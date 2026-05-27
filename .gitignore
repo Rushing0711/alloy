@@ -25,6 +25,14 @@ dist/
 .env.local
 .env.*.local
 
+### Claude Code ###
+.claude/
+
+### Superpowers ###
+docs/superpowers/
+.worktrees/
+worktrees/
+
 ### OS ###
 Thumbs.db
 ehthumbs.db
