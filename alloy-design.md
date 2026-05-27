@@ -6,26 +6,22 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具，提供
 
 ## 一、命令参考
 
-```
-/alloy:init              项目级初始化（部署 schema + skill）
-/alloy:start [topic]    智能入口：自动检测状态，接续或新建
-/alloy:plan <name>      逐制品生成设计文档（始终分步，每步可审查）
-/alloy:plan <name> --redo <id>  重新生成指定制品及下游
-/alloy:apply [name]     执行：隔离 + TDD + 验证 + 复盘
-/alloy:finish [name]    收尾：merge / PR / keep / discard
-/alloy:archive [name]   归档（硬校验 phase=finished）
-/alloy:fix              Bug 修复入口
-/alloy:discard [name]   放弃当前 change，清理 worktree + 分支 + 目录
-/alloy:status [name]    查看当前阶段、制品状态、下一步
-```
+| 命令 | 参数 | 说明 |
+|------|------|------|
+| `/alloy:init` | — | 项目级初始化：检测依赖 → 部署 schema + skill |
+| `/alloy:start` | `[topic]` | 智能入口：自动检测状态，接续或新建 |
+| `/alloy:plan` | `<name>` | 逐制品生成设计文档，始终分步，每步可审查 |
+| | `<name> --redo <id>` | 重新生成指定制品及下游（级联删除 + 重做） |
+| `/alloy:apply` | `[name]` | 执行：隔离 + TDD + 验证 + 复盘 |
+| `/alloy:finish` | `[name]` | 收尾：merge / PR / keep / discard |
+| `/alloy:archive` | `[name]` | 归档（硬校验 phase=finished，否则拒绝） |
+| `/alloy:fix` | — | Bug 修复入口：诊断 → 不改契约直接 PR / 改契约提示创建新 change |
+| `/alloy:discard` | `[name]` | 放弃当前 change，清理 worktree + 分支 + 目录 |
+| `/alloy:status` | `[name]` | 查看当前阶段、制品状态、下一步 |
 
-所有命令（除 start / init / fix 外）支持可选的 `<name>` 参数。省略时从当前活跃 change 的上下文推断。start 通过扫描发现活跃 change，fix 独立入口不绑定 change。
+带 `[name]` 的命令，省略时自动从当前活跃 change 的上下文推断。
 
-**上下文推断规则：** 当命令省略 name 时，CLI 按以下顺序查找：
-1. 扫描 `openspec/changes/*/.alloy.yaml`，找到所有非 archived 状态的 change
-2. 如果只有 1 个活跃 change → 自动选中
-3. 如果有多个活跃 change → 提示选择
-4. 如果没有活跃 change → 报错，提示先 `alloy start`
+**上下文推断规则：** CLI 扫描 `openspec/changes/*/.alloy.yaml` → 仅 1 个活跃 change 自动选中 → 多个则提示选择 → 无活跃 change 报错，提示先 `alloy start`。
 
 ---
 
