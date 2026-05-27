@@ -12,11 +12,11 @@
 |------|----------|--------|
 | 需求输入 |（离线/人工） | `requirement.md` |
 | 统一探索入口 | `/opsx:explore <topic>` | 无文件（上下文内消化） |
-| 设计草案 | `superpowers:brainstorming`（隐含） | **`draft.md`** |
+| 设计草案 | `superpowers:brainstorming`（隐含） | **`draft.md`**（项目根目录，临时存放） |
 
 explore 自动分流：新项目 → 探索需求空间；存量项目 → 探索代码库 + 需求空间。
 
-change-name 在 draft.md 完成后自然浮现。
+change-name 在 draft.md 完成后自然浮现。`/opsx:new <name>` 执行时会将 draft.md 移入 `openspec/changes/<name>/`。
 
 ### OpenSpec 规划阶段
 
@@ -127,9 +127,15 @@ superpowers:systematic-debugging
     │       不进 OpenSpec
     │
     └── 需改契约
-           ├── plan.md 已存在？
-           │     是 → 当前 change 文档已审定 → 开新 /opsx:new <new-name>
-           │     否 → 回当前 change，/opsx:continue 更新制品
+           ├── 无已有 change？
+           │     → 走 Pre-OpenSpec 完整流程
+           │       （/opsx:explore → draft.md → /opsx:new → /opsx:continue）
+           │
+           ├── plan.md 已存在？（change 已审定）
+           │     → 开新 /opsx:new <new-name>，独立追踪
+           │
+           └── plan.md 不存在？（change 在规划阶段，尚未执行）
+                 → 回当前 change，/opsx:continue 更新制品
 ```
 
 ---
@@ -227,7 +233,9 @@ OpenSpec 执行阶段:
 
 ---
 
-## 六、流程全貌（3 种场景叠加）
+## 六、流程全貌
+
+### 功能开发流程
 
 ```
                     requirement.md
@@ -246,34 +254,73 @@ OpenSpec 执行阶段:
                    产出: draft.md
                change-name 自然浮现
                          │
-              ┌──────────┴──────────┐
-              ▼                     ▼
-          Bug 修复            功能开发
-              │                     │
-   systematic-debugging     /opsx:new <name>
-         ┌───┴───┐          /opsx:continue
-         ▼       ▼    proposal→design→specs→tasks→plan
-      不改契约  需改契约   (隐含: writing-plans)
-         │       │               │
-         ▼    ┌──┴──┐            ▼
-     直接PR  plan plan      /opsx:apply
-            已存在 不存在  git-worktrees→subagent→verify→retro
-              │       │    (隐含: worktrees, subagent,
-              ▼       ▼     TDD, review, verification)
-           新change 回当前        │
-                    change       ▼
-                             人工测试
-                           ┌───┴───┐
-                           ▼       ▼
-                          通过    失败→修复→重新
-                           │
-                      finishing
-                      merge/PR/keep/discard
-                           │
-                      PR 审查(可选)
-                      receiving-code-review(如有反馈)
-                           │
-                      /opsx:archive
+                         ▼
+              /opsx:new <name>
+              /opsx:continue
+         proposal→design→specs→tasks→plan
+              (隐含: writing-plans)
+                         │
+                         ▼
+                    /opsx:apply
+         git-worktrees→subagent→verify→retro
+         (隐含: worktrees, subagent,
+          TDD, review, verification)
+                         │
+                         ▼
+                     人工测试
+                   ┌───┴───┐
+                   ▼       ▼
+                  通过    失败
+                   │       │
+                   │   ┌───┴───┐
+                   │   ▼       ▼
+                   │ 小修    大修
+                   │ (直接   (回 continue
+                   │  改码)   更新制品)
+                   │   │       │
+                   │   └───┬───┘
+                   │       ▼
+                   │    重新人工
+                   │       │
+                   └───────┘
+                         │
+                    finishing
+                 merge/PR/keep/discard
+                         │
+                    PR 审查(如有)
+               receiving-code-review
+                         │
+                    /opsx:archive
+```
+
+### Bug 修复流程（独立入口）
+
+```
+              Bug / 报错
+                  │
+     superpowers:systematic-debugging
+              根因定位
+                  │
+           ┌──────┴──────┐
+           ▼              ▼
+        不改契约         需改契约
+           │              │
+           │       ┌──────┼──────┐
+           │       ▼      ▼      ▼
+           │    无change plan    plan
+           │       │    已存在   不存在
+           │       ▼      │      │
+           │    Pre-      ▼      ▼
+           │    OpenSpec 新    回当前
+           │    完整流程 change  change
+           │       │           更新制品
+           │       │            │
+           ▼       ▼            │
+    verification-before-        │
+       completion               │
+           │                    │
+           ▼                    │
+        直接 PR ←───────────────┘
 ```
 
 ---
@@ -292,4 +339,5 @@ OpenSpec 执行阶段:
 | verification-before-completion 嵌入 apply | 补充 openspec-verify-change | 前者查代码行为，后者查制品结构 |
 | apply 不含 finishing/archive | 两者独立为收尾阶段 | 不给未验证代码建 PR，不假设 AI 实现正确 |
 | archive 前提是 finishing 完成 | 硬约束 | 只有人类确认的 change 才能归档 |
-| bug 修复 plan.md 分水岭 | plan 存在 = 开新 change | 保护已审定文档不被回改 |
+| bug 修复三向分流 | 无 change / plan 已存在 / plan 不存在 三条路径 | 覆盖"无已有 change"的漏缺场景 |
+| 人工测试失败分级 | 小修直接改码 → 重新测试；大修回 continue 更新制品 | 避免小改动走重流程，避免大改动绕过制品审查 |
