@@ -25,7 +25,7 @@ change-name 在 draft.md 完成后自然浮现。`/opsx:new <name>` 执行时会
 | 创建 change | `/opsx:new <name>` | change 目录（将 draft.md 放入） |
 | 范围 | `/opsx:continue` → proposal | **`proposal.md`** |
 | 技术方案 | `/opsx:continue` → design | **`design.md`** |
-| 行为契约 | `/opsx:continue` → specs | **`specs/**/*.md`** |
+| 行为 spec | `/opsx:continue` → specs | **`specs/**/*.md`** |
 | 任务清单 | `/opsx:continue` → tasks | **`tasks.md`** |
 | 执行计划 | `/opsx:continue` → plan（隐含 `superpowers:writing-plans`） | **`plan.md`** |
 
@@ -122,20 +122,14 @@ superpowers:systematic-debugging
     作用：结构化诊断（观察→分析→假设→验证）
     产出：根因定位
 
-    ├── 不改契约（不改变 API 行为 / 不新增 requirement）
+    ├── 不改 spec（实现偏离现有 spec，不需修改 spec）
     │       直接修 → superpowers:verification-before-completion → 直接 PR
     │       不进 OpenSpec
     │
-    └── 需改契约
-           ├── 无已有 change？
-           │     → 走 Pre-OpenSpec 完整流程
-           │       （/opsx:explore → draft.md → /opsx:new → /opsx:continue）
-           │
-           ├── plan.md 已存在？（change 已审定）
-           │     → 开新 /opsx:new <new-name>，独立追踪
-           │
-           └── plan.md 不存在？（change 在规划阶段，尚未执行）
-                 → 回当前 change，/opsx:continue 更新制品
+    └── 需改 spec（spec 需新增或修正）
+             → 触发新 change 流程
+               （/opsx:explore → draft.md → /opsx:new → /opsx:continue）
+             → 与当前是否有活跃 change 无关，spec 变更始终是独立 change
 ```
 
 ---
@@ -177,7 +171,7 @@ OpenSpec 执行阶段:
 |----|------|
 | proposal 读 draft | 从 draft 决策链中提取范围。无正式 DAG 依赖（draft 在 schema 之外，由 instruction 读取） |
 | specs → proposal | 按 Capabilities 列表逐项写 Delta Spec，只关心行为边界 |
-| specs ∅→ draft | **故意不读。** 防止行为契约被技术实现细节污染（如"用 Redis"而非"支持会话持久化"） |
+| specs ∅→ draft | **故意不读。** 防止行为 spec 被技术实现细节污染（如"用 Redis"而非"支持会话持久化"） |
 | design → proposal | 约束技术方案不超出 proposal 的 Capabilities 范围 |
 | design 读 draft | 重组 draft 中的 Q1-Qn 技术决策 |
 | tasks → specs + design | 需 specs 告诉"做什么" + design 告诉"怎么做" |
@@ -303,24 +297,19 @@ OpenSpec 执行阶段:
                   │
            ┌──────┴──────┐
            ▼              ▼
-        不改契约         需改契约
+        不改 spec         需改 spec
            │              │
-           │       ┌──────┼──────┐
-           │       ▼      ▼      ▼
-           │    无change plan    plan
-           │       │    已存在   不存在
-           │       ▼      │      │
-           │    Pre-      ▼      ▼
-           │    OpenSpec 新    回当前
-           │    完整流程 change  change
-           │       │           更新制品
-           │       │            │
-           ▼       ▼            │
-    verification-before-        │
-       completion               │
-           │                    │
-           ▼                    │
-        直接 PR ←───────────────┘
+           │              ▼
+           │         触发新 change
+           │         （独立于当前
+           │          活跃 change）
+           │              │
+           ▼              ▼
+    verification-before-  正常 change 流程
+       completion         （explore → new →
+           │               continue → apply）
+           ▼
+        直接 PR
 ```
 
 ---
@@ -335,9 +324,9 @@ OpenSpec 执行阶段:
 | 默认用 continue 而非 ff | continue 作为主入口 | 每制品可审查 |
 | brainstorming 不在 schema DAG 内 | Pre-OpenSpec 独立步骤 | 此时尚未创建 change，无需 schema 追踪 |
 | design 依赖 proposal | 新增约束 | 技术方案不超出范围 |
-| specs 不读 draft | 故意隔离 | 防止行为契约被实现细节污染 |
+| specs 不读 draft | 故意隔离 | 防止行为 spec 被实现细节污染 |
 | verification-before-completion 嵌入 apply | 补充 openspec-verify-change | 前者查代码行为，后者查制品结构 |
 | apply 不含 finishing/archive | 两者独立为收尾阶段 | 不给未验证代码建 PR，不假设 AI 实现正确 |
 | archive 前提是 finishing 完成 | 硬约束 | 只有人类确认的 change 才能归档 |
-| bug 修复三向分流 | 无 change / plan 已存在 / plan 不存在 三条路径 | 覆盖"无已有 change"的漏缺场景 |
+| bug 修复二向分流 | 不改 spec → 直接修；需改 spec → 触发新 change | spec 变更是独立变更，不与当前 change 耦合 |
 | 人工测试失败分级 | 小修直接改码 → 重新测试；大修回 continue 更新制品 | 避免小改动走重流程，避免大改动绕过制品审查 |

@@ -15,7 +15,7 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具，提供
 | `/alloy:apply` | `[name]` | 执行：隔离 + TDD + 验证 + 复盘 |
 | `/alloy:finish` | `[name]` | 收尾：merge / PR / keep / discard |
 | `/alloy:archive` | `[name]` | 归档（硬校验 phase=finished，否则拒绝） |
-| `/alloy:fix` | — | Bug 修复入口：诊断 → 不改契约直接 PR / 改契约提示创建新 change |
+| `/alloy:fix` | — | Bug 修复入口：诊断 → 不改 spec 直接 PR / 需改 spec 则创建新 change |
 | `/alloy:discard` | `[name]` | 放弃当前 change，清理 worktree + 分支 + 目录 |
 | `/alloy:status` | `[name]` | 查看当前阶段、制品状态、下一步 |
 
@@ -113,13 +113,13 @@ phase → archived
 
 执行: superpowers:systematic-debugging → 根因定位
 
-不改契约:
+不改 spec（实现偏离现有 spec）:
   → fix + verification-before-completion
   → 提示直接 PR
 
-需改契约:
+需改 spec（spec 需新增或修正）:
   → 明确提示:
-    "修复需要变更行为契约。
+    "修复需要变更 spec。
      触发新 change，建议: alloy start <建议名称>"
   → 不自动创建（让用户感知后手动发起）
 ```
@@ -179,7 +179,7 @@ Pre-OpenSpec:
 
 Schema DAG:
   proposal  ← 读 draft.md
-    ├──→ specs     ← 依赖 proposal（不读 draft，防止行为契约被技术细节污染）
+    ├──→ specs     ← 依赖 proposal（不读 draft，防止行为 spec 被技术细节污染）
     │      └──→ tasks   ← 依赖 specs + design
     │            └──→ plan   ← 依赖 tasks（隐含 superpowers:writing-plans）
     │
