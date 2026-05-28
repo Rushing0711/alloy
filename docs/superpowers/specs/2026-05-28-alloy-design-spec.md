@@ -11,7 +11,7 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流编排工具。
 ### 架构分层
 
 ```
-用户输入 /alloy:*
+用户输入 /alloy-*
        │
        ▼
   SKILL.md（Agent 内执行）
@@ -62,14 +62,14 @@ CLI（终端）
 
 | 命令 | 参数 | 用途 |
 |------|------|------|
-| `/alloy:start` | `[topic]` `[--new <topic>]` | 智能入口：自动检测状态，接续或新建 |
-| `/alloy:plan` | `[name]` | 逐制品生成设计文档，始终分步，每步可审查 |
-| `/alloy:apply` | `[name]` | 执行：隔离 workspace → SDD(TDD) → verify → retrospective |
-| `/alloy:finish` | `[name]` | 收尾：merge / PR / keep / discard |
-| `/alloy:archive` | `[name]` | 归档（硬校验 phase=finished） |
-| `/alloy:fix` | — | Bug 修复入口：诊断 → 分流 |
-| `/alloy:discard` | `[name]` | 放弃当前 change，清理 worktree + 分支 + 目录 |
-| `/alloy:status` | `[name]` | 查看指定 change 的阶段、制品状态、下一步 |
+| `/alloy-start` | `[topic]` `[--new <topic>]` | 智能入口：自动检测状态，接续或新建 |
+| `/alloy-plan` | `[name]` | 逐制品生成设计文档，始终分步，每步可审查 |
+| `/alloy-apply` | `[name]` | 执行：隔离 workspace → SDD(TDD) → verify → retrospective |
+| `/alloy-finish` | `[name]` | 收尾：merge / PR / keep / discard |
+| `/alloy-archive` | `[name]` | 归档（硬校验 phase=finished） |
+| `/alloy-fix` | — | Bug 修复入口：诊断 → 分流 |
+| `/alloy-discard` | `[name]` | 放弃当前 change，清理 worktree + 分支 + 目录 |
+| `/alloy-status` | `[name]` | 查看指定 change 的阶段、制品状态、下一步 |
 
 带 `[name]` 的命令省略时，从 `openspec/changes/*/.alloy.yaml` 自动推断当前活跃 change。
 
@@ -89,7 +89,7 @@ CLI（终端）
 #### alloy start
 
 ```
-/alloy:start [topic] [--new <topic>]
+/alloy-start [topic] [--new <topic>]
 
 无活跃 change + 有 topic:
   → 全新开始: explore + brainstorming → draft.md（项目根目录，临时存放）
@@ -113,7 +113,7 @@ CLI（终端）
 #### alloy plan
 
 ```
-/alloy:plan [name]
+/alloy-plan [name]
 
 前置检查: draft.md 存在
 逐制品生成: proposal → design → specs → tasks → plan
@@ -125,7 +125,7 @@ phase → planned
 #### alloy apply
 
 ```
-/alloy:apply [name]
+/alloy-apply [name]
 
 前置检查: plan.md 存在
 执行步骤:
@@ -141,7 +141,7 @@ phase → applied
 #### alloy finish
 
 ```
-/alloy:finish [name]
+/alloy-finish [name]
 
 前置检查: verify.md 存在, 人工测试已通过（用户确认）
 执行: finishing-a-development-branch
@@ -152,7 +152,7 @@ phase → finished（选项 1,2,3），选项 4 不写 phase 直接进入 discar
 #### alloy archive
 
 ```
-/alloy:archive [name]
+/alloy-archive [name]
 
 前置检查（硬拒绝）: phase = finished
 执行: openspec archive -y → sync delta spec + 归档
@@ -162,7 +162,7 @@ phase → archived
 #### alloy fix
 
 ```
-/alloy:fix
+/alloy-fix
 
 1. 环境感知：
    ├── 在 worktree 内 → "当前在 worktree <path>，在此修复并提交"
@@ -181,7 +181,7 @@ phase → archived
 #### alloy discard
 
 ```
-/alloy:discard [name]
+/alloy-discard [name]
 
 phase 行为:
   ├── started / planned         → 仅删 change 目录
@@ -195,7 +195,7 @@ phase 行为:
 #### alloy status
 
 ```
-/alloy:status [name]
+/alloy-status [name]
 
 输出指定 change: 阶段、change 名、路径、制品状态、下一步
 自动附带一致性检查: worktree 残留警告、孤立 worktree 提示
@@ -209,14 +209,14 @@ v1 不调用外部技能，仅在关键节点给出提示：
 ```
 draft.md 已完成。
 💡 建议：可以用 grill-me 对需求进行深入拷问，确认后再进入 plan。
-→ 继续进入 /alloy:plan
+→ 继续进入 /alloy-plan
 ```
 
 **apply 完成后、finish 之前：**
 ```
 retrospective.md 已生成。
 💡 建议：可以执行 QA 测试或浏览器测试等质量检查，确认后再进入 finish。
-→ 继续进入 /alloy:finish
+→ 继续进入 /alloy-finish
 ```
 
 后续版本将扩展点升级为可配置闸门（对话驱动，HARD GATE 阻断流程）。
@@ -304,7 +304,7 @@ updated_at: "2026-05-28"
 
 | 字段 | 读写者 | 用途 |
 |------|--------|------|
-| `phase` | CLI + Agent | 决定 `/alloy:start` 的断点恢复路径 |
+| `phase` | CLI + Agent | 决定 `/alloy-start` 的断点恢复路径 |
 | `worktree` | apply 写入 | null=未创建；有值=跳过创建直接恢复 |
 | `schema_version` | init 写入 | 格式演进兼容 |
 | `created_at` | start 写入 | change 创建时间 |
@@ -327,7 +327,7 @@ started → planned → applied → finished → archived
 
 ### 断点恢复
 
-`/alloy:start` 检测到活跃 change → 读 phase + worktree + 文件系统 → 自动从断点继续。
+`/alloy-start` 检测到活跃 change → 读 phase + worktree + 文件系统 → 自动从断点继续。
 
 ---
 
@@ -422,7 +422,7 @@ install:
 |----|------|------|
 | 1 | v1 仅 Claude Code | 团队统一平台，聚焦质量 |
 | 2 | Schema 从零构建，参考 superpowers-bridge + Comet | 零技术债，不留已知 DAG 时序问题 |
-| 3 | `/alloy:start` 唯一入口，默认接续 | 降低心智负担 |
+| 3 | `/alloy-start` 唯一入口，默认接续 | 降低心智负担 |
 | 4 | plan 始终分步，不提供一键生成 | 每步审查的价值大于省下的几秒 |
 | 5 | `.alloy.yaml` per-change，非全局 | 天然支持多 change 并行 |
 | 6 | Agent 内流程 + CLI 辅助 | 核心工作流依赖 AI 编排，CLI 只做确定性操作 |
@@ -454,7 +454,7 @@ install:
 
 ## 九、推荐开发路径
 
-1. **原型验证**（第 1-2 周）——写 `/alloy:start` + `/alloy:plan` 的 SKILL.md，在 Claude Code 中跑通 Pre-OpenSpec → 规划阶段
+1. **原型验证**（第 1-2 周）——写 `/alloy-start` + `/alloy-plan` 的 SKILL.md，在 Claude Code 中跑通 Pre-OpenSpec → 规划阶段
 2. **CLI + Schema**（第 3-5 周）——alloy init / status / doctor / update + alloy schema 从零构建
 3. **完整流程**（第 6-8 周）——补全 apply / finish / archive / fix / discard 的 SKILL.md + shell 脚本
 4. **测试 + 文档 + 推广**（第 9-10 周）——单元测试、团队推广、反馈收集

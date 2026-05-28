@@ -24,15 +24,15 @@ Alloy 的价值主张：用 OpenSpec 管理"构建什么"（需求追踪、Delta
 
 | 命令 | 用途 |
 |------|------|
-| `/alloy:init` | 项目级初始化：检测依赖 → 部署 schema + skill |
-| `/alloy:start` | 智能入口：自动检测状态，接续或新建 |
-| `/alloy:plan` | 逐制品生成设计文档，始终分步，每步可审查 |
-| `/alloy:apply` | 执行：隔离 + TDD + 验证 + 复盘 |
-| `/alloy:finish` | 收尾：merge / PR / keep / discard |
-| `/alloy:archive` | 归档（硬校验 phase=finished） |
-| `/alloy:fix` | Bug 修复入口：诊断 → 三向分流 |
-| `/alloy:discard` | 放弃当前 change，清理 worktree + 分支 + 目录 |
-| `/alloy:status` | 查看当前阶段、制品状态、下一步 |
+| `/alloy-init` | 项目级初始化：检测依赖 → 部署 schema + skill |
+| `/alloy-start` | 智能入口：自动检测状态，接续或新建 |
+| `/alloy-plan` | 逐制品生成设计文档，始终分步，每步可审查 |
+| `/alloy-apply` | 执行：隔离 + TDD + 验证 + 复盘 |
+| `/alloy-finish` | 收尾：merge / PR / keep / discard |
+| `/alloy-archive` | 归档（硬校验 phase=finished） |
+| `/alloy-fix` | Bug 修复入口：诊断 → 三向分流 |
+| `/alloy-discard` | 放弃当前 change，清理 worktree + 分支 + 目录 |
+| `/alloy-status` | 查看当前阶段、制品状态、下一步 |
 
 带 `[name]` 的命令省略时，从 `openspec/changes/*/.alloy.yaml` 自动推断当前活跃 change。
 

@@ -27,11 +27,11 @@ Alloy 在现有两个工具的基础上补上了这些缺口：
 Alloy 把一次开发拆成 5 个有闸门的阶段：
 
 ```
-/alloy:start    → 把需求聊透（explore + brainstorming），产出设计草案
-/alloy:plan     → 逐制品生成 proposal/design/specs/tasks/plan，每步人类审查
-/alloy:apply    → 隔离环境 + SDD + TDD + verify，verify 不过不结束
-/alloy:finish   → 人类决定合入/PR/保留/丢弃（人工闸门）
-/alloy:archive  → Delta Spec 合入主 spec，归档审计
+/alloy-start    → 把需求聊透（explore + brainstorming），产出设计草案
+/alloy-plan     → 逐制品生成 proposal/design/specs/tasks/plan，每步人类审查
+/alloy-apply    → 隔离环境 + SDD + TDD + verify，verify 不过不结束
+/alloy-finish   → 人类决定合入/PR/保留/丢弃（人工闸门）
+/alloy-archive  → Delta Spec 合入主 spec，归档审计
 ```
 
 每个阶段之间有闸门——上一个阶段没完成、没审查通过，**进不了下一个阶段**。这不是靠 Agent 自觉，是靠 SKILL.md 里的硬指令和 shell 脚本的 HARD STOP 校验。
@@ -70,17 +70,17 @@ alloy init --skip-claude-md  # 不修改 CLAUDE.md
 在 Claude Code 中输入：
 
 ```
-/alloy:start <你的需求主题>
+/alloy-start <你的需求主题>
 ```
 
 Alloy 会自动引导你走完完整流程：
 
 ```
-/alloy:start    → 智能入口（自动检测状态，接续或新建）
-/alloy:plan     → 逐制品生成（proposal → design → specs → tasks → plan）
-/alloy:apply    → 隔离执行（worktree + SDD(TDD) + verify + retrospective）
-/alloy:finish   → 收尾（merge / PR / keep / discard，人工闸门）
-/alloy:archive  → 归档（硬校验 phase=finished）
+/alloy-start    → 智能入口（自动检测状态，接续或新建）
+/alloy-plan     → 逐制品生成（proposal → design → specs → tasks → plan）
+/alloy-apply    → 隔离执行（worktree + SDD(TDD) + verify + retrospective）
+/alloy-finish   → 收尾（merge / PR / keep / discard，人工闸门）
+/alloy-archive  → 归档（硬校验 phase=finished）
 ```
 
 ## 命令参考
@@ -89,14 +89,14 @@ Alloy 会自动引导你走完完整流程：
 
 | 命令 | 用途 |
 |------|------|
-| `/alloy:start [topic]` | 智能入口：自动检测状态，接续或新建 |
-| `/alloy:plan [name]` | 逐制品生成设计文档，始终分步，每步可审查 |
-| `/alloy:apply [name]` | 执行：隔离 workspace → SDD(TDD) → 验证 → 复盘 |
-| `/alloy:finish [name]` | 收尾：merge / PR / keep / discard |
-| `/alloy:archive [name]` | 归档（硬校验 phase=finished，否则拒绝） |
-| `/alloy:fix` | Bug 修复入口：诊断 → 分流 |
-| `/alloy:discard [name]` | 放弃当前 change，清理 worktree + 分支 + 目录 |
-| `/alloy:status [name]` | 查看指定 change 的阶段、制品状态、下一步 |
+| `/alloy-start [topic]` | 智能入口：自动检测状态，接续或新建 |
+| `/alloy-plan [name]` | 逐制品生成设计文档，始终分步，每步可审查 |
+| `/alloy-apply [name]` | 执行：隔离 workspace → SDD(TDD) → 验证 → 复盘 |
+| `/alloy-finish [name]` | 收尾：merge / PR / keep / discard |
+| `/alloy-archive [name]` | 归档（硬校验 phase=finished，否则拒绝） |
+| `/alloy-fix` | Bug 修复入口：诊断 → 分流 |
+| `/alloy-discard [name]` | 放弃当前 change，清理 worktree + 分支 + 目录 |
+| `/alloy-status [name]` | 查看指定 change 的阶段、制品状态、下一步 |
 
 带 `[name]` 的命令省略时自动从当前活跃 change 推断。
 
@@ -116,32 +116,32 @@ Alloy 会自动引导你走完完整流程：
 ```
 requirement.md
      │
-/alloy:start <topic>
+/alloy-start <topic>
      │  explore + brainstorming → draft.md
      ▼
-/alloy:plan
+/alloy-plan
      │  proposal → design → specs → tasks → plan
      ▼
-/alloy:apply
+/alloy-apply
      │  worktree + SDD(TDD) + verify + retrospective
      ▼
 人工测试（人类闸门）
      │
-/alloy:finish
+/alloy-finish
      │  merge / PR / keep / discard
      ▼
-/alloy:archive（仅 finished 后可执行）
+/alloy-archive（仅 finished 后可执行）
 ```
 
 ### Bug 修复
 
 ```
-/alloy:fix
+/alloy-fix
      │  systematic-debugging → 根因定位
      ▼
   分流：
   ├── 不改 spec → TDD 修复 → verification → 直接 PR
-  └── 需改 spec → 新 change 流程（/alloy:start → plan → apply → finish → archive）
+  └── 需改 spec → 新 change 流程（/alloy-start → plan → apply → finish → archive）
 ```
 
 ## 核心理念

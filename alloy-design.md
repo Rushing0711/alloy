@@ -25,14 +25,14 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 
 | 命令 | 参数 | 说明 |
 |------|------|------|
-| `/alloy:start` | `[topic]` | 智能入口：自动检测状态，接续或新建 |
-| `/alloy:plan` | `[name]` | 逐制品生成设计文档，始终分步，每步可审查 |
-| `/alloy:apply` | `[name]` | 执行：隔离 workspace → SDD → 验证 → 复盘 |
-| `/alloy:finish` | `[name]` | 收尾：merge / PR / keep / discard |
-| `/alloy:archive` | `[name]` | 归档（硬校验 phase=finished，否则拒绝） |
-| `/alloy:fix` | — | Bug 修复入口：诊断 → 分流（apply 为分水岭） |
-| `/alloy:discard` | `[name]` | 放弃当前 change，清理 worktree + 分支 + 目录 |
-| `/alloy:status` | `[name]` | 查看指定 change 的阶段、制品状态、下一步 |
+| `/alloy-start` | `[topic]` | 智能入口：自动检测状态，接续或新建 |
+| `/alloy-plan` | `[name]` | 逐制品生成设计文档，始终分步，每步可审查 |
+| `/alloy-apply` | `[name]` | 执行：隔离 workspace → SDD → 验证 → 复盘 |
+| `/alloy-finish` | `[name]` | 收尾：merge / PR / keep / discard |
+| `/alloy-archive` | `[name]` | 归档（硬校验 phase=finished，否则拒绝） |
+| `/alloy-fix` | — | Bug 修复入口：诊断 → 分流（apply 为分水岭） |
+| `/alloy-discard` | `[name]` | 放弃当前 change，清理 worktree + 分支 + 目录 |
+| `/alloy-status` | `[name]` | 查看指定 change 的阶段、制品状态、下一步 |
 
 带 `[name]` 的命令省略时从当前活跃 change 的上下文推断。
 
@@ -45,7 +45,7 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 ### alloy start
 
 ```
-/alloy:start [topic]
+/alloy-start [topic]
 
 无活跃 change + 有 topic:
   → 全新开始: explore + brainstorming → draft.md（项目根目录，临时存放）
@@ -70,7 +70,7 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 ### alloy plan
 
 ```
-/alloy:plan [name]（省略时从当前活跃 change 推断）
+/alloy-plan [name]（省略时从当前活跃 change 推断）
 
 前置检查: draft.md 存在
 
@@ -100,7 +100,7 @@ phase → planned
 ### alloy apply
 
 ```
-/alloy:apply [name]（省略时从当前活跃 change 推断）
+/alloy-apply [name]（省略时从当前活跃 change 推断）
 
 前置检查: plan.md 存在
 verify 在 apply 内部闭环，失败则循环修复直到通过，不通过不结束 apply。
@@ -121,14 +121,14 @@ phase → applied
 ### alloy finish
 
 ```
-/alloy:finish [name]（省略时从当前活跃 change 推断）
+/alloy-finish [name]（省略时从当前活跃 change 推断）
 
 前置检查: verify.md 存在, 人工测试已通过（用户确认）
 执行: superpowers:finishing-a-development-branch
   → 4 选项:
-      1. 本地 merge → "代码已合入。是否现在归档？ /alloy:archive <name>"
-      2. 创建 PR    → "PR 已创建。审查通过后 /alloy:archive <name>"
-      3. 保持分支   → "分支已保留。后续可 /alloy:archive 或 /alloy:discard"
+      1. 本地 merge → "代码已合入。是否现在归档？ /alloy-archive <name>"
+      2. 创建 PR    → "PR 已创建。审查通过后 /alloy-archive <name>"
+      3. 保持分支   → "分支已保留。后续可 /alloy-archive 或 /alloy-discard"
       4. 丢弃       → 清理完毕，流程结束
 
 选 PR 后，审查反馈通过自然对话处理，Agent 内部遵循
@@ -139,7 +139,7 @@ phase → finished（仅选项 1, 2, 3；选项 4 不写 phase）
 ### alloy archive
 
 ```
-/alloy:archive [name]（省略时从当前活跃 change 推断）
+/alloy-archive [name]（省略时从当前活跃 change 推断）
 
 前置检查（硬拒绝）: phase = finished
 执行: openspec archive -y
@@ -150,7 +150,7 @@ phase → archived
 ### alloy fix
 
 ```
-/alloy:fix
+/alloy-fix
 
 1. 环境感知：
    ├── 在 worktree 内 → "当前在 worktree <path>，在此修复并提交"
@@ -166,18 +166,18 @@ phase → archived
 
    需改 spec（spec 需新增或修正）:
      ├── 有活跃 change 且 phase < applied（无代码落地）
-     │     → "spec 变更可并入当前 change <name>。回到 /alloy:plan 更新制品。"
+     │     → "spec 变更可并入当前 change <name>。回到 /alloy-plan 更新制品。"
      │     → 无需开新 change
      │
      └── 无活跃 change 或 phase ≥ applied（已有代码落地）
-           → "修复需要变更 spec。开新 change: /alloy:start <建议名称>"
+           → "修复需要变更 spec。开新 change: /alloy-start <建议名称>"
            → 不自动创建（让用户感知后手动发起）
 ```
 
 ### alloy discard
 
 ```
-/alloy:discard [name]（省略时从当前活跃 change 推断）
+/alloy-discard [name]（省略时从当前活跃 change 推断）
 
 phase 行为：
   ├── started / planned         → 仅删 change 目录（无 worktree / 分支）
@@ -201,7 +201,7 @@ phase 行为：
 ### alloy status
 
 ```
-/alloy:status [name]（省略时显示所有活跃 change 总览）
+/alloy-status [name]（省略时显示所有活跃 change 总览）
 
 输出指定 change 详情:
   阶段:    planned
@@ -219,7 +219,7 @@ phase 行为：
 
 ## 三、状态文件
 
-每个 change 目录内包含 `.alloy.yaml`，CLI 和 Agent 读写，用户通过 `/alloy:status` 查看：
+每个 change 目录内包含 `.alloy.yaml`，CLI 和 Agent 读写，用户通过 `/alloy-status` 查看：
 
 ```yaml
 # openspec/changes/<name>/.alloy.yaml
@@ -232,13 +232,13 @@ updated_at: "2026-05-28"
 
 | 字段 | 读写 | 含义 |
 |------|------|------|
-| `phase` | CLI + Agent | 当前阶段，决定 `/alloy:start` 的恢复路径 |
+| `phase` | CLI + Agent | 当前阶段，决定 `/alloy-start` 的恢复路径 |
 | `worktree` | apply 阶段写入 | null=未创建；有值=apply 已开始，恢复时跳过创建 |
 | `schema_version` | alloy init 写入 | 格式演进时用于兼容解析 |
 | `created_at` | alloy start 写入 | change 创建时间 |
 | `updated_at` | phase 变更时写入 | 最后状态变更时间，调试和排序用 |
 
-断点恢复：`/alloy:start` 检测到活跃 change → 读 phase + worktree + 文件系统 → 自动从断点继续。不设子步骤状态——Agent 通过检查文件存在性自判断。
+断点恢复：`/alloy-start` 检测到活跃 change → 读 phase + worktree + 文件系统 → 自动从断点继续。不设子步骤状态——Agent 通过检查文件存在性自判断。
 
 ---
 
@@ -307,7 +307,7 @@ retrospective.md 已生成。
 ## 五、架构
 
 ```
-用户输入 /alloy:*
+用户输入 /alloy-*
        │
        ▼
   SKILL.md（Agent 内执行）
@@ -408,7 +408,7 @@ alloy init 检测已有 Alloy skill：
 场景 A：新手上路
   npm install -g @alloy/cli
   alloy init → 默认装全局 skill
-  → 所有项目可用 /alloy:*，无需重复安装
+  → 所有项目可用 /alloy-*，无需重复安装
 
 场景 B：版本兼容
   npm install -g @alloy/cli@latest  ← v1.3（新）
@@ -452,7 +452,7 @@ $ alloy init
      ✓ Superpowers v5.1.0（兼容范围 >=5.0.0 <6.0.0）
 
   ✅ Alloy 就绪！
-     在 Claude Code 中输入 /alloy:start <topic> 开始工作
+     在 Claude Code 中输入 /alloy-start <topic> 开始工作
 ```
 
 - Claude Code 必须由用户预先安装，否则 init 无法继续
@@ -475,7 +475,7 @@ alloy update [path]
 
 | # | 决策 | 理由 |
 |----|------|------|
-| 1 | `/alloy:start` 作为唯一入口，默认接续 | 用户只需记住一个命令，降低心智负担 |
+| 1 | `/alloy-start` 作为唯一入口，默认接续 | 用户只需记住一个命令，降低心智负担 |
 | 2 | plan 始终分步，不提供一键生成 | 每步审查的价值大于省下的几秒 |
 | 3 | `.alloy.yaml` per-change，非全局 | 天然支持多 change 并行，discard 只需删目录 |
 | 4 | Agent 内流程 + CLI 辅助 | 核心工作流依赖 AI 编排能力，CLI 只做确定性操作 |
@@ -525,7 +525,7 @@ alloy update [path]
 
 ### 推荐开发路径
 
-1. **原型验证**（第 1-2 周）——写 `/alloy:start` + `/alloy:plan` 的 SKILL.md，在 Claude Code 中跑通 Pre-OpenSpec → 规划阶段，验证 OpenSpec + Superpowers 组合是否如设计运作
+1. **原型验证**（第 1-2 周）——写 `/alloy-start` + `/alloy-plan` 的 SKILL.md，在 Claude Code 中跑通 Pre-OpenSpec → 规划阶段，验证 OpenSpec + Superpowers 组合是否如设计运作
 2. **CLI + Schema**（第 3-5 周）——alloy init / status / doctor / update + alloy schema 从零构建，参考 Comet 架构
 3. **完整流程**（第 6-8 周）——补全 apply / finish / archive / fix / discard 的 SKILL.md + shell 脚本
 4. **测试 + 文档 + 推广**（第 9-10 周）——单元测试、团队推广、反馈收集

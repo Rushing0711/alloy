@@ -18,7 +18,7 @@ description: Alloy 智能入口 - 自动检测状态，接续或新建 change
 
 ### 情况 A：无活跃 change + 有 topic 参数
 
-用户输入了 `/alloy:start <topic>`，开始全新流程：
+用户输入了 `/alloy-start <topic>`，开始全新流程：
 
 1. 告知用户当前状态："未检测到活跃 change，开始新的工作流程"
 2. 调用 `superpowers:brainstorming` skill —— 但在此之前，先调用 `/opsx:explore <topic>` 进行上下文探查
@@ -33,7 +33,7 @@ draft.md 已生成。
 
 💡 建议：可以用 grill-me 对需求进行深入拷问，确认后再进入 plan。
 
-准备好后，运行 `/alloy:plan` 进入规划阶段。
+准备好后，运行 `/alloy-plan` 进入规划阶段。
 ```
 
 **关键规则：**
@@ -46,7 +46,7 @@ draft.md 已生成。
 扫描项目上下文（README.md、requirement.md、已有代码结构等）：
 
 - 有上下文可读取 → 基于项目信息引导用户，提出建议方向或追问
-- 空项目无上下文 → "请提供主题，例如：`/alloy:start <topic>`"
+- 空项目无上下文 → "请提供主题，例如：`/alloy-start <topic>`"
 
 ### 情况 C：--new <topic>
 
@@ -60,10 +60,10 @@ draft.md 已生成。
 
 | 当前 phase | 恢复行为 |
 |-----------|----------|
-| `started` | 继续 `/alloy:plan` |
-| `planned` | 继续 `/alloy:apply` |
-| `applied` | 提示用户：`/alloy:finish` 或继续修改 |
-| `finished` | 提示用户：`/alloy:archive` |
+| `started` | 继续 `/alloy-plan` |
+| `planned` | 继续 `/alloy-apply` |
+| `applied` | 提示用户：`/alloy-finish` 或继续修改 |
+| `finished` | 提示用户：`/alloy-archive` |
 
 恢复时输出当前状态概要（change 名、phase、已完成制品、下一步建议）。
 
@@ -75,7 +75,7 @@ draft.md 已生成。
   1. login-feature (planned) - 已完成 proposal, design, specs, tasks, plan
   2. payment-fix   (started) - 已完成 draft.md
 
-请选择要接续的 change（输入编号），或 `/alloy:start --new <topic>` 开新 change。
+请选择要接续的 change（输入编号），或 `/alloy-start --new <topic>` 开新 change。
 ```
 
 ## 扩展点提示

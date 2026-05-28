@@ -11,7 +11,7 @@ description: Alloy 归档 - 硬校验 phase=finished，执行 openspec archive
 
 ```
 [HARD STOP] Change '<name>' 的 phase 为 '<phase>'，归档要求 phase=finished。
-请先运行 /alloy:finish 完成收尾。
+请先运行 /alloy-finish 完成收尾。
 ```
 
 ## 执行

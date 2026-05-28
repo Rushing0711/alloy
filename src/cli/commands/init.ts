@@ -76,5 +76,5 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   }
 
   console.log("\n  ✅ Alloy 就绪！");
-  console.log("     在 Claude Code 中输入 /alloy:start <topic> 开始工作\n");
+  console.log("     在 Claude Code 中输入 /alloy-start <topic> 开始工作\n");
 }

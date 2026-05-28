@@ -9,7 +9,7 @@ description: Alloy 执行阶段 - worktree 隔离 + SDD(TDD) + verify + retrospe
 
 ## 前置检查
 
-1. 确认 `plan.md` 存在于 change 目录，不存在则报错："未找到 plan.md，请先运行 /alloy:plan"
+1. 确认 `plan.md` 存在于 change 目录，不存在则报错："未找到 plan.md，请先运行 /alloy-plan"
 2. 确认 change 的 phase 为 `planned`
 
 ## 执行步骤
@@ -53,7 +53,7 @@ retrospective.md 已生成。phase → applied
 
 💡 建议：可以执行 QA 测试或浏览器测试等质量检查，确认后再进入 finish。
 
-准备好后，运行 /alloy:finish 进入收尾阶段。
+准备好后，运行 /alloy-finish 进入收尾阶段。
 ```
 
 ## 闸门规则

@@ -22,4 +22,4 @@
 
 - draft.md 存放在项目根目录，不在 change 目录内
 - 生成即完成，不自动创建 change 目录
-- 完成后提示用户可运行 /alloy:plan
+- 完成后提示用户可运行 /alloy-plan

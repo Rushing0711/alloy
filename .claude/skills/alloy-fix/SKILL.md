@@ -25,9 +25,9 @@ description: Alloy Bug 修复入口 - 诊断 → 环境感知 → 分流
 ### 需改 spec（spec 需新增或修正）
 
 **无代码落地（有活跃 change 且 phase < applied）：**
-→ "spec 变更可并入当前 change <name>。回到 /alloy:plan 更新制品。"
+→ "spec 变更可并入当前 change <name>。回到 /alloy-plan 更新制品。"
 → 无需开新 change
 
 **已有代码落地（无活跃 change 或 phase ≥ applied）：**
-→ "修复需要变更 spec。开新 change: /alloy:start <建议名称>"
+→ "修复需要变更 spec。开新 change: /alloy-start <建议名称>"
 → 不自动创建，让用户感知后手动发起

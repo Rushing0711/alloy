@@ -39,7 +39,7 @@ export async function statusCommand(
 async function overviewMode(changesDir: string): Promise<string> {
   const changes = await findActiveChanges(changesDir);
   if (changes.size === 0) {
-    return "无活跃 change。使用 /alloy:start <topic> 开始新工作流。";
+    return "无活跃 change。使用 /alloy-start <topic> 开始新工作流。";
   }
 
   const lines: string[] = ["活跃 Change："];
@@ -104,13 +104,13 @@ function getNextStepSimple(
 ): string {
   switch (state.phase) {
     case "started":
-      return `${name} 等待 /alloy:plan`;
+      return `${name} 等待 /alloy-plan`;
     case "planned":
-      return `${name} 等待 /alloy:apply`;
+      return `${name} 等待 /alloy-apply`;
     case "applied":
-      return `${name} 等待 /alloy:finish`;
+      return `${name} 等待 /alloy-finish`;
     case "finished":
-      return `${name} 等待 /alloy:archive`;
+      return `${name} 等待 /alloy-archive`;
     default:
       return "";
   }
@@ -122,13 +122,13 @@ function getNextStepDetail(
 ): string {
   switch (state.phase) {
     case "started":
-      return artifacts.plan ? "等待 /alloy:apply" : "继续 /alloy:plan，等待下一个制品生成";
+      return artifacts.plan ? "等待 /alloy-apply" : "继续 /alloy-plan，等待下一个制品生成";
     case "planned":
-      return "等待 /alloy:apply";
+      return "等待 /alloy-apply";
     case "applied":
-      return "等待 /alloy:finish";
+      return "等待 /alloy-finish";
     case "finished":
-      return "等待 /alloy:archive";
+      return "等待 /alloy-archive";
     default:
       return "";
   }
