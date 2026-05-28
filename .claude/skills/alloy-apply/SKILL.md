@@ -29,14 +29,42 @@ description: Alloy 执行阶段 - worktree 隔离 + SDD(TDD) + verify + retrospe
 ```
 ---
 ### Step 1/4：隔离环境 · superpowers:using-git-worktrees
+
+**MUST 先输出以下信息，告知用户即将创建的隔离环境：**
+
+```
+---
+### Step 1/4：隔离环境 · superpowers:using-git-worktrees
 ---
 
-正在创建 git worktree 隔离开发环境...
+创建隔离开发环境：
+
+  当前分支：   <current-branch>
+  新分支：     <change-name>
+  工作目录：   .worktrees/<change-name>/
+
+正在创建 git worktree...
 ```
 
-1. 读取 `.alloy.yaml`，将 worktree 路径写入为 `.worktrees/<name>`
-2. 调用 `superpowers:using-git-worktrees` skill
-3. 切换到 worktree 目录开始工作
+**然后调用 `superpowers:using-git-worktrees` skill，创建隔离 workspace：**
+
+1. 读取当前 git 分支名（`git branch --show-current`）
+2. 将 worktree 路径 `.worktrees/<name>` 写入 `.alloy.yaml`
+3. 调用 `superpowers:using-git-worktrees` skill：
+   - 基于当前分支 HEAD 创建新分支 `<change-name>`
+   - 在新目录 `.worktrees/<change-name>/` 检出代码
+   - 不会影响当前分支和当前目录
+
+**创建完成后，MUST 确认结果：**
+
+```
+✓ worktree 已创建
+  分支：   <change-name>（基于 <current-branch>）
+  目录：   .worktrees/<change-name>/
+  状态：   已切换到新目录，后续操作在此目录中进行
+```
+
+4. 切换到 worktree 目录开始工作
 
 ### Step 2: 子 agent 驱动开发（SDD）
 
