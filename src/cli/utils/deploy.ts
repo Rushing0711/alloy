@@ -19,19 +19,28 @@ function getPackageRoot(): string {
 export async function deploySkills(opts: DeployOptions): Promise<string[]> {
   const deployed: string[] = [];
   const packageRoot = getPackageRoot();
-  const skillsSource = join(packageRoot, ".claude", "skills", "alloy");
+  const skillsSourceDir = join(packageRoot, ".claude", "skills");
 
-  let targetDir: string;
+  let skillsTargetDir: string;
   if (opts.scope === "global") {
     const home = process.env.HOME || process.env.USERPROFILE || "~";
-    targetDir = join(home, ".claude", "skills", "alloy");
+    skillsTargetDir = join(home, ".claude", "skills");
   } else {
-    targetDir = join(opts.projectPath, ".claude", "skills", "alloy");
+    skillsTargetDir = join(opts.projectPath, ".claude", "skills");
   }
 
-  await mkdir(targetDir, { recursive: true });
-  await cp(skillsSource, targetDir, { recursive: true });
-  deployed.push(`→ ${targetDir}`);
+  await mkdir(skillsTargetDir, { recursive: true });
+
+  // 部署所有 alloy* 目录（alloy/ + alloy-start/ + alloy-plan/ + ...）
+  const { readdir } = await import("node:fs/promises");
+  const entries = await readdir(skillsSourceDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.startsWith("alloy")) continue;
+    const srcPath = join(skillsSourceDir, entry.name);
+    const destPath = join(skillsTargetDir, entry.name);
+    await cp(srcPath, destPath, { recursive: true });
+    deployed.push(`→ ${destPath}`);
+  }
 
   return deployed;
 }
