@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { existsSync } from "node:fs";
-import { loadCompat, checkCompat, CompatResult } from "../utils/compat.js";
+import { loadCompat, checkCompat } from "../../core/compat.js";
+import type { CompatResult } from "../../core/types.js";
 import { findActiveChanges } from "../utils/state.js";
 
 export interface DoctorResult {
