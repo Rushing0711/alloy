@@ -2,6 +2,8 @@
 
 Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流编排工具。入口在 AI Agent 内部（Claude Code），CLI 辅助初始化和诊断。
 
+> 本文档为 brainstorming 产出，保持概要级别，聚焦设计决策和架构边界。详细的边界条件、输出格式、交互流程以 [alloy-design.md](../../alloy-design.md) 为权威参考。
+
 ---
 
 ## 一、整体架构与 v1 范围
@@ -60,7 +62,7 @@ CLI（终端）
 
 | 命令 | 参数 | 用途 |
 |------|------|------|
-| `/alloy:start` | `[topic]` | 智能入口：自动检测状态，接续或新建 |
+| `/alloy:start` | `[topic]` `[--new <topic>]` | 智能入口：自动检测状态，接续或新建 |
 | `/alloy:plan` | `[name]` | 逐制品生成设计文档，始终分步，每步可审查 |
 | `/alloy:apply` | `[name]` | 执行：隔离 workspace → SDD(TDD) → verify → retrospective |
 | `/alloy:finish` | `[name]` | 收尾：merge / PR / keep / discard |
@@ -79,7 +81,7 @@ CLI（终端）
 |------|------|
 | `alloy init` | 项目初始化：检测环境 → 安装依赖 → 部署 schema + skill |
 | `alloy status` | 查看所有活跃 change 总览，附带一致性检查 |
-| `alloy doctor` | 诊断：版本兼容性、文件一致性、worktree 健康 |
+| `alloy doctor` | 诊断：版本兼容性、文件一致性 |
 | `alloy update` | 更新 Alloy skill 文件到最新版 |
 
 ### 命令行为详述
@@ -87,7 +89,7 @@ CLI（终端）
 #### alloy start
 
 ```
-/alloy:start [topic]
+/alloy:start [topic] [--new <topic>]
 
 无活跃 change + 有 topic:
   → 全新开始: explore + brainstorming → draft.md（项目根目录，临时存放）
@@ -96,6 +98,10 @@ CLI（终端）
   → Agent 扫描项目上下文（README、requirement.md、已有代码等）
     ├── 有上下文 → 基于项目信息引导，提出建议方向或追问
     └── 空项目 → "请提供主题: alloy start <topic>"
+
+--new <topic>:
+  → 无论是否有活跃 change，直接开始新 change 流程
+  → 多个 change 可并行 planning，但不能同时 apply
 
 有 1 个活跃 change:
   → 自动接续，从 phase 断点继续
@@ -158,8 +164,14 @@ phase → archived
 ```
 /alloy:fix
 
-1. systematic-debugging → 根因定位
-2. 分流:
+1. 环境感知：
+   ├── 在 worktree 内 → "当前在 worktree <path>，在此修复并提交"
+   └── 不在 worktree → "在当前分支 <branch> 修复并提交"
+   （告知用户操作位置，不自动跳转）
+
+2. systematic-debugging → 根因定位
+
+3. 分流:
    不改 spec → TDD 修复 → verification → 直接 PR
    需改 spec:
      ├── 有活跃 change 且 phase < applied → 并入当前 change
@@ -355,10 +367,9 @@ alloy status [path] [--json]
 alloy doctor [path] [--json]
 ```
 
-诊断三项：
+诊断两项：
 - 版本兼容性：OpenSpec/Superpowers 是否在 compat.yaml 范围内
 - 文件一致性：.alloy.yaml 的 phase 与实际文件是否匹配
-- worktree 健康：worktree 路径是否存在，是否有孤立 worktree
 
 ### alloy update
 
@@ -391,7 +402,7 @@ install:
 | CLI（TypeScript） | init / status / doctor / update | 参考 Comet 架构分层 |
 | Slash Commands | 8 条 SKILL.md + 子步骤 prompt 模板 | 自行设计，参考 Comet 闸门风格 |
 | Schema + Templates | alloy schema（从零构建） | 参考 superpowers-bridge artifact 定义 |
-| Shell 脚本 | guard / state（闸门校验和状态管理） | 参考 Comet guard 模式 |
+| Shell 脚本 | guard / state / archive（闸门校验、状态管理和归档） | 参考 Comet guard 模式 |
 | 测试 | CLI 单元测试 + shell 脚本 Bats 测试 | — |
 
 ### 依赖稳定性
