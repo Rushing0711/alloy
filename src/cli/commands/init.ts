@@ -27,24 +27,24 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   }
 
   // 2. 安装 OpenSpec CLI
-  console.log("\n  📥 安装 OpenSpec CLI...");
-  try {
-    await installOpenSpec();
-    console.log("     ✓ @fission-ai/openspec@1");
-  } catch {
+  console.log("\n  📥 OpenSpec CLI...");
+  const openspecResult = await installOpenSpec();
+  if (openspecResult === "installed") {
+    console.log("     ✓ @fission-ai/openspec@1 已安装");
+  } else if (openspecResult === "failed") {
     console.error("     ✗ OpenSpec 安装失败");
     process.exit(1);
   }
+  // "skipped" — 函数内部已输出跳过信息
 
   // 3. 安装 Superpowers
-  console.log("\n  📥 安装 Superpowers...");
-  try {
-    await installSuperpowers();
-    console.log("     ✓ Claude Code → obra/superpowers@5");
-  } catch {
-    console.error("     ✗ Superpowers 安装失败");
-    process.exit(1);
+  console.log("\n  📥 Superpowers...");
+  const superpowersResult = await installSuperpowers();
+  if (superpowersResult === "installed") {
+    console.log("     ✓ Claude Code → obra/superpowers@5 已安装");
   }
+  // "skipped" — 函数内部已输出跳过信息
+  // "failed" — 不致命，使用内置 vendor 兜底
 
   // 4. 部署 Alloy skill
   console.log("\n  🚀 部署 Alloy...");
@@ -65,7 +65,7 @@ export async function initCommand(opts: InitOptions): Promise<void> {
 
   // 7. 兼容性检查
   console.log("\n  🩺 兼容性检查...");
-  const packageDir = join(import.meta.dirname, "..", "..");
+  const packageDir = join(import.meta.dirname, "..", "..", "..");
   const config = await loadCompat(packageDir);
   const results = checkCompat(config);
   for (const r of results) {

@@ -12,7 +12,7 @@ export interface DeployOptions {
 }
 
 function getPackageRoot(): string {
-  // 从 dist/cli/utils/ 回到包根目录
+  // 从 dist/cli/utils/ 回到包根目录（3 级）
   return join(import.meta.dirname, "..", "..", "..");
 }
 
@@ -101,21 +101,47 @@ export async function injectClaudeMd(opts: DeployOptions): Promise<boolean> {
   return true;
 }
 
-export async function installOpenSpec(): Promise<void> {
-  execSync("npm install -g @fission-ai/openspec@1", {
-    stdio: "inherit",
-    cwd: process.cwd(),
-  });
+export async function installOpenSpec(): Promise<"installed" | "skipped" | "failed"> {
+  // 先检查是否已安装（版本兼容性由 doctor 步骤校验）
+  try {
+    execSync("openspec --version", { stdio: "pipe" });
+    console.log("     ✓ OpenSpec 已安装，跳过");
+    return "skipped";
+  } catch {
+    // 未安装，继续
+  }
+
+  try {
+    execSync("npm install -g @fission-ai/openspec@1", {
+      stdio: "inherit",
+      cwd: process.cwd(),
+    });
+    return "installed";
+  } catch {
+    return "failed";
+  }
 }
 
-export async function installSuperpowers(): Promise<void> {
+export async function installSuperpowers(): Promise<"installed" | "skipped" | "failed"> {
+  // 先检查是否已安装
+  try {
+    const output = execSync("npx skills list", { stdio: "pipe" }).toString();
+    if (output.includes("obra/superpowers")) {
+      console.log("     ✓ Superpowers 已安装，跳过");
+      return "skipped";
+    }
+  } catch {
+    // 未安装或命令不可用
+  }
+
   try {
     execSync("npx skills add obra/superpowers@5", {
       stdio: "inherit",
       cwd: process.cwd(),
     });
+    return "installed";
   } catch {
-    // 网络不可用，从 vendor 复制
     console.log("  网络不可达，将使用内置 Superpowers skill 兜底");
+    return "failed";
   }
 }
