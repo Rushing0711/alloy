@@ -2,7 +2,51 @@
 
 Alloy 是一套融合 [OpenSpec](https://github.com/Fission-AI/OpenSpec) 和 [Superpowers](https://github.com/obra/superpowers) 的开发工作流编排工具。
 
-**OpenSpec 管"做成什么样"（需求追踪、Delta Spec、归档审计） + Superpowers 管"怎么做"（流程闸门、TDD、系统化调试、验证） = Alloy 编排两者，提供稳定可控的 AI 辅助开发体验。**
+## Alloy 是什么？
+
+Alloy 是一个 **AI 编码 Agent 的驾驶舱**——它不写代码，而是告诉 Agent **何时写、怎么写、写完之后谁来把关**。
+
+### 解决的问题
+
+用 AI 辅助开发的团队通常会遇到三个痛点：
+
+1. **需求容易偏**——Agent 理解的"要做的东西"和人类想的常常不一样，聊着聊着范围就漂了
+2. **质量靠自觉**——TDD、代码审查、分支隔离全看 Agent 心情，同一个 session 里前面记得后面就忘了
+3. **改完不留痕**——代码是改了，但"为什么这么改"、"这次改了哪些 spec"没有记录，下次换个人（或换个 session）就断片了
+
+Alloy 在现有两个工具的基础上补上了这些缺口：
+
+| 工具 | 管什么 | 各自的短板 |
+|------|--------|-----------|
+| **OpenSpec** | "做成什么样"——需求追踪、Delta Spec、归档审计 | 有文档没纪律：不强制 TDD、不强制审查、不强制分支隔离 |
+| **Superpowers** | "怎么做"——流程闸门、TDD、系统化调试、验证 | 有纪律没档案：改了代码但没记录"这次改了什么 spec" |
+| **Alloy** | "编排两者"——把规格管理和流程纪律缝成一条完整的、不可跳步的工作流 | — |
+
+### Alloy 怎么做
+
+Alloy 把一次开发拆成 5 个有闸门的阶段：
+
+```
+/alloy:start    → 把需求聊透（explore + brainstorming），产出设计草案
+/alloy:plan     → 逐制品生成 proposal/design/specs/tasks/plan，每步人类审查
+/alloy:apply    → 隔离环境 + SDD + TDD + verify，verify 不过不结束
+/alloy:finish   → 人类决定合入/PR/保留/丢弃（人工闸门）
+/alloy:archive  → Delta Spec 合入主 spec，归档审计
+```
+
+每个阶段之间有闸门——上一个阶段没完成、没审查通过，**进不了下一个阶段**。这不是靠 Agent 自觉，是靠 SKILL.md 里的硬指令和 shell 脚本的 HARD STOP 校验。
+
+### Alloy 不是什么
+
+- **不是一个新框架**——不引入新的 DSL、新的配置格式。制品格式沿用 OpenSpec，技能沿用 Superpowers
+- **不让开发更快**——反而因为有审查窗口和闸门，会比"让 Agent 一把梭"更慢。慢是故意的：省下的时间是拿质量换的
+- **不是 Comet**——Comet 也是 OpenSpec + Superpowers 的编排工具，但方向不同：Comet 提供 hotfix/tweak 快捷路径追求简便，Alloy 不给快捷路径，追求稳定可控
+
+### 适合谁
+
+- 用 Claude Code + Superpowers 做日常开发的团队
+- 对 AI 生成代码的质量有要求、希望有审查机制的项目
+- Java Web / Python / 银行等对变更可追溯性有要求的领域
 
 > 项目由来与设计历程详见 [docs/project-background.md](docs/project-background.md)。
 
