@@ -98,10 +98,10 @@ proposal → design → specs → tasks → plan
 4. 用户选择 (a) 才继续下一个制品
 
 **审查期间调整上游制品：**
-用户如说"把 proposal 第 3 点改一下"，Agent MUST：
+用户如说"把 proposal 第 3 点改一下"，你需要：
 1. 修改 proposal.md
 2. 自动识别 DAG 中依赖 proposal 的下游制品（design + specs → tasks → plan）
-3. 标注这些制品为"已过期"，重新生成
+3. 标注这些制品为"已过期"，提醒用户需要重新生成
 
 ### 各制品指令概述
 

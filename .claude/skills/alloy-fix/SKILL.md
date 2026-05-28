@@ -52,7 +52,7 @@ description: Alloy Bug 修复入口 - 诊断 → 环境感知 → 分流
 ### Step 3/3：直接修复 · 不改 spec
 ---
 
-→ TDD 修复 → verification-before-completion → 直接 PR
+→ 调用 superpowers:test-driven-development → 调用 superpowers:verification-before-completion → 直接 PR
 ```
 
 ### 路径 B：需改 spec（spec 需新增或修正）
