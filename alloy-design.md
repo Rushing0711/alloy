@@ -270,24 +270,37 @@ Apply:
 
 ### Schema
 
-Alloy schema fork 自 `superpowers-bridge`（社区 schema），差异如下：
+Alloy schema 从零构建，参考 `superpowers-bridge`（社区 schema）和 Comet，修正其已知问题：
 
 | 项目 | superpowers-bridge | Alloy |
 |------|-------------------|-------|
 | schema 名 | `superpowers-bridge` | `alloy` |
-| 首个制品 | `brainstorm.md` | `draft.md` |
-| 制品模板 | `templates/brainstorm.md` | `templates/draft.md` |
-| apply 范围 | 含 archive + PR | 仅到 retrospective（finish/archive 独立命令） |
+| 首个制品 | `brainstorm.md`（在 change 目录内） | `draft.md`（change 目录外，临时存放） |
+| DAG 时序 | verify/retro 有"有意的时序不对齐"（已承认的设计问题） | 修正：verify/retro 明确为 apply 子步骤，无 DAG 时序矛盾 |
+| apply 范围 | 含 archive + PR | 仅到 retrospective（finish/archive 独立为人工闸门） |
+| 构建方式 | — | 从零构建，保留完全掌控力 |
 
-其余制品（proposal / design / specs / tasks / plan / verify / retrospective）的 instruction 和 DAG 依赖关系直接从 superpowers-bridge 继承，templates 目录复用。
-
-`alloy init` 部署时 fork superpowers-bridge → 替换差异文件 → 写入 `openspec/config.yaml`（`schema: alloy`）。
+`alloy init` 部署时从零创建 schema → 写入 `openspec/config.yaml`（`schema: alloy`）。
 
 ### 平台兼容
 
-Alloy slash command 兼容主流 AI 编码平台。每个平台仅在 skills 目录路径和 slash command 语法上不同，OpenSpec 已处理多工具适配。
+v1 仅支持 Claude Code。团队统一使用 Claude Code，聚焦质量而非覆盖面。后续版本视需求扩展其他平台。
 
-优先覆盖：Claude Code、Cursor、Codex、GitHub Copilot、Windsurf、Gemini CLI、Cline、RooCode、Continue、OpenCode、Qwen Code、Kilo Code、Trae、CodeBuddy Code。
+### 扩展点
+
+v1 在关键节点给出提示，不调用外部技能（可靠性优先）。后续版本升级为可配置的 HARD GATE 闸门。
+
+**start 阶段完成后：**
+```
+draft.md 已完成。
+💡 建议：可以用 grill-me 对需求进行深入拷问，确认后再进入 plan。
+```
+
+**apply 完成后、finish 之前：**
+```
+retrospective.md 已生成。
+💡 建议：可以执行 QA 测试或浏览器测试等质量检查，确认后再进入 finish。
+```
 
 ---
 
@@ -420,24 +433,17 @@ $ alloy init
   🔍 检测环境...
      Node.js v22 ✓
      git ✓
-     AI 平台: Claude Code ✓  Cursor ✓  Codex ✗
+     Claude Code ✓
      Alloy skill 全局: ✗ 未安装
-
-  📦 选择安装目标（空格选择，回车确认）：
-     [x] Claude Code
-     [x] Cursor
-     [ ] Codex（未安装，灰掉）
 
   📥 安装 OpenSpec CLI...
      ✓ @fission-ai/openspec@1 （v1.5.0）
 
   📥 安装 Superpowers...
      ✓ Claude Code → obra/superpowers@5 （v5.1.0）
-     ✓ Cursor → obra/superpowers@5 （v5.1.0）
 
   🚀 部署 Alloy...
      ✓ Claude Code → ~/.claude/skills/alloy/（global）
-     ✓ Cursor → ~/.cursor/skills/alloy/（global）
      ✓ 项目 schema → openspec/schemas/alloy/
      ✓ CLAUDE.md → 已追加 Alloy 工作流提示
 
@@ -449,7 +455,7 @@ $ alloy init
      在 Claude Code 中输入 /alloy:start <topic> 开始工作
 ```
 
-- AI 平台必须由用户预先安装（Claude Code、Cursor 等），否则灰掉无法勾选
+- Claude Code 必须由用户预先安装，否则 init 无法继续
 - OpenSpec 和 Superpowers 由 alloy init 自动安装，钉住 compat.yaml 中指定的版本
 - CLAUDE.md 自动注入 Alloy 工作流提示（可用 `--skip-claude-md` 跳过），注入内容用注释标记包围，方便 `alloy update` 时替换
 
@@ -494,7 +500,7 @@ alloy update [path]
 |------|------|:--:|
 | CLI（TypeScript） | init / status / doctor / update 四条命令 | 2-3 周 |
 | Slash Commands | 8 条 SKILL.md + 子步骤 prompt 模板 | 2-3 周 |
-| Schema + Templates | fork superpowers-bridge → 适配 | 1 周 |
+| Schema + Templates | 从零构建，参考 superpowers-bridge + Comet | 2 周 |
 | Shell 脚本 | guard / state / archive（参考 Comet） | 1 周 |
 | 测试 | CLI 单元测试 + shell 脚本 Bats 测试 | 1 周 |
 
@@ -512,14 +518,14 @@ alloy update [path]
 | 风险 | 等级 | 缓解措施 |
 |------|:--:|------|
 | Superpowers skill 行为变更导致编排失效 | 中 | compat.yaml 钉版本 + alloy update 同步 vendor |
-| OpenSpec schema 格式演进 | 低 | fork 自 superpowers-bridge，OpenSpec schema 有版本号 |
-| 多平台 slash command 语法差异 | 低 | OpenSpec 已处理 29 个平台的语法适配，Alloy 继承 |
+| OpenSpec schema 格式演进 | 低 | alloy schema 独立构建，不依赖上游 schema |
+| Agent 不遵循 SKILL.md 闸门指令 | 中 | 参考 Comet 用 shell 脚本做 HARD STOP 校验，不可跳过 |
 | plan 阶段上下文溢出 | 低 | 逐制品分步 + SDD subagent 上下文隔离 |
 | 并行 change 冲突 | 低 | OpenSpec 目录隔离 + worktree 独立 |
 
 ### 推荐开发路径
 
 1. **原型验证**（第 1-2 周）——写 `/alloy:start` + `/alloy:plan` 的 SKILL.md，在 Claude Code 中跑通 Pre-OpenSpec → 规划阶段，验证 OpenSpec + Superpowers 组合是否如设计运作
-2. **CLI 实现**（第 3-5 周）——alloy init / status / doctor / update，参考 Comet 架构
+2. **CLI + Schema**（第 3-5 周）——alloy init / status / doctor / update + alloy schema 从零构建，参考 Comet 架构
 3. **完整流程**（第 6-8 周）——补全 apply / finish / archive / fix / discard 的 SKILL.md + shell 脚本
-4. **多平台适配 + 测试 + 文档**（第 9-10 周）
+4. **测试 + 文档 + 推广**（第 9-10 周）——单元测试、团队推广、反馈收集
