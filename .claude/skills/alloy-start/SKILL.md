@@ -21,12 +21,18 @@ description: Alloy 智能入口 - 自动检测状态，接续或新建 change
 用户输入了 `/alloy-start <topic>`，开始全新流程：
 
 1. 告知用户当前状态："未检测到活跃 change，开始新的工作流程"
-2. 调用 `superpowers:brainstorming` skill —— 但在此之前，先调用 `/opsx:explore <topic>` 进行上下文探查
-3. 互动式探索需求：
-   - 新项目（无现有代码）→ 探索需求空间
-   - 存量项目（有现有代码）→ 先探查代码库架构、集成点、约束，再探索需求
-4. 产出 `draft.md`（项目根目录，自由格式设计草案）
-5. draft.md 完成后，输出以下提示：
+
+2. **（MUST，不可跳过）调用 `/opsx:explore <topic>` 进行上下文探查：**
+   - 新项目（无现有代码）→ 探索需求空间、同类产品方案、技术可行性
+   - 存量项目（有现有代码）→ 先探查代码库架构、模块边界、集成点、技术栈约束，再探索需求空间
+   - explore 完成前，DO NOT 进入 brainstorming
+
+3. **（MUST，不可跳过）调用 `superpowers:brainstorming` skill 进行交互式需求设计：**
+   - 基于 explore 的探查结果，进行多轮 Q&A
+   - 提出 2-3 个方案选项，对比利弊，推荐最优方案
+   - 获得用户设计审批后，产出 `draft.md`
+
+4. 输出完成提示：
 
 ```
 draft.md 已生成。
