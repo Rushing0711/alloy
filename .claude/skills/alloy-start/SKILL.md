@@ -7,6 +7,8 @@ description: Alloy 智能入口 - 自动检测状态，接续或新建 change
 
 你是 Alloy 工作流的智能入口。你的职责是自动检测当前状态并引导用户进入正确的流程阶段。
 
+**关键行为规则：每次调用技能/命令前，MUST 先输出醒目的阶段标题，让用户清楚知道当前在做什么。**
+
 ## 状态检测
 
 首先，扫描 `openspec/changes/*/.alloy.yaml`，统计活跃 change（phase != archived）：
@@ -18,23 +20,60 @@ description: Alloy 智能入口 - 自动检测状态，接续或新建 change
 
 ### 情况 A：无活跃 change + 有 topic 参数
 
-用户输入了 `/alloy-start <topic>`，开始全新流程：
+用户输入了 `/alloy-start <topic>`，开始全新流程。
 
-1. 告知用户当前状态："未检测到活跃 change，开始新的工作流程"
-
-2. **（MUST，不可跳过）调用 `/opsx:explore <topic>` 进行上下文探查：**
-   - 新项目（无现有代码）→ 探索需求空间、同类产品方案、技术可行性
-   - 存量项目（有现有代码）→ 先探查代码库架构、模块边界、集成点、技术栈约束，再探索需求空间
-   - explore 完成前，DO NOT 进入 brainstorming
-
-3. **（MUST，不可跳过）调用 `superpowers:brainstorming` skill 进行交互式需求设计：**
-   - 基于 explore 的探查结果，进行多轮 Q&A
-   - 提出 2-3 个方案选项，对比利弊，推荐最优方案
-   - 获得用户设计审批后，产出 `draft.md`
-
-4. 输出完成提示：
+**Step 1 — 输出状态确认：**
 
 ```
+## Alloy Start：开始新工作流
+
+未检测到活跃 change，开始新的工作流程。
+
+主题：<topic>
+```
+
+**Step 2 — 上下文探查（MUST，不可跳过）：**
+
+先输出阶段标题，再调用技能：
+
+```
+---
+### Phase 1/2：上下文探查（/opsx:explore）
+---
+
+正在探查项目上下文和需求空间...
+```
+
+然后调用 `/opsx:explore <topic>`：
+- 新项目（无现有代码）→ 探索需求空间、同类产品方案、技术可行性
+- 存量项目（有现有代码）→ 先探查代码库架构、模块边界、集成点、技术栈约束，再探索需求空间
+
+explore 完成前，DO NOT 进入 brainstorming。
+
+**Step 3 — 需求设计（MUST，不可跳过）：**
+
+先输出阶段标题，再调用技能：
+
+```
+---
+### Phase 2/2：需求设计（superpowers:brainstorming）
+---
+
+基于上下文探查结果，进行交互式需求设计...
+```
+
+然后调用 `superpowers:brainstorming` skill：
+- 基于 explore 的探查结果，进行多轮 Q&A
+- 提出 2-3 个方案选项，对比利弊，推荐最优方案
+- 获得用户设计审批后，产出 `draft.md`
+
+**Step 4 — 完成提示：**
+
+```
+---
+### Alloy Start 完成
+---
+
 draft.md 已生成。
 
 💡 建议：可以用 grill-me 对需求进行深入拷问，确认后再进入 plan。
@@ -62,7 +101,20 @@ draft.md 已生成。
 
 ### 情况 D：有 1 个活跃 change
 
-自动接续，从当前 phase 断点恢复：
+输出恢复提示，自动接续：
+
+```
+---
+## Alloy Start：接续已有 Change
+---
+
+检测到活跃 change：<name>
+当前阶段：<phase>
+已完成制品：<列出已有制品>
+下一步：<建议操作>
+```
+
+然后从当前 phase 断点恢复：
 
 | 当前 phase | 恢复行为 |
 |-----------|----------|
@@ -71,12 +123,13 @@ draft.md 已生成。
 | `applied` | 提示用户：`/alloy-finish` 或继续修改 |
 | `finished` | 提示用户：`/alloy-archive` |
 
-恢复时输出当前状态概要（change 名、phase、已完成制品、下一步建议）。
-
 ### 情况 E：有多个活跃 change
 
 列出所有活跃 change，让用户选择：
+
 ```
+## Alloy Start：多个活跃 Change
+
 检测到多个活跃 change：
   1. login-feature (planned) - 已完成 proposal, design, specs, tasks, plan
   2. payment-fix   (started) - 已完成 draft.md
@@ -84,19 +137,11 @@ draft.md 已生成。
 请选择要接续的 change（输入编号），或 `/alloy-start --new <topic>` 开新 change。
 ```
 
-## 扩展点提示
-
-draft.md 完成后，MUST 输出扩展点提示（v1 仅提示，不调用技能）：
-
-```
-draft.md 已完成。
-💡 建议：可以用 grill-me 对需求进行深入拷问，确认后再进入 plan。
-```
-
 ---
 
 ## 行为约束
 
+- **每次调用技能/命令前 MUST 输出 `---` 分隔的阶段标题**，格式：`### Phase N/M：<阶段名称>（<技能名>）`
 - **闸门规则：** 在用户确认前，DO NOT 创建 change 目录或写入 `.alloy.yaml`
 - **上下文推断：** 必须按上述路由逻辑准确分发，不得跳过状态检测
 - **断点恢复：** phase + worktree 字段 + 文件存在性三者交叉验证，不可仅依赖 phase 字段

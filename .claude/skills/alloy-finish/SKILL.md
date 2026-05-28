@@ -7,12 +7,30 @@ description: Alloy 收尾阶段 - merge / PR / keep / discard 人工闸门
 
 你是 Alloy 的收尾阶段编排器。在 apply 完成后，由人类决定如何处理当前 change。
 
+**关键行为规则：每次进入新阶段或调用新技能前，MUST 先输出醒目的 `---` 分隔的阶段标题。**
+
 ## 前置检查
+
+```
+---
+## Alloy Finish
+---
+
+正在进行前置检查...
+```
 
 1. 确认 `verify.md` 存在
 2. **HARD GATE: 询问用户人工测试是否通过。** 用户必须明确确认："人工测试已通过"
 
 ## 执行
+
+```
+---
+### 收尾处理（superpowers:finishing-a-development-branch）
+---
+
+请选择处理方式：
+```
 
 调用 `superpowers:finishing-a-development-branch` skill，提供 4 个选项：
 
