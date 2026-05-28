@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
 import { initCommand } from "./commands/init.js";
+import { statusCommand } from "./commands/status.js";
+import { doctorCommand, formatDoctorResult } from "./commands/doctor.js";
+import { updateCommand } from "./commands/update.js";
 
 const USAGE = `
 alloy <command> [options]
@@ -56,15 +59,23 @@ async function main() {
       });
       break;
     }
-    case "status":
-      console.log("  status 命令将在 Task 8 中实现");
+    case "status": {
+      const statusName = restArgs[0];
+      const result = await statusCommand(process.cwd(), statusName);
+      console.log(result);
       break;
-    case "doctor":
-      console.log("  doctor 命令将在 Task 9 中实现");
+    }
+    case "doctor": {
+      const useJson = restArgs.includes("--json");
+      const result = await doctorCommand(process.cwd());
+      console.log(formatDoctorResult(result, useJson));
       break;
-    case "update":
-      console.log("  update 命令将在 Task 10 中实现");
+    }
+    case "update": {
+      const results = await updateCommand(process.cwd());
+      for (const r of results) console.log(`  ${r}`);
       break;
+    }
     default:
       console.error(`未知命令: ${command}`);
       console.log(USAGE);
