@@ -40,9 +40,11 @@ description: Alloy 智能入口 - 自动检测状态，接续或新建 change
 正在探查项目上下文和需求空间...
 ```
 
-**调用前检查：** 若项目未初始化 OpenSpec（`.claude/commands/opsx/explore.md` 不存在），引导用户运行 `openspec init` 初始化 OpenSpec。OpenSpec 必须先在项目中初始化才能使用。
+**调用前检查：** 若项目未初始化 OpenSpec（`.claude/commands/opsx/explore.md` 不存在），引导用户运行 `openspec init`。
 
-**使用 Skill 工具加载 `/opsx:explore`。** 禁止跳过此步骤。
+**立即执行：** 使用 Skill 工具加载 `/opsx:explore` 技能。禁止跳过此步骤。
+
+技能加载后，按其指引自由探索项目上下文和需求空间。
 
 ---
 
@@ -56,14 +58,16 @@ description: Alloy 智能入口 - 自动检测状态，接续或新建 change
 正在启动 brainstorming...
 ```
 
-**使用 Skill 工具加载 `superpowers:brainstorming`。** 禁止跳过此步骤。
+**立即执行：** 使用 Skill 工具加载 `superpowers:brainstorming` 技能。禁止跳过此步骤。
 
-调用时将探查结果作为 ARGUMENTS 传入：
+将探查结果作为 ARGUMENTS 传入：
 ```
 探查结果：<Step 1 的关键发现摘要>
 主题：<topic>
 项目类型：<新项目/存量项目>
 ```
+
+技能加载后，按其指引进行交互式需求设计。brainstorming 完成后，在项目根目录产出 `draft.md`。
 
 如果 `superpowers:brainstorming` 不可用，停止并提示用户安装 Superpowers，不要用普通对话替代。
 
