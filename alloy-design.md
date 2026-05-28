@@ -483,3 +483,43 @@ alloy update [path]
 | 12 | SDD 内部自带 TDD + code review | Alloy 不重复声明 SDD 的实现细节 |
 | 13 | retrospective 模板参考 superpowers-bridge | 有指导的 AI 生成，7 节结构，证据驱动 |
 | 14 | 不设子步骤状态追踪 | phase + worktree + 文件检查足够 Agent 判断恢复位置 |
+
+---
+
+## 八、开发可行性评估
+
+### 实现范围
+
+| 组件 | 内容 | 工作量（估） |
+|------|------|:--:|
+| CLI（TypeScript） | init / status / doctor / update 四条命令 | 2-3 周 |
+| Slash Commands | 8 条 SKILL.md + 子步骤 prompt 模板 | 2-3 周 |
+| Schema + Templates | fork superpowers-bridge → 适配 | 1 周 |
+| Shell 脚本 | guard / state / archive（参考 Comet） | 1 周 |
+| 测试 | CLI 单元测试 + shell 脚本 Bats 测试 | 1 周 |
+
+### 依赖稳定性
+
+| 依赖 | 状态 | 风险 |
+|------|------|:--:|
+| OpenSpec CLI | npm 包，版本化管理 | 低 |
+| Superpowers skill | npx skills add 安装，版本化管理 | 低 |
+| AI 平台（Claude Code 等） | slash command 机制稳定 | 低 |
+| Node.js + git | 基础环境 | 低 |
+
+### 关键风险与缓解
+
+| 风险 | 等级 | 缓解措施 |
+|------|:--:|------|
+| Superpowers skill 行为变更导致编排失效 | 中 | compat.yaml 钉版本 + alloy update 同步 vendor |
+| OpenSpec schema 格式演进 | 低 | fork 自 superpowers-bridge，OpenSpec schema 有版本号 |
+| 多平台 slash command 语法差异 | 低 | OpenSpec 已处理 29 个平台的语法适配，Alloy 继承 |
+| plan 阶段上下文溢出 | 低 | 逐制品分步 + SDD subagent 上下文隔离 |
+| 并行 change 冲突 | 低 | OpenSpec 目录隔离 + worktree 独立 |
+
+### 推荐开发路径
+
+1. **原型验证**（第 1-2 周）——写 `/alloy:start` + `/alloy:plan` 的 SKILL.md，在 Claude Code 中跑通 Pre-OpenSpec → 规划阶段，验证 OpenSpec + Superpowers 组合是否如设计运作
+2. **CLI 实现**（第 3-5 周）——alloy init / status / doctor / update，参考 Comet 架构
+3. **完整流程**（第 6-8 周）——补全 apply / finish / archive / fix / discard 的 SKILL.md + shell 脚本
+4. **多平台适配 + 测试 + 文档**（第 9-10 周）
