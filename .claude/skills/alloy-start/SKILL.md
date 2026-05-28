@@ -38,13 +38,18 @@ description: Alloy 智能入口 - 自动检测状态，接续或新建 change
 
 ```
 ---
-### Step 1/2：上下文探查 · /opsx:explore
+### Step 1/2：上下文探查 · OpenSpec Explore
 ---
 
 正在探查项目上下文和需求空间...
 ```
 
-然后调用 `/opsx:explore <topic>`：
+然后调用 OpenSpec Explore（优先 skill，fallback slash command）：
+
+**调用方式：** 先检查可用 skills 列表是否包含 `openspec-explore`。
+若有 → 使用 Skill 工具调用 `openspec-explore`（用户会看到 Skill 确认提示）。
+若无 → 使用 `/opsx:explore <topic>` slash command。
+
 - 新项目（无现有代码）→ 探索需求空间、同类产品方案、技术可行性
 - 存量项目（有现有代码）→ 先探查代码库架构、模块边界、集成点、技术栈约束，再探索需求空间
 
