@@ -123,10 +123,10 @@ export async function installOpenSpec(): Promise<"installed" | "skipped" | "fail
 }
 
 export async function installSuperpowers(): Promise<"installed" | "skipped" | "failed"> {
-  // 先检查是否已安装
+  // 先检查 Superpowers 核心 skill 是否已存在（brainstorming 是 Superpowers 的标志性 skill）
   try {
     const output = execSync("npx skills list", { stdio: "pipe" }).toString();
-    if (output.includes("obra/superpowers")) {
+    if (output.includes("brainstorming") && output.includes("using-git-worktrees")) {
       console.log("     ✓ Superpowers 已安装，跳过");
       return "skipped";
     }
@@ -135,7 +135,7 @@ export async function installSuperpowers(): Promise<"installed" | "skipped" | "f
   }
 
   try {
-    execSync("npx skills add obra/superpowers@5", {
+    execSync("npx skills add obra/superpowers", {
       stdio: "inherit",
       cwd: process.cwd(),
     });
