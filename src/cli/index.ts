@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
-import { initCommand } from "./commands/init.js";
+import { select } from "@inquirer/prompts";
+import { initCommand, selectScope } from "./commands/init.js";
 import { statusCommand } from "./commands/status.js";
 import { doctorCommand, formatDoctorResult } from "./commands/doctor.js";
 import { updateCommand } from "./commands/update.js";
@@ -47,14 +48,15 @@ async function main() {
       const { values } = parseArgs({
         args: restArgs,
         options: {
-          scope: { type: "string", default: "global" },
-          "skip-claude-md": { type: "boolean", default: false },
+          scope: { type: "string" },
+          "inject-claude-md": { type: "boolean", default: false },
         },
         strict: false,
       });
+      const scope = await selectScope(values.scope as string | undefined);
       await initCommand({
-        scope: (values.scope as "global" | "project") || "global",
-        skipClaudeMd: (values["skip-claude-md"] as boolean) || false,
+        scope,
+        injectClaudeMd: (values["inject-claude-md"] as boolean) || false,
         projectPath: process.cwd(),
       });
       break;
