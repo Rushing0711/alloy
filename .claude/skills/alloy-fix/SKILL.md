@@ -11,7 +11,7 @@ description: Alloy Bug 修复入口 - 诊断 → 环境感知 → 分流
 
 ```
 ---
-## Alloy Fix
+## Alloy · Bug 修复 · 诊断 + 分流
 ---
 
 正在检测当前环境...
@@ -27,7 +27,7 @@ description: Alloy Bug 修复入口 - 诊断 → 环境感知 → 分流
 
 ```
 ---
-### 根因诊断（superpowers:systematic-debugging）
+### Step 1/2：根因诊断 · superpowers:systematic-debugging
 ---
 
 正在系统化诊断问题...
@@ -41,7 +41,7 @@ description: Alloy Bug 修复入口 - 诊断 → 环境感知 → 分流
 
 ```
 ---
-### 修复方式：直接修复（不改 spec）
+### Step 2/2：直接修复 · 不改 spec
 ---
 
 → TDD 修复 → verification-before-completion → 直接 PR

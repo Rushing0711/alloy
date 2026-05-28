@@ -13,7 +13,7 @@ description: Alloy 收尾阶段 - merge / PR / keep / discard 人工闸门
 
 ```
 ---
-## Alloy Finish
+## Alloy · 收尾阶段 · 人工闸门
 ---
 
 正在进行前置检查...
@@ -26,7 +26,7 @@ description: Alloy 收尾阶段 - merge / PR / keep / discard 人工闸门
 
 ```
 ---
-### 收尾处理（superpowers:finishing-a-development-branch）
+### 收尾处理 · superpowers:finishing-a-development-branch
 ---
 
 请选择处理方式：

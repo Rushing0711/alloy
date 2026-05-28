@@ -25,7 +25,7 @@ description: Alloy 智能入口 - 自动检测状态，接续或新建 change
 **Step 1 — 输出状态确认：**
 
 ```
-## Alloy Start：开始新工作流
+## Alloy · Pre-OpenSpec 阶段 · 需求探索
 
 未检测到活跃 change，开始新的工作流程。
 
@@ -38,7 +38,7 @@ description: Alloy 智能入口 - 自动检测状态，接续或新建 change
 
 ```
 ---
-### Phase 1/2：上下文探查（/opsx:explore）
+### Step 1/2：上下文探查 · /opsx:explore
 ---
 
 正在探查项目上下文和需求空间...
@@ -56,7 +56,7 @@ explore 完成前，DO NOT 进入 brainstorming。
 
 ```
 ---
-### Phase 2/2：需求设计（superpowers:brainstorming）
+### Step 2/2：需求设计 · superpowers:brainstorming
 ---
 
 基于上下文探查结果，进行交互式需求设计...

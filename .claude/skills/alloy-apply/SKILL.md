@@ -16,7 +16,7 @@ description: Alloy 执行阶段 - worktree 隔离 + SDD(TDD) + verify + retrospe
 
 ```
 ---
-## Alloy Apply
+## Alloy · 执行阶段 · 隔离 + SDD(TDD) + 验证 + 复盘
 
 前置检查通过：plan.md ✓  phase=planned ✓
 ---
@@ -28,7 +28,7 @@ description: Alloy 执行阶段 - worktree 隔离 + SDD(TDD) + verify + retrospe
 
 ```
 ---
-### Step 1/4：创建隔离环境（superpowers:using-git-worktrees）
+### Step 1/4：隔离环境 · superpowers:using-git-worktrees
 ---
 
 正在创建 git worktree 隔离开发环境...
@@ -42,7 +42,7 @@ description: Alloy 执行阶段 - worktree 隔离 + SDD(TDD) + verify + retrospe
 
 ```
 ---
-### Step 2/4：逐任务实现（superpowers:subagent-driven-development）
+### Step 2/4：逐任务实现 · superpowers:subagent-driven-development
 ---
 
 按 plan.md 微步骤逐任务分派子 agent 执行...
@@ -63,7 +63,7 @@ description: Alloy 执行阶段 - worktree 隔离 + SDD(TDD) + verify + retrospe
 
 ```
 ---
-### Step 3/4：验证（verification-before-completion + openspec-verify-change）
+### Step 3/4：验证 · verification-before-completion + openspec-verify-change
 ---
 
 正在验证代码行为和制品结构...
@@ -77,7 +77,7 @@ description: Alloy 执行阶段 - worktree 隔离 + SDD(TDD) + verify + retrospe
 
 ```
 ---
-### Step 4/4：复盘（retrospective）
+### Step 4/4：复盘 · retrospective
 ---
 
 正在生成证据驱动复盘报告...
