@@ -1,0 +1,61 @@
+name: alloy
+version: "1"
+description: >
+  Alloy schema - 融合 OpenSpec 制品治理和 Superpowers 执行技能。
+  Pre-OpenSpec 阶段产出 draft.md，规划阶段逐制品生成，
+  执行阶段使用 worktree + SDD(TDD) + verify + retrospective。
+
+artifacts:
+  - id: draft
+    generates: draft.md
+    template: templates/draft.md
+    instruction: artifacts/draft.md
+    requires: []
+
+  - id: proposal
+    generates: proposal.md
+    template: templates/proposal.md
+    instruction: artifacts/proposal.md
+    requires: [draft]
+
+  - id: design
+    generates: design.md
+    template: templates/design.md
+    instruction: artifacts/design.md
+    requires: [proposal]
+
+  - id: specs
+    generates: "specs/"
+    template: templates/specs.md
+    instruction: artifacts/specs.md
+    requires: [proposal]
+
+  - id: tasks
+    generates: tasks.md
+    template: templates/tasks.md
+    instruction: artifacts/tasks.md
+    requires: [specs, design]
+
+  - id: plan
+    generates: plan.md
+    template: templates/plan.md
+    instruction: artifacts/plan.md
+    requires: [tasks]
+
+apply:
+  requires: [plan]
+  steps:
+    - id: worktree
+      description: "创建隔离 workspace (git worktree)"
+      skill: superpowers:using-git-worktrees
+    - id: subagent
+      description: "逐任务子 agent 执行 (SDD + TDD + code review)"
+      skill: superpowers:subagent-driven-development
+    - id: verify
+      description: "代码行为验证 + 制品结构验证"
+      command: openspec-verify-change
+      generates: verify.md
+    - id: retrospective
+      description: "证据驱动复盘"
+      generates: retrospective.md
+      template: templates/retrospective.md
