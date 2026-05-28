@@ -5,6 +5,12 @@ description: Alloy 放弃 change - 按 phase 分级清理
 
 # alloy-discard
 
+```
+---
+## Alloy · 放弃 Change
+---
+```
+
 ## Phase 行为
 
 | phase | 行为 |
@@ -30,3 +36,13 @@ description: Alloy 放弃 change - 按 phase 分级清理
 1. `git worktree remove <path> --force`（如有）
 2. `git branch -D <name>`（如有且未合并）
 3. `rm -rf openspec/changes/<name>/`
+
+### 完成
+
+```
+---
+### Alloy Discard 完成
+---
+
+✓ <name> 已清理
+```

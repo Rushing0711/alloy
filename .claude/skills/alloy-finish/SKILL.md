@@ -7,7 +7,7 @@ description: Alloy 收尾阶段 - merge / PR / keep / discard 人工闸门
 
 你是 Alloy 的收尾阶段编排器。在 apply 完成后，由人类决定如何处理当前 change。
 
-**关键行为规则：每次进入新阶段或调用新技能前，MUST 先输出醒目的 `---` 分隔的阶段标题。**
+**关键行为规则：每次进入新阶段或调用新技能前，MUST 先输出 `---` 分隔的阶段标题。**
 
 ## 前置检查
 
@@ -16,7 +16,11 @@ description: Alloy 收尾阶段 - merge / PR / keep / discard 人工闸门
 ## Alloy · 收尾阶段 · 人工闸门
 ---
 
-正在进行前置检查...
+### Step 1/2：前置检查
+---
+
+verify.md 存在？ <检查结果>
+人工测试状态：等待确认...
 ```
 
 1. 确认 `verify.md` 存在
@@ -26,10 +30,16 @@ description: Alloy 收尾阶段 - merge / PR / keep / discard 人工闸门
 
 ```
 ---
-### 收尾处理 · superpowers:finishing-a-development-branch
+### Step 2/2：收尾处理 · superpowers:finishing-a-development-branch
 ---
 
+人工测试已通过 ✓
+
 请选择处理方式：
+  1. 本地 merge  — 合入 main
+  2. 创建 PR    — 提交代码审查
+  3. 保持分支   — 暂不处理
+  4. 丢弃       — 取消本次 change
 ```
 
 调用 `superpowers:finishing-a-development-branch` skill，提供 4 个选项：
@@ -43,6 +53,19 @@ description: Alloy 收尾阶段 - merge / PR / keep / discard 人工闸门
    - phase → `finished`
 4. **丢弃** → 清理完毕，流程结束
    - 不写 phase，直接进入 discard 流程
+
+### 完成
+
+```
+---
+### Alloy Finish 完成
+---
+
+处理方式：<选择的方式>
+phase → finished
+
+准备好后，运行 `/alloy-archive <name>` 归档。
+```
 
 ## 闸门规则
 
