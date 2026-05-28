@@ -1,0 +1,7 @@
+compatible:
+  openspec: ">=1.3.0 <2.0.0"
+  superpowers: ">=5.0.0 <6.0.0"
+
+install:
+  openspec: "@fission-ai/openspec@1"
+  superpowers: "obra/superpowers@5"

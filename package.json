@@ -1,0 +1,36 @@
+{
+  "name": "@alloy/cli",
+  "version": "0.1.0",
+  "description": "Alloy - OpenSpec + Superpowers 编排层 CLI 工具",
+  "type": "module",
+  "main": "dist/cli/index.js",
+  "bin": {
+    "alloy": "dist/cli/index.js"
+  },
+  "files": [
+    "dist/",
+    "compat.yaml",
+    "vendor/",
+    "openspec/schemas/alloy/"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "yaml": "^2.7.0",
+    "semver": "^7.7.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0",
+    "vitest": "^3.1.0",
+    "@types/node": "^22.0.0",
+    "@types/semver": "^7.7.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "license": "MIT"
+}
