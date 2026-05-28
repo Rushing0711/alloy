@@ -48,10 +48,8 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 /alloy:start [topic]
 
 无活跃 change + 有 topic:
-  → 全新开始: explore + brainstorming → draft.md
-  → Agent 根据 draft.md 内容建议 change name
-  → 用户确认 → 创建 openspec/changes/<name>/
-  → 移入 draft.md → 写入 .alloy.yaml → phase=started
+  → 全新开始: explore + brainstorming → draft.md（项目根目录，临时存放）
+  → 不创建 change 目录（留给 plan 阶段）
 
 无活跃 change + 无 topic:
   → Agent 扫描项目上下文（README、requirement.md、已有代码等）
@@ -75,6 +73,20 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 /alloy:plan [name]（省略时从当前活跃 change 推断）
 
 前置检查: draft.md 存在
+
+若指定 name 但未匹配到活跃 change:
+  → ⚠️ "未找到 change '<name>'，将创建新 change。确认？"
+
+若有活跃 change 但 draft.md 内容与 change 目录不匹配:
+  → ⚠️ 提示异常，让用户选择：
+      1) 继续当前 change
+      2) 创建新 change
+
+流程:
+  1. 若无活跃 change 或用户选择新建 → 调用 /opsx:new <name> 创建 change 目录
+     （Agent 根据 draft.md 内容建议 name，用户确认）
+     → 移入 draft.md → 写入 .alloy.yaml → phase=started
+  2. 调用 /opsx:continue → 利用 schema DAG 按依赖顺序逐制品生成
 逐制品生成: proposal → design → specs → tasks → plan
 每步生成后有审查窗口，可确认或要求修改
 始终分步，不提供一键生成
@@ -82,6 +94,7 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 审查期间可沟通调整上游制品（如"把 proposal 第 3 点改一下"），
 Agent 根据 DAG 依赖自动识别下游制品过期并重做。
 plan 完成后不允许手动修改制品文件，变更需通过对话驱动。
+phase → planned
 ```
 
 ### alloy apply
@@ -93,7 +106,7 @@ plan 完成后不允许手动修改制品文件，变更需通过对话驱动。
 verify 在 apply 内部闭环，失败则循环修复直到通过，不通过不结束 apply。
 
 执行步骤:
-  1. .alloy.yaml → phase=planned，worktree 字段标记开始
+  1. 记录 worktree 路径到 .alloy.yaml，标记 apply 已开始
   2. superpowers:using-git-worktrees → 创建隔离 workspace
   3. superpowers:subagent-driven-development → 逐任务执行
        （SDD 内部遵循 TDD + 自带 spec review + code quality review）
@@ -254,6 +267,27 @@ Apply:
 
 所有制品存放于 openspec/changes/<name>/ 目录内，不需外部指针。
 ```
+
+### Schema
+
+Alloy schema fork 自 `superpowers-bridge`（社区 schema），差异如下：
+
+| 项目 | superpowers-bridge | Alloy |
+|------|-------------------|-------|
+| schema 名 | `superpowers-bridge` | `alloy` |
+| 首个制品 | `brainstorm.md` | `draft.md` |
+| 制品模板 | `templates/brainstorm.md` | `templates/draft.md` |
+| apply 范围 | 含 archive + PR | 仅到 retrospective（finish/archive 独立命令） |
+
+其余制品（proposal / design / specs / tasks / plan / verify / retrospective）的 instruction 和 DAG 依赖关系直接从 superpowers-bridge 继承，templates 目录复用。
+
+`alloy init` 部署时 fork superpowers-bridge → 替换差异文件 → 写入 `openspec/config.yaml`（`schema: alloy`）。
+
+### 平台兼容
+
+Alloy slash command 兼容主流 AI 编码平台。每个平台仅在 skills 目录路径和 slash command 语法上不同，OpenSpec 已处理多工具适配。
+
+优先覆盖：Claude Code、Cursor、Codex、GitHub Copilot、Windsurf、Gemini CLI、Cline、RooCode、Continue、OpenCode、Qwen Code、Kilo Code、Trae、CodeBuddy Code。
 
 ---
 
