@@ -15,6 +15,8 @@ description: Alloy 智能入口 - 自动检测状态，接续或新建 change
 
 扫描 `openspec/changes/*/.alloy.yaml`，统计 phase != `archived` 的 change。
 
+**在进入路由之前，先检查 OpenSpec 是否已在项目中初始化。** 检查 `.claude/commands/opsx/explore.md` 是否存在。若不存在，说明项目未初始化 OpenSpec——引导用户运行 `openspec init`（这会创建 OpenSpec 所需的命令文件和目录结构）。OpenSpec 未初始化时无法继续后续步骤。
+
 ---
 
 ## 路由 A：全新开始（无活跃 change + 用户提供了 topic）
@@ -28,42 +30,42 @@ description: Alloy 智能入口 - 自动检测状态，接续或新建 change
 ---
 ```
 
-### Step 1/2：上下文探查
+### Step 1/2：上下文探查 · /opsx:explore
 
 ```
 ---
-### Step 1/2：上下文探查
+### Step 1/2：上下文探查 · /opsx:explore
 ---
 
 正在探查项目上下文和需求空间...
 ```
 
-**使用 Skill 工具加载 `openspec-explore` 技能。** 禁止跳过此步骤。
+**调用前检查：** 若项目未初始化 OpenSpec（`.claude/commands/opsx/explore.md` 不存在），引导用户运行 `openspec init` 初始化 OpenSpec。OpenSpec 必须先在项目中初始化才能使用。
 
-如果 `openspec-explore` 不可用，停止并提示用户安装 OpenSpec 技能（`openspec init`），不要用普通的文件搜索或 Web 搜索替代。
+**使用 Skill 工具加载 `/opsx:explore`。** 禁止跳过此步骤。
 
 ---
 
-### Step 2/2：需求设计
+### Step 2/2：需求设计 · superpowers:brainstorming
 
 ```
 ---
-### Step 2/2：需求设计
+### Step 2/2：需求设计 · superpowers:brainstorming
 ---
 
 正在启动 brainstorming...
 ```
 
-**使用 Skill 工具加载 `superpowers:brainstorming` 技能。** 禁止跳过此步骤。
+**使用 Skill 工具加载 `superpowers:brainstorming`。** 禁止跳过此步骤。
 
-调用时将探查结果作为 ARGUMENTS 传入，让 brainstorming 技能带着上下文开始对话：
+调用时将探查结果作为 ARGUMENTS 传入：
 ```
 探查结果：<Step 1 的关键发现摘要>
 主题：<topic>
 项目类型：<新项目/存量项目>
 ```
 
-如果 `superpowers:brainstorming` 不可用，停止并提示用户安装 Superpowers 技能，不要用普通对话替代。
+如果 `superpowers:brainstorming` 不可用，停止并提示用户安装 Superpowers，不要用普通对话替代。
 
 **brainstorming 完成后，你必须等待用户确认方案，然后在项目根目录生成 `draft.md`：**
 
