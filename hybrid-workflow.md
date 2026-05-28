@@ -36,8 +36,8 @@ change-name 在 draft.md 完成后自然浮现。`/opsx:new <name>` 执行时会
 | 执行 | `/opsx:apply` | |
 | ├ 隔离 | 隐含 `superpowers:using-git-worktrees` | 隔离 workspace |
 | ├ 编码 | 隐含 `superpowers:subagent-driven-development` | 代码变更 |
-| │ ├ 传递 | `superpowers:test-driven-development` | 测试代码 |
-| │ └ 传递 | `superpowers:requesting-code-review` | 审查结果 |
+| │ │（SDD 内部遵循 `superpowers:test-driven-development`） | 测试代码 |
+| │ │（SDD 内部使用 `superpowers:requesting-code-review` 模板） | 审查结果 |
 | ├ 验证 | 隐含 `superpowers:verification-before-completion` | |
 | │ + | `openspec-verify-change` | **`verify.md`** |
 | └ 复盘 | 纯 AI 生成 | **`retrospective.md`** |
@@ -48,8 +48,9 @@ change-name 在 draft.md 完成后自然浮现。`/opsx:new <name>` 执行时会
 |------|----------|--------|
 | 人工测试 |（人工） | 测试结论 |
 | 收尾 | `superpowers:finishing-a-development-branch` | merge / PR / keep / discard |
-| PR 审查 | `superpowers:receiving-code-review`（PR 反馈时） | 代码修改 |
 | 归档 | `/opsx:archive` | delta spec 合并 + 目录归档 |
+
+> PR 审查反馈通过自然对话处理，Agent 内部遵循 `superpowers:receiving-code-review` 行为规范（验证优先、不盲从、技术推理）。
 
 ---
 
@@ -81,8 +82,8 @@ OpenSpec 执行:
     /opsx:apply
         ├── superpowers:using-git-worktrees
         ├── superpowers:subagent-driven-development
-        │      传递: superpowers:test-driven-development
-        │      传递: superpowers:requesting-code-review
+        │     （内部遵循 superpowers:test-driven-development）
+        │     （内部使用 superpowers:requesting-code-review 模板）
         ├── superpowers:verification-before-completion
         │      + openspec-verify-change → verify.md
         └── retrospective.md
@@ -91,8 +92,8 @@ OpenSpec 执行:
     人工测试
     superpowers:finishing-a-development-branch
         选项1: 本地 merge / 选项2: 创建 PR / 选项3: 保持 / 选项4: 丢弃
-    PR 审查（如选选项2）
-        → superpowers:receiving-code-review（如有反馈）
+    （选 PR 后，审查反馈通过自然对话处理，
+      Agent 内部遵循 superpowers:receiving-code-review 行为规范）
     /opsx:archive
         前提：finishing 已完成
         作用：sync delta spec + 归档
@@ -127,9 +128,14 @@ superpowers:systematic-debugging
     │       不进 OpenSpec
     │
     └── 需改 spec（spec 需新增或修正）
-             → 触发新 change 流程
-               （/opsx:explore → draft.md → /opsx:new → /opsx:continue）
-             → 与当前是否有活跃 change 无关，spec 变更始终是独立 change
+           ├── 有活跃 change 且尚未 apply（无代码落地）
+           │     → 并入当前 change，回到 /opsx:continue 更新制品
+           │       （减少碎片化 change）
+           │
+           └── 无活跃 change，或已有代码落地（phase ≥ applied）
+                 → 触发新 change 流程
+                   （/opsx:explore → draft.md → /opsx:new → /opsx:continue）
+                 → 代码已存在时，spec 变更作为独立增量更清晰
 ```
 
 ---
@@ -159,7 +165,7 @@ OpenSpec 执行阶段:
     apply  ← 依赖 plan
         ├── git-worktrees  ← 隐含: superpowers:using-git-worktrees
         ├── subagent-dev   ← 隐含: superpowers:subagent-driven-development
-        │                       传递: TDD + code-review
+        │                       （内部含 TDD + code-review）
         ├── verify         ← 隐含: verification-before-completion
         │                        + openspec-verify-change → verify.md
         └── retrospective  →  retrospective.md
@@ -209,12 +215,12 @@ OpenSpec 执行阶段:
 | `writing-plans` | OpenSpec 规划 | schema 隐含 | 将 tasks 拆为 TDD 微步骤 |
 | `using-git-worktrees` | OpenSpec 执行 | apply 隐含 | 创建隔离 workspace |
 | `subagent-driven-development` | OpenSpec 执行 | apply 隐含 | 逐任务子 agent 执行 |
-| `test-driven-development` | OpenSpec 执行 | 传递激活 | 每个微任务 RED-GREEN-REFACTOR |
-| `requesting-code-review` | OpenSpec 执行 | 传递激活 | 每个任务后派 code-reviewer |
+| `test-driven-development` | OpenSpec 执行 | SDD 内部遵循 | 子 agent 每个微任务走 RED-GREEN-REFACTOR |
+| `requesting-code-review` | OpenSpec 执行 | SDD 内部模板 | 为 code reviewer 子 agent 提供审查 prompt 模板 |
 | `verification-before-completion` | 执行 + Bug 修复 | apply 隐含 / 主动 | 代码行为验证 |
 | `finishing-a-development-branch` | 收尾 | 主动调用 | 提供 merge/PR/keep/discard |
 | `systematic-debugging` | Bug 修复 | 主动调用 | 结构化诊断 |
-| `receiving-code-review` | 收尾 | 主动调用 | PR 审查反馈处理 |
+| `receiving-code-review` | 收尾 | Agent 行为规范 | 处理 PR 反馈时的行为协议（验证优先、不盲从、技术推理） |
 
 ### 未使用的（4 个）
 
@@ -281,10 +287,12 @@ OpenSpec 执行阶段:
                     finishing
                  merge/PR/keep/discard
                          │
-                    PR 审查(如有)
-               receiving-code-review
-                         │
                     /opsx:archive
+                         │
+                   （选 PR 后，反馈
+                     自然对话处理，
+                     遵循 receiving-code-review
+                     行为规范）
 ```
 
 ### Bug 修复流程（独立入口）
@@ -299,15 +307,20 @@ OpenSpec 执行阶段:
            ▼              ▼
         不改 spec         需改 spec
            │              │
-           │              ▼
-           │         触发新 change
-           │         （独立于当前
-           │          活跃 change）
-           │              │
-           ▼              ▼
-    verification-before-  正常 change 流程
-       completion         （explore → new →
-           │               continue → apply）
+           │       ┌──────┴──────┐
+           │       ▼              ▼
+           │    无代码落地      已有代码落地
+           │    (phase <       (phase ≥
+           │     applied)      applied)
+           │       │              │
+           │       ▼              ▼
+           │   并入当前       触发新 change
+           │    change        流程
+           │       │              │
+           ▼       ▼              ▼
+    verification-before-  /opsx:continue   正常 change 流程
+       completion         更新制品        （explore → new →
+           │                            continue → apply）
            ▼
         直接 PR
 ```
@@ -328,5 +341,5 @@ OpenSpec 执行阶段:
 | verification-before-completion 嵌入 apply | 补充 openspec-verify-change | 前者查代码行为，后者查制品结构 |
 | apply 不含 finishing/archive | 两者独立为收尾阶段 | 不给未验证代码建 PR，不假设 AI 实现正确 |
 | archive 前提是 finishing 完成 | 硬约束 | 只有人类确认的 change 才能归档 |
-| bug 修复二向分流 | 不改 spec → 直接修；需改 spec → 触发新 change | spec 变更是独立变更，不与当前 change 耦合 |
-| 人工测试失败分级 | 小修直接改码 → 重新测试；大修回 continue 更新制品 | 避免小改动走重流程，避免大改动绕过制品审查 |
+| bug 修复二向分流 | 不改 spec → 直接修；需改 spec → 以代码是否已落地为分水岭 | 无代码（phase < applied）：并入当前 change；有代码（phase ≥ applied）：开新 change |
+| 人工测试失败处理 | apply 内部验证失败 → 循环修复直到通过；人工测试失败 → 看是 spec 还是代码问题 | 不和 spec 变更混入同一 change，代码修复在 apply 内部闭环 |
