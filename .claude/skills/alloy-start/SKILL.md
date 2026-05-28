@@ -60,7 +60,7 @@ explore 完成前，DO NOT 进入 brainstorming。
 
 ```
 ---
-### Step 2/2：需求设计
+### Step 2/2：需求设计（brainstorming）
 ---
 
 基于上下文探查结果，进行交互式需求设计...
