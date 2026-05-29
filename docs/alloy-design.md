@@ -10,9 +10,9 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 
 | 命令 | 参数 | 说明 |
 |------|------|------|
-| `alloy init` | `[path]` | 项目初始化：检测环境 → 安装依赖 → 部署 schema + skill |
-| | `--skip-claude-md` | 跳过 CLAUDE.md 注入 |
-| | `--scope <global\|project>` | 安装范围，默认 global |
+| `alloy init` | `[path]` | 项目初始化：检测环境 → 安装依赖 → openspec init → 部署 schema + skill |
+| | `--inject-claude-md` | 注入 CLAUDE.md（默认关闭） |
+| | `--scope <global\|project>` | 安装范围，默认 project |
 | `alloy status` | `[path]` | 查看所有活跃 change 总览 |
 | | `--json` | JSON 格式输出 |
 | `alloy doctor` | `[path]` | 诊断：版本兼容性、文件一致性 |
@@ -26,10 +26,10 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 | 命令 | 参数 | 说明 |
 |------|------|------|
 | `/alloy-start` | `[topic]` | 智能入口：自动检测状态，接续或新建 |
-| `/alloy-plan` | `[name]` | 逐制品生成设计文档，始终分步，每步可审查 |
-| `/alloy-apply` | `[name]` | 执行：隔离 workspace → SDD → 验证 → 复盘 |
-| `/alloy-finish` | `[name]` | 收尾：merge / PR / keep / discard |
-| `/alloy-archive` | `[name]` | 归档（硬校验 phase=finished，否则拒绝） |
+| `/alloy-plan` | `[name]` | 制品生成设计文档，始终分步，每步可审查 |
+| `/alloy-apply` | `[name]` | 执行：隔离 workspace → SDD → 代码验证 → 制品验证 → 复盘 |
+| `/alloy-archive` | `[name]` | 归档 + 收尾：sync delta spec → finish（merge / PR / keep） |
+| `/alloy-finish` | `[name]` | 独立收尾：archive 时选 keep 后，后续手动 merge / PR |
 | `/alloy-fix` | — | Bug 修复入口：诊断 → 分流（apply 为分水岭） |
 | `/alloy-discard` | `[name]` | 放弃当前 change，清理 worktree + 分支 + 目录 |
 | `/alloy-status` | `[name]` | 查看指定 change 的阶段、制品状态、下一步 |
@@ -46,6 +46,11 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 
 ```
 /alloy-start [topic]
+
+状态检测:
+  → 检查 openspec/config.yaml 是否存在（项目就绪标记）
+  → 不存在则引导运行 alloy init
+  → 扫描 openspec/changes/*/.alloy.yaml（活跃 change）
 
 无活跃 change + 有 topic:
   → 全新开始: explore + brainstorming → draft.md（项目根目录，临时存放）
@@ -86,8 +91,8 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
   1. 若无活跃 change 或用户选择新建 → 调用 /opsx:new <name> 创建 change 目录
      （Agent 根据 draft.md 内容建议 name，用户确认）
      → 移入 draft.md → 写入 .alloy.yaml → phase=started
-  2. 调用 /opsx:continue → 利用 schema DAG 按依赖顺序逐制品生成
-逐制品生成: proposal → design → specs → tasks → plan
+  2. 调用 /opsx:continue → 利用 schema DAG 按依赖顺序制品生成
+制品生成: proposal → design → specs → tasks → plan
 每步生成后有审查窗口，可确认或要求修改
 始终分步，不提供一键生成
 
@@ -102,38 +107,17 @@ phase → planned
 ```
 /alloy-apply [name]（省略时从当前活跃 change 推断）
 
-前置检查: plan.md 存在
-verify 在 apply 内部闭环，失败则循环修复直到通过，不通过不结束 apply。
+前置检查: plan.md 存在 + apply precheck 全部通过（5 个 Superpowers 技能可用性，缺一 STOP）
 
-执行步骤:
-  1. 记录 worktree 路径到 .alloy.yaml，标记 apply 已开始
-  2. superpowers:using-git-worktrees → 创建隔离 workspace
-  3. superpowers:subagent-driven-development → 逐任务执行
+执行步骤（共 5 步，验证失败回到 step 1 修复）:
+  1. superpowers:using-git-worktrees → 创建隔离 workspace
+  2. superpowers:subagent-driven-development（首选）或 executing-plans（降级）→ 任务执行
        （SDD 内部遵循 TDD + 自带 spec review + code quality review）
-  4. superpowers:verification-before-completion  → 代码行为验证
-        + openspec-verify-change                 → verify.md
-     → 验证失败则修复后重新验证，直到通过
-  5. retrospective.md（证据驱动复盘，模板参考 superpowers-bridge 的 retrospective 指令，
-     适配 Alloy 制品名和技能清单）
+  3. superpowers:verification-before-completion → 代码层验证（测试通过、行为正确）
+  4. /opsx:verify → 制品层验证（7 项结构化检查 → verify.md）
+  5. 纯 AI 生成 → retrospective.md（证据驱动复盘，§0-§6）
+
 phase → applied
-```
-
-### alloy finish
-
-```
-/alloy-finish [name]（省略时从当前活跃 change 推断）
-
-前置检查: verify.md 存在, 人工测试已通过（用户确认）
-执行: superpowers:finishing-a-development-branch
-  → 4 选项:
-      1. 本地 merge → "代码已合入。是否现在归档？ /alloy-archive <name>"
-      2. 创建 PR    → "PR 已创建。审查通过后 /alloy-archive <name>"
-      3. 保持分支   → "分支已保留。后续可 /alloy-archive 或 /alloy-discard"
-      4. 丢弃       → 清理完毕，流程结束
-
-选 PR 后，审查反馈通过自然对话处理，Agent 内部遵循
-superpowers:receiving-code-review 行为规范（验证优先、不盲从、技术推理）。
-phase → finished（仅选项 1, 2, 3；选项 4 不写 phase）
 ```
 
 ### alloy archive
@@ -141,10 +125,35 @@ phase → finished（仅选项 1, 2, 3；选项 4 不写 phase）
 ```
 /alloy-archive [name]（省略时从当前活跃 change 推断）
 
-前置检查（硬拒绝）: phase = finished
-执行: openspec archive -y
-  → sync delta spec + 归档到 archive/YYYY-MM-DD-<name>/
-phase → archived
+前置检查（硬拒绝）: phase = applied + verify.md 存在且 Overall Decision 不是 FAIL
+
+执行:
+  1. openspec archive -y → sync delta spec + 归档到 archive/YYYY-MM-DD-<name>/
+     （openspec 自有幂等检查，已归档则跳过）
+  2. 自动调用 /alloy-finish → 用户选择 merge / PR / keep
+
+phase → finished
+```
+
+### alloy finish
+
+```
+/alloy-finish [name]（省略时从当前活跃 change 推断）
+
+独立命令，两种使用场景：
+  1. /alloy-archive 内部自动调用 → 归档后立即收尾
+  2. 手动调用 → archive 时选了 keep，后续想 merge / PR
+
+前置检查: phase = finished（已归档）
+
+执行: superpowers:finishing-a-development-branch
+  → 3 选项:
+      1. 本地 merge → 完成
+      2. 创建 PR    → "PR 已创建，等待审查"
+      3. 保持分支   → "分支已保留"
+
+选 PR 后，审查反馈通过自然对话处理，Agent 内部遵循
+superpowers:receiving-code-review 行为规范（验证优先、不盲从、技术推理）。
 ```
 
 ### alloy fix
@@ -182,8 +191,7 @@ phase → archived
 phase 行为：
   ├── started / planned         → 仅删 change 目录（无 worktree / 分支）
   ├── applied / finished        → 删 change 目录 + worktree + 分支
-  ├── finished（已 merge）      → 警告"代码已合入 main，discard 仅清理 change 目录，不撤销 merge"
-  └── archived                  → 硬拒绝
+  └── finished（已 merge）      → 警告"代码已合入 main，discard 仅清理 change 目录，不撤销 merge"
 
 确认提示: "将删除以下内容，不可恢复:
   - Change: <name>
@@ -223,7 +231,7 @@ phase 行为：
 
 ```yaml
 # openspec/changes/<name>/.alloy.yaml
-phase: started | planned | applied | finished | archived
+phase: started | planned | applied | finished
 worktree: null | ".worktrees/<name>"
 schema_version: 1
 created_at: "2026-05-28"
@@ -248,22 +256,26 @@ updated_at: "2026-05-28"
 Pre-OpenSpec:
   draft.md ← explore + brainstorming 产出
 
-Schema DAG:
+Schema DAG（8 个制品）:
   proposal  ← 读 draft.md
     ├──→ specs     ← 依赖 proposal（不读 draft，防止行为 spec 被技术细节污染）
     │      └──→ tasks   ← 依赖 specs + design
     │            └──→ plan   ← 依赖 tasks（隐含 superpowers:writing-plans）
+    │                  └──→ verify     ← 依赖 plan（apply 阶段产出）
+    │                        └──→ retrospective ← 依赖 verify（apply 阶段产出）
     │
     └──→ design   ← 依赖 proposal（读 draft.md，受 proposal 范围约束）
 
 Apply:
   apply  ← 依赖 plan
-    ├── git-worktrees  ← 隐含 superpowers:using-git-worktrees
-    ├── subagent-dev   ← 隐含 superpowers:subagent-driven-development
-    │                       （SDD 内部含 TDD + code-review）
-    ├── verify         ← 隐含 verification-before-completion
-    │                        + openspec-verify-change → verify.md
-    └── retrospective  →  retrospective.md（模板参考 superpowers-bridge）
+    ├── precheck      ← 5 个 Superpowers 技能可用性检查
+    ├── git-worktrees ← 隐含 superpowers:using-git-worktrees
+    ├── 任务实现       ← 隐含 superpowers:subagent-driven-development（首选）
+    │                      or superpowers:executing-plans（降级）
+    │                      （SDD 内部含 TDD + code-review）
+    ├── 代码层验证     ← superpowers:verification-before-completion
+    ├── 制品层验证     ← /opsx:verify → verify.md（7 项结构化检查）
+    └── 复盘          → retrospective.md（纯 AI 生成，证据驱动 §0-§6）
 
 所有制品存放于 openspec/changes/<name>/ 目录内，不需外部指针。
 ```
@@ -275,9 +287,11 @@ Alloy schema 从零构建，参考 `superpowers-bridge`（社区 schema）和 Co
 | 项目 | superpowers-bridge | Alloy |
 |------|-------------------|-------|
 | schema 名 | `superpowers-bridge` | `alloy` |
+| 制品数 | 8 个 | 8 个（draft/proposal/design/specs/tasks/plan/verify/retrospective） |
 | 首个制品 | `brainstorm.md`（在 change 目录内） | `draft.md`（change 目录外，临时存放） |
-| DAG 时序 | verify/retro 有"有意的时序不对齐"（已承认的设计问题） | 修正：verify/retro 明确为 apply 子步骤，无 DAG 时序矛盾 |
-| apply 范围 | 含 archive + PR | 仅到 retrospective（finish/archive 独立为人工闸门） |
+| DAG 时序 | verify/retro 在 DAG 中但 apply 后才产出（已承认的设计问题） | verify/retro 在 DAG 中，依赖 plan/verify，apply 阶段产出 |
+| apply 范围 | 含 archive + PR | 仅到 retrospective（archive + finish 为收尾阶段） |
+| 指令存放 | 内联在 schema.yaml | 独立 `instructions/*.md` 文件 |
 | 构建方式 | — | 从零构建，保留完全掌控力 |
 
 `alloy init` 部署时从零创建 schema → 写入 `openspec/config.yaml`（`schema: alloy`）。
@@ -296,10 +310,10 @@ draft.md 已完成。
 💡 建议：可以用 grill-me 对需求进行深入拷问，确认后再进入 plan。
 ```
 
-**apply 完成后、finish 之前：**
+**apply 完成后、archive 之前：**
 ```
 retrospective.md 已生成。
-💡 建议：可以执行 QA 测试或浏览器测试等质量检查，确认后再进入 finish。
+💡 建议：可以执行 QA 测试或浏览器测试等质量检查，确认后再进入 archive。
 ```
 
 ---
@@ -313,13 +327,13 @@ retrospective.md 已生成。
   SKILL.md（Agent 内执行）
   ├── 阶段检测（读 .alloy.yaml + 文件系统）
   ├── 流程编排（按 phase 分发到对应子步骤）
-  ├── 审查窗口（逐制品确认）
+  ├── 审查窗口（制品确认）
   └── 调用 OpenSpec CLI + Superpowers skill
        │
        ▼
   大模型（内容层）
   ├── 写文档（proposal / design / specs / tasks / plan / retrospective）
-  ├── 写代码（subagent 逐任务执行）
+  ├── 写代码（subagent 优先，无 subagent 时降级为直接执行）
   └── 交互（explore Q&A / brainstorming 设计审批）
 ```
 
@@ -382,45 +396,24 @@ npm install -g @alloy/cli
 
 ### alloy init --scope
 
-`--scope` 控制 Alloy skill 安装位置。Claude Code 的 skill 加载合并全局和项目两个来源，同名 skill **项目级优先于全局**。
+`--scope` 控制 Alloy 和 Superpowers skill 文件的安装位置。OpenSpec CLI 始终全局安装（npm 包），`openspec/` 目录始终在项目内创建——全局共享的 skill 文件与项目级的需求追踪目录是分开的。
+
+Claude Code 的 skill 加载合并全局和项目两个来源，同名 skill **项目级优先于全局**。
 
 ```
-alloy init 检测已有 Alloy skill：
+alloy init --scope project（默认）:
+  Alloy skills      → .claude/skills/alloy/
+  Superpowers       → .claude/skills/（项目级）
+  OpenSpec CLI      → npm install -g（始终全局）
+  openspec init     → <项目路径>
+  openspec/ 目录    → <项目路径>/openspec/（始终项目级）
 
-  ├── 兼容的全局版本已安装
-  │     → 跳过 skill 部署，直接使用全局版
-  │
-  ├── 不兼容的全局版本已安装
-  │     → ⚠️ 提示版本冲突，给两个选择：
-  │       1) alloy update 升级全局版
-  │       2) --scope project 安装到项目级（覆盖同名全局 skill）
-  │
-  ├── 全局未安装
-  │     → 默认 --scope global 安装
-  │
-  └── --scope project 显式指定
-        → 无条件安装到项目 .claude/skills/alloy/
-```
-
-典型场景：
-
-```
-场景 A：新手上路
-  npm install -g @alloy/cli
-  alloy init → 默认装全局 skill
-  → 所有项目可用 /alloy-*，无需重复安装
-
-场景 B：版本兼容
-  npm install -g @alloy/cli@latest  ← v1.3（新）
-  cd old-project
-  alloy init → 检测到全局 skill v1.0（不兼容 CLI v1.3）
-  → 用户选 --scope project → 项目级装 v1.3 skill
-  → 其他老项目继续用旧版，互不影响
-
-场景 C：内网离线
-  alloy init → npx skills add 超时 / registry 不可达
-  → 从 vendor/superpowers/ 复制到目标平台 skills 目录
-  → 离线可用
+alloy init --scope global:
+  Alloy skills      → ~/.claude/skills/alloy/
+  Superpowers       → ~/.claude/plugins/（全局级，带 -g flag）
+  OpenSpec CLI      → npm install -g（始终全局）
+  openspec init     → ~/（全局 OpenSpec 命令）
+  openspec/ 目录    → <项目路径>/openspec/（始终项目级，由 deploySchema 创建）
 ```
 
 ### alloy init 流程
@@ -434,18 +427,19 @@ $ alloy init
      Node.js v22 ✓
      git ✓
      Claude Code ✓
-     Alloy skill 全局: ✗ 未安装
 
-  📥 安装 OpenSpec CLI...
+  📥 OpenSpec CLI...
      ✓ @fission-ai/openspec@1 （v1.5.0）
 
-  📥 安装 Superpowers...
+  📂 初始化 OpenSpec 项目结构...
+     ✓ openspec init 完成（项目）
+
+  📥 Superpowers...
      ✓ Claude Code → obra/superpowers@5 （v5.1.0）
 
   🚀 部署 Alloy...
-     ✓ Claude Code → ~/.claude/skills/alloy/（global）
+     ✓ Claude Code → .claude/skills/alloy/（project）
      ✓ 项目 schema → openspec/schemas/alloy/
-     ✓ CLAUDE.md → 已追加 Alloy 工作流提示
 
   🩺 兼容性检查...
      ✓ OpenSpec v1.5.0（兼容范围 >=1.3.0 <2.0.0）
@@ -455,9 +449,17 @@ $ alloy init
      在 Claude Code 中输入 /alloy-start <topic> 开始工作
 ```
 
-- Claude Code 必须由用户预先安装，否则 init 无法继续
-- OpenSpec 和 Superpowers 由 alloy init 自动安装，钉住 compat.yaml 中指定的版本
-- CLAUDE.md 自动注入 Alloy 工作流提示（可用 `--skip-claude-md` 跳过），注入内容用注释标记包围，方便 `alloy update` 时替换
+关键步骤：
+
+1. **安装 OpenSpec CLI** — `npm install -g @fission-ai/openspec@1`
+2. **调用 openspec init** — `openspec init <path> --tools claude --profile custom`。传入临时 custom profile 确保全部 11 个 workflow（new / continue / verify 等）被启用。参考 Comet 的做法
+3. **安装 Superpowers** — `npx skills add obra/superpowers -y --agent claude-code`（project scope 不加 `-g`）
+4. **部署 Alloy skill + schema** — 从包复制 `.claude/skills/alloy*/`，写入 `openspec/schemas/alloy/`，追加 `schema: alloy` 到 `openspec/config.yaml`
+5. **兼容性检查** — 根据 `compat.yaml` 校验版本
+
+CLAUDE.md 注入默认关闭。需要时使用 `--inject-claude-md`。Claude Code 必须由用户预先安装。
+
+OpenSpec 和 Superpowers 由 `alloy init` 自动安装，钉住 `compat.yaml` 中指定的版本。网络不可用时使用 `vendor/superpowers/` 内置兜底。
 
 ### alloy update
 
@@ -481,14 +483,19 @@ alloy update [path]
 | 4 | Agent 内流程 + CLI 辅助 | 核心工作流依赖 AI 编排能力，CLI 只做确定性操作 |
 | 5 | alloy init 自动安装 OpenSpec + Superpowers | 用户从零到可用只需两条命令（install + init） |
 | 6 | compat.yaml 钉版本 | init 装已验证的组合，doctor 警告超出范围的非兼容风险 |
-| 7 | CLAUDE.md 自动注入（可选跳过） | 让未来 session 知道项目归 Alloy 管，可跳过不强制 |
-| 8 | verify 在 apply 内部闭环 | 失败则循环修复直到通过，不引入外部回退状态 |
-| 9 | discard 全阶段可用，archived 硬拒绝 | started/planned 阶段无代码沉淀，可自由丢弃 |
+| 7 | CLAUDE.md 注入默认关闭 | 非功能必需，减少对项目文件的侵入。需要时显式 `--inject-claude-md` |
+| 8 | verify 在 apply 内部闭环，两层验证 | 代码层（verification-before-completion）+ 制品层（/opsx:verify → verify.md），任意 FAIL 回退到 SDD |
+| 9 | archive 内部包含 finish | 先归档文档再合入代码，避免"代码合入了但 spec 没同步"的窗口期；openspec 自有幂等检查 |
 | 10 | fix 以 apply 为 spec 变更分水岭 | 无代码（phase< applied）并入当前 change；有代码新开 change |
 | 11 | receiving-code-review 嵌入 agent 指令 | 行为规范非管道步骤，减少命令数，降低使用门槛 |
 | 12 | SDD 内部自带 TDD + code review | Alloy 不重复声明 SDD 的实现细节 |
-| 13 | retrospective 模板参考 superpowers-bridge | 有指导的 AI 生成，7 节结构，证据驱动 |
+| 13 | retrospective 模板参考 superpowers-bridge | 纯 AI 生成，§0-§6 证据驱动，Forward-Pointer 保留审计线索 |
 | 14 | 不设子步骤状态追踪 | phase + worktree + 文件检查足够 Agent 判断恢复位置 |
+| 15 | CLI 守门，Skill 信任 | 环境依赖由 `alloy init` 确保，Skill 不做手动 fallback。依赖缺失时引导 `alloy init` |
+| 16 | scope 只控制 skill 安装位置 | Alloy + Superpowers skill 受 scope 控制；OpenSpec `openspec/` 目录始终在项目内；默认 project 级别 |
+| 17 | 项目就绪标记 = `openspec/config.yaml` | `alloy-start` 检查此文件判断项目是否已初始化，与 OpenSpec 自身的检测方式一致 |
+| 18 | openspec init 启用 custom profile | 参考 Comet，使用临时 custom profile 确保全部 11 个 workflow 可用，避免 core profile 缺少 new/continue 等命令 |
+| 19 | /alloy-finish 保留为独立命令 | archive 时选 keep 后，后续可手动调 finish 合入；无需重跑 archive |
 
 ---
 
@@ -520,7 +527,7 @@ alloy update [path]
 | Superpowers skill 行为变更导致编排失效 | 中 | compat.yaml 钉版本 + alloy update 同步 vendor |
 | OpenSpec schema 格式演进 | 低 | alloy schema 独立构建，不依赖上游 schema |
 | Agent 不遵循 SKILL.md 闸门指令 | 中 | 参考 Comet 用 shell 脚本做 HARD STOP 校验，不可跳过 |
-| plan 阶段上下文溢出 | 低 | 逐制品分步 + SDD subagent 上下文隔离 |
+| plan 阶段上下文溢出 | 低 | 制品分步 + SDD subagent 上下文隔离 |
 | 并行 change 冲突 | 低 | OpenSpec 目录隔离 + worktree 独立 |
 
 ### 推荐开发路径

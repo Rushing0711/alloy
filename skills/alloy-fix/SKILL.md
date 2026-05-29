@@ -9,6 +9,11 @@ description: Alloy Bug 修复入口 - 诊断 → 环境感知 → 分流
 
 **调用外部命令或技能前，先输出标题和状态描述，再执行操作。**
 
+**什么算"fix 诊断不到位"（反例）：**
+- 没跑 systematic-debugging 就凭直觉修——"一看就知道是哪的问题"——根因可能完全错误
+- 诊断出需改 spec 但直接修代码不改 spec——spec 和代码从此分叉，下次换人（换 session）就断片
+- 已有代码落地但并入当前 change——混入已有 change，后续 audit 无法追溯"这个 spec 变更是因为修 bug"
+
 ---
 
 ## Step 1/3：环境感知

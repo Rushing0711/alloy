@@ -2,6 +2,8 @@
 
 本文档融合 OpenSpec 和 Superpowers，设计一套完整的开发工作流，覆盖 4 个阶段：Pre-OpenSpec → OpenSpec 规划 → OpenSpec 执行 → 收尾。
 
+> **约定：** 文中标注的"内部遵循 xxx""内部使用 xxx""SDD 内部…"等描述，记录的是该技能**内部自动完成**的行为，用于让读者了解完整流程。这些不是需要主动调用的独立步骤——编排层只需调用入口技能，内部机制由技能自身管理。
+
 ---
 
 ## 一、阶段全貌
@@ -34,21 +36,23 @@ change-name 在 draft.md 完成后自然浮现。`/opsx:new <name>` 执行时会
 | 步骤 | 命令/技能 | 产出物 |
 |------|----------|--------|
 | 执行 | `/opsx:apply` | |
+| ├ 预检 | precheck：5 个 Superpowers 技能可用性 | |
 | ├ 隔离 | 隐含 `superpowers:using-git-worktrees` | 隔离 workspace |
-| ├ 编码 | 隐含 `superpowers:subagent-driven-development` | 代码变更 |
-| │ │（SDD 内部遵循 `superpowers:test-driven-development`） | 测试代码 |
-| │ │（SDD 内部使用 `superpowers:requesting-code-review` 模板） | 审查结果 |
-| ├ 验证 | 隐含 `superpowers:verification-before-completion` | |
-| │ + | `openspec-verify-change` | **`verify.md`** |
-| └ 复盘 | 纯 AI 生成 | **`retrospective.md`** |
+| ├ 任务实现 | 隐含 `superpowers:subagent-driven-development`（首选） | 代码变更 |
+| │ │（SDD 内部：按任务分派子 agent） | |
+| │ │（SDD 内部遵循：`superpowers:test-driven-development`） | 测试代码 |
+| │ │（SDD 内部含：spec compliance review + code quality review） | 审查结果 |
+| │ │（无 subagent 支持时降级：`superpowers:executing-plans`） | |
+| ├ 代码层验证 | `superpowers:verification-before-completion` | 测试通过 |
+| ├ 制品层验证 | `/opsx:verify` | **`verify.md`**（7 项结构化检查） |
+| └ 复盘 | 纯 AI 生成 | **`retrospective.md`**（证据驱动 §0-§6） |
 
 ### 收尾阶段
 
 | 步骤 | 命令/技能 | 产出物 |
 |------|----------|--------|
 | 人工测试 |（人工） | 测试结论 |
-| 收尾 | `superpowers:finishing-a-development-branch` | merge / PR / keep / discard |
-| 归档 | `/opsx:archive` | delta spec 合并 + 目录归档 |
+| 归档 + 收尾 | `/opsx:archive -y` → `superpowers:finishing-a-development-branch` | delta spec 合并 + merge / PR / keep |
 
 > PR 审查反馈通过自然对话处理，Agent 内部遵循 `superpowers:receiving-code-review` 行为规范（验证优先、不盲从、技术推理）。
 
@@ -80,23 +84,24 @@ OpenSpec 规划:
 
 OpenSpec 执行:
     /opsx:apply
+        ├── precheck：5 个 Superpowers 技能可用性检查
         ├── superpowers:using-git-worktrees
-        ├── superpowers:subagent-driven-development
-        │     （内部遵循 superpowers:test-driven-development）
-        │     （内部使用 superpowers:requesting-code-review 模板）
-        ├── superpowers:verification-before-completion
-        │      + openspec-verify-change → verify.md
-        └── retrospective.md
+        ├── superpowers:subagent-driven-development（首选）
+        │     SDD 内部：按任务分派子 agent
+        │     SDD 内部遵循：superpowers:test-driven-development
+        │     SDD 内部含：spec compliance review + code quality review
+        │     或 superpowers:executing-plans（无 subagent 支持时降级）
+        ├── superpowers:verification-before-completion（代码层验证）
+        ├── /opsx:verify → verify.md（制品层验证，7 项结构化检查）
+        └── retrospective.md（证据驱动复盘）
 
 收尾:
     人工测试
-    superpowers:finishing-a-development-branch
-        选项1: 本地 merge / 选项2: 创建 PR / 选项3: 保持 / 选项4: 丢弃
+    /opsx:archive -y（sync delta spec + 归档）
+        → 自动调用 superpowers:finishing-a-development-branch
+            选项1: 本地 merge / 选项2: 创建 PR / 选项3: 保持
     （选 PR 后，审查反馈通过自然对话处理，
       Agent 内部遵循 superpowers:receiving-code-review 行为规范）
-    /opsx:archive
-        前提：finishing 已完成
-        作用：sync delta spec + 归档
 ```
 
 ### 场景 2：存量项目开发新功能
@@ -146,7 +151,7 @@ superpowers:systematic-debugging
 Pre-OpenSpec 阶段:
     draft.md  ← /opsx:explore 隐含 superpowers:brainstorming 产出（无 DAG 依赖）
 
-OpenSpec 规划阶段（schema DAG）:
+OpenSpec 规划阶段（schema DAG，6 个制品）:
     proposal  ← 无 schema 依赖（instruction 读 draft.md）
         │
         ├──→ specs     ← 依赖 proposal
@@ -156,27 +161,33 @@ OpenSpec 规划阶段（schema DAG）:
         │            │            （需"做什么"+"怎么做"）
         │            │
         │            └──→ plan   ← 依赖 tasks
-        │                      隐含: superpowers:writing-plans
+        │                  │   隐含: superpowers:writing-plans
+        │                  │
+        │                  └──→ verify  ← 依赖 plan（apply 阶段产出）
+        │                        │
+        │                        └──→ retrospective ← 依赖 verify（apply 阶段产出）
         │
         └──→ design   ← 依赖 proposal
                        （instruction 读 draft.md，受 proposal 范围约束）
 
-OpenSpec 执行阶段:
+OpenSpec 执行阶段（8 个制品，后 2 个在 apply 中产出）:
     apply  ← 依赖 plan
-        ├── git-worktrees  ← 隐含: superpowers:using-git-worktrees
-        ├── subagent-dev   ← 隐含: superpowers:subagent-driven-development
-        │                       （内部含 TDD + code-review）
-        ├── verify         ← 隐含: verification-before-completion
-        │                        + openspec-verify-change → verify.md
-        └── retrospective  →  retrospective.md
+        ├── precheck      ← 5 个 Superpowers 技能可用性检查
+        ├── git-worktrees ← 隐含: superpowers:using-git-worktrees
+        ├── 任务实现       ← 隐含: superpowers:subagent-driven-development（首选）
+        │                      or superpowers:executing-plans（降级）
+        │                      （内部含 TDD）
+        ├── 代码层验证     ← superpowers:verification-before-completion
+        ├── 制品层验证     ← /opsx:verify → verify.md（7 项结构化检查）
+        └── 复盘          → retrospective.md（纯 AI 生成）
 ```
 
-### 逐依赖理由
+### 各依赖理由
 
 | 边 | 理由 |
 |----|------|
 | proposal 读 draft | 从 draft 决策链中提取范围。无正式 DAG 依赖（draft 在 schema 之外，由 instruction 读取） |
-| specs → proposal | 按 Capabilities 列表逐项写 Delta Spec，只关心行为边界 |
+| specs → proposal | 按 Capabilities 列表按条目写 Delta Spec，只关心行为边界 |
 | specs ∅→ draft | **故意不读。** 防止行为 spec 被技术实现细节污染（如"用 Redis"而非"支持会话持久化"） |
 | design → proposal | 约束技术方案不超出 proposal 的 Capabilities 范围 |
 | design 读 draft | 重组 draft 中的 Q1-Qn 技术决策 |
@@ -191,12 +202,12 @@ OpenSpec 执行阶段:
 |------|------|------|
 | `/opsx:explore` | 用 | Pre-OpenSpec：统一入口，自适应（新项目探索需求、存量项目探索代码），隐含 brainstorming |
 | `/opsx:new` | 用 | OpenSpec 规划：创建空 change 目录 |
-| `/opsx:continue` | 用 | OpenSpec 规划：逐制品生成 + 审查 |
+| `/opsx:continue` | 用 | OpenSpec 规划：制品生成 + 审查 |
 | `/opsx:apply` | 用 | OpenSpec 执行：实现（不含 finishing 和 archive） |
 | `/opsx:archive` | 用 | 收尾：finishing 完成后手动归档 |
 | `/opsx:ff` | 备选 | 需求极其明确时替代 continue |
 | `/opsx:propose` | 不用 | 自定义 schema 下与 ff/continue 等价 |
-| `/opsx:verify` | 不用 | 嵌入 apply 内部 |
+| `/opsx:verify` | 用 | 嵌入 apply 内部（制品层验证 → verify.md） |
 | `/opsx:sync` | 不用 | 嵌入 archive |
 | `/opsx:bulk-archive` | 不用 | 边缘场景 |
 | `/opsx:onboard` | 不用 | 一次性引导 |
@@ -207,27 +218,27 @@ OpenSpec 执行阶段:
 
 ## 五、Superpowers 技能使用情况
 
-### 在流程中使用的（10 个）
+### 在流程中使用的（11 个）
 
 | 技能 | 阶段 | 触发方式 | 作用 |
 |------|------|---------|------|
 | `brainstorming` | Pre-OpenSpec | explore 隐含 | 交互式 Q&A + 方案对比 + 设计审批 |
 | `writing-plans` | OpenSpec 规划 | schema 隐含 | 将 tasks 拆为 TDD 微步骤 |
 | `using-git-worktrees` | OpenSpec 执行 | apply 隐含 | 创建隔离 workspace |
-| `subagent-driven-development` | OpenSpec 执行 | apply 隐含 | 逐任务子 agent 执行 |
+| `subagent-driven-development` | OpenSpec 执行 | apply 隐含（首选） | 按任务分派子 agent 执行 |
+| `executing-plans` | OpenSpec 执行 | apply 隐含（降级） | 无 subagent 支持时的兜底方案，当前 session 直接执行 |
 | `test-driven-development` | OpenSpec 执行 | SDD 内部遵循 | 子 agent 每个微任务走 RED-GREEN-REFACTOR |
-| `requesting-code-review` | OpenSpec 执行 | SDD 内部模板 | 为 code reviewer 子 agent 提供审查 prompt 模板 |
+| `requesting-code-review` | OpenSpec 执行 | SDD 内部使用 | 为 code reviewer 子 agent 提供审查 prompt 模板 |
 | `verification-before-completion` | 执行 + Bug 修复 | apply 隐含 / 主动 | 代码行为验证 |
 | `finishing-a-development-branch` | 收尾 | 主动调用 | 提供 merge/PR/keep/discard |
 | `systematic-debugging` | Bug 修复 | 主动调用 | 结构化诊断 |
 | `receiving-code-review` | 收尾 | Agent 行为规范 | 处理 PR 反馈时的行为协议（验证优先、不盲从、技术推理） |
 
-### 未使用的（4 个）
+### 未使用的（3 个）
 
 | 技能 | 原因 |
 |------|------|
-| `executing-plans` | 不如 subagent-driven-development，不传递激活 TDD + code review |
-| `dispatching-parallel-agents` | 特定场景工具，不属于核心工作流 |
+| `dispatching-parallel-agents` | 特定场景工具（并行排查多个独立 bug），不属于核心工作流 |
 | `writing-skills` | 与日常开发无关 |
 | `using-superpowers` | 系统入口，不参与开发流程 |
 
@@ -262,7 +273,7 @@ OpenSpec 执行阶段:
                          │
                          ▼
                     /opsx:apply
-         git-worktrees→subagent→verify→retro
+         precheck→worktree→SDD→代码验证→制品验证→复盘
          (隐含: worktrees, subagent,
           TDD, review, verification)
                          │
@@ -284,10 +295,9 @@ OpenSpec 执行阶段:
                    │       │
                    └───────┘
                          │
-                    finishing
-                 merge/PR/keep/discard
-                         │
                     /opsx:archive
+                 sync delta spec → finishing
+                   merge/PR/keep
                          │
                    （选 PR 后，反馈
                      自然对话处理，
@@ -338,8 +348,10 @@ OpenSpec 执行阶段:
 | brainstorming 不在 schema DAG 内 | Pre-OpenSpec 独立步骤 | 此时尚未创建 change，无需 schema 追踪 |
 | design 依赖 proposal | 新增约束 | 技术方案不超出范围 |
 | specs 不读 draft | 故意隔离 | 防止行为 spec 被实现细节污染 |
-| verification-before-completion 嵌入 apply | 补充 openspec-verify-change | 前者查代码行为，后者查制品结构 |
-| apply 不含 finishing/archive | 两者独立为收尾阶段 | 不给未验证代码建 PR，不假设 AI 实现正确 |
-| archive 前提是 finishing 完成 | 硬约束 | 只有人类确认的 change 才能归档 |
+| verification-before-completion + /opsx:verify 双层验证 | 代码层验证（测试、行为）→ 制品层验证（7 项结构化检查） | 先确保代码正确，再确保制品完整；任意 FAIL 回到 SDD 修复 |
+| apply 不含 archive/finish | archive + finish 独立为收尾阶段 | 不给未验证代码建 PR，不假设 AI 实现正确 |
+| archive 先于 finish | 归档（sync delta spec）→ 自动 finish（merge/PR/keep） | 先锁定文档证据链，再合入代码；避免"代码合入了但 spec 没跟上" |
+| /alloy-finish 可独立调用 | archive 时选 keep 后，后续可手动调 finish | 分支还在，spec 已归档，随时可以合入 |
+| verify/retrospective 是 schema 制品 | artifacts 从 6 个扩展到 8 个，DAG 完整 | 有模板、有指令、有依赖——具备制品的所有特征 |
 | bug 修复二向分流 | 不改 spec → 直接修；需改 spec → 以代码是否已落地为分水岭 | 无代码（phase < applied）：并入当前 change；有代码（phase ≥ applied）：开新 change |
 | 人工测试失败处理 | apply 内部验证失败 → 循环修复直到通过；人工测试失败 → 看是 spec 还是代码问题 | 不和 spec 变更混入同一 change，代码修复在 apply 内部闭环 |

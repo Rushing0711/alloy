@@ -28,7 +28,7 @@ Alloy 把一次开发拆成 5 个有闸门的阶段：
 
 ```
 /alloy-start    → 把需求聊透（explore + brainstorming），产出设计草案
-/alloy-plan     → 逐制品生成 proposal/design/specs/tasks/plan，每步人类审查
+/alloy-plan     → 制品生成 proposal/design/specs/tasks/plan，每步人类审查
 /alloy-apply    → 隔离环境 + SDD + TDD + verify，verify 不过不结束
 /alloy-finish   → 人类决定合入/PR/保留/丢弃（人工闸门）
 /alloy-archive  → Delta Spec 合入主 spec，归档审计
@@ -40,13 +40,17 @@ Alloy 把一次开发拆成 5 个有闸门的阶段：
 
 - **不是一个新框架**——不引入新的 DSL、新的配置格式。制品格式沿用 OpenSpec，技能沿用 Superpowers
 - **不让开发更快**——反而因为有审查窗口和闸门，会比"让 Agent 一把梭"更慢。慢是故意的：省下的时间是拿质量换的
-- **不是 Comet**——Comet 也是 OpenSpec + Superpowers 的编排工具，但方向不同：Comet 提供 hotfix/tweak 快捷路径追求简便，Alloy 不给快捷路径，追求稳定可控
+- **不是 Comet**——Comet 也是 OpenSpec + Superpowers 的编排工具，但核心理念不同：
+  - Comet 先跑 OpenSpec 生成 proposal/specs，**再**调 brainstorming 做深度设计——brainstorming 的能力没有反哺到 spec 中
+  - Comet 的 finish → archive 是自动流转，缺少人工闸门——AI 按流程开发的代码不一定没偏差，不严重的偏差直接归档是不稳妥的
+  - Comet 没有复盘制品（retrospective）——改完不留痕，下次换人（或换 session）就断了
+  - Comet 没有设计草稿（draft.md）——需求一上来就直接进 OpenSpec artifacts，缺少一个"先把事情想清楚"的阶段
+  - 一句话：Comet 给的是**速度和便利**，Alloy 给的是**掌控力和稳妥感**——每个制品有审查窗口，代码落地前有人工闸门，改完有复盘留痕
 
 ### 适合谁
 
 - 用 Claude Code + Superpowers 做日常开发的团队
 - 对 AI 生成代码的质量有要求、希望有审查机制的项目
-- Java Web / Python / 银行等对变更可追溯性有要求的领域
 
 > 项目由来与设计历程详见 [docs/project-background.md](docs/project-background.md)。
 
@@ -77,7 +81,7 @@ Alloy 会自动引导你走完完整流程：
 
 ```
 /alloy-start    → 智能入口（自动检测状态，接续或新建）
-/alloy-plan     → 逐制品生成（proposal → design → specs → tasks → plan）
+/alloy-plan     → 制品生成（proposal → design → specs → tasks → plan）
 /alloy-apply    → 隔离执行（worktree + SDD(TDD) + verify + retrospective）
 /alloy-finish   → 收尾（merge / PR / keep / discard，人工闸门）
 /alloy-archive  → 归档（硬校验 phase=finished）
@@ -90,7 +94,7 @@ Alloy 会自动引导你走完完整流程：
 | 命令 | 用途 |
 |------|------|
 | `/alloy-start [topic]` | 智能入口：自动检测状态，接续或新建 |
-| `/alloy-plan [name]` | 逐制品生成设计文档，始终分步，每步可审查 |
+| `/alloy-plan [name]` | 制品生成设计文档，始终分步，每步可审查 |
 | `/alloy-apply [name]` | 执行：隔离 workspace → SDD(TDD) → 验证 → 复盘 |
 | `/alloy-finish [name]` | 收尾：merge / PR / keep / discard |
 | `/alloy-archive [name]` | 归档（硬校验 phase=finished，否则拒绝） |
@@ -146,7 +150,7 @@ requirement.md
 
 ## 核心理念
 
-- **每步可审查**：plan 阶段逐制品生成，每一步人类确认后才继续
+- **每步可审查**：plan 阶段制品生成，每一步人类确认后才继续
 - **人工闸门**：apply 和 archive 之间夹着 finish（人类决定 merge/PR/keep/discard）
 - **稳定可控 > 简便快速**：不提供跳过审查的快捷路径
 - **AI 做执行，人类做决策**：Agent 负责生成和验证，人类负责审查和收尾
@@ -166,9 +170,10 @@ requirement.md
 
 | 文档 | 内容 |
 |------|------|
-| [alloy-design.md](alloy-design.md) | 主设计文档（命令体系、状态管理、制品 DAG、架构） |
-| [hybrid-workflow.md](hybrid-workflow.md) | 工作流设计推导（4 阶段融合、3 种场景） |
-| [hybird.md](hybird.md) | 原始对比分析（OpenSpec vs Superpowers） |
+| [alloy-design.md](docs/alloy-design.md) | 主设计文档（命令体系、状态管理、制品 DAG、架构） |
+| [openspec-vs-superpowers.md](docs/openspec-vs-superpowers.md) | 原始对比分析（OpenSpec vs Superpowers） |
+| [workflow-design.md](docs/workflow-design.md) | 工作流设计推导（4 阶段融合、3 种场景） |
+| [skill-writing-guide.md](docs/skill-writing-guide.md) | **Skill 编写指南**（开发前必读） |
 | [设计规格](docs/superpowers/specs/2026-05-28-alloy-design-spec.md) | 正式设计规格（brainstorming 产出） |
 | [项目由来](docs/project-background.md) | 项目背景与设计历程 |
 

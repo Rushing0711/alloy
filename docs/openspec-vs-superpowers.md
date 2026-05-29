@@ -17,7 +17,7 @@
 |------|------|
 | `/opsx:propose [name]` | 创建 change 并生成全部规划工件 |
 | `/opsx:explore [topic]` | 探索代码库、对比方案，纯只读 |
-| `/opsx:apply [name]` | 按 tasks.md 逐项实现 |
+| `/opsx:apply [name]` | 按 tasks.md 按条目实现 |
 | `/opsx:verify [name]` | 三维度验证（完整性/正确性/一致性） |
 | `/opsx:sync [name]` | 合并 Delta Spec 到主 spec |
 | `/opsx:archive [name]` | 归档 change，保留审计历史 |
@@ -48,8 +48,8 @@
 |------|------|
 | `brainstorming` | 需求探索 → 设计文档 → 用户审批 |
 | `writing-plans` | 将设计文档转化为分步实现计划 |
-| `executing-plans` | 按计划逐任务实现（内联） |
-| `subagent-driven-development` | 按计划逐任务实现（子 agent） |
+| `executing-plans` | 按计划执行实现（SDD 不可用时的降级方案） |
+| `subagent-driven-development` | 按计划分派子 agent 执行（首选，内部含 TDD + review） |
 | `test-driven-development` | RED-GREEN-REFACTOR 循环 |
 | `verification-before-completion` | 声明完成前强制验证 |
 | `requesting-code-review` | 合并前代码审查 |
@@ -143,7 +143,7 @@ openspec/
 
 **归档合并规则**：ADDED 追加到主 spec → MODIFIED 替换对应条目 → REMOVED 从主 spec 删除。Change 移入 `archive/YYYY-MM-DD-<name>/` 保留审计历史。
 
-**Dark Mode 演练**：完整演示了 propose（生成工件）→ apply（逐项实现 30+ tasks）→ archive（合并 spec + 归档）的全流程。
+**Dark Mode 演练**：完整演示了 propose（生成工件）→ apply（按条目实现 30+ tasks）→ archive（合并 spec + 归档）的全流程。
 
 ---
 
@@ -184,7 +184,7 @@ openspec/
 |------|------|
 | `/opsx:propose [name]` | 创建 change + 生成全部规划工件 |
 | `/opsx:explore [topic]` | 探索性对话，纯只读 |
-| `/opsx:apply [name]` | 按 tasks.md 逐项实现 |
+| `/opsx:apply [name]` | 按 tasks.md 按条目实现 |
 | `/opsx:sync [name]` | 合并 Delta Spec 到主 spec |
 | `/opsx:archive [name]` | 归档 change |
 

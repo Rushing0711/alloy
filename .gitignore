@@ -28,6 +28,7 @@ dist/
 ### Claude Code ###
 *.local.*
 
+
 ### Superpowers ###
 docs/superpowers/
 .worktrees/

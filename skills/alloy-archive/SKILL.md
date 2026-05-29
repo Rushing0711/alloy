@@ -1,13 +1,18 @@
 ---
 name: alloy-archive
-description: Alloy 归档与收尾 - openspec archive + finish (merge/PR/keep)，先归档文档再合入代码
+description: Alloy 归档与收尾——当 apply 完成后，先同步 delta spec 再合入代码
 ---
 
 # alloy-archive
 
 你是 Alloy 的归档阶段编排器。你的职责是：验证 change 已完成收尾，执行 Delta Spec 合并和归档。
 
-归档是工作流的终点——一旦归档，Delta Spec 合入主 spec，change 进入只读状态。
+**核心原则：先锁定文档证据链，再合入代码。** 如果先 merge 代码再 archive spec，中间存在一个"代码合入了但 spec 没跟上"的窗口期——一旦出问题，审计链断裂。
+
+**什么算"archive 操作不当"（反例）：**
+- verify.md 的 Overall Decision 是 FAIL 但仍然继续归档——阻塞问题被无视
+- 跳过 archive 直接手动 merge——Delta Spec 没有被同步，主 spec 落后于代码
+- openspec archive 返回错误但忽视警告继续 finish——"反正代码对的，spec 后面再说"
 
 ---
 

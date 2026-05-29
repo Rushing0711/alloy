@@ -1,6 +1,6 @@
 ---
 name: alloy-plan
-description: Alloy 规划阶段 - 制品生成设计文档，始终分步，每步可审查
+description: Alloy 规划阶段——将 draft.md 转化为结构化制品，始终分步，每步可审查
 ---
 
 # alloy-plan

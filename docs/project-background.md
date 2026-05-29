@@ -10,7 +10,7 @@
 
 ## 二、调研：OpenSpec vs Superpowers
 
-首先做的是全面对比两个工具的能力边界。产出 [`hybird.md`](../hybird.md)。
+首先做的是全面对比两个工具的能力边界。产出 [`openspec-vs-superpowers.md`](openspec-vs-superpowers.md)。
 
 ### 互补关系
 
@@ -39,7 +39,7 @@ Superpowers 擅长                    OpenSpec 擅长
 
 ## 三、融合设计：混合工作流
 
-基于对比分析，设计了一套融合两工具的工作流。产出 [`hybrid-workflow.md`](../hybrid-workflow.md)。
+基于对比分析，设计了一套融合两工具的工作流。产出 [`workflow-design.md`](workflow-design.md)。
 
 核心思路：用 OpenSpec 管理需求和变更追踪，用 Superpowers 的流程闸门增强执行纪律。
 
@@ -48,7 +48,7 @@ Superpowers 擅长                    OpenSpec 擅长
 | 阶段 | 主要活动 | 关键工具 |
 |------|----------|----------|
 | Pre-OpenSpec | 需求探索、设计草案 | `/opsx:explore` + brainstorming → draft.md |
-| OpenSpec 规划 | 逐制品生成、审查 | proposal → design → specs → tasks → plan |
+| OpenSpec 规划 | 制品生成、审查 | proposal → design → specs → tasks → plan |
 | OpenSpec 执行 | 隔离开发、TDD、验证 | worktree + SDD(TDD) + verify + retrospective |
 | 收尾 | 人工测试、合并、归档 | finish + archive（人工闸门） |
 
@@ -83,7 +83,7 @@ Superpowers 擅长                    OpenSpec 擅长
 - **扩展点仅提示、不调用**：v1 可靠性优先，后续版本升级为可配置闸门
 - **Agent 内流程 + CLI 辅助**：核心工作流依赖 AI 编排，CLI 只做确定性操作
 
-产出 [`alloy-design.md`](../alloy-design.md) 和 [`设计规格`](superpowers/specs/2026-05-28-alloy-design-spec.md)。
+产出 [`alloy-design.md`](alloy-design.md) 和 [`设计规格`](superpowers/specs/2026-05-28-alloy-design-spec.md)。
 
 ## 五、开发计划
 

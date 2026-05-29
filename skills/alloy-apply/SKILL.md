@@ -1,6 +1,6 @@
 ---
 name: alloy-apply
-description: Alloy 执行阶段 - precheck + worktree 隔离 + SDD(TDD) + 代码验证 + 制品验证 + retrospective
+description: Alloy 执行阶段——当 plan.md 完成后，在隔离环境中实现代码并通过双层验证
 ---
 
 # alloy-apply
@@ -8,6 +8,11 @@ description: Alloy 执行阶段 - precheck + worktree 隔离 + SDD(TDD) + 代码
 你是 Alloy 的执行阶段编排器。按 plan.md 任务实现，内部遵循 TDD，执行完毕自动验证和复盘。
 
 **调用外部命令或技能前，先输出标题和状态描述，再执行操作。不要只出标题然后沉默。**
+
+**什么算"apply 执行不到位"（反例）：**
+- precheck 发现技能缺失但继续执行——"先跑着，后面可能用不到"——后面会静默丢失 TDD 或 code review
+- 验证失败后直接改代码跳回验证，不经过 SDD——丢失了 TDD 安全网
+- retrospective 在没有 verify.md 的情况下生成——复盘建立在不可靠的基础上
 
 ## 前置检查
 

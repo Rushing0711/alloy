@@ -159,8 +159,8 @@ draft.md 已生成。
 |-------|---------|
 | `started` | 引导用户继续 `/alloy-plan` |
 | `planned` | 引导用户继续 `/alloy-apply` |
-| `applied` | 提示用户选择：`/alloy-finish` 进入收尾，或用自然对话继续修改 |
-| `finished` | 提示用户：`/alloy-archive` 归档 |
+| `applied` | 提示用户：`/alloy-archive` 进入归档与收尾 |
+| `finished` | 工作流已完成——如需继续修改，使用自然对话提交新变更 |
 
 如果 worktree 字段有值但磁盘路径不存在，警告用户"worktree 残留"后再给出建议。
 

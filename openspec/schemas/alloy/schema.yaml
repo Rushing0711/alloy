@@ -2,60 +2,89 @@ name: alloy
 version: "1"
 description: >
   Alloy schema - 融合 OpenSpec 制品治理和 Superpowers 执行技能。
-  Pre-OpenSpec 阶段产出 draft.md，规划阶段逐制品生成，
-  执行阶段使用 worktree + SDD(TDD) + verify + retrospective。
+  Pre-OpenSpec 阶段产出 draft.md，规划阶段依次生成 proposal → design → specs → tasks → plan。
+  执行阶段（apply）编排：worktree 隔离 → SDD(TDD) → 代码验证 → 制品验证 → 复盘。
+  收尾阶段：/alloy-archive（归档 + finish），/alloy-finish 可独立调用。
 
 artifacts:
   - id: draft
     generates: draft.md
     template: templates/draft.md
-    instruction: artifacts/draft.md
+    instruction: instructions/draft.md
     requires: []
 
   - id: proposal
     generates: proposal.md
     template: templates/proposal.md
-    instruction: artifacts/proposal.md
+    instruction: instructions/proposal.md
     requires: [draft]
 
   - id: design
     generates: design.md
     template: templates/design.md
-    instruction: artifacts/design.md
+    instruction: instructions/design.md
     requires: [proposal]
 
   - id: specs
     generates: "specs/"
     template: templates/specs.md
-    instruction: artifacts/specs.md
+    instruction: instructions/specs.md
     requires: [proposal]
 
   - id: tasks
     generates: tasks.md
     template: templates/tasks.md
-    instruction: artifacts/tasks.md
+    instruction: instructions/tasks.md
     requires: [specs, design]
 
   - id: plan
     generates: plan.md
     template: templates/plan.md
-    instruction: artifacts/plan.md
+    instruction: instructions/plan.md
     requires: [tasks]
 
+  - id: verify
+    generates: verify.md
+    template: templates/verify.md
+    instruction: instructions/verify.md
+    requires: [plan]
+
+  - id: retrospective
+    generates: retrospective.md
+    template: templates/retrospective.md
+    instruction: instructions/retrospective.md
+    requires: [verify]
+
 apply:
-  requires: [plan]
+  tracks: tasks.md
+
+  precheck:
+    - superpowers:using-git-worktrees
+    - superpowers:subagent-driven-development
+    - superpowers:test-driven-development
+    - superpowers:requesting-code-review
+    - superpowers:verification-before-completion
+
   steps:
-    - id: worktree
-      description: "创建隔离 workspace (git worktree)"
+    - order: 1
       skill: superpowers:using-git-worktrees
-    - id: subagent
-      description: "逐任务子 agent 执行 (SDD + TDD + code review)"
+      description: 创建隔离 workspace
+
+    - order: 2
       skill: superpowers:subagent-driven-development
-    - id: verify
-      description: "代码行为验证 + 制品结构验证"
-      command: openspec-verify-change
-      generates: verify.md
-    - id: retrospective
-      description: "证据驱动复盘"
-      generates: retrospective.md
-      template: templates/retrospective.md
+      description: SDD + TDD + code review 执行 tasks
+      transitive: [superpowers:test-driven-development, superpowers:requesting-code-review]
+      fallback: superpowers:executing-plans
+
+    - order: 3
+      skill: superpowers:verification-before-completion
+      description: 代码层验证 — 测试通过、行为正确
+
+    - order: 4
+      skill: opsx:verify
+      description: 制品层验证 — 7 项结构化检查，产出 verify.md
+      produces: verify
+
+    - order: 5
+      description: 证据驱动复盘 — 纯 AI 生成，产出 retrospective.md
+      produces: retrospective

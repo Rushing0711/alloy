@@ -12,7 +12,7 @@ function createCustomProfile(): { env: NodeJS.ProcessEnv; cleanup: () => void } 
   const config = {
     featureFlags: {},
     profile: "custom",
-    delivery: "both",
+    delivery: "commands",
     workflows: [
       "propose", "explore", "new", "continue", "apply", "ff",
       "sync", "archive", "bulk-archive", "verify", "onboard",
