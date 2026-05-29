@@ -1,0 +1,82 @@
+// src/cli/commands/internal/guard.ts
+import { existsSync } from "node:fs";
+import { join, basename } from "node:path";
+import { execSync } from "node:child_process";
+import { readState, writeState } from "../../utils/state.js";
+
+const VALID_TRANSITIONS: Record<string, string[]> = {
+  started: ["planned"],
+  planned: ["applied"],
+  applied: ["archived"],
+  archived: ["finished"],
+};
+
+const ARTIFACT_CHECKS: Record<string, string[]> = {
+  "started->planned": ["proposal.md", "design.md", "specs", "tasks.md", "plan.md"],
+  "planned->applied": ["plan.md"],
+  "applied->archived": ["verify.md"],
+};
+
+export async function guardCommand(args: string[]): Promise<void> {
+  const changeDir = args[0];
+  const targetPhase = args[1];
+  const apply = args.includes("--apply");
+
+  if (!changeDir || !targetPhase) {
+    console.error("用法: alloy _guard <change-dir> <target-phase> [--apply]");
+    process.exit(1);
+  }
+
+  const state = await readState(changeDir);
+  const currentPhase = state.phase;
+
+  // 1. 校验 phase 转换合法性
+  const allowed = VALID_TRANSITIONS[currentPhase];
+  if (!allowed || !allowed.includes(targetPhase)) {
+    console.error(`[HARD STOP] 不允许的 phase 转换: ${currentPhase} → ${targetPhase}`);
+    console.error("  允许的转换: started→planned, planned→applied, applied→archived, archived→finished");
+    process.exit(1);
+  }
+
+  // 2. 制品完整性检查
+  const transition = `${currentPhase}->${targetPhase}`;
+  const checks = ARTIFACT_CHECKS[transition];
+  if (checks) {
+    const missing: string[] = [];
+    for (const c of checks) {
+      const p = join(changeDir, c);
+      if (!existsSync(p)) missing.push(`  ${c}`);
+    }
+    if (missing.length > 0) {
+      console.error(`[HARD STOP] 以下制品缺失，无法进入 ${targetPhase} 阶段:`);
+      console.error(missing.join("\n"));
+      process.exit(1);
+    }
+  }
+
+  // started→planned 额外检查：change 目录必须已提交
+  if (transition === "started->planned") {
+    try {
+      execSync("git rev-parse --git-dir", { stdio: "pipe" });
+      const relPath = `openspec/changes/${basename(changeDir)}`;
+      const status = execSync(`git status --porcelain "${relPath}"`, {
+        stdio: "pipe",
+        cwd: process.cwd(),
+      }).toString();
+      if (status.trim()) {
+        console.error("[HARD STOP] Change 目录有未提交的变更，请先执行 git add + git commit:");
+        console.error(status);
+        process.exit(1);
+      }
+    } catch {
+      // 不在 git 仓库中，跳过 git 检查
+    }
+  }
+
+  // 3. --apply: 更新 phase
+  if (apply) {
+    state.phase = targetPhase as typeof state.phase;
+    await writeState(changeDir, state);
+    console.log(`✓ phase: ${currentPhase} → ${targetPhase}`);
+  }
+}

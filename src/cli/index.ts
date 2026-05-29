@@ -10,6 +10,7 @@ import { doctorCommand, formatDoctorResult } from "./commands/doctor.js";
 import { updateCommand } from "./commands/update.js";
 import { generateCompletion } from "./commands/completion.js";
 import { stateCommand } from "./commands/internal/state.js";
+import { guardCommand } from "./commands/internal/guard.js";
 
 const USAGE = `
 alloy <command> [options]
@@ -198,6 +199,10 @@ async function main() {
     }
     case "_state": {
       await stateCommand(restArgs);
+      break;
+    }
+    case "_guard": {
+      await guardCommand(restArgs);
       break;
     }
     default:
