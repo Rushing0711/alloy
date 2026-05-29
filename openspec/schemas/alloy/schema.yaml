@@ -10,57 +10,57 @@ artifacts:
   - id: draft
     description: Pre-OpenSpec 阶段产出——explore + brainstorming 的设计草案
     generates: draft.md
-    template: templates/draft.md
-    instruction: instructions/draft.md
+    template: draft.md
+    instruction: draft.md
     requires: []
 
   - id: proposal
     description: 变更提案——Why/What/Scope，读 draft.md 产出
     generates: proposal.md
-    template: templates/proposal.md
-    instruction: instructions/proposal.md
+    template: proposal.md
+    instruction: proposal.md
     requires: [draft]
 
   - id: design
     description: 技术设计——架构决策和实现方案，依赖 proposal
     generates: design.md
-    template: templates/design.md
-    instruction: instructions/design.md
+    template: design.md
+    instruction: design.md
     requires: [proposal]
 
   - id: specs
     description: 行为规格——Capability 级别的功能契约，只读 proposal 防止被技术细节污染
     generates: "specs/"
-    template: templates/specs.md
-    instruction: instructions/specs.md
+    template: specs.md
+    instruction: specs.md
     requires: [proposal]
 
   - id: tasks
     description: 任务清单——可追踪的实现任务拆解
     generates: tasks.md
-    template: templates/tasks.md
-    instruction: instructions/tasks.md
+    template: tasks.md
+    instruction: tasks.md
     requires: [specs, design]
 
   - id: plan
     description: 执行脚本——给 Agent 执行的微步骤路线图（含代码片段）
     generates: plan.md
-    template: templates/plan.md
-    instruction: instructions/plan.md
+    template: plan.md
+    instruction: plan.md
     requires: [tasks]
 
   - id: verify
     description: 制品验证——7 项结构化检查，apply 阶段产出
     generates: verify.md
-    template: templates/verify.md
-    instruction: instructions/verify.md
+    template: verify.md
+    instruction: verify.md
     requires: [plan]
 
   - id: retrospective
     description: 复盘报告——证据驱动的 §0-§6 结构化复盘
     generates: retrospective.md
-    template: templates/retrospective.md
-    instruction: instructions/retrospective.md
+    template: retrospective.md
+    instruction: retrospective.md
     requires: [verify]
 
 apply:
