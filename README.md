@@ -168,14 +168,23 @@ requirement.md
 
 ## 文档索引
 
+三文档体系：
+
+| 文档 | 角色 | 内容 |
+|------|------|------|
+| [alloy-design.md](docs/alloy-design.md) | **WHAT** — 产品规格 | 命令体系、状态管理、制品 DAG、架构、安装初始化 |
+| [alloy-dev-guide.md](docs/alloy-dev-guide.md) | **DO** — 开发者手册 | 构建/测试命令、代码约定、踩坑记录、跨层复盘 |
+| [CLAUDE.md](CLAUDE.md) | **HOW** — Agent 约束 | 设计约束、开发规则、测试覆盖 |
+
+辅助文档：
+
 | 文档 | 内容 |
 |------|------|
-| [alloy-design.md](docs/alloy-design.md) | 主设计文档（命令体系、状态管理、制品 DAG、架构） |
+| [skill-writing-guide.md](docs/skill-writing-guide.md) | **Skill 编写指南**（开发前必读） |
 | [openspec-vs-superpowers.md](docs/openspec-vs-superpowers.md) | 原始对比分析（OpenSpec vs Superpowers） |
 | [workflow-design.md](docs/workflow-design.md) | 工作流设计推导（4 阶段融合、3 种场景） |
-| [skill-writing-guide.md](docs/skill-writing-guide.md) | **Skill 编写指南**（开发前必读） |
+| [project-background.md](docs/project-background.md) | 项目背景与设计历程 |
 | [设计规格](docs/superpowers/specs/2026-05-28-alloy-design-spec.md) | 正式设计规格（brainstorming 产出） |
-| [项目由来](docs/project-background.md) | 项目背景与设计历程 |
 
 ## 许可
 
