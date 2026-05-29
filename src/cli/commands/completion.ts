@@ -1,18 +1,20 @@
 export function generateCompletion(shell: string): string {
   if (shell.includes("zsh")) return zshCompletion();
+  if (shell.includes("pwsh") || shell.includes("powershell"))
+    return powershellCompletion();
   return bashCompletion();
 }
 
 function bashCompletion(): string {
   return [
     "# alloy bash completion — 添加到 ~/.bashrc 或 ~/.bash_profile:",
-    "#   source <(alloy completion)",
+    "#   source <(alloy completion bash)",
     "",
     "_alloy_completion() {",
     '  local cur="${COMP_WORDS[COMP_CWORD]}"',
     "",
     "  if [ \"$COMP_CWORD\" -eq 1 ]; then",
-    '    COMPREPLY=($(compgen -W "init status doctor update completion" -- "$cur"))',
+    '    COMPREPLY=($(compgen -W "-v --version -h --help init status doctor update completion" -- "$cur"))',
     "    return 0",
     "  fi",
     "",
@@ -27,7 +29,7 @@ function bashCompletion(): string {
     '      COMPREPLY=($(compgen -W "--help -h" -- "$cur"))',
     "      ;;",
     "    completion)",
-    '      COMPREPLY=($(compgen -W "bash zsh" -- "$cur"))',
+    '      COMPREPLY=($(compgen -W "bash zsh pwsh powershell" -- "$cur"))',
     "      ;;",
     "  esac",
     "}",
@@ -40,7 +42,7 @@ function bashCompletion(): string {
 function zshCompletion(): string {
   return [
     "# alloy zsh completion — 添加到 ~/.zshrc:",
-    "#   source <(alloy completion)",
+    "#   source <(alloy completion zsh)",
     "",
     "#compdef alloy",
     "",
@@ -61,7 +63,7 @@ function zshCompletion(): string {
     "  typeset -A opt_args",
     "",
     "  _arguments -C \\",
-    "    '--version[显示版本号]' \\",
+    "    '{-v,--version}[显示版本号]' \\",
     "    '{-h,--help}[显示帮助]' \\",
     "    '1: :_alloy_commands' \\",
     "    '*:: :->args'",
@@ -90,6 +92,57 @@ function zshCompletion(): string {
     "}",
     "",
     "_alloy",
+    "",
+  ].join("\n");
+}
+
+function powershellCompletion(): string {
+  return [
+    "# alloy PowerShell completion",
+    "# 添加到 PowerShell profile:",
+    "#   alloy completion pwsh | Out-File -FilePath $PROFILE -Append",
+    "",
+    "Register-ArgumentCompleter -Native -CommandName alloy -ScriptBlock {",
+    "  param($wordToComplete, $commandAst, $cursorPosition)",
+    "",
+    "  $commands = @('init', 'status', 'doctor', 'update', 'completion')",
+    "  $globalOpts = @('--version', '-v', '--help', '-h')",
+    "",
+    "  $tokens = $commandAst.CommandElements",
+    "  $command = $null",
+    "",
+    "  foreach ($token in $tokens) {",
+    "    $value = $token.Value",
+    "    if ($value -in $commands) {",
+    "      $command = $value",
+    "    }",
+    "  }",
+    "",
+    "  if (-not $command) {",
+    "    $completionText = @()",
+    "    foreach ($cmd in $commands) {",
+    '      if ($cmd -like "$wordToComplete*") { $completionText += $cmd }',
+    "    }",
+    "    foreach ($opt in $globalOpts) {",
+    '      if ($opt -like "$wordToComplete*") { $completionText += $opt }',
+    "    }",
+    "    $completionText | ForEach-Object { [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_) }",
+    "    return",
+    "  }",
+    "",
+    "  $opts = @()",
+    "  switch ($command) {",
+    "    'init'    { $opts = @('--scope', '--inject-claude-md', '--help', '-h') }",
+    "    'status'  { $opts = @('--json', '--help', '-h') }",
+    "    'doctor'  { $opts = @('--json', '--help', '-h') }",
+    "    'update'  { $opts = @('--help', '-h') }",
+    "    'completion' { $opts = @('bash', 'zsh', 'pwsh', 'powershell', '--help', '-h') }",
+    "  }",
+    "",
+    "  $opts | Where-Object { $_ -like \"$wordToComplete*\" } | ForEach-Object {",
+    "    [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)",
+    "  }",
+    "}",
     "",
   ].join("\n");
 }

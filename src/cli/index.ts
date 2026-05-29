@@ -23,12 +23,12 @@ Commands:
               诊断：版本兼容性、文件一致性
   update      [path]
               更新 Alloy skill 文件到最新版
-  completion  [bash|zsh]
+  completion  [bash|zsh|pwsh|powershell]
               生成 shell 补全脚本
 
 Options:
-  --version, -V  版本号
-  --help, -h     帮助（alloy -h 或 alloy <command> -h）
+  --version, -v, -V  版本号
+  --help, -h         帮助（alloy -h 或 alloy <command> -h）
 `;
 
 function commandHelp(cmd: string): string {
@@ -74,11 +74,12 @@ alloy update [path] [options]
 alloy completion [shell]
 
 参数:
-  shell  目标 shell（bash 或 zsh，默认从 $SHELL 自动检测）
+  shell  目标 shell（bash / zsh / pwsh / powershell，默认从 $SHELL 自动检测）
 
 示例:
-  source <(alloy completion)        # 当前 session 生效
-  alloy completion >> ~/.zshrc      # 永久生效
+  source <(alloy completion)              # 当前 session 生效
+  alloy completion zsh >> ~/.zshrc        # 永久生效
+  alloy completion pwsh | Out-File -FilePath $PROFILE -Append  # PowerShell
 `;
     default:
       return `未知命令: ${cmd}\n使用 alloy --help 查看可用命令。`;
@@ -89,7 +90,7 @@ async function main() {
   const args = process.argv.slice(2);
 
   const isHelp = (a: string[]) => a.includes("--help") || a.includes("-h");
-  const isVersion = (a: string[]) => a.includes("--version") || a.includes("-V");
+  const isVersion = (a: string[]) => a.includes("--version") || a.includes("-v") || a.includes("-V");
 
   if (args.length === 0 || (args.length === 1 && isHelp(args))) {
     console.log(USAGE);
