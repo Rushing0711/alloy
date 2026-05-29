@@ -27,8 +27,11 @@ fi
 
 # 2. 执行 openspec archive
 if command -v openspec &> /dev/null; then
-  openspec archive -y --change "$CHANGE_NAME"
-  echo "✓ delta spec 已同步，change 已归档"
+  if openspec archive -y "$CHANGE_NAME"; then
+    echo "✓ delta spec 已同步，change 已归档"
+  else
+    echo "⚠️  openspec archive 失败，继续更新 phase（错误码: $?）"
+  fi
 else
   echo "⚠️  OpenSpec CLI 未安装，跳过 spec 同步"
 fi
