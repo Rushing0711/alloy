@@ -66,34 +66,54 @@ export async function runHealthCheck(
     });
   }
 
-  // 3. Superpowers（解析 npx skills list 输出，检查关键 skill）
+  // 3. Superpowers（优先检查 Claude Code 插件，fallback 到 npx skills list）
   const KEY_SKILLS = ["brainstorming", "using-git-worktrees"];
   try {
-    const output = execSync("npx skills list", { stdio: "pipe" }).toString();
-    const missingSkills = KEY_SKILLS.filter((s) => !output.includes(s));
-    if (missingSkills.length === 0) {
+    const home = process.env.HOME || process.env.USERPROFILE || "~";
+    const pluginsJsonPath = join(home, ".claude", "plugins", "installed_plugins.json");
+    const pluginsRaw = await readFile(pluginsJsonPath, "utf-8");
+    const plugins = JSON.parse(pluginsRaw);
+    const spPlugin = plugins?.plugins?.["superpowers@claude-plugins-official"];
+    if (spPlugin && spPlugin.length > 0) {
       results.push({
         name: "Superpowers",
-        current: `已安装（含 ${KEY_SKILLS.join(", ")}）`,
+        current: `已安装 (Claude 插件 v${spPlugin[0].version})`,
         required: config.compatible.superpowers,
         status: "pass",
       });
     } else {
-      results.push({
-        name: "Superpowers",
-        current: `关键 skill 缺失: ${missingSkills.join(", ")}`,
-        required: config.compatible.superpowers,
-        status: "warn",
-        message: `npx skills list 输出未包含关键 skill: ${missingSkills.join(", ")}`,
-      });
+      // 插件文件存在但无 superpowers 条目
+      throw new Error("superpowers plugin not found");
     }
   } catch {
-    results.push({
-      name: "Superpowers",
-      current: "未安装",
-      required: config.compatible.superpowers,
-      status: "fail",
-    });
+    // fallback: 尝试 npx skills list (旧版安装方式)
+    try {
+      const output = execSync("npx skills list", { stdio: "pipe" }).toString();
+      const missingSkills = KEY_SKILLS.filter((s) => !output.includes(s));
+      if (missingSkills.length === 0) {
+        results.push({
+          name: "Superpowers",
+          current: `已安装（含 ${KEY_SKILLS.join(", ")}）`,
+          required: config.compatible.superpowers,
+          status: "pass",
+        });
+      } else {
+        results.push({
+          name: "Superpowers",
+          current: `关键 skill 缺失: ${missingSkills.join(", ")}`,
+          required: config.compatible.superpowers,
+          status: "warn",
+          message: `npx skills list 输出未包含关键 skill: ${missingSkills.join(", ")}`,
+        });
+      }
+    } catch {
+      results.push({
+        name: "Superpowers",
+        current: "未安装",
+        required: config.compatible.superpowers,
+        status: "fail",
+      });
+    }
   }
 
   // 4. Alloy 自身版本
@@ -137,14 +157,26 @@ export async function runHealthCheck(
     });
   }
 
-  // 6. Skill 文件完整性（根据 scope 确定检查路径）
+  // 6. Skill 文件完整性（检查 .claude/skills/ 和 skills/ 两个路径）
   try {
     const home = process.env.HOME || process.env.USERPROFILE || "~";
     const skillsDir =
       scope === "global"
         ? join(home, ".claude", "skills")
         : join(projectPath, ".claude", "skills");
-    const skillsStatus = checkSkillsIntegrity(skillsDir);
+    const sourceSkillsDir = join(projectPath, "skills");
+
+    let skillsStatus = checkSkillsIntegrity(skillsDir);
+    // 如果 .claude/skills/ 不完整，尝试检查 skills/（源码目录）
+    if (skillsStatus.status === "fail") {
+      const sourceStatus = checkSkillsIntegrity(sourceSkillsDir);
+      if (sourceStatus.status === "pass") {
+        skillsStatus = {
+          ...sourceStatus,
+          current: `${sourceStatus.current}（来源: skills/）`,
+        };
+      }
+    }
     results.push(skillsStatus);
   } catch {
     results.push({

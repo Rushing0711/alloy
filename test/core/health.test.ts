@@ -140,6 +140,116 @@ describe("runHealthCheck", () => {
     expect(envResult!.status).toBe("warn");
   });
 
+  // Superpowers 通过 Claude 插件路径检测
+  it("Superpowers 通过 Claude 插件路径检测到安装时应返回 pass", async () => {
+    vi.mocked(loadCompat).mockResolvedValue(MOCK_CONFIG);
+    vi.mocked(execSync).mockReturnValue(Buffer.from("1.3.1\n") as any);
+    vi.mocked(detectEnv).mockReturnValue({
+      nodeVersion: "20.0.0",
+      gitInstalled: true,
+      claudeCodeInstalled: true,
+    });
+    vi.mocked(existsSync).mockReturnValue(true);
+    // readFile: installed_plugins.json 返回有效插件数据，package.json 返回版本
+    vi.mocked(readFile).mockImplementation((path: any) => {
+      const pathStr = String(path);
+      if (pathStr.includes("installed_plugins.json")) {
+        return Promise.resolve(JSON.stringify({
+          version: 2,
+          plugins: {
+            "superpowers@claude-plugins-official": [
+              {
+                scope: "user",
+                installPath: "/home/user/.claude/plugins/cache/claude-plugins-official/superpowers/5.1.0",
+                version: "5.1.0",
+              },
+            ],
+          },
+        }));
+      }
+      return Promise.resolve(JSON.stringify({ version: "0.1.0" }));
+    });
+
+    const results = await runHealthCheck("/fake/packagedir", "/fake/project");
+    const spResult = results.find((r) => r.name === "Superpowers");
+    expect(spResult).toBeDefined();
+    expect(spResult!.status).toBe("pass");
+    expect(spResult!.current).toContain("Claude 插件 v5.1.0");
+  });
+
+  it("Superpowers 插件文件存在但无对应条目时 fallback 到 npx skills list", async () => {
+    vi.mocked(loadCompat).mockResolvedValue(MOCK_CONFIG);
+    vi.mocked(detectEnv).mockReturnValue({
+      nodeVersion: "20.0.0",
+      gitInstalled: true,
+      claudeCodeInstalled: true,
+    });
+    vi.mocked(existsSync).mockReturnValue(true);
+    // readFile: installed_plugins.json 无 superpowers 条目 → fallback
+    vi.mocked(readFile).mockImplementation((path: any) => {
+      const pathStr = String(path);
+      if (pathStr.includes("installed_plugins.json")) {
+        return Promise.resolve(JSON.stringify({
+          version: 2,
+          plugins: { "some-other-plugin@official": [] },
+        }));
+      }
+      return Promise.resolve(JSON.stringify({ version: "0.1.0" }));
+    });
+    // fallback: npx skills list 返回含关键 skill 的输出
+    vi.mocked(execSync).mockImplementation((cmd: any) => {
+      if (String(cmd).startsWith("npx skills list")) {
+        return Buffer.from("brainstorming\nusing-git-worktrees\n");
+      }
+      return Buffer.from("1.3.1\n");
+    });
+
+    const results = await runHealthCheck("/fake/packagedir", "/fake/project");
+    const spResult = results.find((r) => r.name === "Superpowers");
+    expect(spResult).toBeDefined();
+    expect(spResult!.status).toBe("pass");
+    expect(spResult!.current).toContain("brainstorming");
+  });
+
+  it("Skills: .claude/skills/ 不完整但 skills/ 完整时应返回 pass（来源: skills/）", async () => {
+    vi.mocked(loadCompat).mockResolvedValue(MOCK_CONFIG);
+    vi.mocked(execSync).mockReturnValue(Buffer.from("1.3.1\n") as any);
+    vi.mocked(readFile).mockImplementation((path: any) => {
+      const pathStr = String(path);
+      if (pathStr.includes("installed_plugins.json")) {
+        return Promise.resolve(JSON.stringify({
+          version: 2,
+          plugins: {
+            "superpowers@claude-plugins-official": [
+              { version: "5.1.0" },
+            ],
+          },
+        }));
+      }
+      return Promise.resolve(JSON.stringify({ version: "0.1.0" }));
+    });
+    vi.mocked(detectEnv).mockReturnValue({
+      nodeVersion: "20.0.0",
+      gitInstalled: true,
+      claudeCodeInstalled: true,
+    });
+    // .claude/skills/ 中 alloy-plan 缺失，但 skills/ 中完整
+    vi.mocked(existsSync).mockImplementation((path: any) => {
+      const pathStr = String(path);
+      // .claude/skills/alloy-plan 缺失
+      if (pathStr.includes(".claude/skills/alloy-plan")) {
+        return false;
+      }
+      return true;
+    });
+
+    const results = await runHealthCheck("/fake/packagedir", "/fake/project");
+    const skillsResult = results.find((r) => r.name === "Skills");
+    expect(skillsResult).toBeDefined();
+    expect(skillsResult!.status).toBe("pass");
+    expect(skillsResult!.current).toContain("来源: skills/");
+  });
+
   // Issue 4: Skills fail 状态
   it("Skills 目录缺失时应返回 fail", async () => {
     vi.mocked(loadCompat).mockResolvedValue(MOCK_CONFIG);
