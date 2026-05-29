@@ -1,4 +1,5 @@
 import { cp, readFile, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 
@@ -24,30 +25,32 @@ export async function updateCommand(
     const vendorSource = join(packageRoot, "vendor");
     const vendorTarget = join(projectPath, "vendor");
     await cp(vendorSource, vendorTarget, { recursive: true, force: true });
-    results.push("✓ vendor/ → 已同步");
+    results.push("✓ vendor/ → Superpowers 内置兜底已同步（离线安装用）");
   } catch {
-    results.push("⚠️ vendor/ 同步失败");
+    results.push("⚠️ vendor/ → Superpowers 内置兜底同步失败，请检查包文件完整性");
   }
 
-  // 3. 更新 CLAUDE.md 中的 Alloy 标记区域
+  // 3. 更新 CLAUDE.md 中的 Alloy 标记区域（仅当文件存在时）
   const claudeMdPath = join(projectPath, "CLAUDE.md");
-  try {
-    let content = await readFile(claudeMdPath, "utf-8");
-    if (content.includes(CLAUDE_MD_MARKER_START)) {
-      const latestFragment = getLatestClaudeMdFragment();
-      const startIdx = content.indexOf(CLAUDE_MD_MARKER_START);
-      const endIdx = content.indexOf(CLAUDE_MD_MARKER_END);
-      if (endIdx > startIdx) {
-        content =
-          content.slice(0, startIdx) +
-          latestFragment +
-          content.slice(endIdx + CLAUDE_MD_MARKER_END.length);
-        await writeFile(claudeMdPath, content, "utf-8");
-        results.push("✓ CLAUDE.md → Alloy 标记区域已更新");
+  if (existsSync(claudeMdPath)) {
+    try {
+      let content = await readFile(claudeMdPath, "utf-8");
+      if (content.includes(CLAUDE_MD_MARKER_START)) {
+        const latestFragment = getLatestClaudeMdFragment();
+        const startIdx = content.indexOf(CLAUDE_MD_MARKER_START);
+        const endIdx = content.indexOf(CLAUDE_MD_MARKER_END);
+        if (endIdx > startIdx) {
+          content =
+            content.slice(0, startIdx) +
+            latestFragment +
+            content.slice(endIdx + CLAUDE_MD_MARKER_END.length);
+          await writeFile(claudeMdPath, content, "utf-8");
+          results.push("✓ CLAUDE.md → Alloy 标记区域已更新");
+        }
       }
+    } catch {
+      results.push("⚠️ CLAUDE.md 更新失败");
     }
-  } catch {
-    results.push("⚠️ CLAUDE.md 更新失败");
   }
 
   return results;
