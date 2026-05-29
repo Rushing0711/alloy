@@ -133,12 +133,17 @@ bash .claude/skills/alloy/scripts/alloy-state.sh write openspec/changes/<name> w
 
 > 按 plan.md 微步骤执行实现...
 
-使用 Skill 工具加载 `superpowers:subagent-driven-development` 技能。**SDD 技能内置了执行策略的决策流程**（根据任务独立性、并行度自动判断 SDD vs 串行），按其指引自然推进即可，alloy 不重复建造选择闸门。
+**先评估，再选择执行技能：**
 
-SDD 内部行为：
-- 读取 plan.md，按微步骤分派任务
-- 每个子 agent 遵循 TDD（RED-GREEN-REFACTOR）+ spec/code review
-- 子 agent 失败 → 主 agent 分析原因 → 修复或重试
+1. 读取 `plan.md` 和 `tasks.md`，分析任务特征——独立性、耦合度、并行潜力
+2. 根据 Superpowers 的决策逻辑选择合适的执行技能：
+   - 任务独立、可并行 → 加载 `superpowers:subagent-driven-development`（内含 TDD + spec review + code review 闭环）
+   - 任务紧密耦合、需串行 → 加载 `superpowers:executing-plans`（单 agent 串行，每步审查点）
+3. 加载对应技能后，**按其内部指引执行**，alloy 不重复建造选择闸门
+
+Superpowers 技能内部行为（alloy 仅编排，不替代）：
+- SDD：读取 plan → 分派子 agent → 每个子 agent TDD + 两阶段 review（spec + code quality）
+- 串行：当前 session 直接执行，每步有审查检查点
 
 ### Step 3/5：代码层验证
 
