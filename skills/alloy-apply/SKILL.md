@@ -124,60 +124,16 @@ git rev-parse --abbrev-ref HEAD
 
 **关键约束：** worktree 基于用户选择的分支创建。事后 finish 时 merge 回合的目标也是这个基础分支，而非固定 main。
 
-### [Step 2/5] 选择执行策略
+### [Step 2/5] 任务实现
 
-> [Step 2/5] 选择执行策略
-> ──────────────────────────────────────
->
-> plan.md 已就绪，请选择执行策略：
->
-> **1.** SDD 子 agent 执行（推荐）
->   — 主 agent 按 plan.md 微步骤分派子 agent，每个子 agent 内部 TDD + spec/code review
->   — 适合任务多、可并行的场景
->
-> **2.** 单 agent 直接执行
->   — 当前 session 串行执行 plan.md，每步有审查检查点，同样遵循 TDD
->   — 适合任务少、逻辑连贯的场景
->
-> **3.** 跳过自动实现
->   — 手动编码，apply 仅做双层验证（代码 + 制品）+ 复盘
->   — 适合复杂逻辑需要人工推敲、或已手动完成编码的场景
+> 按 plan.md 微步骤执行实现...
 
-**必须等待用户明确选择后才能继续。** 不允许 Agent 静默选择执行策略。
+使用 Skill 工具加载 `superpowers:subagent-driven-development` 技能。**SDD 技能内置了执行策略的决策流程**（根据任务独立性、并行度自动判断 SDD vs 串行），按其指引自然推进即可，alloy 不重复建造选择闸门。
 
-用户选择后，确认：
-> **执行策略：** <选择的策略>
->
-> 确认开始执行？(y/n)
-
-用户确认后，才进入对应的执行路径。
-
-### 路径 1：SDD 子 agent 执行
-
-> 按 plan.md 微步骤分派子 agent...
-
-使用 Skill 工具加载 `superpowers:subagent-driven-development`：
-- 主 agent 读取 plan.md，按微步骤依次分派子 agent
-- 每个子 agent 内部遵循 TDD（RED-GREEN-REFACTOR）+ spec/code review
+SDD 内部行为：
+- 读取 plan.md，按微步骤分派任务
+- 每个子 agent 遵循 TDD（RED-GREEN-REFACTOR）+ spec/code review
 - 子 agent 失败 → 主 agent 分析原因 → 修复或重试
-
-### 路径 2：单 agent 直接执行
-
-> 按 plan.md 微步骤串行执行...
-
-使用 Skill 工具加载 `superpowers:executing-plans`：
-- 当前 session 直接执行，每步有审查检查点
-- 同样内部遵循 TDD
-
-### 路径 3：跳过自动实现
-
-> 跳过自动实现，直接进入验证阶段。
-
-不加载执行技能。apply 仅做 Step 3-5：代码层验证 → 制品层验证 → 复盘。
-
-适用于：已手动完成编码、复杂逻辑需要人工推敲、或 plan.md 仅作为指导手册而非自动化脚本的场景。
-
-**如果任何执行路径中当前平台不支持对应技能，告知用户并建议选择其他路径。**
 
 ### Step 3/5：代码层验证
 

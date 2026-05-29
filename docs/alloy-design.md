@@ -119,10 +119,7 @@ phase → planned
 
 执行步骤（共 5 步，验证失败回到 step 1 修复）:
   1. superpowers:using-git-worktrees → 创建隔离 workspace
-  2. 用户选择执行策略（人工闸门，三选一）:
-     a) SDD — superpowers:subagent-driven-development（推荐，子 agent TDD + review）
-     b) 串行 — superpowers:executing-plans（单 agent 每步审查点）
-     c) 跳过 — 手动编码，apply 仅做验证 + 复盘
+  2. superpowers:subagent-driven-development → 任务执行（SDD 内置决策流程，按 plan.md 分派）
   3. superpowers:verification-before-completion → 代码层验证（测试通过、行为正确）
   4. /opsx:verify → 制品层验证（7 项结构化检查 → verify.md）
   5. 纯 AI 生成 → retrospective.md（证据驱动复盘，§0-§6）
