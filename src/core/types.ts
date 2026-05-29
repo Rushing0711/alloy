@@ -11,15 +11,24 @@ export interface EnvInfo {
 }
 
 export interface CompatConfig {
-  compatible: { openspec: string; superpowers: string };
+  compatible: { node: string; openspec: string; superpowers: string; alloy: string; schema: number };
   install: { openspec: string; superpowers: string };
 }
 
+/** @deprecated 使用 HealthCheckResult 替代 */
 export interface CompatResult {
   name: string;
   current: string;
   required: string;
   compatible: boolean;
+}
+
+export interface HealthCheckResult {
+  name: string;
+  status: "pass" | "warn" | "fail";
+  current: string;
+  required: string;
+  message?: string;
 }
 
 export interface AlloyState {
