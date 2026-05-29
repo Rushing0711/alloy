@@ -128,7 +128,7 @@ async function main() {
           scope: { type: "string" },
           "inject-claude-md": { type: "boolean", default: false },
         },
-        strict: false,
+        strict: true,
         allowPositionals: true,
       });
       const projectPath = positionals[0] ?? process.cwd();
@@ -145,7 +145,7 @@ async function main() {
       const { positionals } = parseArgs({
         args: restArgs,
         options: { json: { type: "boolean", default: false } },
-        strict: false,
+        strict: true,
         allowPositionals: true,
       });
       const useJson = restArgs.includes("--json");
@@ -174,7 +174,7 @@ async function main() {
       const { positionals } = parseArgs({
         args: restArgs,
         options: { json: { type: "boolean", default: false } },
-        strict: false,
+        strict: true,
         allowPositionals: true,
       });
       const useJson = restArgs.includes("--json");
@@ -186,7 +186,7 @@ async function main() {
       const { positionals } = parseArgs({
         args: restArgs,
         options: {},
-        strict: false,
+        strict: true,
         allowPositionals: true,
       });
       const results = await updateCommand(positionals[0] ?? process.cwd());
