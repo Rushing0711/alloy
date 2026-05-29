@@ -203,7 +203,7 @@ bash .claude/skills/alloy/scripts/alloy-guard.sh openspec/changes/<name> applied
 ```
 
 ```
-💡 建议：可以执行 QA 测试或浏览器测试等质量检查，确认后再进入 finish。
+💡 建议：可以执行 QA 测试或浏览器测试等质量检查，确认后再进入 archive。
 
 准备好后，运行 `/alloy-archive` 进入归档阶段。
 ```
