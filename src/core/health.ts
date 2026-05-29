@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 import semver from "semver";
-import type { HealthCheckResult } from "./types.js";
+import type { DepCheckResult, HealthCheckResult } from "./types.js";
 import { loadCompat } from "./compat.js";
 import { detectEnv } from "./detect.js";
 
@@ -18,6 +18,65 @@ const EXPECTED_SKILLS = [
   "alloy-fix",
   "alloy-status",
 ];
+
+/**
+ * 检测 OpenSpec CLI 是否安装且版本兼容。
+ * 供 doctor 诊断和 init 安装前检测复用。
+ */
+export function checkOpenSpec(requiredRange: string): DepCheckResult {
+  try {
+    const version = execSync("openspec --version", { stdio: "pipe" })
+      .toString()
+      .trim();
+    return {
+      installed: true,
+      version,
+      compatible: semver.satisfies(version, requiredRange),
+    };
+  } catch {
+    return { installed: false, compatible: false };
+  }
+}
+
+/**
+ * 检测 Superpowers 是否安装且版本兼容。
+ * 优先检查 Claude Code 插件（~/.claude/plugins/installed_plugins.json），
+ * fallback 到 npx skills list。
+ * 供 doctor 诊断和 init 安装前检测复用。
+ */
+export async function checkSuperpowers(requiredRange: string): Promise<DepCheckResult> {
+  const KEY_SKILLS = ["brainstorming", "using-git-worktrees"];
+
+  // 1. 检查 Claude Code 插件
+  try {
+    const home = process.env.HOME || process.env.USERPROFILE || "~";
+    const pluginsJsonPath = join(home, ".claude", "plugins", "installed_plugins.json");
+    const pluginsRaw = await readFile(pluginsJsonPath, "utf-8");
+    const plugins = JSON.parse(pluginsRaw);
+    const sp = plugins?.plugins?.["superpowers@claude-plugins-official"];
+    if (sp && sp.length > 0) {
+      return {
+        installed: true,
+        version: sp[0].version,
+        compatible: semver.satisfies(sp[0].version, requiredRange),
+      };
+    }
+  } catch {
+    // 插件文件不存在或无 superpowers 条目，继续 fallback
+  }
+
+  // 2. fallback: npx skills list
+  try {
+    const output = execSync("npx skills list", { stdio: "pipe" }).toString();
+    if (output.includes("brainstorming") && output.includes("using-git-worktrees")) {
+      return { installed: true, compatible: true };
+    }
+  } catch {
+    // 未安装
+  }
+
+  return { installed: false, compatible: false };
+}
 
 /**
  * 运行 7 项健康检查，统一编排并返回结果数组。
@@ -45,19 +104,15 @@ export async function runHealthCheck(
   });
 
   // 2. OpenSpec
-  try {
-    const version = execSync("openspec --version", { stdio: "pipe" })
-      .toString()
-      .trim();
+  const osCheck = checkOpenSpec(config.compatible.openspec);
+  if (osCheck.installed) {
     results.push({
       name: "OpenSpec",
-      current: version,
+      current: osCheck.version!,
       required: config.compatible.openspec,
-      status: semver.satisfies(version, config.compatible.openspec)
-        ? "pass"
-        : "warn",
+      status: osCheck.compatible ? "pass" : "warn",
     });
-  } catch {
+  } else {
     results.push({
       name: "OpenSpec",
       current: "未安装",
@@ -66,54 +121,23 @@ export async function runHealthCheck(
     });
   }
 
-  // 3. Superpowers（优先检查 Claude Code 插件，fallback 到 npx skills list）
-  const KEY_SKILLS = ["brainstorming", "using-git-worktrees"];
-  try {
-    const home = process.env.HOME || process.env.USERPROFILE || "~";
-    const pluginsJsonPath = join(home, ".claude", "plugins", "installed_plugins.json");
-    const pluginsRaw = await readFile(pluginsJsonPath, "utf-8");
-    const plugins = JSON.parse(pluginsRaw);
-    const spPlugin = plugins?.plugins?.["superpowers@claude-plugins-official"];
-    if (spPlugin && spPlugin.length > 0) {
-      results.push({
-        name: "Superpowers",
-        current: `已安装 (Claude 插件 v${spPlugin[0].version})`,
-        required: config.compatible.superpowers,
-        status: "pass",
-      });
-    } else {
-      // 插件文件存在但无 superpowers 条目
-      throw new Error("superpowers plugin not found");
-    }
-  } catch {
-    // fallback: 尝试 npx skills list (旧版安装方式)
-    try {
-      const output = execSync("npx skills list", { stdio: "pipe" }).toString();
-      const missingSkills = KEY_SKILLS.filter((s) => !output.includes(s));
-      if (missingSkills.length === 0) {
-        results.push({
-          name: "Superpowers",
-          current: `已安装（含 ${KEY_SKILLS.join(", ")}）`,
-          required: config.compatible.superpowers,
-          status: "pass",
-        });
-      } else {
-        results.push({
-          name: "Superpowers",
-          current: `关键 skill 缺失: ${missingSkills.join(", ")}`,
-          required: config.compatible.superpowers,
-          status: "warn",
-          message: `npx skills list 输出未包含关键 skill: ${missingSkills.join(", ")}`,
-        });
-      }
-    } catch {
-      results.push({
-        name: "Superpowers",
-        current: "未安装",
-        required: config.compatible.superpowers,
-        status: "fail",
-      });
-    }
+  // 3. Superpowers
+  const spCheck = await checkSuperpowers(config.compatible.superpowers);
+  if (spCheck.installed) {
+    const versionInfo = spCheck.version ? ` v${spCheck.version}` : "";
+    results.push({
+      name: "Superpowers",
+      current: `已安装${versionInfo}`,
+      required: config.compatible.superpowers,
+      status: spCheck.compatible ? "pass" : "warn",
+    });
+  } else {
+    results.push({
+      name: "Superpowers",
+      current: "未安装",
+      required: config.compatible.superpowers,
+      status: "fail",
+    });
   }
 
   // 4. Alloy 自身版本

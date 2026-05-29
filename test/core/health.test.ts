@@ -174,7 +174,7 @@ describe("runHealthCheck", () => {
     const spResult = results.find((r) => r.name === "Superpowers");
     expect(spResult).toBeDefined();
     expect(spResult!.status).toBe("pass");
-    expect(spResult!.current).toContain("Claude 插件 v5.1.0");
+    expect(spResult!.current).toContain("v5.1.0");
   });
 
   it("Superpowers 插件文件存在但无对应条目时 fallback 到 npx skills list", async () => {
@@ -208,7 +208,7 @@ describe("runHealthCheck", () => {
     const spResult = results.find((r) => r.name === "Superpowers");
     expect(spResult).toBeDefined();
     expect(spResult!.status).toBe("pass");
-    expect(spResult!.current).toContain("brainstorming");
+    expect(spResult!.current).toContain("已安装");
   });
 
   it("Skills: .claude/skills/ 不完整但 skills/ 完整时应返回 pass（来源: skills/）", async () => {
@@ -340,10 +340,10 @@ describe("runHealthCheck", () => {
     const spResult = results.find((r) => r.name === "Superpowers");
     expect(spResult).toBeDefined();
     expect(spResult!.status).toBe("pass");
-    expect(spResult!.current).toContain("brainstorming");
+    expect(spResult!.current).toContain("已安装");
   });
 
-  it("Superpowers 输出缺少关键 skill 时应返回 warn", async () => {
+  it("Superpowers 输出缺少关键 skill 时应返回 fail", async () => {
     vi.mocked(loadCompat).mockResolvedValue(MOCK_CONFIG);
     vi.mocked(readFile).mockResolvedValue(
       JSON.stringify({ version: "0.1.0" })
@@ -365,9 +365,7 @@ describe("runHealthCheck", () => {
     const results = await runHealthCheck("/fake/packagedir", "/fake/project");
     const spResult = results.find((r) => r.name === "Superpowers");
     expect(spResult).toBeDefined();
-    expect(spResult!.status).toBe("warn");
-    expect(spResult!.current).toContain("缺失");
-    expect(spResult!.message).toContain("brainstorming");
-    expect(spResult!.message).toContain("using-git-worktrees");
+    expect(spResult!.status).toBe("fail");
+    expect(spResult!.current).toBe("未安装");
   });
 });
