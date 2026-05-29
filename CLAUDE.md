@@ -72,15 +72,23 @@ vendor/superpowers/     # Superpowers skill 内置兜底（离线安装用）
 
 ## 核心文档及关系
 
+三文档体系：
+
 | 文件 | 角色 | 内容 |
 |------|------|------|
-| `docs/alloy-design.md` | **主设计文档**（权威源） | Alloy 命令体系、状态管理、制品 DAG、架构、问题方案、安装初始化 |
-| `docs/openspec-vs-superpowers.md` | 原始对比分析 | OpenSpec vs Superpowers 命令/技能一览、优缺点、互补关系 |
-| `docs/workflow-design.md` | 工作流设计推导 | 4 阶段融合流程、3 种场景（新项目/存量项目/Bug 修复）、技能使用分析 |
-| `docs/alloy-design.md` | **主设计文档**（权威源） | Alloy 命令体系、状态管理、制品 DAG、架构、问题方案、安装初始化 |
-| `docs/skill-writing-guide.md` | **Skill 编写指南** | 来自 skill-creator、writing-skills、Comet、Claude Code 官方文档的编写规范和最佳实践 |
+| `docs/alloy-design.md` | **WHAT** — 产品规格 | Alloy 命令体系、状态管理、制品 DAG、架构、安装初始化 |
+| `CLAUDE.md` | **HOW** — Agent 行为约束 | 设计约束、开发规则、测试覆盖、跨层复盘 |
+| `docs/alloy-dev-guide.md` | **DO** — 开发者执行手册 | 构建/测试命令、代码约定、踩坑记录、验证流程 |
 
-**阅读顺序：** 先看 `docs/openspec-vs-superpowers.md` 了解上游对比 → `docs/workflow-design.md` 了解设计推导 → `docs/alloy-design.md` 了解功能全貌；写代码前必读 `docs/skill-writing-guide.md`。
+**辅助文档：**
+
+| 文件 | 角色 | 内容 |
+|------|------|------|
+| `docs/openspec-vs-superpowers.md` | 原始对比分析 | OpenSpec vs Superpowers 优缺点、互补关系 |
+| `docs/workflow-design.md` | 工作流设计推导 | 4 阶段融合流程、3 种场景 |
+| `docs/skill-writing-guide.md` | **Skill 编写指南**（权威源） | 来自官方文档的编写规范和最佳实践 |
+
+**阅读顺序：** `alloy-design.md` 了解功能全貌 → `alloy-dev-guide.md` 了解怎么动手 → 写代码前必读 `skill-writing-guide.md`。
 
 ## Alloy 核心设计（摘要自 docs/alloy-design.md）
 

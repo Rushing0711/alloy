@@ -659,3 +659,6 @@ alloy update [path]
 2. **CLI + Schema**（第 3-5 周）——alloy init / status / doctor / update + alloy schema 从零构建，参考 Comet 架构
 3. **完整流程**（第 6-8 周）——补全 apply / finish / archive / fix / discard 的 SKILL.md + shell 脚本
 4. **测试 + 文档 + 推广**（第 9-10 周）——单元测试、团队推广、反馈收集
+
+> 实际开发时参照 `docs/alloy-dev-guide.md`（WHAT → HOW → DO 三文档体系），
+> 包含构建命令、代码约定、测试写法、踩坑记录和跨层复盘清单。
