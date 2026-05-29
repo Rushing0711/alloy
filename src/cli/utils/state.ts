@@ -5,8 +5,14 @@ import type { AlloyState } from "../../core/types.js";
 
 export type { AlloyState };
 
+function formatTimestamp(): string {
+  const d = new Date();
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 export function createInitialState(): AlloyState {
-  const now = new Date().toISOString().slice(0, 10);
+  const now = formatTimestamp();
   return {
     phase: "started",
     worktree: null,
@@ -27,7 +33,7 @@ export async function writeState(
   state: AlloyState
 ): Promise<void> {
   const yamlPath = join(changePath, ".alloy.yaml");
-  state.updated_at = new Date().toISOString().slice(0, 10);
+  state.updated_at = formatTimestamp();
   const content = stringifyYaml(state);
   await writeFile(yamlPath, content, "utf-8");
 }

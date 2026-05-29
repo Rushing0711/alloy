@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
+import { existsSync } from "node:fs";
 import { select } from "@inquirer/prompts";
 import { initCommand, selectScope } from "./commands/init.js";
 import { statusCommand } from "./commands/status.js";
@@ -71,8 +72,20 @@ async function main() {
         allowPositionals: true,
       });
       const useJson = restArgs.includes("--json");
-      const statusName = positionals[1];
-      const result = await statusCommand(positionals[0] ?? process.cwd(), statusName);
+
+      let projectPath: string;
+      let changeName: string | undefined;
+
+      if (positionals.length === 1 && !existsSync(positionals[0])) {
+        // 单个参数且非路径 → 视为 change name
+        projectPath = process.cwd();
+        changeName = positionals[0];
+      } else {
+        projectPath = positionals[0] ?? process.cwd();
+        changeName = positionals[1];
+      }
+
+      const result = await statusCommand(projectPath, changeName);
       if (useJson) {
         console.log(JSON.stringify({ output: result }, null, 2));
       } else {

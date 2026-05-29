@@ -26,8 +26,9 @@ describe("state utils", () => {
     expect(state.phase).toBe("started");
     expect(state.worktree).toBeNull();
     expect(state.schema_version).toBe(1);
-    expect(state.created_at).toBeTruthy();
-    expect(state.updated_at).toBeTruthy();
+    // 格式: YYYY-MM-DDTHH:MM:SS（与 shell 脚本一致）
+    expect(state.created_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
+    expect(state.updated_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
   });
 
   it("writeState 和 readState 往返一致", async () => {
@@ -41,14 +42,15 @@ describe("state utils", () => {
     expect(loaded.schema_version).toBe(original.schema_version);
   });
 
-  it("writeState 自动更新 updated_at", async () => {
+  it("writeState 自动更新 updated_at（含时间）", async () => {
     const changeDir = join(tmpDir, "test-change-2");
     await mkdir(changeDir, { recursive: true });
     const state = createInitialState();
-    state.updated_at = "2020-01-01";
+    state.updated_at = "2020-01-01T00:00:00";
     await writeState(changeDir, state);
     const loaded = await readState(changeDir);
-    expect(loaded.updated_at).not.toBe("2020-01-01");
+    expect(loaded.updated_at).not.toBe("2020-01-01T00:00:00");
+    expect(loaded.updated_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
   });
 
   it("findActiveChanges 过滤 finished change，保留 archived", async () => {

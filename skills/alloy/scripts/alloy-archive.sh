@@ -37,7 +37,7 @@ else
 fi
 
 # 3. 更新 phase
-today=$(date +%Y-%m-%d)
+today=$(date +%Y-%m-%dT%H:%M:%S)
 if [[ "$(uname)" == "Darwin" ]]; then
   sed -i '' "s/^phase:.*/phase: archived/" "$ALLOY_YAML"
   sed -i '' "s/^updated_at:.*/updated_at: \"$today\"/" "$ALLOY_YAML"
@@ -54,6 +54,5 @@ if git diff --quiet && git diff --cached --quiet; then
   echo "⚠️  没有需要提交的变更"
 else
   git add openspec/specs/ openspec/changes/ archive/ 2>/dev/null || true
-  git commit -m "archive: ${CHANGE_NAME} 归档——Delta Spec 已同步"
-  echo "✓ 归档变更已提交"
+  git commit -m "archive: ${CHANGE_NAME} 归档——Delta Spec 已同步" 2>/dev/null || echo "⚠️  git commit 失败（可能不是 git 仓库）"
 fi

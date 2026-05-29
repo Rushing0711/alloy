@@ -11,7 +11,7 @@ setup() {
 worktree: .worktrees/web-tetris
 schema_version: 1
 phase: applied
-updated_at: "2026-05-29"
+updated_at: "2026-05-29T10:30:00"
 EOF
 
   touch "$CHANGE_DIR/verify.md"

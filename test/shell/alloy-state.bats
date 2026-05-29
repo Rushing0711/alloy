@@ -62,12 +62,12 @@ teardown() {
   grep -q '^worktree: .worktrees/web-tetris' "$ALLOY_YAML"
 }
 
-@test "write auto-updates updated_at to today" {
-  local today
-  today=$(date +%Y-%m-%d)
+@test "write auto-updates updated_at to today (with time)" {
+  local today_prefix
+  today_prefix=$(date +%Y-%m-%d)
   run bash "$SCRIPT" write "$CHANGE_DIR" phase "applied"
   [ "$status" -eq 0 ]
-  grep -q "updated_at: \"$today\"" "$ALLOY_YAML"
+  grep -q "updated_at: \"${today_prefix}T" "$ALLOY_YAML"
 }
 
 # ─── check ───
