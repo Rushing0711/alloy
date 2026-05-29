@@ -16,6 +16,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "postbuild": "chmod +x dist/cli/index.js",
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest"
