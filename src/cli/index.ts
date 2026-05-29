@@ -9,6 +9,7 @@ import { statusCommand } from "./commands/status.js";
 import { doctorCommand, formatDoctorResult } from "./commands/doctor.js";
 import { updateCommand } from "./commands/update.js";
 import { generateCompletion } from "./commands/completion.js";
+import { stateCommand } from "./commands/internal/state.js";
 
 const USAGE = `
 alloy <command> [options]
@@ -193,6 +194,10 @@ async function main() {
     case "completion": {
       const shell = restArgs[0] ?? process.env.SHELL ?? "bash";
       console.log(generateCompletion(shell));
+      break;
+    }
+    case "_state": {
+      await stateCommand(restArgs);
       break;
     }
     default:
