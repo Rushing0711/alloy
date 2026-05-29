@@ -1,5 +1,9 @@
 # Alloy 开发必读：Skill 编写经验
 
+> **目标读者：** 写/改 Alloy Skill 的人（人类开发者 + AI Agent）
+> **职责：** Skill 编写规范和踩坑教训——修改任何 `SKILL.md` 之前必读本文全文（这不是建议，是前置条件）。
+> **不放入：** Claude Code 官方 Skill 规范（见本文末尾"参考来源"中的官方文档链接）。
+
 本文档总结来自 skill-creator、superpowers:writing-skills、Comet、Superpowers、OpenSpec 的技能编写最佳实践和教训，供 Alloy 项目开发和迭代技能时参考。
 
 ---
@@ -200,42 +204,10 @@ superpowers:writing-skills 采用 RED-GREEN-REFACTOR 开发 skill：
 
 ## 八、Claude Code 官方技能规范
 
-来源：https://code.claude.com/docs/en/skills.md
+官方文档是最新最权威的，这里不维护副本。Skill 结构、frontmatter 字段、发现机制等详见：
 
-### Skill 目录结构
-
-```
-~/.claude/skills/<skill-name>/SKILL.md    # 个人，所有项目可用
-.claude/skills/<skill-name>/SKILL.md      # 项目级，本项目可用
-```
-
-### 关键规则
-
-1. **命令名 = 目录名。** `.claude/skills/alloy-start/SKILL.md` → `/alloy-start`
-2. **自定义命令已并入 Skill。** `.claude/commands/deploy.md` 和 `.claude/skills/deploy/SKILL.md` 效果相同
-3. **优先级：** Enterprise > Personal > Project；Skill 优先于同名 command
-4. **实时检测：** 修改 skill 文件无需重启 session
-5. **父目录发现：** 从当前目录到仓库根的 `.claude/skills/` 都会被加载
-6. **`disable-model-invocation: true`** → 阻止 Claude 自动加载，仅手动调用
-7. **`user-invocable: false`** → 从 `/` 菜单隐藏，用于纯背景知识
-
-### Frontmatter 参考
-
-| 字段 | 说明 |
-|------|------|
-| `name` | 展示名（默认=目录名） |
-| `description` | 何时使用、做什么（Claude 据此决定是否自动加载） |
-| `when_to_use` | 额外的触发条件说明 |
-| `argument-hint` | 参数提示，如 `[topic]` |
-| `disable-model-invocation` | `true` = 仅手动调用 |
-| `user-invocable` | `false` = 隐藏 |
-| `allowed-tools` / `disallowed-tools` | 工具权限控制 |
-| `model` / `effort` | 临时覆盖模型/努力级别 |
-| `context: fork` | 在子 agent 中运行 |
-
-### 动态上下文注入
-
-\`\`\` ! `command` \`\`\` 语法在 skill 加载前执行命令并内联输出，让 skill 携带实时上下文。
+- [Claude Code Skills 文档](https://code.claude.com/docs/en/skills.md)
+- [Claude Code .claude 目录规范](https://code.claude.com/docs/en/claude-directory.md)
 
 ---
 

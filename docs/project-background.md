@@ -1,5 +1,9 @@
 # Alloy 项目由来
 
+> **目标读者：** 想了解 Alloy 起源的人（人类）
+> **职责：** 讲清楚"为什么会有 Alloy"——从发现两个工具，到调研对比，到融合设计，到产品化。
+> **不放入：** 产品规格 → 见 [alloy-design.md](alloy-design.md)；工具对比细节 → 见 [openspec-vs-superpowers.md](openspec-vs-superpowers.md)；工作流编排推导 → 见 [workflow-design.md](workflow-design.md)。
+
 ## 一、起点：两个工具的发现
 
 2026 年初，团队在日常使用 Claude Code + Superpowers 进行 AI 辅助开发。Superpowers 提供了严谨的流程闸门——brainstorming 的设计审批、TDD 的红绿重构、verification 的完成前验证——让我们在 AI 生成代码的混沌中建立了一定的秩序。

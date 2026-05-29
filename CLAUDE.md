@@ -8,19 +8,10 @@
 
 ## 构建与测试
 
-```bash
-npm run build       # tsc 编译 TypeScript
-npm run dev         # tsc --watch 开发模式
-npm test            # vitest run（一次性运行全部测试）
-npm run test:watch  # vitest（交互式 watch 模式）
-```
+构建/测试命令、代码约定、踩坑记录统一见 `docs/alloy-dev-guide.md`。下面只列 Agent 执行时必须知道的：
 
-运行单个测试文件：
-```bash
-npx vitest run test/cli/state.test.ts
-```
-
-Node.js ≥ 22，TypeScript 源码在 `src/`，编译产物输出到 `dist/`。
+- Node.js ≥ 22，TypeScript 源码在 `src/`，编译产物输出到 `dist/`
+- 修改代码后运行 `npm test`（vitest 全量）+ `bats test/shell/*.bats`（shell 测试全量）
 
 ## 代码架构
 
@@ -45,7 +36,7 @@ src/core/
 src/utils/
     fs.ts               # 文件系统工具（包根目录定位）
 
-.claude/skills/
+skills/
   alloy/SKILL.md        # 路由层 — 按 phase 分发到子命令
   alloy/scripts/
     alloy-state.sh      # 状态文件操作（Agent 不直接写 YAML）
@@ -54,8 +45,8 @@ src/utils/
   alloy-start/SKILL.md  # 智能入口：状态检测 → explore + brainstorming → draft.md
   alloy-plan/SKILL.md   # 规划：制品生成 proposal/design/specs/tasks/plan
   alloy-apply/SKILL.md  # 执行：worktree 隔离 + SDD(TDD) + verify + retrospective
-  alloy-finish/SKILL.md # 收尾：merge / PR / keep / discard 人工闸门
-  alloy-archive/SKILL.md# 归档：硬校验 phase=finished → openspec archive
+  alloy-finish/SKILL.md # 收尾：merge / PR / keep 人工闸门
+  alloy-archive/SKILL.md# 归档：硬校验 phase=archived → openspec archive
   alloy-fix/SKILL.md    # Bug 修复：diagnose → 分流（不改 spec / 需改 spec）
   alloy-discard/SKILL.md# 放弃：按 phase 分级清理
   alloy-status/SKILL.md # 状态：查看阶段、制品、下一步
@@ -66,6 +57,8 @@ openspec/schemas/alloy/
   templates/            # 制品模板（proposal/design/specs/tasks/plan/retrospective）
 
 vendor/superpowers/     # Superpowers skill 内置兜底（离线安装用）
+
+以上为源文件（git 追踪）。alloy init 部署时将 skills/ → .claude/skills/，openspec/schemas/ → 项目 openspec/ 目录。
 ```
 
 **三层架构：** CLI 控制层（TypeScript，确定性）→ Schema 制品层（DAG + instruction，硬约束）→ 大模型内容层（文档/代码生成，柔性+人类审查）。

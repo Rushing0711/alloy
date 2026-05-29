@@ -1,5 +1,11 @@
 # 混合工作流设计
 
+> **本文档定位：Alloy 设计决策的来源——不是过时文档，是推导文档。**
+>
+> 这份文档写于 Alloy 自身技能体系诞生之前。它分析的是 OpenSpec 和 Superpowers **原始技能**的编排融合方式，因此文中使用的是 `/opsx:` 和 `superpowers:` 命名（如 `/opsx:explore`、`superpowers:brainstorming`），而非 Alloy 封装后的 `/alloy-` 命令。这正是本文档的价值——它记录了"为什么要这么编排"的分析过程，是 alloy-design.md 中每一条设计决策的推导来源。
+>
+> 如果你在找"怎么用 Alloy 命令"，请看 [alloy-design.md](alloy-design.md)。如果你想理解"Alloy 为什么这样设计"，本文档就是起点。
+
 本文档融合 OpenSpec 和 Superpowers，设计一套完整的开发工作流，覆盖 4 个阶段：Pre-OpenSpec → OpenSpec 规划 → OpenSpec 执行 → 收尾。
 
 > **约定：** 文中标注的"内部遵循 xxx""内部使用 xxx""SDD 内部…"等描述，记录的是该技能**内部自动完成**的行为，用于让读者了解完整流程。这些不是需要主动调用的独立步骤——编排层只需调用入口技能，内部机制由技能自身管理。

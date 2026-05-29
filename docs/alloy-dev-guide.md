@@ -1,6 +1,10 @@
 # Alloy 开发者执行手册
 
-Alloy 项目的构建、测试、调试约定和踩坑记录。面向开发者和 AI Agent。
+> **目标读者：** 人类开发者（不是给 Agent 的——Agent 的约束在 [CLAUDE.md](../CLAUDE.md)）
+> **职责：** 如何构建、测试、调试 Alloy CLI 和 Skill 本身。
+> **不放入：** 产品规格 → 见 [alloy-design.md](alloy-design.md)；设计背景 → 见 [project-background.md](project-background.md)；Skill 编写规范 → 见 [skill-writing-guide.md](skill-writing-guide.md)。
+
+Alloy 项目的构建、测试、调试约定和踩坑记录。
 
 **前置阅读：** 动手前先读完 `alloy-design.md`（了解 Alloy 是什么）、`openspec-vs-superpowers.md` + `workflow-design.md`（了解设计推导）。
 

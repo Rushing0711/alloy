@@ -1,5 +1,9 @@
 # Alloy 设计文档
 
+> **目标读者：** 人类开发者 + AI Agent
+> **职责：** Alloy 完整产品规格——这是 Alloy 的"真相源"。Alloy 是什么、怎么用、为什么这样设计，都以本文档为准。
+> **不放入：** 构建/测试命令 → 见 [alloy-dev-guide.md](alloy-dev-guide.md)；Skill 编写经验 → 见 [skill-writing-guide.md](skill-writing-guide.md)；设计推导过程 → 见 [workflow-design.md](workflow-design.md)；开发背景 → 见 [project-background.md](project-background.md)。
+
 Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口在 AI Agent 内部（Claude Code、Cursor 等），CLI 辅助初始化和诊断。
 
 ---
@@ -635,13 +639,6 @@ alloy update [path]
 | 19 | /alloy-finish 保留为独立命令 | archive 时选 keep 后，后续可手动调 finish 合入；无需重跑 archive |
 | 20 | 制品上下文一致性决定输出语言 | 不硬编码语言要求也不绑定特定平台机制。指令/模板写什么语言，Agent 自然产出什么语言 |
 | 21 | apply 关键决策点用户有感 | git 初始化、worktree 创建、执行策略（SDD vs 串行）三个决策点均展示选项让用户选择 |
-| 13 | retrospective 模板参考 superpowers-bridge | 纯 AI 生成，§0-§6 证据驱动，Forward-Pointer 保留审计线索 |
-| 14 | 不设子步骤状态追踪 | phase + worktree + 文件检查足够 Agent 判断恢复位置 |
-| 15 | CLI 守门，Skill 信任 | 环境依赖由 `alloy init` 确保，Skill 不做手动 fallback。依赖缺失时引导 `alloy init` |
-| 16 | scope 只控制 skill 安装位置 | Alloy + Superpowers skill 受 scope 控制；OpenSpec `openspec/` 目录始终在项目内；默认 project 级别 |
-| 17 | 项目就绪标记 = `openspec/config.yaml` | `alloy-start` 检查此文件判断项目是否已初始化，与 OpenSpec 自身的检测方式一致 |
-| 18 | openspec init 启用 custom profile | 参考 Comet，使用临时 custom profile 确保全部 11 个 workflow 可用，避免 core profile 缺少 new/continue 等命令 |
-| 19 | /alloy-finish 保留为独立命令 | archive 时选 keep 后，后续可手动调 finish 合入；无需重跑 archive |
 
 ---
 

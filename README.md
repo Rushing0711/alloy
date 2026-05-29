@@ -1,6 +1,36 @@
 # Alloy
 
+> **本文档是给人类看的项目入口。** 如果你是 AI Agent，请读 [CLAUDE.md](CLAUDE.md)。
+
 Alloy 是一套融合 [OpenSpec](https://github.com/Fission-AI/OpenSpec)（需求追踪）和 [Superpowers](https://github.com/obra/superpowers)（流程纪律）的开发工作流编排工具。
+
+---
+
+## 文档导航
+
+| 我想… | 读这个 |
+|-------|------|
+| 了解 Alloy 是什么、能做什么 | 你正在看的就是——往下读 |
+| 理解为什么这么设计 | [project-background.md](docs/project-background.md) — 项目起源与设计历程 |
+| 看完整产品规格（命令、状态管理、制品 DAG） | [alloy-design.md](docs/alloy-design.md) — 产品"真相源" |
+| 看原始工作流推导（OpenSpec+Superpowers 融合分析） | [workflow-design.md](docs/workflow-design.md) — 设计决策来源 |
+| 看两个基础工具的对比分析 | [openspec-vs-superpowers.md](docs/openspec-vs-superpowers.md) |
+| 构建、测试、调试 Alloy 本身 | [alloy-dev-guide.md](docs/alloy-dev-guide.md) — 开发者手册 |
+| 写或改 Alloy Skill | [skill-writing-guide.md](docs/skill-writing-guide.md) — Skill 编写规范（改 SKILL.md 前必读） |
+| 看 Agent 的行为约束 | [CLAUDE.md](CLAUDE.md) — Agent 专用，人类可跳过 |
+
+### 文档角色速览
+
+| 文档 | 角色 | 目标读者 |
+|------|------|---------|
+| README.md | **入口** — 项目概览 + 导航 | 人类 |
+| [alloy-design.md](docs/alloy-design.md) | **WHAT** — 产品规格 | 人类 + Agent |
+| [alloy-dev-guide.md](docs/alloy-dev-guide.md) | **DO** — 开发者手册 | 人类 |
+| [CLAUDE.md](CLAUDE.md) | **HOW** — Agent 约束 | Agent |
+| [skill-writing-guide.md](docs/skill-writing-guide.md) | **SKILL** — 编写规范 | 人类 + Agent |
+| [workflow-design.md](docs/workflow-design.md) | **WHY** — 设计推导 | 人类 |
+| [project-background.md](docs/project-background.md) | **STORY** — 项目故事 | 人类 |
+| [openspec-vs-superpowers.md](docs/openspec-vs-superpowers.md) | **RESEARCH** — 调研对比 | 人类 |
 
 ---
 
@@ -118,6 +148,8 @@ draft.md              ← /alloy-start 产出（需求探索 + brainstorming）
 
 ## 命令参考
 
+> 完整命令行为、参数详情、阶段闸门规则见 [alloy-design.md](docs/alloy-design.md)。下面只列概览。
+
 ### Slash Command（在 AI Agent 中使用）
 
 | 命令 | 用途 |
@@ -163,32 +195,6 @@ draft.md              ← /alloy-start 产出（需求探索 + brainstorming）
 | Claude Code | — | AI Agent 运行平台（v1） |
 | Node.js | ≥ 22 | 运行时 |
 | git | — | 版本控制 |
-
----
-
-## 文档索引
-
-### 按阅读目的
-
-| 我想… | 读这个 |
-|-------|------|
-| 了解 Alloy 是什么、能做什么 | [alloy-design.md](docs/alloy-design.md) — 完整产品规格 |
-| 理解为什么这么设计 | [project-background.md](docs/project-background.md) — 项目背景与设计历程 |
-| | [openspec-vs-superpowers.md](docs/openspec-vs-superpowers.md) — OpenSpec vs Superpowers 对比分析 |
-| | [workflow-design.md](docs/workflow-design.md) — 工作流设计推导 |
-| 开始写代码 | [alloy-dev-guide.md](docs/alloy-dev-guide.md) — 构建/测试/踩坑记录/跨层复盘 |
-| 写或改 Skill | [skill-writing-guide.md](docs/skill-writing-guide.md) — Skill 编写规范（改 SKILL.md 前必读） |
-| 了解 Agent 行为约束 | [CLAUDE.md](CLAUDE.md) — Agent 在项目中的设计约束和开发规则 |
-| 看正式设计规格 | [设计规格](docs/superpowers/specs/2026-05-28-alloy-design-spec.md) — brainstorming 产出 |
-
-### 文档角色
-
-| 文档 | 角色 | 一句话 |
-|------|------|--------|
-| [alloy-design.md](docs/alloy-design.md) | **WHAT** — 产品规格 | 命令体系、状态管理、制品 DAG、架构 |
-| [alloy-dev-guide.md](docs/alloy-dev-guide.md) | **DO** — 开发者手册 | 构建命令、测试写法、跨层复盘清单 |
-| [CLAUDE.md](CLAUDE.md) | **HOW** — Agent 约束 | 设计约束、开发规则、测试覆盖 |
-| [skill-writing-guide.md](docs/skill-writing-guide.md) | **SKILL** — 编写指南 | 调用模式、反例定义、三层防线 |
 
 ---
 
