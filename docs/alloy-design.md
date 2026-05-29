@@ -228,8 +228,9 @@ phase 行为：
   制品状态: draft ✓  proposal ✓  design ✗  specs ✗  tasks ✗  plan ✗
   下一步:  继续 alloy plan，等待 design 生成
 
-一致性检查（随 status 自动执行）:
+一致性检查（随 status 和 start 自动执行，双向）:
   ├── worktree 字段有值但磁盘路径不存在 → ⚠️ "worktree 残留"
+  ├── worktree 字段为 null 但 .worktrees/<name>/ 目录存在 → ⚠️ "worktree 孤儿"（状态写入缺失）
   └── git worktree list 中有孤立 worktree → ⚠️ 提示清理
 ```
 

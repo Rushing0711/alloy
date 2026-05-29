@@ -122,6 +122,11 @@ git rev-parse --abbrev-ref HEAD
   状态：     已切换到新目录，后续所有操作在此目录中进行
 ```
 
+**worktree 创建后立即写入状态文件**——这是断点恢复的关键数据：
+```bash
+bash .claude/skills/alloy/scripts/alloy-state.sh write openspec/changes/<name> worktree ".worktrees/<name>"
+```
+
 **关键约束：** worktree 基于用户选择的分支创建。事后 finish 时 merge 回合的目标也是这个基础分支，而非固定 main。
 
 ### [Step 2/5] 任务实现

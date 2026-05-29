@@ -160,7 +160,10 @@ draft.md 已生成。
 | `archived` | 引导用户继续 `/alloy-finish` |
 | `finished` | 工作流已完成——如需继续修改，使用自然对话提交新变更 |
 
-如果 worktree 字段有值但磁盘路径不存在，警告用户"worktree 残留"后再给出建议。
+一致性检查（双向）：
+- worktree 字段有值但磁盘路径不存在 → ⚠️ "worktree 残留：.alloy.yaml 声称有 worktree 但磁盘不存在"
+- worktree 字段为 null 但 `.worktrees/<name>/` 目录存在 → ⚠️ "worktree 孤儿：磁盘存在 worktree 但 .alloy.yaml 未记录，建议手动验证并更新状态"
+- 发现孤儿 worktree 时，询问用户是否修复 .alloy.yaml：`bash .claude/skills/alloy/scripts/alloy-state.sh write openspec/changes/<name> worktree ".worktrees/<name>"`
 
 ---
 

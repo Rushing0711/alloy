@@ -21,7 +21,7 @@ case "$ACTION" in
   write)
     if grep -qE "^${FIELD}:" "$ALLOY_YAML"; then
       if [[ "$(uname)" == "Darwin" ]]; then
-        sed -i '' "s/^${FIELD}:.*/${FIELD}: ${VALUE}/" "$ALLOY_YAML"
+        sed -i '' "s#^${FIELD}:.*#${FIELD}: ${VALUE}#" "$ALLOY_YAML"
       else
         sed -i "s/^${FIELD}:.*/${FIELD}: ${VALUE}/" "$ALLOY_YAML"
       fi
