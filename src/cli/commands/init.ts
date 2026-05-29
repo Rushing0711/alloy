@@ -117,6 +117,44 @@ export async function initCommand(opts: InitOptions): Promise<void> {
     );
   }
 
+  // 9. 自动注册 shell 补全（失败不阻断 init）
+  console.log("\n  🐚 注册 shell 补全...");
+  try {
+    const home = process.env.HOME || process.env.USERPROFILE || "~";
+    const shell = process.env.SHELL || "";
+    const completionLine = "source <(alloy completion)";
+    let rcFile: string | null = null;
+
+    if (shell.includes("zsh")) {
+      rcFile = join(home, ".zshrc");
+    } else if (shell.includes("bash")) {
+      rcFile = join(home, ".bashrc");
+    }
+
+    if (rcFile) {
+      let rcContent = "";
+      try {
+        rcContent = await readFile(rcFile, "utf-8");
+      } catch {
+        // 文件不存在，稍后创建
+      }
+      if (!rcContent.includes("alloy completion")) {
+        await writeFile(
+          rcFile,
+          rcContent.trimEnd() + "\n" + completionLine + "\n",
+          "utf-8"
+        );
+        console.log(`     ✓ shell 补全已注册 → ${rcFile}`);
+      } else {
+        console.log("     ✓ shell 补全已存在，跳过");
+      }
+    } else {
+      console.log("     ⚠ 未检测到 bash/zsh，跳过补全注册");
+    }
+  } catch {
+    // 注册失败不阻断 init，静默忽略
+  }
+
   console.log("\n  ✅ Alloy 就绪！");
   console.log("     在 Claude Code 中输入 /alloy-start <topic> 开始工作\n");
 }
