@@ -1,40 +1,109 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { select } from "@inquirer/prompts";
 import { initCommand, selectScope } from "./commands/init.js";
 import { statusCommand } from "./commands/status.js";
 import { doctorCommand, formatDoctorResult } from "./commands/doctor.js";
 import { updateCommand } from "./commands/update.js";
+import { generateCompletion } from "./commands/completion.js";
 
 const USAGE = `
 alloy <command> [options]
 
 Commands:
-  init    项目初始化：检测环境 → 安装依赖 → 部署 schema + skill
-  status  查看所有活跃 change 总览
-  doctor  诊断：版本兼容性、文件一致性
-  update  更新 Alloy skill 文件到最新版
+  init        [path] [--scope <project|global>] [--inject-claude-md]
+              项目初始化：检测环境 → 安装依赖 → 部署 schema + skill
+  status      [path|name] [--json]
+              查看活跃 change 总览，指定 name 查看详情
+  doctor      [path] [--json]
+              诊断：版本兼容性、文件一致性
+  update      [path]
+              更新 Alloy skill 文件到最新版
+  completion  [bash|zsh]
+              生成 shell 补全脚本
 
 Options:
-  --version  版本号
-  --help     帮助
+  --version, -V  版本号
+  --help, -h     帮助（alloy -h 或 alloy <command> -h）
 `;
+
+function commandHelp(cmd: string): string {
+  switch (cmd) {
+    case "init":
+      return `
+alloy init [path] [options]
+
+选项:
+  --scope <project|global>  安装范围，默认 project
+  --inject-claude-md        注入 CLAUDE.md 工作流标记（默认关闭）
+  --help, -h                显示本帮助
+`;
+    case "status":
+      return `
+alloy status [path|name] [options]
+
+参数:
+  path  项目路径（默认当前目录）
+  name  change 名称（查看详情）
+
+选项:
+  --json    JSON 格式输出
+  --help, -h    显示本帮助
+`;
+    case "doctor":
+      return `
+alloy doctor [path] [options]
+
+选项:
+  --json    JSON 格式输出
+  --help, -h    显示本帮助
+`;
+    case "update":
+      return `
+alloy update [path] [options]
+
+选项:
+  --help, -h    显示本帮助
+`;
+    case "completion":
+      return `
+alloy completion [shell]
+
+参数:
+  shell  目标 shell（bash 或 zsh，默认从 $SHELL 自动检测）
+
+示例:
+  source <(alloy completion)        # 当前 session 生效
+  alloy completion >> ~/.zshrc      # 永久生效
+`;
+    default:
+      return `未知命令: ${cmd}\n使用 alloy --help 查看可用命令。`;
+  }
+}
 
 async function main() {
   const args = process.argv.slice(2);
 
-  if (args.length === 0 || args.includes("--help")) {
+  const isHelp = (a: string[]) => a.includes("--help") || a.includes("-h");
+  const isVersion = (a: string[]) => a.includes("--version") || a.includes("-V");
+
+  if (args.length === 0 || (args.length === 1 && isHelp(args))) {
     console.log(USAGE);
     process.exit(0);
   }
 
-  if (args.includes("--version")) {
+  if (args.length === 1 && isVersion(args)) {
     try {
-      const pkg = await import("../../package.json", {
-        with: { type: "json" },
-      });
-      console.log(`alloy v${pkg.default.version}`);
+      const pkg = JSON.parse(
+        readFileSync(
+          join(dirname(fileURLToPath(import.meta.url)), "..", "..", "package.json"),
+          "utf-8"
+        )
+      );
+      console.log(`alloy v${pkg.version}`);
     } catch {
       console.log("alloy v0.1.0");
     }
@@ -43,6 +112,11 @@ async function main() {
 
   const command = args[0];
   const restArgs = args.slice(1);
+
+  if (isHelp(restArgs)) {
+    console.log(commandHelp(command));
+    process.exit(0);
+  }
 
   switch (command) {
     case "init": {
@@ -114,6 +188,11 @@ async function main() {
       });
       const results = await updateCommand(positionals[0] ?? process.cwd());
       for (const r of results) console.log(`  ${r}`);
+      break;
+    }
+    case "completion": {
+      const shell = restArgs[0] ?? process.env.SHELL ?? "bash";
+      console.log(generateCompletion(shell));
       break;
     }
     default:

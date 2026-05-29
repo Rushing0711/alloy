@@ -10,7 +10,7 @@
 
 构建/测试命令、代码约定、踩坑记录统一见 `docs/alloy-dev-guide.md`。下面只列 Agent 执行时必须知道的：
 
-- Node.js ≥ 22，TypeScript 源码在 `src/`，编译产物输出到 `dist/`
+- Node.js ≥ 18，TypeScript 源码在 `src/`，编译产物输出到 `dist/`
 - 修改代码后运行 `npm test`（vitest 全量）+ `bats test/shell/*.bats`（shell 测试全量）
 - **本地开发验证：** 修改 Skill 或 CLI 后，`npm run build && npm link` 使全局 `alloy` 命令指向本地构建产物。在其他项目中运行 `alloy update` 即可拉取最新 skill 文件进行端到端验证。
 

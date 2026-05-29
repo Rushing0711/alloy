@@ -91,7 +91,7 @@ cd your-project
 alloy init
 ```
 
-`alloy init` 自动完成：检测环境（Node.js ≥ 22 + git + Claude Code）→ 安装 OpenSpec CLI + Superpowers → 部署 Alloy skill 和 schema → 兼容性检查。
+`alloy init` 自动完成：检测环境（Node.js ≥ 18 + git + Claude Code）→ 安装 OpenSpec CLI + Superpowers → 部署 Alloy skill 和 schema → 兼容性检查。
 
 ```bash
 alloy init --scope project   # 安装到项目级（默认）

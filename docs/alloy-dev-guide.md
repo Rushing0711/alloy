@@ -67,7 +67,7 @@ alloy init --scope project         # 初始化
 
 | 规则 | 说明 |
 |------|------|
-| Node.js ≥ 22 | 使用 `import.meta.dirname`、`parseArgs` 等 ES2024 特性 |
+| Node.js ≥ 18 | 编译和测试通过即可，不依赖特定版本的 Node.js 新 API |
 | ESM 模块 | `"type": "module"`，import 用 `.js` 后缀 |
 | `execSync` 用 `pipe` | 捕获输出静默运行，错误通过 try/catch 处理 |
 | 类型统一放 `core/types.ts` | 避免 `AlloyState` 重复定义这种技术债 |

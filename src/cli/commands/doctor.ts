@@ -1,4 +1,5 @@
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
 import { loadCompat, checkCompat } from "../../core/compat.js";
 import type { CompatResult } from "../../core/types.js";
@@ -12,7 +13,7 @@ export interface DoctorResult {
 export async function doctorCommand(
   projectPath: string
 ): Promise<DoctorResult> {
-  const packageDir = join(import.meta.dirname, "..", "..", "..");
+  const packageDir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
   // 1. 版本兼容性
   const config = await loadCompat(packageDir);

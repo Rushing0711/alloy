@@ -547,7 +547,7 @@ $ cd your-project
 $ alloy init
 
   🔍 检测环境...
-     Node.js v22 ✓
+     Node.js v18+ ✓
      git ✓
      Claude Code ✓
 
