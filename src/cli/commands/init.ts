@@ -1,4 +1,3 @@
-import { select } from "@inquirer/prompts";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { detectEnv } from "../../core/detect.js";
@@ -12,6 +11,7 @@ import { getPackageRoot } from "../../utils/fs.js";
 
 export async function selectScope(passedScope?: string): Promise<"global" | "project"> {
   if (passedScope) return passedScope as "global" | "project";
+  const { select } = await import("@inquirer/prompts");
   return select({
     message: "Install scope:",
     choices: [

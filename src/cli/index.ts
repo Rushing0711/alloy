@@ -3,8 +3,6 @@ import { parseArgs } from "node:util";
 import { existsSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { select } from "@inquirer/prompts";
-import { initCommand, selectScope } from "./commands/init.js";
 import { statusCommand } from "./commands/status.js";
 import { doctorCommand, formatDoctorResult } from "./commands/doctor.js";
 import { updateCommand } from "./commands/update.js";
@@ -133,6 +131,7 @@ async function main() {
         allowPositionals: true,
       });
       const projectPath = positionals[0] ?? process.cwd();
+      const { initCommand, selectScope } = await import("./commands/init.js");
       const scope = await selectScope(values.scope as string | undefined);
       await initCommand({
         scope,
