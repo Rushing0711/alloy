@@ -156,10 +156,12 @@ Superpowers 技能内部行为（alloy 仅编排，不替代）：
 
 ### Step 4/5：制品层验证
 
-> [Step 4/5] /opsx:verify
+> [Step 4/5] 制品层验证
 > 正在验证制品结构——7 项结构化检查 → verify.md...
 
-调用 `/opsx:verify`（openspec-verify-change）产出 `verify.md`。
+1. 调用 `/opsx:verify` 执行结构化的 7 项检查
+2. **用中文重写 verify.md** — `/opsx:verify` 输出为英文，Agent 必须使用 `templates/verify.md` 的中文模板格式重新生成，确保章节标题、分析、结论全部为中文
+3. `/opsx:verify` 的检查结果（PASS/FAIL/WARNING）保留作为事实依据，但描述语言必须转为中文
 
 7 项检查：结构校验 → 任务完成 → Delta Spec 同步 → Design/Specs 一致性 → 实现信号 → 路由泄漏检测 → 延期任务对照。
 
@@ -168,7 +170,9 @@ Superpowers 技能内部行为（alloy 仅编排，不替代）：
 ### Step 5/5：复盘
 
 > [Step 5/5] retrospective
-> 正在生成证据驱动复盘报告（§0-§6）...
+> 正在生成中文证据驱动复盘报告（§0-§6）...
+
+**语言要求：retrospective.md 必须全部使用中文。** 代码标识符、commit hash、文件名保持英文。
 
 读取 `instructions/retrospective.md`，按模板 `templates/retrospective.md` 生成 `openspec/changes/<name>/retrospective.md`：
 
