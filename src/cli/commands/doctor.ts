@@ -1,12 +1,12 @@
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
-import { loadCompat, checkCompat } from "../../core/compat.js";
-import type { CompatResult } from "../../core/types.js";
+import { runHealthCheck } from "../../core/health.js";
+import type { HealthCheckResult } from "../../core/types.js";
 import { findActiveChanges } from "../utils/state.js";
 
 export interface DoctorResult {
-  compatResults: CompatResult[];
+  healthResults: HealthCheckResult[];
   consistencyWarnings: string[];
 }
 
@@ -16,8 +16,7 @@ export async function doctorCommand(
   const packageDir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
   // 1. 版本兼容性
-  const config = await loadCompat(packageDir);
-  const compatResults = checkCompat(config);
+  const healthResults = await runHealthCheck(packageDir, projectPath);
 
   // 2. 文件一致性
   const consistencyWarnings: string[] = [];
@@ -38,7 +37,7 @@ export async function doctorCommand(
     }
   }
 
-  return { compatResults, consistencyWarnings };
+  return { healthResults, consistencyWarnings };
 }
 
 export function formatDoctorResult(
@@ -51,9 +50,9 @@ export function formatDoctorResult(
 
   const lines: string[] = [];
 
-  lines.push("版本兼容性：");
-  for (const r of result.compatResults) {
-    const mark = r.compatible ? "✓" : "⚠️";
+  lines.push("健康检查：");
+  for (const r of result.healthResults) {
+    const mark = r.status === "pass" ? "✓" : r.status === "warn" ? "⚠️" : "✗";
     lines.push(`  ${mark} ${r.name}: ${r.current}（要求 ${r.required}）`);
   }
 

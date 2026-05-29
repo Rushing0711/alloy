@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { detectEnv } from "../../core/detect.js";
-import { loadCompat, checkCompat } from "../../core/compat.js";
+import { runHealthCheck } from "../../core/health.js";
 import { installOpenSpecCli, initOpenSpecProject } from "../../core/openspec.js";
 import { installSuperpowers } from "../../core/superpowers.js";
 import { deploySkills, deploySchema } from "../../core/skills.js";
@@ -108,12 +108,11 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   // 8. 兼容性检查
   console.log("\n  🩺 兼容性检查...");
   const packageDir = getPackageRoot();
-  const config = await loadCompat(packageDir);
-  const results = checkCompat(config);
+  const results = await runHealthCheck(packageDir, opts.projectPath, opts.scope);
   for (const r of results) {
-    const mark = r.compatible ? "✓" : "⚠️";
+    const mark = r.status === "pass" ? "✓" : r.status === "warn" ? "⚠️" : "✗";
     console.log(
-      `     ${mark} ${r.name} ${r.current}（兼容范围 ${r.required}）`
+      `     ${mark} ${r.name} ${r.current}（要求 ${r.required}）`
     );
   }
 
