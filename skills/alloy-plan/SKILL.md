@@ -33,12 +33,12 @@ description: Alloy 规划阶段——将 draft.md 转化为结构化制品，始
 若 change 目录不存在：
 1. 根据 draft.md 内容建议 change name（kebab-case），用户确认
 2. **调用 `/opsx:new <name>` 创建 change 目录** —— OpenSpec 自动创建目录结构、移入 draft.md、写入初始状态
-3. `/opsx:new` 完成后，通过 alloy-state.sh 补充写入 Alloy 特有字段：
+3. `/opsx:new` 完成后，通过 `alloy _state` 补充写入 Alloy 特有字段：
    ```bash
-   bash .claude/skills/alloy/scripts/alloy-state.sh write openspec/changes/<name> phase started
-   bash .claude/skills/alloy/scripts/alloy-state.sh write openspec/changes/<name> worktree null
-   bash .claude/skills/alloy/scripts/alloy-state.sh write openspec/changes/<name> schema_version 1
-   bash .claude/skills/alloy/scripts/alloy-state.sh write openspec/changes/<name> created_at "\"$(date +%Y-%m-%dT%H:%M:%S)\""
+   alloy _state write openspec/changes/<name> phase started
+   alloy _state write openspec/changes/<name> worktree null
+   alloy _state write openspec/changes/<name> schema_version 1
+   alloy _state write openspec/changes/<name> created_at "$(date +%Y-%m-%dT%H:%M:%S)"
    ```
    脚本每次 write 会自动更新 `updated_at`。
 
@@ -141,10 +141,10 @@ git add openspec/changes/<name>/
 git commit -m "plan: <name> 规划完成——proposal + design + specs + tasks + plan"
 ```
 
-**通过 alloy-guard.sh 校验并更新 phase：**
+**通过 `alloy _guard` 校验并更新 phase：**
 
 ```bash
-bash .claude/skills/alloy/scripts/alloy-guard.sh openspec/changes/<name> planned --apply
+alloy _guard openspec/changes/<name> planned --apply
 ```
 
 如果 guard 返回非零，说明前置条件不满足——检查缺哪个制品或是否有未提交文件，补全后重试。guard 通过后 phase 自动更新为 `planned`。
@@ -160,5 +160,5 @@ bash .claude/skills/alloy/scripts/alloy-guard.sh openspec/changes/<name> planned
 ## 闸门规则
 
 - **始终分步，不提供一键生成** —— 每个制品必须单独审查确认后才能继续。跳过审查等于跳过需求验证，后期返工代价远大于审查时间
-- **制品生成完成后必须通过 alloy-guard.sh 校验** —— 脚本检查 started→planned 转换的合法性
+- **制品生成完成后必须通过 alloy _guard 校验** —— 脚本检查 started→planned 转换的合法性
 - **plan 完成后不要自动进入 apply** —— 给用户空间审视完整规划

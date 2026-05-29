@@ -33,9 +33,9 @@ description: Alloy 归档——apply 完成后，锁定 Delta Spec 并归档 cha
 当前 phase 不支持归档。请先运行 /alloy-apply 完成执行阶段。
 ```
 
-先通过 alloy-guard.sh 做硬校验：
+先通过 `alloy _guard` 做硬校验：
 ```bash
-bash .claude/skills/alloy/scripts/alloy-guard.sh openspec/changes/<name> archived
+alloy _guard openspec/changes/<name> archived
 ```
 
 **2. verify.md 存在且 Overall Decision 不是 FAIL：**
@@ -51,10 +51,10 @@ test -f openspec/changes/<name>/verify.md && ! grep -q '^- \[x\] ❌ FAIL' opens
 > 执行 openspec archive -y → delta spec 合并到主 spec → 移入 archive/
 >
 > ```bash
-> bash .claude/skills/alloy/scripts/alloy-archive.sh <project-dir> <change-name>
+> alloy _archive <project-dir> <change-name>
 > ```
 >
-> `alloy-archive.sh` 自动完成：
+> `alloy _archive` 自动完成：
 > 1. 验证 phase = applied
 > 2. 执行 `openspec archive -y --change <name>`（自有幂等检查，已归档则跳过）
 > 3. Delta Spec 合并到主 spec

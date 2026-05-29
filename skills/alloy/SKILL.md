@@ -28,7 +28,7 @@ description: Alloy 开发工作流编排器主入口——当用户输入 /alloy
 2. 使用 Skill 工具加载对应的子 skill：`alloy-<command>`
 3. 严格按照子 skill 的指令执行——不要自作主张跳过步骤或简化流程
 4. 带 `[name]` 参数的命令若省略，从 `openspec/changes/*/.alloy.yaml` 自动推断
-5. 涉及 phase 转换时，子 skill 会调用 `alloy-guard.sh` 做硬校验——不要跳过
+5. 涉及 phase 转换时，子 skill 会调用 `alloy _guard` 做硬校验——不要跳过
 
 **什么算"路由失败"（反例）：**
 - 没有加载子 skill，而是自己内联执行了子 skill 的流程——丢失闸门和脚本校验
@@ -41,6 +41,6 @@ description: Alloy 开发工作流编排器主入口——当用户输入 /alloy
 
 | 脚本 | 用途 |
 |------|------|
-| `.claude/skills/alloy/scripts/alloy-state.sh` | 读写 .alloy.yaml（Agent 不直接编辑 YAML） |
-| `.claude/skills/alloy/scripts/alloy-guard.sh` | 阶段转换闸门校验 + phase 更新 |
-| `.claude/skills/alloy/scripts/alloy-archive.sh` | 归档验证 + openspec archive + phase 更新 |
+| `alloy _state` | 读写 .alloy.yaml（Agent 不直接编辑 YAML） |
+| `alloy _guard` | 阶段转换闸门校验 + phase 更新 |
+| `alloy _archive` | 归档验证 + openspec archive + phase 更新 |

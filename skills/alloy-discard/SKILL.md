@@ -17,10 +17,10 @@ description: Alloy 放弃 change - 按 phase 分级清理
 ---
 ```
 
-先通过 alloy-state.sh 读取 phase 和 worktree：
+先通过 `alloy _state` 读取 phase 和 worktree：
 ```bash
-bash .claude/skills/alloy/scripts/alloy-state.sh read openspec/changes/<name> phase
-bash .claude/skills/alloy/scripts/alloy-state.sh read openspec/changes/<name> worktree
+alloy _state read openspec/changes/<name> phase
+alloy _state read openspec/changes/<name> worktree
 ```
 
 ---

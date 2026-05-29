@@ -34,9 +34,9 @@ description: Alloy 收尾——archive 完成后，合入代码并清理现场
 请先运行 /alloy-archive 完成归档。
 ```
 
-通过 alloy-guard.sh 校验：
+通过 `alloy _guard` 校验：
 ```bash
-bash .claude/skills/alloy/scripts/alloy-guard.sh openspec/changes/<name> finished --check
+alloy _guard openspec/changes/<name> finished
 ```
 
 确认当前有对应的 git 分支存在：
@@ -104,7 +104,7 @@ git merge <change-name>
 
 合并成功后运行测试验证，然后更新 phase：
 ```bash
-bash .claude/skills/alloy/scripts/alloy-guard.sh openspec/changes/<name> finished --apply
+alloy _guard openspec/changes/<name> finished --apply
 ```
 
 提示："代码已合入 <base-branch>。Alloy 工作流完成。"
@@ -112,7 +112,7 @@ bash .claude/skills/alloy/scripts/alloy-guard.sh openspec/changes/<name> finishe
 **选项 2：创建 PR**
 - PR 创建后，更新 phase：
   ```bash
-  bash .claude/skills/alloy/scripts/alloy-guard.sh openspec/changes/<name> finished --apply
+  alloy _guard openspec/changes/<name> finished --apply
   ```
 - 提示："PR 已创建。审查通过后合并，Alloy 工作流即完成。"
 - 当用户收到 PR 审查反馈并在对话中讨论时，遵循以下行为规范（来自 superpowers:receiving-code-review）：
