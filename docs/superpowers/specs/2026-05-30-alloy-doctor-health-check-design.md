@@ -185,7 +185,39 @@ if (shell.includes("pwsh") || shell.includes("powershell")) return powershellCom
 
 ---
 
-## 七、不变的部分
+## 七、CLI 选项规范对齐
+
+对齐 Node.js 生态标准约定（参考 npm、git、tsc 等流行 CLI 工具）。
+
+### 变更项
+
+| 现状 | 改为 | 原因 |
+|------|------|------|
+| `-V`（大写 version） | `-v`（小写） | node/npm/tsc/git 都用小写 `-v` |
+| `parseArgs({ strict: false })` | `parseArgs({ strict: true })` | 未知选项应报错，不应静默忽略 |
+
+### 涉及的改动文件
+
+- `src/cli/index.ts` — 5 处 `strict: false` → `strict: true`，`-V` → `-v`
+- `src/cli/completion.ts` — bash/zsh 补全脚本中的 `-V` → `-v`
+
+### 标准约定清单
+
+```
+-h / --help          帮助信息
+-v / --version        版本号（短选项小写 v）
+--json               布尔标志（无值）
+--scope <value>      带值选项（空格分隔值）
+--inject-claude-md   布尔标志（无值）
+```
+
+子命令格式：`alloy <command> [options] [args]`
+
+内部命令 `_state` / `_guard` / `_archive` 遵循相同规范但不显示在 `--help` 中。
+
+---
+
+## 八、不变的部分
 
 - CLI 命令体系结构不变（init/status/doctor/update/completion 命令名不变）
 - 内部命令（_state/_guard/_archive）不变
