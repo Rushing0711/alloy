@@ -108,9 +108,11 @@ function getNextStepSimple(
     case "planned":
       return `${name} 等待 /alloy-apply`;
     case "applied":
+      return `${name} 等待 /alloy-archive`;
+    case "archived":
       return `${name} 等待 /alloy-finish`;
     case "finished":
-      return `${name} 等待 /alloy-archive`;
+      return `${name} 已完成`;
     default:
       return "";
   }
@@ -126,9 +128,11 @@ function getNextStepDetail(
     case "planned":
       return "等待 /alloy-apply";
     case "applied":
+      return "等待 /alloy-archive";
+    case "archived":
       return "等待 /alloy-finish";
     case "finished":
-      return "等待 /alloy-archive";
+      return "已完成";
     default:
       return "";
   }

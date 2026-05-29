@@ -1,4 +1,6 @@
 import { select } from "@inquirer/prompts";
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { detectEnv } from "../../core/detect.js";
 import { loadCompat, checkCompat } from "../../core/compat.js";
 import { installOpenSpecCli, initOpenSpecProject } from "../../core/openspec.js";
@@ -20,6 +22,26 @@ export async function selectScope(passedScope?: string): Promise<"global" | "pro
 }
 
 export interface InitOptions extends DeployOptions {}
+
+const GITIGNORE_RULES = ["docs/superpowers/", ".worktrees/", "worktrees/"];
+
+async function ensureGitignore(projectPath: string): Promise<void> {
+  const gitignorePath = join(projectPath, ".gitignore");
+  let content = "";
+  try {
+    content = await readFile(gitignorePath, "utf-8");
+    if (!content.endsWith("\n")) content += "\n";
+  } catch {
+    // 文件不存在，稍后创建
+  }
+
+  const missing = GITIGNORE_RULES.filter((rule) => !content.includes(rule));
+  if (missing.length === 0) return;
+
+  const block = `\n### Alloy + Superpowers 运行时 ###\n${missing.join("\n")}\n`;
+  await writeFile(gitignorePath, content + block, "utf-8");
+  console.log(`     ✓ .gitignore → 已追加 ${missing.length} 条规则`);
+}
 
 export async function initCommand(opts: InitOptions): Promise<void> {
   console.log("\n  🔍 检测环境...");
@@ -58,10 +80,12 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   console.log("\n  📥 Superpowers...");
   const superpowersResult = await installSuperpowers(opts.scope);
   if (superpowersResult === "installed") {
-    console.log("     ✓ Claude Code → obra/superpowers@5 已安装");
+    console.log("     ✓ obra/superpowers@5 已安装");
+  } else if (superpowersResult === "skipped") {
+    console.log("     ✓ Superpowers 已安装，跳过");
+  } else {
+    console.log("     ⚠ Superpowers 安装失败，请稍后手动运行 alloy init 重试");
   }
-  // "skipped" — 函数内部已输出跳过信息
-  // "failed" — 不致命，使用内置 vendor 兜底
 
   // 5. 部署 Alloy skill + schema
   console.log("\n  🚀 部署 Alloy...");
@@ -72,13 +96,16 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   const schemaPath = await deploySchema(opts);
   console.log(`     ✓ 项目 schema → ${schemaPath}`);
 
-  // 6. 注入 CLAUDE.md
+  // 6. 确保 .gitignore 包含 Alloy 运行时目录
+  await ensureGitignore(opts.projectPath);
+
+  // 7. 注入 CLAUDE.md
   const injected = await injectClaudeMd(opts);
   if (injected) {
     console.log("     ✓ CLAUDE.md → 已追加 Alloy 工作流提示");
   }
 
-  // 7. 兼容性检查
+  // 8. 兼容性检查
   console.log("\n  🩺 兼容性检查...");
   const packageDir = getPackageRoot();
   const config = await loadCompat(packageDir);

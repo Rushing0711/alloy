@@ -51,12 +51,14 @@ describe("state utils", () => {
     expect(loaded.updated_at).not.toBe("2020-01-01");
   });
 
-  it("findActiveChanges 过滤 archived change", async () => {
+  it("findActiveChanges 过滤 finished change，保留 archived", async () => {
     const changesDir = join(tmpDir, "openspec", "changes");
     const activeDir = join(changesDir, "active-change");
     const archivedDir = join(changesDir, "archived-change");
+    const finishedDir = join(changesDir, "finished-change");
     await mkdir(activeDir, { recursive: true });
     await mkdir(archivedDir, { recursive: true });
+    await mkdir(finishedDir, { recursive: true });
 
     const active = createInitialState();
     await writeState(activeDir, active);
@@ -65,9 +67,14 @@ describe("state utils", () => {
     archived.phase = "archived";
     await writeState(archivedDir, archived);
 
+    const finished = createInitialState();
+    finished.phase = "finished";
+    await writeState(finishedDir, finished);
+
     const changes = await findActiveChanges(changesDir);
     expect(changes.has("active-change")).toBe(true);
-    expect(changes.has("archived-change")).toBe(false);
+    expect(changes.has("archived-change")).toBe(true);
+    expect(changes.has("finished-change")).toBe(false);
   });
 
   it("findActiveChanges 忽略无 .alloy.yaml 的目录", async () => {

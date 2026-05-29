@@ -1,14 +1,9 @@
 import { readFile, writeFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
+import type { AlloyState } from "../../core/types.js";
 
-export interface AlloyState {
-  phase: "started" | "planned" | "applied" | "finished" | "archived";
-  worktree: string | null;
-  schema_version: number;
-  created_at: string;
-  updated_at: string;
-}
+export type { AlloyState };
 
 export function createInitialState(): AlloyState {
   const now = new Date().toISOString().slice(0, 10);
@@ -47,7 +42,7 @@ export async function findActiveChanges(
       if (!entry.isDirectory()) continue;
       try {
         const state = await readState(join(changesDir, entry.name));
-        if (state.phase !== "archived") {
+        if (state.phase !== "finished") {
           changes.set(entry.name, state);
         }
       } catch {

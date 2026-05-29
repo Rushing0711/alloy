@@ -9,7 +9,6 @@ export async function installSuperpowers(
   try {
     const output = execSync("npx skills list", { stdio: "pipe" }).toString();
     if (output.includes("brainstorming") && output.includes("using-git-worktrees")) {
-      console.log("     ✓ Superpowers 已安装，跳过");
       return "skipped";
     }
   } catch {
@@ -21,12 +20,12 @@ export async function installSuperpowers(
 
   try {
     execSync(`npx skills add obra/superpowers ${flags}`, {
-      stdio: "inherit",
+      stdio: "pipe",
       cwd: process.cwd(),
     });
     return "installed";
   } catch {
-    console.log("     ⚠ 网络不可达，使用内置 Superpowers skill");
+    console.log("     ⚠ 网络不可达，使用内置 vendor 兜底");
     return await installSuperpowersFromVendor(scope, process.cwd());
   }
 }

@@ -17,16 +17,17 @@ description: Alloy 规划阶段——将 draft.md 转化为结构化制品，始
 
 ---
 
-## Step 1/6：创建 Change 目录
+## Step 1/3：创建 Change 目录
 
 ```
----
-## Alloy · 规划阶段 · 制品生成
+┌──────────────────────────────────────┐
+│ Alloy [2/5] · Phase: Plan            │
+└──────────────────────────────────────┘
+
+[Step 1/3] 创建 Change
+──────────────────────────────────────
 
 前置检查通过：draft.md ✓
-
-### Step 1/6：创建 Change · /opsx:new
----
 ```
 
 若 change 目录不存在：
@@ -46,7 +47,10 @@ description: Alloy 规划阶段——将 draft.md 转化为结构化制品，始
 
 ---
 
-## Step 2/6：制品生成 · /opsx:continue
+## Step 2/3：制品生成 · /opsx:continue
+
+**[Step 2/3] 制品生成**
+──────────────────────────────────────
 
 **调用 `/opsx:continue`** 驱动 schema DAG 按依赖顺序依次生成制品。`/opsx:continue` 自动读取 schema 定义的 DAG，按 `proposal → design → specs → tasks → plan` 顺序依次产出。
 
@@ -54,73 +58,77 @@ description: Alloy 规划阶段——将 draft.md 转化为结构化制品，始
 
 如果 `/opsx:continue` 不可用，引导用户运行 `alloy init` 完成环境初始化。
 
-**制品 DAG 顺序：**
+**制品 DAG 及依赖关系：**
 ```
-proposal → design → specs → tasks → plan
+proposal ──→ design ──→ specs ──→ tasks ──→ plan
+    │                      ↑
+    └──────────────────────┘
 ```
 
-**每个制品的审查流程：**
-1. 生成当前制品（按下方制品指令概述）
-2. 将生成的完整内容展示给用户
-3. 审查窗口：
-   - (a) 确认，继续下一个制品
-   - (b) 需要修改（请说明修改点）
-   - (c) 跳过此制品
-4. 仅用户选择 (a) 后才继续下一个制品
+| 制品 | 依赖 | 被依赖 |
+|------|------|--------|
+| proposal | draft.md | design, specs |
+| design | proposal + draft.md | specs, tasks |
+| specs | proposal（只读 Capabilities） | tasks |
+| tasks | specs + design | plan |
+| plan | tasks | — |
 
-**审查期间调整上游制品：**
-用户如说"把 proposal 第 3 点改一下"，你需要：
-1. 修改 proposal.md
-2. 自动识别 DAG 中依赖 proposal 的下游制品（design → specs → tasks → plan）
-3. 标注这些制品为"已过期"，提醒用户需要重新生成
+**注意：plan.md 是执行脚本，非规格文档。** 规格（specs/）是行为契约，plan.md 是给 Agent 执行的微步骤路线图（可含代码片段）。
+
+### 正常推进：逐个制品的审查流程
+
+每个制品生成后，展示内容并进入审查窗口。**仅两个选项——不跳过。** 审查窗口使用块引用格式（终端有底色渲染）：
+
+> 制品 [3/5] specs ✓ 完成
+>
+> [展示制品完整内容]
+>
+> → 下一个：tasks（依赖 specs + design）
+>
+> → (a) 确认，锁定 specs 并继续 tasks
+> → (b) 需要调整 — 说明修改点，修改后重新展示
+
+**审查窗口只展示制品内容，不打印 OpenSpec schema 的 instructions 模板。** instructions 是给 Agent 的内部指引，不是给用户审查的输出。
+
+- **选 (a)**：当前制品锁定，进入下一个制品
+- **选 (b)**：用户说明修改点 → Agent 修改 → 重新展示审查窗口。下游尚未生成，无需标记过期
 
 **什么算"审查不充分"（反例）：**
 - 只问了一句"看起来可以吗？"没有展示实际内容
 - 用户说"继续"但没有明确说"确认"
-- 跳过了某个制品的审查因为"内容很简单"
+- 用户不明确表态时催促用户给出 (a) 或 (b)
 
----
+### 回溯修改：修改已确认的上游制品
 
-### 各制品指令概述
+当用户已在审查下游制品（如 specs），却要求修改已确认的上游制品（如 proposal），触发回溯：
 
-以下指令作为审查每个制品时的检查清单——确认 `/opsx:continue` 生成的制品内容是否完整。
+1. 修改目标制品文件
+2. 根据 DAG 依赖链，自动识别所有下游制品，标记为 **「已过期」**
+3. 提醒用户需要按顺序重新生成过期制品
 
-**Proposal：**
-- 读 draft.md，提取 Why / What / Capabilities
-- 产出 `openspec/changes/<name>/proposal.md`
-- Capabilities 列表是后续 specs 的唯一输入
+**过期标记规则：**
 
-**Design：**
-- 依赖 proposal，读 draft.md 中的技术决策
-- 受 proposal 的 Capabilities 范围约束
-- 产出 `openspec/changes/<name>/design.md`
-
-**Specs：**
-- 依赖 proposal，只读 Capabilities 列表
-- **故意不读 draft.md**——这防止行为规格说明书被 draft.md 中的技术实现细节污染。specs 描述"系统应该做什么"，不应该知道"我们打算怎么实现"
-- 按 Capabilities 列表按条目写 Delta Spec（ADDED / MODIFIED / REMOVED）
-- 产出 `openspec/changes/<name>/specs/**/*.md`
-
-**Tasks：**
-- 依赖 specs + design（需要知道"做什么"和"怎么做"）
-- 产出 `openspec/changes/<name>/tasks.md`（层级编号 checkbox 清单）
-
-**Plan：**
-- 依赖 tasks
-- 使用 Skill 工具加载 `superpowers:writing-plans` 技能
-- 将粗粒度 checkbox 拆为 TDD 微步骤（每步 2-5 分钟粒度）
-- 产出 `openspec/changes/<name>/plan.md`
-
-如果 `superpowers:writing-plans` 不可用，引导用户运行 `alloy init` 完成环境初始化。
-
----
-
-## Step 7：完成
+| 修改的制品 | 标记过期的下游 |
+|-----------|---------------|
+| proposal | design, specs, tasks, plan |
+| design | specs, tasks, plan |
+| specs | tasks, plan |
+| tasks | plan |
 
 ```
+proposal.md 已更新 ✓
+→ design.md 已过期，需重新生成
+→ specs/ 已过期，需重新生成
+```
+
 ---
-### Alloy Plan 完成
----
+
+## Step 3/3：完成
+
+```
+┌──────────────────────────────────────┐
+│ Alloy [2/5] · Phase: Plan — DONE     │
+└──────────────────────────────────────┘
 
 所有制品已生成：draft ✓  proposal ✓  design ✓  specs ✓  tasks ✓  plan ✓
 ```

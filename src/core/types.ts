@@ -23,7 +23,7 @@ export interface CompatResult {
 }
 
 export interface AlloyState {
-  phase: "started" | "planned" | "applied" | "finished";
+  phase: "started" | "planned" | "applied" | "archived" | "finished";
   worktree: string | null;
   schema_version: number;
   created_at: string;

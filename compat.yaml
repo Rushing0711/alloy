@@ -4,4 +4,4 @@ compatible:
 
 install:
   openspec: "@fission-ai/openspec@1"
-  superpowers: "obra/superpowers"
+  superpowers: "obra/superpowers@5"

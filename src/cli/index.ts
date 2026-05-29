@@ -45,8 +45,10 @@ async function main() {
 
   switch (command) {
     case "init": {
+      const projectPath = getProjectPath(restArgs);
+      const flagArgs = restArgs.filter((a) => a.startsWith("-"));
       const { values } = parseArgs({
-        args: restArgs,
+        args: flagArgs,
         options: {
           scope: { type: "string" },
           "inject-claude-md": { type: "boolean", default: false },
@@ -57,24 +59,34 @@ async function main() {
       await initCommand({
         scope,
         injectClaudeMd: (values["inject-claude-md"] as boolean) || false,
-        projectPath: process.cwd(),
+        projectPath,
       });
       break;
     }
     case "status": {
-      const statusName = restArgs[0];
-      const result = await statusCommand(process.cwd(), statusName);
-      console.log(result);
+      const projectPath = getProjectPath(restArgs);
+      const useJson = restArgs.includes("--json");
+      const statusName = restArgs.filter(
+        (a) => !a.startsWith("-") && a !== projectPath
+      )[0];
+      const result = await statusCommand(projectPath, statusName);
+      if (useJson) {
+        console.log(JSON.stringify({ output: result }, null, 2));
+      } else {
+        console.log(result);
+      }
       break;
     }
     case "doctor": {
+      const projectPath = getProjectPath(restArgs);
       const useJson = restArgs.includes("--json");
-      const result = await doctorCommand(process.cwd());
+      const result = await doctorCommand(projectPath);
       console.log(formatDoctorResult(result, useJson));
       break;
     }
     case "update": {
-      const results = await updateCommand(process.cwd());
+      const projectPath = getProjectPath(restArgs);
+      const results = await updateCommand(projectPath);
       for (const r of results) console.log(`  ${r}`);
       break;
     }
@@ -83,6 +95,14 @@ async function main() {
       console.log(USAGE);
       process.exit(1);
   }
+}
+
+/** 从剩余 args 中提取可选 path 参数（第一个非 - 开头的参数） */
+function getProjectPath(args: string[]): string {
+  for (const arg of args) {
+    if (!arg.startsWith("-")) return arg;
+  }
+  return process.cwd();
 }
 
 main().catch((err) => {

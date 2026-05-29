@@ -30,9 +30,8 @@ bash .claude/skills/alloy/scripts/alloy-state.sh read openspec/changes/<name> wo
 | phase | 行为 |
 |-------|------|
 | started / planned | 仅删除 `openspec/changes/<name>/` 目录（无 worktree 无分支） |
-| applied / finished | 删除 change 目录 + worktree + 分支 |
-| finished（已 merge） | 警告 "代码已合入 main，discard 仅清理 change 目录和 worktree，不撤销 merge" |
-| archived | **[HARD STOP] 已归档的 change 不可 discard。** 归档是只读终态 |
+| applied / archived | 删除 change 目录 + worktree + 分支 |
+| finished | **[HARD STOP] 已完成的 change 不可 discard。** finished 是终态 |
 
 ---
 

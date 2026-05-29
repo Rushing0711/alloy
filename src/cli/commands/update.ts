@@ -18,16 +18,10 @@ export async function updateCommand(
     results.push("⚠️ skills/alloy/ 更新失败，请检查网络连接");
   }
 
-  // 2. 更新 vendor
+  // 2. 更新 vendor（从包内置目录同步）
   try {
-    const home = process.env.HOME || process.env.USERPROFILE || "~";
-    const vendorSource = join(
-      home,
-      ".claude",
-      "skills",
-      "alloy",
-      "vendor"
-    );
+    const packageRoot = join(import.meta.dirname, "..", "..", "..");
+    const vendorSource = join(packageRoot, "vendor");
     const vendorTarget = join(projectPath, "vendor");
     await cp(vendorSource, vendorTarget, { recursive: true, force: true });
     results.push("✓ vendor/ → 已同步");

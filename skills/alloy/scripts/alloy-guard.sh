@@ -19,14 +19,14 @@ current_phase=$(grep -E '^phase:' "$ALLOY_YAML" | awk '{print $2}')
 declare -A VALID_TRANSITIONS
 VALID_TRANSITIONS["started->planned"]=1
 VALID_TRANSITIONS["planned->applied"]=1
-VALID_TRANSITIONS["applied->finished"]=1
-VALID_TRANSITIONS["finished->archived"]=1
+VALID_TRANSITIONS["applied->archived"]=1
+VALID_TRANSITIONS["archived->finished"]=1
 
 transition="${current_phase}->${TARGET_PHASE}"
 
 if [[ -z "${VALID_TRANSITIONS[$transition]:-}" ]]; then
   echo "[HARD STOP] 不允许的 phase 转换: $current_phase → $TARGET_PHASE"
-  echo "  允许的转换: started→planned, planned→applied, applied→finished, finished→archived"
+  echo "  允许的转换: started→planned, planned→applied, applied→archived, archived→finished"
   exit 1
 fi
 
@@ -38,15 +38,9 @@ case "$transition" in
       exit 1
     fi
     ;;
-  "applied->finished")
+  "applied->archived")
     if [[ ! -f "$CHANGE_DIR/verify.md" ]]; then
-      echo "[HARD STOP] verify.md 不存在，无法进入 finish 阶段"
-      exit 1
-    fi
-    ;;
-  "finished->archived")
-    if [[ ! -f "$CHANGE_DIR/retrospective.md" ]]; then
-      echo "[HARD STOP] retrospective.md 不存在，无法进入 archive 阶段"
+      echo "[HARD STOP] verify.md 不存在，无法进入 archive 阶段"
       exit 1
     fi
     ;;

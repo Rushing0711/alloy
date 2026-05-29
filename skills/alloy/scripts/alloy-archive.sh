@@ -14,8 +14,8 @@ ALLOY_YAML="$CHANGE_DIR/.alloy.yaml"
 
 # 1. 状态验证
 phase=$(grep -E '^phase:' "$ALLOY_YAML" | awk '{print $2}')
-if [[ "$phase" != "finished" ]]; then
-  echo "[HARD STOP] phase 必须为 finished，当前为 $phase"
+if [[ "$phase" != "applied" ]]; then
+  echo "[HARD STOP] phase 必须为 applied，当前为 $phase"
   exit 1
 fi
 

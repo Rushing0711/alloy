@@ -41,7 +41,7 @@ export async function installOpenSpecCli(): Promise<"installed" | "skipped" | "f
 
   try {
     execSync("npm install -g @fission-ai/openspec@1", {
-      stdio: "inherit",
+      stdio: "pipe",
       cwd: process.cwd(),
     });
     return "installed";

@@ -34,9 +34,16 @@ src/cli/
     update.ts           # alloy update — 更新 skill 文件到最新版
   utils/
     state.ts            # .alloy.yaml 状态文件读写
-    env.ts              # 环境检测（Node.js / git / Claude Code / OpenSpec / Superpowers）
-    deploy.ts           # 文件部署（schema / skill / CLAUDE.md 注入）
+src/core/
+    types.ts            # 共享类型定义
+    detect.ts           # 环境检测（Node.js / git / Claude Code）
+    openspec.ts         # OpenSpec CLI 安装 + 项目初始化
+    superpowers.ts      # Superpowers 安装（含 vendor 兜底）
+    skills.ts           # Alloy skill + schema 部署
+    claude-md.ts        # CLAUDE.md 注入
     compat.ts           # compat.yaml 兼容性检查
+src/utils/
+    fs.ts               # 文件系统工具（包根目录定位）
 
 .claude/skills/
   alloy/SKILL.md        # 路由层 — 按 phase 分发到子命令
@@ -84,8 +91,8 @@ vendor/superpowers/     # Superpowers skill 内置兜底（离线安装用）
 | `/alloy-start [topic]` | 智能入口：自动检测状态，接续或新建 |
 | `/alloy-plan [name]` | 制品生成设计文档，始终分步，每步可审查 |
 | `/alloy-apply [name]` | 执行：隔离 + TDD + 验证 + 复盘 |
-| `/alloy-finish [name]` | 收尾：merge / PR / keep / discard |
-| `/alloy-archive [name]` | 归档（硬校验 phase=finished） |
+| `/alloy-finish [name]` | 收尾：merge / PR / keep（硬校验 phase=archived） |
+| `/alloy-archive [name]` | 归档：Delta Spec 合并（硬校验 phase=applied） |
 | `/alloy-fix` | Bug 修复入口：诊断 → 三向分流 |
 | `/alloy-discard [name]` | 放弃当前 change，清理 worktree + 分支 + 目录 |
 | `/alloy-status [name]` | 查看当前阶段、制品状态、下一步 |
@@ -109,7 +116,7 @@ apply 依赖 plan → worktree + subagent(TDD+review) + verify + retrospective
 
 `openspec/changes/<name>/.alloy.yaml`：
 ```yaml
-phase: started | planned | applied | finished | archived
+phase: started | planned | applied | archived | finished
 worktree: null | ".worktrees/<name>"
 schema_version: 1
 created_at: "2026-05-28"
@@ -128,6 +135,7 @@ Agent 不直接写 YAML——通过 `alloy-state.sh` 脚本操作，避免格式
 - 提交信息使用中文，格式为 `conventional-commits` 风格（如 `Alloy 设计文档：命令体系...`）
 - `.gitignore` 规则：`*.local.*` 忽略本地配置覆盖文件；`docs/superpowers/`、`.worktrees/`、`worktrees/` 忽略 Superpowers 运行时产物
 - Skill 编写遵循 `docs/skill-writing-guide.md` 中的规范：description 只写触发条件不写流程、用 Skill 工具调用外部技能不内联重写、关键闸门用 shell 脚本兜底
+- Skill 的终端输出格式遵循 `docs/alloy-design.md` 第三章「终端输出视觉规范」：Phase 框 → Step 下划线 → Artifact 块引用三级体系
 - **修改任何 `skills/alloy*/SKILL.md` 或 `.claude/skills/alloy*/SKILL.md` 之前，必须先 Read `docs/skill-writing-guide.md` 全文**——这不是建议，是前置条件
 
 ## 外部参考
