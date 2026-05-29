@@ -31,6 +31,12 @@ export interface HealthCheckResult {
   message?: string;
 }
 
+export interface DepCheckResult {
+  installed: boolean;
+  version?: string;
+  compatible: boolean;
+}
+
 export interface AlloyState {
   phase: "started" | "planned" | "applied" | "archived" | "finished";
   worktree: string | null;
