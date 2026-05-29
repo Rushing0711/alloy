@@ -483,14 +483,15 @@ CLI（终端）
   alloy init / status / doctor / update
   ├── 确定性强（TypeScript 逻辑）
   ├── 安装依赖（OpenSpec CLI + Superpowers skill）
-  ├── 部署文件（schema + skill + shell 脚本）
-  └── 诊断（版本兼容性 + 文件一致性）
+  ├── 部署文件（schema + skill）
+  ├── 诊断（版本兼容性 + 文件一致性）
+  └── 内部命令（_state / _guard / _archive）供 Agent 调用
 ```
 
 | 层 | 在哪运行 | 内容 | 可靠性 |
 |----|---------|------|--------|
-| CLI | 终端 | 安装、诊断、状态总览 | 确定性强（TypeScript） |
-| Skill | Agent 内部 | 流程编排、阶段检测、审查窗口 | 硬约束（SKILL.md 指令 + guard 脚本） |
+| CLI | 终端 | 安装、诊断、状态总览、内部命令（_state/_guard/_archive） | 确定性强（TypeScript） |
+| Skill | Agent 内部 | 流程编排、阶段检测、审查窗口 | 硬约束（SKILL.md 指令 + CLI 内部命令） |
 | AI 内容 | Agent 内部 | 文档生成、代码生成、交互决策 | 柔性（AI 发挥，人类审查） |
 
 核心工作流（start / plan / apply / finish / archive / fix / discard）全部在 Agent 内以 slash command 运行。CLI 只做辅助——安装、诊断、查看状态总览。
