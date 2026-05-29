@@ -25,10 +25,12 @@ const EXPECTED_SKILLS = [
  *
  * @param packageDir 包安装目录（读取 compat.yaml 和 package.json）
  * @param projectPath 用户项目根路径（检查 change 和 skills 目录）
+ * @param scope 技能安装范围："global" 检查 ~/.claude/skills/，"project"（默认）检查 projectPath/.claude/skills/
  */
 export async function runHealthCheck(
   packageDir: string,
-  projectPath: string
+  projectPath: string,
+  scope?: "global" | "project"
 ): Promise<HealthCheckResult[]> {
   const results: HealthCheckResult[] = [];
   const config = await loadCompat(packageDir);
@@ -64,15 +66,27 @@ export async function runHealthCheck(
     });
   }
 
-  // 3. Superpowers
+  // 3. Superpowers（解析 npx skills list 输出，检查关键 skill）
+  const KEY_SKILLS = ["brainstorming", "using-git-worktrees"];
   try {
-    execSync("npx skills list", { stdio: "pipe" });
-    results.push({
-      name: "Superpowers",
-      current: "已安装",
-      required: config.compatible.superpowers,
-      status: "pass",
-    });
+    const output = execSync("npx skills list", { stdio: "pipe" }).toString();
+    const missingSkills = KEY_SKILLS.filter((s) => !output.includes(s));
+    if (missingSkills.length === 0) {
+      results.push({
+        name: "Superpowers",
+        current: `已安装（含 ${KEY_SKILLS.join(", ")}）`,
+        required: config.compatible.superpowers,
+        status: "pass",
+      });
+    } else {
+      results.push({
+        name: "Superpowers",
+        current: `关键 skill 缺失: ${missingSkills.join(", ")}`,
+        required: config.compatible.superpowers,
+        status: "warn",
+        message: `npx skills list 输出未包含关键 skill: ${missingSkills.join(", ")}`,
+      });
+    }
   } catch {
     results.push({
       name: "Superpowers",
@@ -123,9 +137,13 @@ export async function runHealthCheck(
     });
   }
 
-  // 6. Skill 文件完整性
+  // 6. Skill 文件完整性（根据 scope 确定检查路径）
   try {
-    const skillsDir = join(projectPath, ".claude", "skills");
+    const home = process.env.HOME || process.env.USERPROFILE || "~";
+    const skillsDir =
+      scope === "global"
+        ? join(home, ".claude", "skills")
+        : join(projectPath, ".claude", "skills");
     const skillsStatus = checkSkillsIntegrity(skillsDir);
     results.push(skillsStatus);
   } catch {

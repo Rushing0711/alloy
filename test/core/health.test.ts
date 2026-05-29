@@ -6,6 +6,7 @@ vi.mock("node:child_process", () => ({
 }));
 vi.mock("node:fs/promises", () => ({
   readFile: vi.fn(),
+  readdir: vi.fn(),
 }));
 vi.mock("node:fs", () => ({
   existsSync: vi.fn(),
@@ -18,7 +19,7 @@ vi.mock("../../src/core/detect.js", () => ({
 }));
 
 import { execSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { loadCompat } from "../../src/core/compat.js";
 import { detectEnv } from "../../src/core/detect.js";
@@ -137,5 +138,126 @@ describe("runHealthCheck", () => {
     const envResult = results.find((r) => r.name === "Environment");
     expect(envResult).toBeDefined();
     expect(envResult!.status).toBe("warn");
+  });
+
+  // Issue 4: Skills fail 状态
+  it("Skills 目录缺失时应返回 fail", async () => {
+    vi.mocked(loadCompat).mockResolvedValue(MOCK_CONFIG);
+    vi.mocked(execSync).mockReturnValue(Buffer.from("1.3.1\n") as any);
+    vi.mocked(readFile).mockResolvedValue(
+      JSON.stringify({ version: "0.1.0" })
+    );
+    vi.mocked(detectEnv).mockReturnValue({
+      nodeVersion: "20.0.0",
+      gitInstalled: true,
+      claudeCodeInstalled: true,
+    });
+    // existsSync 对特定 skill 目录返回 false，模拟缺失
+    vi.mocked(existsSync).mockImplementation((path: any) => {
+      const pathStr = String(path);
+      if (pathStr.includes("alloy-plan") || pathStr.includes("alloy-archive")) {
+        return false;
+      }
+      return true;
+    });
+
+    const results = await runHealthCheck("/fake/packagedir", "/fake/project");
+    const skillsResult = results.find((r) => r.name === "Skills");
+    expect(skillsResult).toBeDefined();
+    expect(skillsResult!.status).toBe("fail");
+    expect(skillsResult!.current).toContain("缺失");
+    expect(skillsResult!.message).toContain("alloy-plan");
+    expect(skillsResult!.message).toContain("alloy-archive");
+  });
+
+  // Issue 4: Schema 版本不匹配导致 warn
+  it("Schema 版本不匹配时应返回 warn", async () => {
+    vi.mocked(loadCompat).mockResolvedValue(MOCK_CONFIG);
+    vi.mocked(execSync).mockReturnValue(Buffer.from("1.3.1\n") as any);
+    vi.mocked(detectEnv).mockReturnValue({
+      nodeVersion: "20.0.0",
+      gitInstalled: true,
+      claudeCodeInstalled: true,
+    });
+    vi.mocked(existsSync).mockReturnValue(true);
+    // readdir 返回一个 change 目录
+    vi.mocked(readdir).mockResolvedValue([
+      { name: "test-change", isDirectory: () => true },
+      { name: "some-file.txt", isDirectory: () => false },
+    ] as any);
+    // readFile 根据路径返回不同内容
+    vi.mocked(readFile).mockImplementation((path: any) => {
+      const pathStr = String(path);
+      if (pathStr.includes("package.json")) {
+        return Promise.resolve(JSON.stringify({ version: "0.1.0" }));
+      }
+      if (pathStr.includes(".alloy.yaml")) {
+        return Promise.resolve("schema_version: 2\n");
+      }
+      return Promise.resolve("");
+    });
+
+    const results = await runHealthCheck("/fake/packagedir", "/fake/project");
+    const schemaResult = results.find((r) => r.name === "Schema");
+    expect(schemaResult).toBeDefined();
+    expect(schemaResult!.status).toBe("warn");
+    expect(schemaResult!.message).toBeDefined();
+    expect(schemaResult!.message).toContain("schema_version 不匹配");
+    expect(schemaResult!.current).toContain("test-change=2");
+  });
+
+  // Issue 4: Superpowers 输出内容解析
+  it("Superpowers 输出含关键 skill 时应返回 pass", async () => {
+    vi.mocked(loadCompat).mockResolvedValue(MOCK_CONFIG);
+    vi.mocked(readFile).mockResolvedValue(
+      JSON.stringify({ version: "0.1.0" })
+    );
+    vi.mocked(detectEnv).mockReturnValue({
+      nodeVersion: "20.0.0",
+      gitInstalled: true,
+      claudeCodeInstalled: true,
+    });
+    vi.mocked(existsSync).mockReturnValue(true);
+    // execSync 返回含关键 skill 的输出
+    vi.mocked(execSync).mockImplementation((cmd: any) => {
+      if (String(cmd).startsWith("npx skills list")) {
+        return Buffer.from("brainstorming\nusing-git-worktrees\ntest-driven-development\n");
+      }
+      return Buffer.from("1.3.1\n");
+    });
+
+    const results = await runHealthCheck("/fake/packagedir", "/fake/project");
+    const spResult = results.find((r) => r.name === "Superpowers");
+    expect(spResult).toBeDefined();
+    expect(spResult!.status).toBe("pass");
+    expect(spResult!.current).toContain("brainstorming");
+  });
+
+  it("Superpowers 输出缺少关键 skill 时应返回 warn", async () => {
+    vi.mocked(loadCompat).mockResolvedValue(MOCK_CONFIG);
+    vi.mocked(readFile).mockResolvedValue(
+      JSON.stringify({ version: "0.1.0" })
+    );
+    vi.mocked(detectEnv).mockReturnValue({
+      nodeVersion: "20.0.0",
+      gitInstalled: true,
+      claudeCodeInstalled: true,
+    });
+    vi.mocked(existsSync).mockReturnValue(true);
+    // execSync 返回不含关键 skill 的输出
+    vi.mocked(execSync).mockImplementation((cmd: any) => {
+      if (String(cmd).startsWith("npx skills list")) {
+        return Buffer.from("some-other-skill\n");
+      }
+      return Buffer.from("1.3.1\n");
+    });
+
+    const results = await runHealthCheck("/fake/packagedir", "/fake/project");
+    const spResult = results.find((r) => r.name === "Superpowers");
+    expect(spResult).toBeDefined();
+    expect(spResult!.status).toBe("warn");
+    expect(spResult!.current).toContain("缺失");
+    expect(spResult!.message).toContain("brainstorming");
+    expect(spResult!.message).toContain("using-git-worktrees");
   });
 });
