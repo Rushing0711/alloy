@@ -380,6 +380,30 @@ Alloy schema 从零构建，参考 `superpowers-bridge`（社区 schema）和 Co
 
 `alloy init` 部署时从零创建 schema → 写入 `openspec/config.yaml`（`schema: alloy`）。
 
+#### Schema 校验
+
+OpenSpec 在加载 schema.yaml 时进行严格格式校验，字段不合法会阻断 `/opsx:new` 和 `openspec status`。
+
+**校验规则（来自实际踩坑）：**
+
+| 字段 | 要求 | 错误示例 |
+|------|------|---------|
+| `version` | number，非 string | `"1"` → 应为 `1` |
+| `artifacts[].description` | 必填 string | 缺少此字段 |
+| `apply.requires` | 必填 array，至少 1 项 | 缺少此字段 |
+
+**修改 schema 后的验证命令：**
+
+```bash
+# 方式 1：列出 schema，加载失败即 schema 不合法
+openspec schemas
+
+# 方式 2：通过现有 change 加载 schema 验证
+openspec status --change <change-name>
+```
+
+两种方式都会加载并校验 schema.yaml，任一失败则 schema 不合法。推荐修改 schema 后立即运行 `openspec schemas` 验证。
+
 ### 平台兼容
 
 v1 仅支持 Claude Code。团队统一使用 Claude Code，聚焦质量而非覆盖面。后续版本视需求扩展其他平台。
