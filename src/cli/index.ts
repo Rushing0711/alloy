@@ -45,16 +45,16 @@ async function main() {
 
   switch (command) {
     case "init": {
-      const projectPath = getProjectPath(restArgs);
-      const flagArgs = restArgs.filter((a) => a.startsWith("-"));
-      const { values } = parseArgs({
-        args: flagArgs,
+      const { values, positionals } = parseArgs({
+        args: restArgs,
         options: {
           scope: { type: "string" },
           "inject-claude-md": { type: "boolean", default: false },
         },
         strict: false,
+        allowPositionals: true,
       });
+      const projectPath = positionals[0] ?? process.cwd();
       const scope = await selectScope(values.scope as string | undefined);
       await initCommand({
         scope,
@@ -64,12 +64,15 @@ async function main() {
       break;
     }
     case "status": {
-      const projectPath = getProjectPath(restArgs);
+      const { positionals } = parseArgs({
+        args: restArgs,
+        options: { json: { type: "boolean", default: false } },
+        strict: false,
+        allowPositionals: true,
+      });
       const useJson = restArgs.includes("--json");
-      const statusName = restArgs.filter(
-        (a) => !a.startsWith("-") && a !== projectPath
-      )[0];
-      const result = await statusCommand(projectPath, statusName);
+      const statusName = positionals[1];
+      const result = await statusCommand(positionals[0] ?? process.cwd(), statusName);
       if (useJson) {
         console.log(JSON.stringify({ output: result }, null, 2));
       } else {
@@ -78,15 +81,25 @@ async function main() {
       break;
     }
     case "doctor": {
-      const projectPath = getProjectPath(restArgs);
+      const { positionals } = parseArgs({
+        args: restArgs,
+        options: { json: { type: "boolean", default: false } },
+        strict: false,
+        allowPositionals: true,
+      });
       const useJson = restArgs.includes("--json");
-      const result = await doctorCommand(projectPath);
+      const result = await doctorCommand(positionals[0] ?? process.cwd());
       console.log(formatDoctorResult(result, useJson));
       break;
     }
     case "update": {
-      const projectPath = getProjectPath(restArgs);
-      const results = await updateCommand(projectPath);
+      const { positionals } = parseArgs({
+        args: restArgs,
+        options: {},
+        strict: false,
+        allowPositionals: true,
+      });
+      const results = await updateCommand(positionals[0] ?? process.cwd());
       for (const r of results) console.log(`  ${r}`);
       break;
     }
@@ -95,14 +108,6 @@ async function main() {
       console.log(USAGE);
       process.exit(1);
   }
-}
-
-/** 从剩余 args 中提取可选 path 参数（第一个非 - 开头的参数） */
-function getProjectPath(args: string[]): string {
-  for (const arg of args) {
-    if (!arg.startsWith("-")) return arg;
-  }
-  return process.cwd();
 }
 
 main().catch((err) => {
