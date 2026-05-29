@@ -70,77 +70,15 @@ vendor/superpowers/     # Superpowers skill 内置兜底（离线安装用）
 
 **三层架构：** CLI 控制层（TypeScript，确定性）→ Schema 制品层（DAG + instruction，硬约束）→ 大模型内容层（文档/代码生成，柔性+人类审查）。
 
-## 核心文档及关系
+## 关键设计要点
 
-三文档体系：
+以下要点不再复述完整设计——细节见 `docs/alloy-design.md`。这里只列 Agent 执行时必须遵守的硬约束：
 
-| 文件 | 角色 | 内容 |
-|------|------|------|
-| `docs/alloy-design.md` | **WHAT** — 产品规格 | Alloy 命令体系、状态管理、制品 DAG、架构、安装初始化 |
-| `CLAUDE.md` | **HOW** — Agent 行为约束 | 设计约束、开发规则、测试覆盖、跨层复盘 |
-| `docs/alloy-dev-guide.md` | **DO** — 开发者执行手册 | 构建/测试命令、代码约定、踩坑记录、验证流程 |
-
-**辅助文档：**
-
-| 文件 | 角色 | 内容 |
-|------|------|------|
-| `docs/openspec-vs-superpowers.md` | 原始对比分析 | OpenSpec vs Superpowers 优缺点、互补关系 |
-| `docs/workflow-design.md` | 工作流设计推导 | 4 阶段融合流程、3 种场景 |
-| `docs/skill-writing-guide.md` | **Skill 编写指南**（权威源） | 来自官方文档的编写规范和最佳实践 |
-
-**阅读顺序：**
-1. `alloy-design.md` — 了解 Alloy 功能和架构
-2. `openspec-vs-superpowers.md` → `workflow-design.md` — 了解设计推导
-3. `alloy-dev-guide.md` — 构建/测试/踩坑/复盘清单
-4. `skill-writing-guide.md` — 写 Skill 前必读
-5. `CLAUDE.md`（本文件）— Agent 行为约束
-
-## Alloy 核心设计（摘要自 docs/alloy-design.md）
-
-### 命令体系（8 条 Slash Command + 4 条 CLI）
-
-| Slash Command | 用途 |
-|------|------|
-| `/alloy-start [topic]` | 智能入口：自动检测状态，接续或新建 |
-| `/alloy-plan [name]` | 制品生成设计文档，始终分步，每步可审查 |
-| `/alloy-apply [name]` | 执行：隔离 + TDD + 验证 + 复盘 |
-| `/alloy-finish [name]` | 收尾：merge / PR / keep（硬校验 phase=archived） |
-| `/alloy-archive [name]` | 归档：Delta Spec 合并（硬校验 phase=applied） |
-| `/alloy-fix` | Bug 修复入口：诊断 → 三向分流 |
-| `/alloy-discard [name]` | 放弃当前 change，清理 worktree + 分支 + 目录 |
-| `/alloy-status [name]` | 查看当前阶段、制品状态、下一步 |
-
-CLI 命令：`alloy init` / `alloy status` / `alloy doctor` / `alloy update`
-
-带 `[name]` 的命令省略时，从 `openspec/changes/*/.alloy.yaml` 自动推断当前活跃 change。
-
-### 制品依赖 DAG
-
-```
-draft.md（Pre-OpenSpec，brainstorming 产出）
-  → proposal → specs → tasks → plan（隐含 writing-plans）
-  → proposal → design → tasks
-apply 依赖 plan → worktree + subagent(TDD+review) + verify + retrospective
-```
-
-关键约束：specs 故意不读 draft.md（防止行为契约被技术实现细节污染）；design 读 draft 但受 proposal 范围约束。
-
-### 每个 change 的状态文件
-
-`openspec/changes/<name>/.alloy.yaml`：
-```yaml
-phase: started | planned | applied | archived | finished
-worktree: null | ".worktrees/<name>"
-schema_version: 1
-created_at: "2026-05-28"
-updated_at: "2026-05-28"
-```
-
-Agent 不直接写 YAML——通过 `alloy-state.sh` 脚本操作，避免格式错误。
-
-### 阶段闸门
-
-关键状态转换有 shell 脚本 HARD STOP 校验（`alloy-guard.sh`）。三层防线：SKILL.md 指令（行为引导）→ 脚本硬校验（确定性阻断）→ 人类审查窗口（最终决策）。
+- Agent 不直接写 YAML——通过 `alloy-state.sh` 脚本操作 `.alloy.yaml`
+- 阶段转换必须通过 `alloy-guard.sh` 校验——不仅是 phase 合法性，还包含制品完整性检查
+- specs 不读 draft.md（防止行为契约被技术实现细节污染），design 读 draft 但受 proposal 范围约束
+- 命令中 `[name]` 省略时，从 `openspec/changes/*/.alloy.yaml` 自动推断活跃 change
+- 每个 change 状态文件字段：`phase` / `worktree` / `schema_version` / `created_at` / `updated_at`
 
 ## 设计约束与风格
 
@@ -155,16 +93,9 @@ Agent 不直接写 YAML——通过 `alloy-state.sh` 脚本操作，避免格式
 - **任何 bug 修复或功能改动，必须做跨层复盘**——从设计文档 → schema/guard → Skill 文档 → CLI 代码 → 测试五个层面逐一检查影响，更新所有受影响的文件。不做"只改出 bug 那一行"的点状修复——这个规则本身就是一次点状修复的教训总结
 - **代码改动必须有测试覆盖**——改 shell 脚本补 bats 用例、改 TypeScript 补 vitest 用例。改 bug 先补一个能复现的失败测试、改功能先确定测试用例清单。测试覆盖范围：shell 脚本（阶段闸门、状态管理、归档）→ TypeScript core 模块（纯函数优先）→ CLI 命令（集成测试）。不允许"改完就跑"——规则源自 apply worktree 状态写入缺失的教训，若有测试就不会让 bug 存活到端到端测试才发现
 
-## 外部参考
+## 参考文档
 
-### 上游依赖
-- OpenSpec 仓库：https://github.com/Fission-AI/OpenSpec
-- OpenSpec 文档：https://github.com/Fission-AI/OpenSpec/tree/main/docs
-- Superpowers 仓库：https://github.com/obra/superpowers
-
-### Skill 开发参考
-- **开发前必读：** `docs/skill-writing-guide.md`（Skill 编写规范和最佳实践）
-- Claude Code Skill 官方文档：https://code.claude.com/docs/en/skills.md
-- Agent Skills 开放标准：https://agentskills.io
-- Comet 仓库：https://github.com/rpamis/comet
-- superpowers-bridge：https://github.com/JiangWay/openspec-schemas
+Agent 需要查阅以下文件时，直接 Read：
+- `docs/alloy-design.md` — 完整产品规格
+- `docs/alloy-dev-guide.md` — 构建命令、测试写法、踩坑记录
+- `docs/skill-writing-guide.md` — Skill 编写规范（改 SKILL.md 前必须读）
