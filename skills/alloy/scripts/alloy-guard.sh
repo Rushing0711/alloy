@@ -68,7 +68,7 @@ if $APPLY; then
     sed -i "s/^phase:.*/phase: $TARGET_PHASE/" "$ALLOY_YAML"
   fi
   # 更新 updated_at
-  today=$(date +%Y-%m-%d)
+  today=$(date +%Y-%m-%dT%H:%M:%S)
   if [[ "$(uname)" == "Darwin" ]]; then
     sed -i '' "s/^updated_at:.*/updated_at: \"$today\"/" "$ALLOY_YAML"
   else

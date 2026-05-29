@@ -28,7 +28,7 @@ case "$ACTION" in
     else
       echo "${FIELD}: ${VALUE}" >> "$ALLOY_YAML"
     fi
-    today=$(date +%Y-%m-%d)
+    today=$(date +%Y-%m-%dT%H:%M:%S)
     if [[ "$(uname)" == "Darwin" ]]; then
       sed -i '' "s/^updated_at:.*/updated_at: \"$today\"/" "$ALLOY_YAML"
     else

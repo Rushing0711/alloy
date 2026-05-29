@@ -210,3 +210,5 @@ describe("myFunction", () => {
 | 8 | `openspec archive -y --change <name>` 报 `unknown option` | v1.3 CLI 不支持 `--change` flag | 语法是 `openspec archive -y <name>` |
 | 9 | worktree 断线重连无法识别 | alloy-apply 创建 worktree 后没写 `.alloy.yaml` | Step 1c 后立即 `alloy-state.sh write worktree` |
 | 10 | `.alloy.yaml` phase 不更新 | guard 脚本 `started→planned` 无制品检查 | 补充 5 制品缺失检查 |
+| 11 | `.alloy.yaml` 缺少 `created_at` 字段 | alloy-plan Step 1/3 只写了 worktree 和 schema_version | 补写 `phase started` + `created_at "$(date +%Y-%m-%dT%H:%M:%S)"` |
+| 12 | `updated_at` 只有日期无时间 | `date +%Y-%m-%d` 只输出日期 | 改为 `date +%Y-%m-%dT%H:%M:%S` |

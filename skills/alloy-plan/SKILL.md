@@ -35,10 +35,12 @@ description: Alloy 规划阶段——将 draft.md 转化为结构化制品，始
 2. **调用 `/opsx:new <name>` 创建 change 目录** —— OpenSpec 自动创建目录结构、移入 draft.md、写入初始状态
 3. `/opsx:new` 完成后，通过 alloy-state.sh 补充写入 Alloy 特有字段：
    ```bash
+   bash .claude/skills/alloy/scripts/alloy-state.sh write openspec/changes/<name> phase started
    bash .claude/skills/alloy/scripts/alloy-state.sh write openspec/changes/<name> worktree null
    bash .claude/skills/alloy/scripts/alloy-state.sh write openspec/changes/<name> schema_version 1
+   bash .claude/skills/alloy/scripts/alloy-state.sh write openspec/changes/<name> created_at "\"$(date +%Y-%m-%dT%H:%M:%S)\""
    ```
-   脚本会自动设置 `updated_at`。
+   脚本每次 write 会自动更新 `updated_at`。
 
 如果 `/opsx:new` 不可用，说明 OpenSpec 未安装或未初始化——引导用户运行 `alloy init` 完成环境初始化。
 
