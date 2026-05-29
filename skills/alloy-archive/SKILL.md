@@ -59,6 +59,7 @@ test -f openspec/changes/<name>/verify.md && ! grep -q '^- \[x\] ❌ FAIL' opens
 > 2. 执行 `openspec archive -y --change <name>`（自有幂等检查，已归档则跳过）
 > 3. Delta Spec 合并到主 spec
 > 4. 更新 phase → archived
+> 5. 提交归档变更（`git add` + `git commit`）
 >
 > 如果 `openspec` CLI 不可用，警告但不阻断——spec 同步依赖 OpenSpec CLI。
 >
@@ -66,6 +67,7 @@ test -f openspec/changes/<name>/verify.md && ! grep -q '^- \[x\] ❌ FAIL' opens
 > ✓ Delta Spec 已合并到主 spec
 > ✓ Change 已归档到 archive/YYYY-MM-DD-<name>/
 > ✓ phase → archived
+> ✓ 归档变更已提交
 > ```
 
 ### Step 3/3：完成
@@ -78,6 +80,7 @@ test -f openspec/changes/<name>/verify.md && ! grep -q '^- \[x\] ❌ FAIL' opens
 > ✓ Delta Spec 已合并到主 spec
 > ✓ Change 已归档到 archive/YYYY-MM-DD-<name>/
 > ✓ phase → archived
+> ✓ 归档变更已提交
 >
 > 代码尚未合入，分支仍保留。运行 `/alloy-finish` 完成代码合入与现场清理。
 

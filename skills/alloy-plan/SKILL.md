@@ -135,13 +135,19 @@ proposal.md 已更新 ✓
 所有制品已生成：draft ✓  proposal ✓  design ✓  specs ✓  tasks ✓  plan ✓
 ```
 
+**提交 change 目录到 VCS：**
+```bash
+git add openspec/changes/<name>/
+git commit -m "plan: <name> 规划完成——proposal + design + specs + tasks + plan"
+```
+
 **通过 alloy-guard.sh 校验并更新 phase：**
 
 ```bash
 bash .claude/skills/alloy/scripts/alloy-guard.sh openspec/changes/<name> planned --apply
 ```
 
-如果 guard 返回非零，说明前置条件不满足——检查缺哪个制品，补全后重试。guard 通过后 phase 自动更新为 `planned`。
+如果 guard 返回非零，说明前置条件不满足——检查缺哪个制品或是否有未提交文件，补全后重试。guard 通过后 phase 自动更新为 `planned`。
 
 ```
 制品文件禁止手动修改，如需变更请通过对话驱动。

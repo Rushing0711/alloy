@@ -45,21 +45,21 @@ FAIL 时 STOP，告知用户先修复 verify 中的阻塞问题。
 每条结论必须引用 §0 的证据或具体 commit hash/文件路径/测试名称。
 分析 bullet 引用 §0 而非内联证据（如 "见 §0 提交链 #3"）。
 
-#### §1 Wins — 做对了什么
+#### §1 做对了什么
 - 每个 point 格式：`- [evidence: <commit/file/test>] <描述>`
 - 聚焦可复现的成功模式
 
-#### §2 Misses — 做错了什么
+#### §2 做错了什么
 三级严重度，每条带 evidence：
 - `- 🔴 [blocking | evidence: ...] <描述>` — 阻塞性问题
 - `- 🟡 [painful  | evidence: ...] <描述>` — 痛苦但不阻塞
 - `- 📌 [nit      | evidence: ...] <描述>` — 小问题
 
-#### §3 Plan Deviations — 计划偏离
+#### §3 计划偏离
 表格：Plan task / What changed / Why
 哪些 task 的范围在执行中发生了变化，原因是什么
 
-#### §4 Skill / Workflow Compliance — 技能遵循度
+#### §4 技能遵循度
 列出 apply 阶段的每个技能，标记是否实际使用 ✓ / ✗：
 
 | 技能 | 使用 |
@@ -84,10 +84,10 @@ FAIL 时 STOP，告知用户先修复 verify 中的阻塞问题。
 
 如果多个 cycle 因相似原因跳过同一技能，该模式应成为 §6 的 Promote candidate。
 
-#### §5 Surprises — 意外发现
+#### §5 意外发现
 `- <被推翻的假设>` — 哪些假设被证明是错误的
 
-#### §6 Promote Candidates → 长期学习
+#### §6 值得推广
 使用 `- [ ]` checklist（非表格），未勾选的 = 跨周期 carry-forward：
 - 标题：严重度 emoji + 一句话教训
 - `→ **Promote to** <destination>`（memory / CLAUDE.md / schema / skill / one-off）

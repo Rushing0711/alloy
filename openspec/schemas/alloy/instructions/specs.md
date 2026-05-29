@@ -43,3 +43,11 @@
 - **故意不读 draft.md** —— 只读 proposal 的 Capabilities 列表。这防止行为规格被 draft.md 中的技术实现细节污染。specs 描述"系统应该做什么"，不应该知道"打算用 Redis 还是 Postgres"
 - 规格是行为契约，不写类名、库选型、目录结构
 - 仅描述外部可观察行为
+
+## 格式校验
+
+生成完成后，必须运行 `openspec validate --all` 验证 Delta Spec 格式。常见问题：
+- header 格式：`## ADDED` → 应为 `## ADDED Requirements`（OpenSpec 要求完整 section 名）
+- 场景层级：`#### Scenario:` 必须恰好 4 个 `#`，多用或少用会导致静默解析失败
+
+若 validate 失败，根据错误提示修正格式，重新验证直到通过。

@@ -45,6 +45,15 @@ case "$transition" in
       echo "$missing"
       exit 1
     fi
+    # 检查 change 目录是否已提交到 git（防止 worktree 创建后缺失制品）
+    if git rev-parse --git-dir >/dev/null 2>&1; then
+      rel_path="openspec/changes/$(basename "$CHANGE_DIR")"
+      if git status --porcelain "$rel_path" 2>/dev/null | grep -q '^'; then
+        echo "[HARD STOP] Change 目录有未提交的变更，请先执行 git add + git commit:"
+        git status --short "$rel_path" 2>/dev/null
+        exit 1
+      fi
+    fi
     ;;
   "planned->applied")
     if [[ ! -f "$CHANGE_DIR/plan.md" ]]; then

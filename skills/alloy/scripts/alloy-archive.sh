@@ -47,3 +47,13 @@ else
 fi
 
 echo "✓ phase → archived"
+
+# 4. 提交归档变更
+cd "$PROJECT_DIR"
+if git diff --quiet && git diff --cached --quiet; then
+  echo "⚠️  没有需要提交的变更"
+else
+  git add openspec/specs/ openspec/changes/ archive/ 2>/dev/null || true
+  git commit -m "archive: ${CHANGE_NAME} 归档——Delta Spec 已同步"
+  echo "✓ 归档变更已提交"
+fi

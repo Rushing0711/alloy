@@ -5,7 +5,7 @@
 > 2. 确认 verify.md 的 Overall Decision 不是 FAIL
 > 两项都通过后才生成 retrospective。每项结论引用具体 commit hash、文件路径或测试名称。
 
-## §0 Evidence（量化证据）
+## §0 量化证据
 
 - 提交数：
 - 变更规模（文件数/行数）：
@@ -17,11 +17,11 @@
 - 测试覆盖信号：
 - 提交链：`<base>..HEAD`
 
-## §1 Wins（做对了什么）
+## §1 做对了什么
 
 <!-- 什么做得好，每条引用 §0 的证据 -->
 
-## §2 Misses（做错了什么）
+## §2 做错了什么
 
 <!-- 按严重程度标注，每条带 evidence：
 - 🔴 [blocking | evidence: <commit/file/test>] <描述>
@@ -29,11 +29,11 @@
 - 📌 [nit      | evidence: <commit/file/test>] <描述>
 -->
 
-## §3 Plan Deviations（计划偏离）
+## §3 计划偏离
 
 <!-- 哪些 task 的范围在执行中发生了变化，为什么 -->
 
-## §4 Skill Compliance（技能遵循度）
+## §4 技能遵循度
 
 | 技能 | 使用 |
 |------|:----:|
@@ -53,11 +53,11 @@
 3. **How to prevent recurrence** — schema graph fix / skill description tightening / CLAUDE.md trigger / scope-judgment rule / one-off
 -->
 
-## §5 Surprises（意外发现）
+## §5 意外发现
 
 <!-- 哪些假设被证明是错误的 -->
 
-## §6 Promote Candidates（值得推广）
+## §6 值得推广
 
 <!-- 使用 - [ ] checklist，未勾选的 = 跨周期 carry-forward
 格式：
