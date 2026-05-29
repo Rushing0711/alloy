@@ -2,6 +2,8 @@
 
 Alloy 项目的构建、测试、调试约定和踩坑记录。面向开发者和 AI Agent。
 
+**前置阅读：** 动手前先读完 `alloy-design.md`（了解 Alloy 是什么）、`openspec-vs-superpowers.md` + `workflow-design.md`（了解设计推导）。
+
 ---
 
 ## 一、构建与测试

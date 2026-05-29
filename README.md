@@ -168,7 +168,21 @@ requirement.md
 
 ## 文档索引
 
-三文档体系：
+### 阅读路线
+
+```
+新手入门:  README → alloy-design.md（了解 Alloy 是什么）
+          ↓
+深入理解:  openspec-vs-superpowers.md → workflow-design.md（了解设计推导）
+          ↓
+动手写码:  alloy-dev-guide.md（构建/测试/踩坑/复盘清单）
+          ↓
+写 Skill:  skill-writing-guide.md（Skill 编写规范，改 SKILL.md 前必读）
+          ↓
+Agent 约束:  CLAUDE.md（Agent 在项目中的行为规则，换 Agent 时参考）
+```
+
+### 三文档体系
 
 | 文档 | 角色 | 内容 |
 |------|------|------|

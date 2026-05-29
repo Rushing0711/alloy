@@ -88,7 +88,12 @@ vendor/superpowers/     # Superpowers skill 内置兜底（离线安装用）
 | `docs/workflow-design.md` | 工作流设计推导 | 4 阶段融合流程、3 种场景 |
 | `docs/skill-writing-guide.md` | **Skill 编写指南**（权威源） | 来自官方文档的编写规范和最佳实践 |
 
-**阅读顺序：** `alloy-design.md` 了解功能全貌 → `alloy-dev-guide.md` 了解怎么动手 → 写代码前必读 `skill-writing-guide.md`。
+**阅读顺序：**
+1. `alloy-design.md` — 了解 Alloy 功能和架构
+2. `openspec-vs-superpowers.md` → `workflow-design.md` — 了解设计推导
+3. `alloy-dev-guide.md` — 构建/测试/踩坑/复盘清单
+4. `skill-writing-guide.md` — 写 Skill 前必读
+5. `CLAUDE.md`（本文件）— Agent 行为约束
 
 ## Alloy 核心设计（摘要自 docs/alloy-design.md）
 
