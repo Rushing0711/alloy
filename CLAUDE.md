@@ -30,7 +30,7 @@ src/core/
     types.ts            # 共享类型定义
     detect.ts           # 环境检测（Node.js / git / Claude Code）
     openspec.ts         # OpenSpec CLI 安装 + 项目初始化
-    superpowers.ts      # Superpowers 安装（含 vendor 兜底）
+    superpowers.ts      # Superpowers 在线安装
     skills.ts           # Alloy skill + schema 部署
     claude-md.ts        # CLAUDE.md 注入
     compat.ts           # compat.yaml 兼容性检查
@@ -56,8 +56,6 @@ openspec/schemas/alloy/
   schema.yaml           # 制品 DAG 依赖定义
   instructions/         # 制品指令文件（每制品一个 .md，定义生成规则）
   templates/            # 制品模板（proposal/design/specs/tasks/plan/retrospective）
-
-vendor/superpowers/     # Superpowers skill 内置兜底（离线安装用）
 
 以上为源文件（git 追踪）。alloy init 部署时将 skills/ → .claude/skills/，openspec/schemas/ → 项目 openspec/ 目录。
 ```

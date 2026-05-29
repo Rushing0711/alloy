@@ -1,7 +1,4 @@
-import { mkdir, cp } from "node:fs/promises";
-import { join } from "node:path";
 import { execSync } from "node:child_process";
-import { getPackageRoot } from "../utils/fs.js";
 
 export async function installSuperpowers(
   scope: "global" | "project"
@@ -25,42 +22,7 @@ export async function installSuperpowers(
     });
     return "installed";
   } catch {
-    console.log("     ⚠ 网络不可达，使用内置 vendor 兜底");
-    return await installSuperpowersFromVendor(scope, process.cwd());
-  }
-}
-
-async function installSuperpowersFromVendor(
-  scope: "global" | "project",
-  projectPath: string,
-): Promise<"installed" | "failed"> {
-  const packageRoot = getPackageRoot();
-  const vendorSource = join(packageRoot, "vendor", "superpowers");
-
-  let skillsTargetDir: string;
-  if (scope === "global") {
-    const home = process.env.HOME || process.env.USERPROFILE || "~";
-    skillsTargetDir = join(home, ".claude", "skills");
-  } else {
-    skillsTargetDir = join(projectPath, ".claude", "skills");
-  }
-
-  try {
-    await mkdir(skillsTargetDir, { recursive: true });
-    const { readdir } = await import("node:fs/promises");
-    const entries = await readdir(vendorSource, { withFileTypes: true });
-    let copied = 0;
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const srcPath = join(vendorSource, entry.name);
-      const destPath = join(skillsTargetDir, entry.name);
-      await cp(srcPath, destPath, { recursive: true });
-      copied++;
-    }
-    console.log(`     ✓ 已从 vendor 复制 ${copied} 个 Superpowers skill`);
-    return "installed";
-  } catch (error) {
-    console.error(`     ✗ vendor 兜底失败: ${(error as Error).message}`);
+    console.log("     ✗ Superpowers 安装失败，请检查网络连接后重试 alloy init");
     return "failed";
   }
 }

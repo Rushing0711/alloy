@@ -1,4 +1,4 @@
-import { cp, readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
@@ -19,18 +19,7 @@ export async function updateCommand(
     results.push("⚠️ skills/alloy/ 更新失败，请检查网络连接");
   }
 
-  // 2. 更新 vendor（从包内置目录同步）
-  try {
-    const packageRoot = join(import.meta.dirname, "..", "..", "..");
-    const vendorSource = join(packageRoot, "vendor");
-    const vendorTarget = join(projectPath, "vendor");
-    await cp(vendorSource, vendorTarget, { recursive: true, force: true });
-    results.push("✓ vendor/ → Superpowers 内置兜底已同步（离线安装用）");
-  } catch {
-    results.push("⚠️ vendor/ → Superpowers 内置兜底同步失败，请检查包文件完整性");
-  }
-
-  // 3. 更新 CLAUDE.md 中的 Alloy 标记区域（仅当文件存在时）
+  // 2. 更新 CLAUDE.md 中的 Alloy 标记区域（仅当文件存在时）
   const claudeMdPath = join(projectPath, "CLAUDE.md");
   if (existsSync(claudeMdPath)) {
     try {

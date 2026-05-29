@@ -179,7 +179,6 @@ describe("myFunction", () => {
 | `skills/alloy-*/SKILL.md` | `.claude/skills/alloy-*/SKILL.md` |
 | `skills/alloy/scripts/*.sh` | `.claude/skills/alloy/scripts/*.sh` |
 | `openspec/schemas/alloy/*` | `openspec/schemas/alloy/*` |
-| `vendor/superpowers/` | `.claude/skills/`（离线兜底） |
 
 ---
 
