@@ -245,10 +245,25 @@ phase 行为：
   制品状态: draft ✓  proposal ✓  design ✗  specs ✗  tasks ✗  plans ✗
   下一步:  继续 alloy plan，等待 design 生成
 
-一致性检查（随 status 和 start 自动执行，双向）:
-  ├── worktree 字段有值但磁盘路径不存在 → ⚠️ "worktree 残留"
-  ├── worktree 字段为 null 但 .worktrees/<name>/ 目录存在 → ⚠️ "worktree 孤儿"（状态写入缺失）
-  └── git worktree list 中有孤立 worktree → ⚠️ 提示清理
+worktree 一致性检查（worktree 残留/孤儿/git worktree list 孤立）由 alloy doctor 统一诊断。
+```
+
+### alloy doctor
+
+```
+alloy doctor [path] [--json]
+
+诊断内容:
+  1. 版本兼容性（7 项健康检查）:
+     Node.js / OpenSpec / Superpowers / Alloy / Schema / Commands / Environment
+     每项返回 pass / warn / fail，依据 compat.yaml 中的版本约束判断
+
+  2. 文件一致性（双向检查）:
+     ├── worktree 字段有值但磁盘路径不存在 → ⚠️ "worktree 残留"
+     ├── worktree 字段为 null 但 .worktrees/<name>/ 目录存在 → ⚠️ "worktree 孤儿"（状态写入缺失）
+     └── git worktree list 中有孤立 worktree → ⚠️ 提示清理
+
+--json: 以 JSON 格式输出 healthResults + consistencyWarnings
 ```
 
 ---
@@ -341,9 +356,11 @@ records:
   - artifact: proposal
     hash: "abc123"
     committed_at: "2026-05-28T09:15:00"
+    approver: "human"
   - artifact: design
     hash: "def456"
     committed_at: "2026-05-28T09:30:00"
+    approver: "human"
 ```
 
 | 字段 | 读写 | 含义 |
@@ -353,7 +370,7 @@ records:
 | `schema_version` | alloy init 写入 | 格式演进时用于兼容解析 |
 | `created_at` | alloy start 写入 | change 创建时间 |
 | `updated_at` | phase 变更时写入 | 最后状态变更时间，调试和排序用 |
-| `records` | plan/apply 阶段写入 | 每个制品提交后的 hash 记录，格式 `ArtifactRecord[]`，含 artifact/hash/committed_at |
+| `records` | plan/apply 阶段写入 | 每个制品提交后的 hash 记录，格式 `ArtifactRecord[]`，含 artifact/hash/committed_at/approver |
 
 断点恢复：`/alloy:start` 检测到活跃 change → 读 phase + worktree + 文件系统 → 自动从断点继续。不设子步骤状态——Agent 通过检查文件存在性自判断。
 

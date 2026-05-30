@@ -1,5 +1,13 @@
 // test/cli/internal/guard.test.ts
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+
+const { mockExecSync } = vi.hoisted(() => ({
+  mockExecSync: vi.fn(),
+}));
+vi.mock("node:child_process", () => ({
+  execSync: mockExecSync,
+}));
+
 import { mkdir, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -25,10 +33,15 @@ describe("alloy _guard", () => {
     changeDir = join(tmpDir, "test-change");
     await mkdir(changeDir, { recursive: true });
     await setupState("started");
+    // 默认：模拟无 git 仓库（与 temp dir 行为一致）
+    mockExecSync.mockImplementation(() => {
+      throw new Error("git not available");
+    });
   });
 
   afterEach(async () => {
     await rm(tmpDir, { recursive: true, force: true });
+    vi.clearAllMocks();
   });
 
   // valid transitions
@@ -231,6 +244,54 @@ describe("alloy _guard", () => {
     await guardCommand([changeDir, "applied"]);
     expect(exitSpy).toHaveBeenCalledWith(1);
     exitSpy.mockRestore();
+  });
+
+  // git 未提交检查（started→planned）
+  it("started→planned change 目录有未提交变更时被阻断", async () => {
+    await writeFile(join(changeDir, "proposal.md"), "");
+    await writeFile(join(changeDir, "design.md"), "");
+    await writeFile(join(changeDir, "tasks.md"), "");
+    await writeFile(join(changeDir, "plans.md"), "");
+    await mkdir(join(changeDir, "specs"));
+
+    // 模拟 git 仓库存在但 change 目录有未提交变更
+    mockExecSync.mockImplementation((cmd: string) => {
+      if (cmd.includes("rev-parse")) {
+        return Buffer.from("/fake/.git");
+      }
+      if (cmd.includes("status")) {
+        return Buffer.from(" M openspec/changes/test-change/draft.md");
+      }
+      return Buffer.from("");
+    });
+
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    await guardCommand([changeDir, "planned"]);
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    exitSpy.mockRestore();
+  });
+
+  it("started→planned git 仓库干净时通过", async () => {
+    await writeFile(join(changeDir, "proposal.md"), "");
+    await writeFile(join(changeDir, "design.md"), "");
+    await writeFile(join(changeDir, "tasks.md"), "");
+    await writeFile(join(changeDir, "plans.md"), "");
+    await mkdir(join(changeDir, "specs"));
+
+    // 模拟 git 仓库干净（status 返回空）
+    mockExecSync.mockImplementation((cmd: string) => {
+      if (cmd.includes("rev-parse")) {
+        return Buffer.from("/fake/.git");
+      }
+      if (cmd.includes("status")) {
+        return Buffer.from("");
+      }
+      return Buffer.from("");
+    });
+
+    await guardCommand([changeDir, "planned", "--apply"]);
+    const state = await readState(changeDir);
+    expect(state.phase).toBe("planned");
   });
 
   // --apply flag behavior

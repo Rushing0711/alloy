@@ -108,4 +108,77 @@ describe("alloy _archive", () => {
       archiveCommand([tmpDir, "test-change"])
     ).rejects.toThrow();
   });
+
+  // === C4: git commit 行为 ===
+
+  it("归档后无变更时提示无需要提交", async () => {
+    let gitDiffCalled = false;
+    mockExecSync.mockImplementation((cmd: string) => {
+      if (cmd.includes("openspec archive")) {
+        return Buffer.from(""); // openspec archive 成功
+      }
+      if (cmd.includes("diff --quiet")) {
+        gitDiffCalled = true;
+        return Buffer.from(""); // git diff 成功 → 无变更
+      }
+      return Buffer.from("");
+    });
+
+    const logs: string[] = [];
+    const logSpy = vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+      logs.push(args.map(String).join(" "));
+    });
+
+    await archiveCommand([tmpDir, "test-change"]);
+    const state = await readState(changeDir);
+    expect(state.phase).toBe("archived");
+    expect(gitDiffCalled).toBe(true);
+    expect(logs.some(l => l.includes("没有需要提交的变更"))).toBe(true);
+
+    logSpy.mockRestore();
+  });
+
+  it("归档后有变更时执行 git add + git commit", async () => {
+    let gitCommitCalled = false;
+    mockExecSync.mockImplementation((cmd: string) => {
+      if (cmd.includes("openspec archive")) {
+        return Buffer.from(""); // openspec archive 成功
+      }
+      if (cmd.includes("diff --quiet")) {
+        throw new Error("有未提交变更"); // git diff 返回 1 → 抛出
+      }
+      if (cmd.includes("git commit")) {
+        gitCommitCalled = true;
+        return Buffer.from("");
+      }
+      return Buffer.from("");
+    });
+
+    await archiveCommand([tmpDir, "test-change"]);
+    const state = await readState(changeDir);
+    expect(state.phase).toBe("archived");
+    expect(gitCommitCalled).toBe(true);
+  });
+
+  it("归档后 git commit 失败时不阻断 phase", async () => {
+    mockExecSync.mockImplementation((cmd: string) => {
+      if (cmd.includes("openspec archive")) {
+        return Buffer.from(""); // openspec archive 成功
+      }
+      // git diff 和 git commit 都失败
+      throw new Error("git 不可用");
+    });
+
+    const logs: string[] = [];
+    const logSpy = vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+      logs.push(args.map(String).join(" "));
+    });
+
+    await archiveCommand([tmpDir, "test-change"]);
+    const state = await readState(changeDir);
+    expect(state.phase).toBe("archived"); // phase 仍然推进
+    expect(logs.some(l => l.includes("git commit 失败"))).toBe(true);
+
+    logSpy.mockRestore();
+  });
 });
