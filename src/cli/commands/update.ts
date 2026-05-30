@@ -1,25 +1,133 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { readFileSync, lstatSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
+import { deploySkills, deploySchema } from "../../core/skills.js";
+import { runHealthCheck } from "../../core/health.js";
+import { getPackageRoot } from "../../utils/fs.js";
+import type { DeployOptions } from "../../core/types.js";
 
 const CLAUDE_MD_MARKER_START = "<!-- ALLOY-WORKFLOW:START -->";
 const CLAUDE_MD_MARKER_END = "<!-- ALLOY-WORKFLOW:END -->";
 
-export async function updateCommand(
-  projectPath: string
-): Promise<string[]> {
+function isDevMode(): boolean {
+  try {
+    return lstatSync(getPackageRoot()).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+function detectScope(projectPath: string): "global" | "project" | null {
+  const probe = (dir: string) => existsSync(join(dir, "alloy"));
+
+  // 先检测项目级别
+  if (probe(join(projectPath, ".claude", "skills"))) return "project";
+
+  // 再检测全局
+  const home = process.env.HOME || process.env.USERPROFILE || "~";
+  if (probe(join(home, ".claude", "skills"))) return "global";
+
+  return null;
+}
+
+async function checkLatestVersion(): Promise<string | null> {
+  try {
+    return execSync("npm view @alloy/cli version", { stdio: "pipe" })
+      .toString()
+      .trim();
+  } catch {
+    return null;
+  }
+}
+
+export async function updateCommand(projectPath: string): Promise<string[]> {
   const results: string[] = [];
 
-  // 1. 更新 skill 文件
-  try {
-    execSync("npx skills update alloy", { stdio: "pipe", cwd: projectPath });
-    results.push("✓ skills/alloy/ → 已更新到最新版");
-  } catch {
-    results.push("⚠️ skills/alloy/ 更新失败，请检查网络连接");
+  // 1. 自动检测 scope
+  const scope = detectScope(projectPath);
+  if (!scope) {
+    results.push("⚠️ Alloy 未初始化，请先运行 alloy init");
+    return results;
   }
 
-  // 2. 更新 CLAUDE.md 中的 Alloy 标记区域（仅当文件存在时）
+  const deployOpts: DeployOptions = {
+    scope,
+    injectClaudeMd: false,
+    projectPath,
+  };
+
+  // 2. 开发模式 vs 用户模式
+  const dev = isDevMode();
+
+  if (dev) {
+    console.log("  🔧 开发模式，从本地构建重新部署…");
+  } else {
+    const pkg = JSON.parse(
+      readFileSync(join(getPackageRoot(), "package.json"), "utf-8")
+    );
+    const currentVersion = pkg.version as string;
+    const latest = await checkLatestVersion();
+
+    if (latest && latest !== currentVersion) {
+      console.log(`\n  发现新版本: v${latest}（当前 v${currentVersion}）`);
+
+      // 兼容性检查
+      console.log("  🩺 兼容性检查…");
+      const health = await runHealthCheck(getPackageRoot(), projectPath);
+      const warnings = health.filter((h) => h.status !== "pass");
+      if (warnings.length > 0) {
+        for (const w of warnings) {
+          console.log(`     ⚠ ${w.name}: ${w.current}`);
+        }
+      } else {
+        console.log("     ✓ 兼容性检查通过");
+      }
+
+      // 询问确认
+      try {
+        const { confirm } = await import("@inquirer/prompts");
+        const answer = await confirm({
+          message: "是否升级 alloy？",
+          default: false,
+        });
+
+        if (answer) {
+          try {
+            execSync("npm update -g @alloy/cli", { stdio: "pipe" });
+            results.push("✓ alloy CLI 已升级");
+          } catch {
+            results.push("⚠️ CLI 升级失败");
+          }
+        } else {
+          results.push("  已跳过 CLI 升级");
+        }
+      } catch {
+        // @inquirer 不可用时
+        results.push("  使用 'npm update -g @alloy/cli' 手动升级");
+      }
+    } else if (latest) {
+      results.push(`✓ Alloy v${currentVersion} 已是最新`);
+    } else {
+      results.push(`⚠️ 无法检查更新（npm registry 不可达）`);
+    }
+  }
+
+  // 3. 部署 skill + schema
+  try {
+    const paths = await deploySkills(deployOpts);
+    results.push(`✓ skills/ → 部署 ${paths.length} 个 skill`);
+  } catch {
+    results.push("⚠️ skill 部署失败");
+  }
+  try {
+    await deploySchema(deployOpts);
+    results.push("✓ schema/ → 已部署");
+  } catch {
+    results.push(`⚠️ schema 部署失败`);
+  }
+
+  // 4. 更新 CLAUDE.md 标记区域
   const claudeMdPath = join(projectPath, "CLAUDE.md");
   if (existsSync(claudeMdPath)) {
     try {
@@ -46,7 +154,6 @@ export async function updateCommand(
 }
 
 function getLatestClaudeMdFragment(): string {
-  // v1 使用内置 fragment，后续版本从 registry 拉取最新
   return [
     "",
     CLAUDE_MD_MARKER_START,

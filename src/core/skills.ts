@@ -1,5 +1,5 @@
 import { mkdir, cp, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { getPackageRoot } from "../utils/fs.js";
 import type { DeployOptions } from "./types.js";
 
@@ -41,7 +41,9 @@ export async function deploySchema(opts: DeployOptions): Promise<string> {
   await mkdir(join(openspecDir, "changes"), { recursive: true });
 
   await mkdir(schemaTarget, { recursive: true });
-  await cp(schemaSource, schemaTarget, { recursive: true });
+  if (resolve(schemaSource) !== resolve(schemaTarget)) {
+    await cp(schemaSource, schemaTarget, { recursive: true });
+  }
 
   const configPath = join(openspecDir, "config.yaml");
   try {

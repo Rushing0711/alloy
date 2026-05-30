@@ -23,7 +23,7 @@ Commands:
   doctor      [path] [--json]
               诊断：版本兼容性、文件一致性
   update      [path]
-              更新 Alloy skill 文件到最新版
+              从 alloy 包重新部署 skill + schema
   completion  [bash|zsh|pwsh|powershell] [--install]
               生成 shell 补全脚本，--install 自动注册
 
@@ -66,6 +66,9 @@ alloy doctor [path] [options]
     case "update":
       return `
 alloy update [path] [options]
+
+自动检测 scope（project/global），从 alloy 包重新部署 skill + schema。
+用户模式下会检查 npm registry 是否有新版本。
 
 选项:
   --help, -h    显示本帮助
@@ -239,7 +242,9 @@ async function main() {
         strict: true,
         allowPositionals: true,
       });
-      const results = await updateCommand(positionals[0] ?? process.cwd());
+      const results = await updateCommand(
+        positionals[0] ?? process.cwd()
+      );
       for (const r of results) console.log(`  ${r}`);
       break;
     }
