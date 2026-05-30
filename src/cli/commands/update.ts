@@ -5,7 +5,7 @@ import { execSync } from "node:child_process";
 import { deploySkills, deploySchema } from "../../core/skills.js";
 import { runHealthCheck } from "../../core/health.js";
 import { getPackageRoot } from "../../utils/fs.js";
-import { confirmStdin } from "../../utils/prompt.js";
+import { promptConfirm } from "../../utils/prompt.js";
 import type { DeployOptions } from "../../core/types.js";
 
 const CLAUDE_MD_MARKER_START = "<!-- ALLOY-WORKFLOW:START -->";
@@ -86,17 +86,7 @@ export async function updateCommand(projectPath: string): Promise<string[]> {
       }
 
       // 询问确认
-      let doUpdate = false;
-      try {
-        const { confirm } = await import("@inquirer/prompts");
-        doUpdate = await confirm({
-          message: "是否升级 alloy？",
-          default: false,
-        });
-      } catch {
-        // @inquirer 不可用时（如 Node 18），fallback 到 stdin
-        doUpdate = await confirmStdin("是否升级 alloy？");
-      }
+      const doUpdate = await promptConfirm("是否升级 alloy？", false);
 
       if (doUpdate) {
         try {
