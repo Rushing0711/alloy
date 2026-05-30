@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
 import { existsSync, readFileSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { statusCommand } from "./commands/status.js";
@@ -23,8 +24,8 @@ Commands:
               诊断：版本兼容性、文件一致性
   update      [path]
               更新 Alloy skill 文件到最新版
-  completion  [bash|zsh|pwsh|powershell]
-              生成 shell 补全脚本
+  completion  [bash|zsh|pwsh|powershell] [--install]
+              生成 shell 补全脚本，--install 自动注册
 
 Options:
   --version, -v, -V  版本号
@@ -71,19 +72,62 @@ alloy update [path] [options]
 `;
     case "completion":
       return `
-alloy completion [shell]
+alloy completion [shell] [options]
 
 参数:
-  shell  目标 shell（bash / zsh / pwsh / powershell，默认从 $SHELL 自动检测）
+  shell  目标 shell（bash / zsh / pwsh / powershell，默认从 $SHELL 检测）
+
+选项:
+  --install    自动注册到 shell 配置文件（~/.zshrc / ~/.bashrc / PowerShell profile）
+  --help, -h   显示本帮助
 
 示例:
   source <(alloy completion)              # 当前 session 生效
-  alloy completion zsh >> ~/.zshrc        # 永久生效
+  alloy completion --install              # 自动注册并立即生效
   alloy completion pwsh | Out-File -FilePath $PROFILE -Append  # PowerShell
 `;
     default:
       return `未知命令: ${cmd}\n使用 alloy --help 查看可用命令。`;
   }
+}
+
+const COMPLETION_LINE = "source <(alloy completion)";
+
+async function installCompletion(shell: string): Promise<void> {
+  const home = process.env.HOME || process.env.USERPROFILE || "~";
+  const completionLine = COMPLETION_LINE;
+
+  let rcFile: string | null = null;
+
+  if (shell.includes("zsh")) {
+    rcFile = join(home, ".zshrc");
+  } else if (shell.includes("bash")) {
+    rcFile = join(home, ".bashrc");
+  } else if (shell.includes("pwsh") || shell.includes("powershell")) {
+    console.log("PowerShell 用户请运行: alloy completion pwsh | Out-File -FilePath $PROFILE -Append");
+    return;
+  }
+
+  if (!rcFile) {
+    console.error("无法确定 shell 配置文件路径");
+    process.exit(1);
+  }
+
+  let content = "";
+  try {
+    content = await readFile(rcFile, "utf-8");
+  } catch {
+    // 文件不存在
+  }
+
+  if (content.includes("alloy completion")) {
+    console.log(`✓ shell 补全已存在 → ${rcFile}`);
+    return;
+  }
+
+  await writeFile(rcFile, content.trimEnd() + "\n" + completionLine + "\n", "utf-8");
+  console.log(`✓ shell 补全已注册 → ${rcFile}`);
+  console.log(`  运行 'source ${rcFile}' 或重新打开终端使其生效`);
 }
 
 async function main() {
@@ -194,7 +238,29 @@ async function main() {
       break;
     }
     case "completion": {
-      const shell = restArgs[0] ?? process.env.SHELL ?? "bash";
+      const { values, positionals } = parseArgs({
+        args: restArgs,
+        options: {
+          install: { type: "boolean", default: false },
+        },
+        strict: true,
+        allowPositionals: true,
+      });
+      const shell = positionals[0] ?? process.env.SHELL ?? "bash";
+
+      if (values.install) {
+        await installCompletion(shell);
+        break;
+      }
+
+      // 不带参数时输出提示到 stderr
+      if (!positionals[0]) {
+        const shellName = shell.includes("zsh") ? "zsh" : shell.includes("pwsh") || shell.includes("powershell") ? "pwsh" : "bash";
+        process.stderr.write(
+          `检测到 ${shellName}，生成补全脚本。运行 'alloy completion --install' 可自动注册。\n`
+        );
+      }
+
       console.log(generateCompletion(shell));
       break;
     }
