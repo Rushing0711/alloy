@@ -45,8 +45,6 @@ export function checkOpenSpec(requiredRange: string): DepCheckResult {
  * 供 doctor 诊断和 init 安装前检测复用。
  */
 export async function checkSuperpowers(requiredRange: string): Promise<DepCheckResult> {
-  const KEY_SKILLS = ["brainstorming", "using-git-worktrees"];
-
   // 1. 检查 Claude Code 插件
   try {
     const home = process.env.HOME || process.env.USERPROFILE || "~";
