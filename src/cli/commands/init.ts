@@ -8,17 +8,31 @@ import { deploySkills, deploySchema } from "../../core/skills.js";
 import { injectClaudeMd } from "../../core/claude-md.js";
 import type { DeployOptions } from "../../core/types.js";
 import { getPackageRoot } from "../../utils/fs.js";
+import { askStdin } from "../../utils/prompt.js";
 
 export async function selectScope(passedScope?: string): Promise<"global" | "project"> {
   if (passedScope) return passedScope as "global" | "project";
-  const { select } = await import("@inquirer/prompts");
-  return select({
-    message: "Install scope:",
-    choices: [
-      { name: "Project (current directory)", value: "project" },
-      { name: "Global (home directory)", value: "global" },
-    ],
-  });
+
+  // 尝试用 @inquirer/prompts（Node ≥ 20），失败则 fallback 到 stdin
+  try {
+    const { select } = await import("@inquirer/prompts");
+    return select({
+      message: "Install scope:",
+      choices: [
+        { name: "Project (current directory)", value: "project" },
+        { name: "Global (home directory)", value: "global" },
+      ],
+    });
+  } catch {
+    // Node 18 不兼容 @inquirer/core — 用简单 stdin 替代
+    console.log("Install scope:");
+    console.log("  [1] Project (current directory)");
+    console.log("  [2] Global (home directory)");
+    const answer = await askStdin("Enter 1 or 2 (default: 1): ");
+    const trimmed = answer.trim();
+    if (trimmed === "2") return "global";
+    return "project";
+  }
 }
 
 export interface InitOptions extends DeployOptions {}

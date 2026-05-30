@@ -5,6 +5,7 @@ import { execSync } from "node:child_process";
 import { deploySkills, deploySchema } from "../../core/skills.js";
 import { runHealthCheck } from "../../core/health.js";
 import { getPackageRoot } from "../../utils/fs.js";
+import { confirmStdin } from "../../utils/prompt.js";
 import type { DeployOptions } from "../../core/types.js";
 
 const CLAUDE_MD_MARKER_START = "<!-- ALLOY-WORKFLOW:START -->";
@@ -85,26 +86,27 @@ export async function updateCommand(projectPath: string): Promise<string[]> {
       }
 
       // 询问确认
+      let doUpdate = false;
       try {
         const { confirm } = await import("@inquirer/prompts");
-        const answer = await confirm({
+        doUpdate = await confirm({
           message: "是否升级 alloy？",
           default: false,
         });
-
-        if (answer) {
-          try {
-            execSync("npm update -g @alloy/cli", { stdio: "pipe" });
-            results.push("✓ alloy CLI 已升级");
-          } catch {
-            results.push("⚠️ CLI 升级失败");
-          }
-        } else {
-          results.push("  已跳过 CLI 升级");
-        }
       } catch {
-        // @inquirer 不可用时
-        results.push("  使用 'npm update -g @alloy/cli' 手动升级");
+        // @inquirer 不可用时（如 Node 18），fallback 到 stdin
+        doUpdate = await confirmStdin("是否升级 alloy？");
+      }
+
+      if (doUpdate) {
+        try {
+          execSync("npm update -g @alloy/cli", { stdio: "pipe" });
+          results.push("✓ alloy CLI 已升级");
+        } catch {
+          results.push("⚠️ CLI 升级失败");
+        }
+      } else {
+        results.push("  已跳过 CLI 升级");
       }
     } else if (latest) {
       results.push(`✓ Alloy v${currentVersion} 已是最新`);
