@@ -141,6 +141,47 @@ describe("alloy _guard", () => {
     ).rejects.toThrow();
   });
 
+  it("applied→archived hash 不匹配时被阻断", async () => {
+    await writeFile(join(changeDir, "verify.md"), "verify content");
+    const yaml = [
+      "worktree: null",
+      "schema_version: 1",
+      "phase: applied",
+      'updated_at: "2020-01-01T00:00:00"',
+      "records:",
+      "  - artifact: verify",
+      '    hash: "wronghash999"',
+      '    approved_at: "2020-01-01T00:00:00"',
+      '    approver: "test"',
+    ].join("\n");
+    await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
+    await expect(
+      guardCommand([changeDir, "archived"])
+    ).rejects.toThrow();
+  });
+
+  it("planned→applied hash 匹配时 --apply 成功", async () => {
+    const { createHash } = await import("node:crypto");
+    const content = "real plans content";
+    await writeFile(join(changeDir, "plans.md"), content, "utf-8");
+    const hash = createHash("sha256").update(content).digest("hex").substring(0, 12);
+    const yaml = [
+      "worktree: null",
+      "schema_version: 1",
+      "phase: planned",
+      'updated_at: "2020-01-01T00:00:00"',
+      "records:",
+      `  - artifact: plans`,
+      `    hash: "${hash}"`,
+      '    approved_at: "2020-01-01T00:00:00"',
+      '    approver: "test"',
+    ].join("\n");
+    await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
+    await guardCommand([changeDir, "applied", "--apply"]);
+    const state = await readState(changeDir);
+    expect(state.phase).toBe("applied");
+  });
+
   // --apply flag behavior
   it("无 --apply 时不修改 phase", async () => {
     await writeFile(join(changeDir, "proposal.md"), "");
