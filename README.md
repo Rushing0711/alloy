@@ -271,7 +271,7 @@ draft.md              ← /alloy-start 产出（需求探索 + brainstorming）
 | [OpenSpec CLI](https://github.com/Fission-AI/OpenSpec) | `>=1.3.0 <2.0.0` | 需求管理和 Delta Spec 追踪 |
 | [Superpowers](https://github.com/obra/superpowers) | `>=5.0.0 <6.0.0` | 流程闸门技能 |
 | Claude Code | — | AI Agent 运行平台（v1） |
-| Node.js | ≥ 22 | 运行时 |
+| Node.js | ≥ 18 | 运行时 |
 | git | — | 版本控制 |
 
 ---

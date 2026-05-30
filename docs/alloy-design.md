@@ -537,7 +537,7 @@ CLI（终端）
 ```yaml
 # Alloy 包内置
 compatible:
-  node: ">=18.0.0 <22.0.0"
+  node: ">=18.0.0"
   openspec: ">=1.3.0 <2.0.0"
   superpowers: ">=5.0.0 <6.0.0"
   alloy: ">=0.1.0"
