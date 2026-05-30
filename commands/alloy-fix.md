@@ -1,6 +1,8 @@
 ---
-name: alloy-fix
+name: "Alloy Fix"
 description: Alloy Bug 修复入口 - 诊断 → 环境感知 → 分流
+category: Workflow
+tags: [alloy, workflow]
 ---
 
 # alloy-fix

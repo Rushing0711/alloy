@@ -1,6 +1,8 @@
 ---
-name: alloy-archive
+name: "Alloy Archive"
 description: Alloy 归档——apply 完成后，锁定 Delta Spec 并归档 change
+category: Workflow
+tags: [alloy, workflow]
 ---
 
 # alloy-archive
@@ -56,7 +58,7 @@ test -f openspec/changes/<name>/verify.md && ! grep -q '^- \[x\] ❌ FAIL' opens
 >
 > `alloy _archive` 自动完成：
 > 1. 验证 phase = applied
-> 2. 执行 `openspec archive -y --change <name>`（自有幂等检查，已归档则跳过）
+> 2. 执行 `openspec archive -y --change <name>`（自有幂等检查，已归档则 Skip）
 > 3. Delta Spec 合并到主 spec
 > 4. 更新 phase → archived
 > 5. 提交归档变更（`git add` + `git commit`）

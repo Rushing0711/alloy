@@ -1,6 +1,8 @@
 ---
-name: alloy-start
+name: "Alloy: Start"
 description: Alloy 智能入口 - 自动检测状态，接续或新建 change
+category: Workflow
+tags: [alloy, workflow]
 ---
 
 # alloy-start
@@ -101,7 +103,7 @@ description: Alloy 智能入口 - 自动检测状态，接续或新建 change
 
 draft.md 已生成。
 
-准备好后，运行 `/alloy-plan` 进入规划阶段。
+准备好后，运行 `/alloy:plan` 进入规划阶段。
 ```
 
 - draft.md 在项目根目录，change 目录由 plan 阶段创建
@@ -125,7 +127,7 @@ draft.md 已生成。
 
 **有上下文可读时：** 总结项目信息（技术栈、已有功能、最近变更），基于发现给用户 2-3 个建议方向或追问。目标是帮用户明确他想做什么，而不是抛回一句"请提供主题"。
 
-**空项目无可读上下文时：** 直接告诉用户："项目较新，没有太多上下文可供参考。请提供需求主题：`/alloy-start <topic>`"
+**空项目无可读上下文时：** 直接告诉用户："项目较新，没有太多上下文可供参考。请提供需求主题：`/alloy:start <topic>`"
 
 ---
 
@@ -154,10 +156,10 @@ draft.md 已生成。
 
 | phase | 接续方式 |
 |-------|---------|
-| `started` | 引导用户继续 `/alloy-plan` |
-| `planned` | 引导用户继续 `/alloy-apply` |
-| `applied` | 引导用户继续 `/alloy-archive` |
-| `archived` | 引导用户继续 `/alloy-finish` |
+| `started` | 引导用户继续 `/alloy:plan` |
+| `planned` | 引导用户继续 `/alloy:apply` |
+| `applied` | 引导用户继续 `/alloy:archive` |
+| `archived` | 引导用户继续 `/alloy:finish` |
 | `finished` | 工作流已完成——如需继续修改，使用自然对话提交新变更 |
 
 一致性检查（双向）：

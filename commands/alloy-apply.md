@@ -1,6 +1,8 @@
 ---
-name: alloy-apply
+name: "Alloy Apply"
 description: Alloy 执行阶段——当 plan.md 完成后，在隔离环境中实现代码并通过双层验证
+category: Workflow
+tags: [alloy, workflow]
 ---
 
 # alloy-apply

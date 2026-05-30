@@ -1,6 +1,8 @@
 ---
-name: alloy-finish
+name: "Alloy: Finish"
 description: Alloy 收尾——archive 完成后，合入代码并清理现场
+category: Workflow
+tags: [alloy, workflow]
 ---
 
 # alloy-finish
@@ -31,7 +33,7 @@ description: Alloy 收尾——archive 完成后，合入代码并清理现场
 **phase 必须是 `archived`。** 如果 phase != archived：
 ```
 [HARD STOP] Change '<name>' 的 phase 为 '<phase>'，finish 要求 phase=archived。
-请先运行 /alloy-archive 完成归档。
+请先运行 /alloy:archive 完成归档。
 ```
 
 通过 `alloy _guard` 校验：
@@ -123,7 +125,7 @@ alloy _guard openspec/changes/<name> finished --apply
   - **spec 级变更 = 新 change** —— 如果审查反馈要求修改 spec，当前 change 的 spec 已归档，应走新 change
 
 **选项 3：保持分支**
-- 提示："分支已保留。后续需要时再次运行 `/alloy-finish <name>` 进行处理。"
+- 提示："分支已保留。后续需要时再次运行 `/alloy:finish <name>` 进行处理。"
 - phase 保持 archived，不推进到 finished
 
 ---

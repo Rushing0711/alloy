@@ -1,6 +1,8 @@
 ---
-name: alloy-discard
+name: "Alloy Discard"
 description: Alloy 放弃 change - 按 phase 分级清理
+category: Workflow
+tags: [alloy, workflow]
 ---
 
 # alloy-discard
