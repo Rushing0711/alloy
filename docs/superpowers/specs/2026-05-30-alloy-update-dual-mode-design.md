@@ -29,10 +29,29 @@ function isDevMode(): boolean {
 
 ---
 
-## 二、流程图
+## 二、Scope 自动检测
+
+`alloy update` 不接受 `--scope` 参数，自动检测：
 
 ```
-alloy update [path] [--scope <project|global>]
+检测 .claude/skills/alloy*/ 是否存在
+  → 存在 → scope = "project"
+  → 不存在 → 检测 ~/.claude/skills/alloy*/
+      → 存在 → scope = "global"
+      → 不存在 → "Alloy 未初始化，请先运行 alloy init"
+```
+
+原则：装在哪里就更新哪里，之前没用过的位置不新增。
+
+---
+
+## 三、流程图
+
+```
+alloy update [path]
+  │
+  ├─ 自动检测 scope（project > global）
+  │   → 都未安装 → 错误提示 + 退出
   │
   ├─ isDevMode()?
   │   YES → "开发模式，从本地构建重新部署"
@@ -89,9 +108,14 @@ async function checkLatestVersion(): Promise<string | null> {
 }
 
 export async function updateCommand(
-  projectPath: string,
-  scope: "global" | "project" = "project"
+  projectPath: string
 ): Promise<string[]> {
+  // 自动检测 scope
+  const scope = detectScope(projectPath);
+  if (!scope) {
+    results.push("Alloy 未初始化，请先运行 alloy init");
+    return results;
+  }
   const results: string[] = [];
   const deployOpts: DeployOptions = { scope, injectClaudeMd: false, projectPath };
 
