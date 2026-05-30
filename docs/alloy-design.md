@@ -59,7 +59,9 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 无活跃 change + 有 topic:
   → 全新开始: explore + brainstorming → draft.md（唯一产出，包含 Why/What/关键决策/范围边界）
   → brainstorming 的详细设计论述写入 draft.md"关键决策"章节，不单独产出 superpowers spec 文件
-  → 不创建 change 目录（留给 plan 阶段）
+  → brainstorming 确认后，调用 /opsx:new 创建 change，将 draft.md 移入 change 目录
+  → 写入 .alloy.yaml（phase=started），hash+commit（draft.md + .alloy.yaml）
+  → draft.md 存放在 change 目录内（openspec/changes/<name>/draft.md），非项目根目录
 
 无活跃 change + 无 topic:
   → Agent 扫描项目上下文（README、requirement.md、已有代码等）
@@ -82,22 +84,20 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 ```
 /alloy:plan [name]（省略时从当前活跃 change 推断）
 
-前置检查: draft.md 存在
+前置检查: change 目录存在且 .alloy.yaml phase=started（/alloy:start 已完成）
 
-若指定 name 但未匹配到活跃 change:
-  → ⚠️ "未找到 change '<name>'，将创建新 change。确认？"
+若指定 name 但 change 不存在:
+  → ⚠️ "未找到 change '<name>'，请先运行 /alloy:start <topic> 创建"
 
-若有活跃 change 但 draft.md 内容与 change 目录不匹配:
-  → ⚠️ 提示异常，让用户选择：
-      1) 继续当前 change
-      2) 创建新 change
+若有活跃 change 但 draft.md 缺失:
+  → ⚠️ 提示异常，引导重新运行 /alloy:start
 
 流程:
-  1. 若无活跃 change 或用户选择新建 → 调用 /opsx:new <name> 创建 change 目录
-     （Agent 根据 draft.md 内容建议 name，用户确认）
-     → 移入 draft.md → 写入 .alloy.yaml → phase=started
+  1. 确认 change 已存在 → 读取 .alloy.yaml 确认 phase=started
+     （无需创建 change —— /alloy:start 已完成这一步）
   2. 调用 /opsx:continue → 利用 schema DAG 按依赖顺序制品生成
-制品生成: proposal → design → specs → tasks → plan
+制品生成: proposal → design → specs → tasks（/opsx:continue 停在 tasks）
+  3. 调用 superpowers:writing-plans → 基于 tasks 生成 plans.md
 每步生成后有审查窗口，可确认或要求修改
 始终分步，不提供一键生成
 
@@ -105,14 +105,14 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 Agent 根据 DAG 依赖自动识别下游制品过期并重做。
 plan 完成后不允许手动修改制品文件，变更需通过对话驱动。
 
-**plan.md 定位：** 执行脚本，非规格文档。tasks.md 是"做什么"的清单（给人确认），
-plan.md 是"怎么做"的剧本（给 Agent 执行，2-5 分钟微步骤粒度，可含代码片段）。
-规格（specs/）是行为契约，plan.md 是执行路线图，两者不可混淆。
+**plans.md 定位：** 执行脚本，非规格文档。tasks.md 是"做什么"的清单（给人确认），
+plans.md 是"怎么做"的剧本（给 Agent 执行，2-5 分钟微步骤粒度，可含代码片段）。
+规格（specs/）是行为契约，plans.md 是执行路线图，两者不可混淆。
 
 **制品生成时禁止打印 instructions。** 审查窗口只展示制品内容本身，不展示 OpenSpec schema 的
 instructions 模板——instructions 是给 Agent 的内部指引，不是给用户审查的输出。
 
-所有制品审查通过后，提交 change 目录到 VCS（确保 apply 阶段 worktree 创建时制品可被带入），再通过 guard 校验推进 phase。
+**一个制品，一次提交：** 每个制品审查通过后，立即 hash-lock 并单独 git commit（而非等所有制品完成后一次性提交）。records 记录每个制品的 commit hash，确保 apply 阶段 worktree 创建时所有制品可被带入。全部提交完成后，通过 guard 校验推进 phase。
 phase → planned
 ```
 
@@ -122,7 +122,7 @@ phase → planned
 /alloy:apply [name]（省略时从当前活跃 change 推断）
 
 前置检查（3 项）:
-  1. plan.md 存在
+  1. plans.md 存在
   2. alloy-guard.sh 确认 phase = planned
   3. git 仓库检测 — 不是仓库时，展示选项让用户选择立即初始化还是稍后自行处理（有感决策，不静默 init）
 
@@ -132,15 +132,15 @@ phase → planned
   1. superpowers:using-git-worktrees → 隔离环境设置。
      技能内置询问环节，用户可选择创建 worktree 或在当前目录直接工作。
      Agent 不重复建造选择闸门。结果写入 .alloy.yaml（worktree 路径或 null）。
-  2. 任务实现。Agent 先分析任务特征（独立性、耦合度、并行潜力），展示推荐方案和理由，
-     让用户选择 SDD（并行子 agent）或串行执行。用户选择后加载对应技能按内部指引执行。
+  2. 任务实现。Agent 从 plans.md header 读取执行策略（SDD 并行 vs 串行），作为推荐方案展示给用户确认。
+     用户可选择 SDD（并行子 agent）或串行执行。用户选择后加载对应技能按内部指引执行。
   3. superpowers:verification-before-completion → 代码层验证（测试通过、行为正确）
   4. /opsx:verify → 制品层验证（7 项结构化检查 → verify.md）。
      CLI 输出语言不由 Agent 控制，Agent 必须将 verify.md 重写为与指令/模板一致的语言。
   5. 纯 AI 生成 → retrospective.md（证据驱动复盘，§0-§6）。
      输出语言与指令/模板上下文保持一致，代码标识符和 commit hash 保持原始语言。
 
-验证通过后提交所有变更（git add -A + commit），再通过 guard 校验。
+验证通过后，verify.md 和 retrospective.md 各自 hash-lock + 单独 git commit，再通过 guard 校验。
 phase → applied
 ```
 
@@ -241,7 +241,7 @@ phase 行为：
   阶段:    planned
   Change:  login-feature
   路径:    openspec/changes/login-feature/
-  制品状态: draft ✓  proposal ✓  design ✗  specs ✗  tasks ✗  plan ✗
+  制品状态: draft ✓  proposal ✓  design ✗  specs ✗  tasks ✗  plans ✗
   下一步:  继续 alloy plan，等待 design 生成
 
 一致性检查（随 status 和 start 自动执行，双向）:
@@ -336,6 +336,13 @@ worktree: null | ".worktrees/<name>"
 schema_version: 1
 created_at: "2026-05-28T09:00:00"
 updated_at: "2026-05-28T15:30:00"
+records:
+  - artifact: proposal
+    hash: "abc123"
+    committed_at: "2026-05-28T09:15:00"
+  - artifact: design
+    hash: "def456"
+    committed_at: "2026-05-28T09:30:00"
 ```
 
 | 字段 | 读写 | 含义 |
@@ -345,6 +352,7 @@ updated_at: "2026-05-28T15:30:00"
 | `schema_version` | alloy init 写入 | 格式演进时用于兼容解析 |
 | `created_at` | alloy start 写入 | change 创建时间 |
 | `updated_at` | phase 变更时写入 | 最后状态变更时间，调试和排序用 |
+| `records` | plan/apply 阶段写入 | 每个制品提交后的 hash 记录，格式 `ArtifactRecord[]`，含 artifact/hash/committed_at |
 
 断点恢复：`/alloy:start` 检测到活跃 change → 读 phase + worktree + 文件系统 → 自动从断点继续。不设子步骤状态——Agent 通过检查文件存在性自判断。
 
@@ -356,8 +364,8 @@ updated_at: "2026-05-28T15:30:00"
 
 | 转换 | 必检制品 | 说明 |
 |------|---------|------|
-| started → planned | proposal, design, specs/, tasks, plan | plan 阶段 5 个产出全部存在 |
-| planned → applied | plan | 执行依赖 plan.md |
+| started → planned | proposal, design, specs/, tasks, plans | plan 阶段 5 个产出全部存在 |
+| planned → applied | plans | 执行依赖 plans.md |
 | applied → archived | verify | 归档依赖 verify.md |
 | archived → finished | — | 仅校验 phase 转换合法性 |
 
@@ -375,14 +383,14 @@ Schema DAG（8 个制品）:
   proposal  ← 读 draft.md
     ├──→ specs     ← 依赖 proposal（不读 draft，防止行为 spec 被技术细节污染）
     │      └──→ tasks   ← 依赖 specs + design
-    │            └──→ plan   ← 依赖 tasks（隐含 superpowers:writing-plans）
-    │                  └──→ verify     ← 依赖 plan（apply 阶段产出）
+    │            └──→ plans   ← 依赖 tasks（由 superpowers:writing-plans 生成，独立步骤）
+    │                  └──→ verify     ← 依赖 plans（apply 阶段产出）
     │                        └──→ retrospective ← 依赖 verify（apply 阶段产出）
     │
     └──→ design   ← 依赖 proposal（读 draft.md，受 proposal 范围约束）
 
 Apply:
-  apply  ← 依赖 plan
+  apply  ← 依赖 plans
     ├── precheck      ← git 仓库检测（有感选择）+ 5 个 Superpowers 技能可用性检查
     ├── 隔离环境设置   ← 隐含 superpowers:using-git-worktrees（用户可选，非强制）
     ├── 任务实现       ← 用户选择执行策略:
@@ -392,7 +400,8 @@ Apply:
     ├── 代码层验证     ← superpowers:verification-before-completion
     ├── 制品层验证     ← /opsx:verify → verify.md（7 项结构化检查）
     ├── 复盘          → retrospective.md（纯 AI 生成，证据驱动 §0-§6）
-    └── git commit    ← 验证通过后提交所有变更，再更新 phase
+    ├── git commit    ← verify.md hash-locked + 单独提交
+    └── 复盘提交       ← retrospective.md hash-locked + 单独提交，再通过 guard 校验更新 phase
 
 所有制品存放于 openspec/changes/<name>/ 目录内，不需外部指针。
 ```
@@ -404,9 +413,9 @@ Alloy schema 从零构建，参考 `superpowers-bridge`（社区 schema）和 Co
 | 项目 | superpowers-bridge | Alloy |
 |------|-------------------|-------|
 | schema 名 | `superpowers-bridge` | `alloy` |
-| 制品数 | 8 个 | 8 个（draft/proposal/design/specs/tasks/plan/verify/retrospective） |
-| 首个制品 | `brainstorm.md`（在 change 目录内） | `draft.md`（change 目录外，临时存放） |
-| DAG 时序 | verify/retro 在 DAG 中但 apply 后才产出（已承认的设计问题） | verify/retro 在 DAG 中，依赖 plan/verify，apply 阶段产出 |
+| 制品数 | 8 个 | 8 个（draft/proposal/design/specs/tasks/plans/verify/retrospective） |
+| 首个制品 | `brainstorm.md`（在 change 目录内） | `draft.md`（start 阶段创建 change 后移入 change 目录） |
+| DAG 时序 | verify/retro 在 DAG 中但 apply 后才产出（已承认的设计问题） | verify/retro 在 DAG 中，依赖 plans/verify，apply 阶段产出 |
 | apply 范围 | 含 archive + PR | 仅到 retrospective（archive + finish 为收尾阶段） |
 | 指令存放 | 内联在 schema.yaml | 独立 `instructions/*.md` 文件 |
 | 构建方式 | — | 从零构建，保留完全掌控力 |
@@ -473,7 +482,7 @@ retrospective.md 已生成，所有变更已提交。
        │
        ▼
   大模型（内容层）
-  ├── 写文档（proposal / design / specs / tasks / plan / retrospective）
+  ├── 写文档（proposal / design / specs / tasks / plans / retrospective）
   ├── 写代码（subagent 优先，无 subagent 时降级为直接执行）
   └── 交互（explore Q&A / brainstorming 设计审批）
 ```
@@ -611,7 +620,7 @@ alloy update [path]
 | 9 | archive 与 finish 分离，先文档后代码 | archive 提交 spec 归档，finish 处理代码合入。避免"代码合入了 spec 还没跟上"的窗口期 |
 | 10 | fix 以 apply 为 spec 变更分水岭 | 无代码（phase< applied）并入当前 change；有代码新开 change |
 | 11 | receiving-code-review 嵌入 agent 指令 | 行为规范非管道步骤，减少命令数，降低使用门槛 |
-| 12 | SDD / 串行执行由用户选择 | Agent 分析任务特征并推荐，用户决定使用 SDD 还是串行执行。不替用户做执行策略决策 |
+| 12 | SDD / 串行执行由用户选择 | Agent 从 plans.md header 读取执行策略作为推荐，用户决定使用 SDD 还是串行执行。策略在规划阶段写入，apply 阶段读取 |
 | 13 | retrospective 模板参考 superpowers-bridge | 纯 AI 生成，§0-§6 证据驱动，Forward-Pointer 保留审计线索 |
 | 14 | 不设子步骤状态追踪 | phase + worktree + 文件检查足够 Agent 判断恢复位置 |
 | 15 | CLI 守门，Skill 信任 | 环境依赖由 `alloy init` 确保，Skill 不做手动 fallback。依赖缺失时引导 `alloy init` |
@@ -621,6 +630,7 @@ alloy update [path]
 | 19 | /alloy:finish 保留为独立命令 | archive 时选 keep 后，后续可手动调 finish 合入；无需重跑 archive |
 | 20 | 制品上下文一致性决定输出语言 | 不硬编码语言要求也不绑定特定平台机制。指令/模板写什么语言，Agent 自然产出什么语言 |
 | 21 | apply 关键决策点用户有感 | git 初始化、worktree 创建、执行策略（SDD vs 串行）三个决策点均展示选项让用户选择 |
+| 22 | 一个制品，一次提交 | 每个制品审查通过后立即 hash-lock + 单独 git commit，records 记录 hash。避免大爆炸提交，每个制品可独立回溯、独立 revert、独立 cherry-pick |
 
 ---
 
