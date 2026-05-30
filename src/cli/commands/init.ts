@@ -140,9 +140,15 @@ export async function initCommand(opts: InitOptions): Promise<void> {
         // 文件不存在，稍后创建
       }
       if (!rcContent.includes("alloy completion")) {
+        const block = [
+          "",
+          "# Alloy shell 补全 — Tab 自动补全 alloy 命令",
+          completionLine,
+          "",
+        ].join("\n");
         await writeFile(
           rcFile,
-          rcContent.trimEnd() + "\n" + completionLine + "\n",
+          rcContent.trimEnd() + block,
           "utf-8"
         );
         console.log(`     ✓ shell 补全已注册 → ${rcFile}`);

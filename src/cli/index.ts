@@ -125,7 +125,13 @@ async function installCompletion(shell: string): Promise<void> {
     return;
   }
 
-  await writeFile(rcFile, content.trimEnd() + "\n" + completionLine + "\n", "utf-8");
+  const block = [
+    "",
+    "# Alloy shell 补全 — Tab 自动补全 alloy 命令",
+    completionLine,
+    "",
+  ].join("\n");
+  await writeFile(rcFile, content.trimEnd() + block, "utf-8");
   console.log(`✓ shell 补全已注册 → ${rcFile}`);
   console.log(`  运行 'source ${rcFile}' 或重新打开终端使其生效`);
 }
