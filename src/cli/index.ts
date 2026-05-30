@@ -11,6 +11,7 @@ import { generateCompletion } from "./commands/completion.js";
 import { stateCommand } from "./commands/internal/state.js";
 import { guardCommand } from "./commands/internal/guard.js";
 import { archiveCommand } from "./commands/internal/archive.js";
+import { recordCommand } from "./commands/internal/record.js";
 
 const USAGE = `
 alloy <command> [options]
@@ -292,6 +293,10 @@ async function main() {
     }
     case "_archive": {
       await archiveCommand(restArgs);
+      break;
+    }
+    case "_record": {
+      await recordCommand(restArgs);
       break;
     }
     default:
