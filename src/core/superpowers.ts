@@ -1,15 +1,26 @@
 import { execSync } from "node:child_process";
+import { checkSuperpowers } from "./health.js";
+import { loadCompat } from "./compat.js";
+import { getPackageRoot } from "../utils/fs.js";
 
 export async function installSuperpowers(
   scope: "global" | "project"
 ): Promise<"installed" | "skipped" | "failed"> {
-  try {
-    const output = execSync("npx skills list", { stdio: "pipe" }).toString();
-    if (output.includes("brainstorming") && output.includes("using-git-worktrees")) {
-      return "skipped";
-    }
-  } catch {
-    // 未安装
+  const packageDir = getPackageRoot();
+  const config = await loadCompat(packageDir);
+  const dep = await checkSuperpowers(config.compatible.superpowers);
+
+  if (dep.installed && dep.compatible) {
+    const versionInfo = dep.version ? ` v${dep.version}` : "";
+    console.log(`     ✓ Superpowers${versionInfo} 已安装，跳过`);
+    return "skipped";
+  }
+
+  if (dep.installed && !dep.compatible) {
+    const versionInfo = dep.version ? ` v${dep.version}` : "";
+    console.log(
+      `     ⚠ Superpowers${versionInfo} 不满足要求 ${config.compatible.superpowers}，重新安装...`
+    );
   }
 
   const scopeFlag = scope === "global" ? "-g" : "";
@@ -22,7 +33,6 @@ export async function installSuperpowers(
     });
     return "installed";
   } catch {
-    console.log("     ✗ Superpowers 安装失败，请检查网络连接后重试 alloy init");
     return "failed";
   }
 }

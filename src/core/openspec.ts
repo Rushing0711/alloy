@@ -3,6 +3,9 @@ import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
+import { checkOpenSpec } from "./health.js";
+import { loadCompat } from "./compat.js";
+import { getPackageRoot } from "../utils/fs.js";
 
 function createCustomProfile(): { env: NodeJS.ProcessEnv; cleanup: () => void } {
   const configHome = mkdtempSync(join(tmpdir(), "alloy-openspec-profile-"));
@@ -31,12 +34,19 @@ function createCustomProfile(): { env: NodeJS.ProcessEnv; cleanup: () => void } 
 }
 
 export async function installOpenSpecCli(): Promise<"installed" | "skipped" | "failed"> {
-  try {
-    execSync("openspec --version", { stdio: "pipe" });
-    console.log("     ✓ OpenSpec CLI 已安装，跳过");
+  const packageDir = getPackageRoot();
+  const config = await loadCompat(packageDir);
+  const dep = checkOpenSpec(config.compatible.openspec);
+
+  if (dep.installed && dep.compatible) {
+    console.log(`     ✓ OpenSpec CLI ${dep.version} 已安装，跳过`);
     return "skipped";
-  } catch {
-    // 未安装，继续
+  }
+
+  if (dep.installed && !dep.compatible) {
+    console.log(
+      `     ⚠ OpenSpec ${dep.version} 不满足要求 ${config.compatible.openspec}，重新安装...`
+    );
   }
 
   try {
