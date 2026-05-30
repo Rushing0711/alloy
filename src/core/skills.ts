@@ -8,6 +8,11 @@ export async function deployCommands(opts: DeployOptions): Promise<string[]> {
   const deployed: string[] = [];
   const packageRoot = getPackageRoot();
 
+  // 始终从冒号源目录读取（commands/alloy/），横线版从冒号源自动生成
+  const colonSourceDir = join(packageRoot, "commands", "alloy");
+  const { readdir } = await import("node:fs/promises");
+  const entries = await readdir(colonSourceDir, { withFileTypes: true });
+
   for (const agent of opts.targetAgents) {
     // Codex: project 模式跳过
     if (agent.globalOnly && opts.scope === "project") {
@@ -18,22 +23,29 @@ export async function deployCommands(opts: DeployOptions): Promise<string[]> {
     const targetDir = getCommandTargetDir(agent, opts.scope, opts.projectPath);
     await mkdir(targetDir, { recursive: true });
 
-    const sourceDir = agent.supportsColonCommands
-      ? join(packageRoot, "commands", "alloy")
-      : join(packageRoot, "commands");
-
-    const { readdir } = await import("node:fs/promises");
-    const entries = await readdir(sourceDir, { withFileTypes: true });
-
     for (const entry of entries) {
       if (!entry.isFile()) continue;
-      // 横线模式：只拷贝 alloy-*.md 文件
-      if (!agent.supportsColonCommands && !entry.name.startsWith("alloy-")) continue;
 
-      const src = join(sourceDir, entry.name);
-      const dest = join(targetDir, entry.name);
-      await cp(src, dest);
-      deployed.push(dest);
+      const src = join(colonSourceDir, entry.name);
+
+      if (agent.supportsColonCommands) {
+        // 冒号版：直接拷贝到 alloy/ 子目录
+        const dest = join(targetDir, entry.name);
+        await cp(src, dest);
+        deployed.push(dest);
+      } else {
+        // 横线版：从冒号源自动生成 — 文件名和 frontmatter 中 : 替换为 -
+        const dashFilename = `alloy-${entry.name}`; // start.md → alloy-start.md
+        const dest = join(targetDir, dashFilename);
+
+        const content = await readFile(src, "utf-8");
+        const convertedContent = content.replace(
+          /name: "Alloy: (.+)"/,
+          'name: "Alloy-$1"'
+        );
+        await writeFile(dest, convertedContent, "utf-8");
+        deployed.push(dest);
+      }
     }
   }
 
