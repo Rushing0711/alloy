@@ -47,10 +47,15 @@ export async function promptMultiSelect(
 ): Promise<string[]> {
   if (supportsInquirer) {
     const { checkbox } = await import("@inquirer/prompts");
+    // @inquirer checkbox 的 validate 传入 NormalizedChoice[]，适配为 string[]
+    const rawValidate = opts?.validate;
     return checkbox({
       message,
       choices: choices.map((c) => ({ name: c.name, value: c.value })),
-      validate: opts?.validate,
+      validate: rawValidate
+        ? (vals: readonly { name: string; value: string }[]) =>
+            rawValidate(vals.map((v) => v.value))
+        : undefined,
     }) as Promise<string[]>;
   }
 
