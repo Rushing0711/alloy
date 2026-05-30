@@ -182,7 +182,7 @@ alloy _record check openspec/changes/<name> plans
 ### Step 5/5：复盘
 
 > [Step 5/5] retrospective
-> 正在生成证据驱动复盘报告（§0-§6）...
+> 正在生成全周期复盘报告（§0-§6）...
 
 读取 `instructions/retrospective.md`，按模板 `templates/retrospective.md` 生成 `openspec/changes/<name>/retrospective.md`。
 
@@ -196,13 +196,19 @@ alloy _record check openspec/changes/<name> verify
 
 **PRECHECK：** verify.md 存在且 Overall Decision 不是 FAIL，否则 STOP。
 
-**§0 Evidence：** 收集量化证据（git log、diff stat、任务完成比、提交链等）。
+**§0 量化全景：** 三来源自动收集——`.alloy.yaml` records（制品审批链）+ `git log`（全周期 commit，按 type 和阶段分组）+ 文件系统（任务完成比、变更规模、测试覆盖信号）。
+
 **§1 Wins：** `[evidence: ...]` 格式，聚焦可复现的成功模式。
+
 **§2 Misses：** 🔴 blocking / 🟡 painful / 📌 nit 三级严重度。
-**§3 Plan Deviations：** 计划 vs 实际变更表格。
-**§4 Skill Compliance：** 技能清单 ✓/✗，跳过的技能填三问（跳过什么/为什么/如何防复发）。
+
+**§3 Plan Deviations：** 计划 vs 实际变更表格，含 strategy 偏差说明。
+
+**§4 全周期技能审计：** Agent 自报 start/plan/apply 三阶段 11 项技能/命令使用情况（✓/✗）。同一 session 亲历，无需推断。跳过的技能填三问（跳过什么/为什么/如何防复发）。
+
 **§5 Surprises：** 被推翻的假设。
-**§6 Promote Candidates：** `- [ ]` checklist + Why/How to apply，跨周期 carry-forward。
+
+**§6 Promote Candidates：** `- [ ]` checklist + Why/How to apply，跨周期 carry-forward。标记 `Promote to: memory` 的条目在 archive 阶段由 Agent 写入 memory。
 
 复盘是证据驱动的——每条结论都引用具体 commit 或文件。
 跳过策略：单 commit 小修可跳过，写 "Skipped: single-commit fix, no insights"。

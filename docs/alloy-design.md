@@ -138,7 +138,9 @@ phase → planned
   3. superpowers:verification-before-completion → 代码层验证（测试通过、行为正确）
   4. /opsx:verify → 制品层验证（7 项结构化检查 → verify.md）。
      CLI 输出语言不由 Agent 控制，Agent 必须将 verify.md 重写为与指令/模板一致的语言。
-  5. 纯 AI 生成 → retrospective.md（证据驱动复盘，§0-§6）。
+  5. 纯 AI 生成 → retrospective.md（全周期复盘，§0-§6）。
+     §0 量化全景：三来源自动收集——.alloy.yaml records（制品审批链）+ git log（全分支按 type/阶段分组）+ 文件系统（任务完成比、变更规模、测试覆盖信号）。
+     §4 全周期技能审计：Agent 自报 start/plan/apply 三阶段 11 项技能/命令使用情况。同一 session 亲历，无需推断。
      输出语言与指令/模板上下文保持一致，代码标识符和 commit hash 保持原始语言。
 
 验证通过后，verify.md 和 retrospective.md 各自 hash-lock + 单独 git commit，再通过 guard 校验。
@@ -153,9 +155,10 @@ phase → applied
 前置检查（硬拒绝）: phase = applied + verify.md 存在且 Overall Decision 不是 FAIL
 
 执行:
-  1. alloy-archive.sh → openspec archive -y → sync delta spec + 归档到 archive/YYYY-MM-DD-<name>/
-  2. git add + git commit → 提交归档变更（delta spec 合并 + 归档移动）
-  3. phase → archived
+  1. /opsx:archive → sync delta spec + 归档到 archive/YYYY-MM-DD-<name>/
+  2. 跨周期反馈：读取 retrospective.md §6 Promote Candidates，将 Promote to: memory 的条目写入 ~/.claude/memory/，让教训进入后续 session
+  3. git add + git commit → 提交归档变更（delta spec 合并 + 归档移动）
+  4. phase → archived
 
 archive 只做 spec 归档和归档提交，不涉及代码合并。代码合入由 /alloy:finish 完成。
 ```
@@ -417,7 +420,7 @@ Apply:
     │                      （SDD 内部含 TDD + code-review）
     ├── 代码层验证     ← superpowers:verification-before-completion
     ├── 制品层验证     ← /opsx:verify → verify.md（7 项结构化检查）
-    ├── 复盘          → retrospective.md（纯 AI 生成，证据驱动 §0-§6）
+    ├── 复盘          → retrospective.md（全周期审计，§0 量化全景 + §4 三阶段技能审计 + §1-§6 定性）
     ├── git commit    ← verify.md hash-locked + 单独提交
     └── 复盘提交       ← retrospective.md hash-locked + 单独提交，再通过 guard 校验更新 phase
 
@@ -642,7 +645,7 @@ alloy update [path]
 | 10 | fix 以 apply 为 spec 变更分水岭 | 无代码（phase< applied）并入当前 change；有代码新开 change |
 | 11 | receiving-code-review 嵌入 agent 指令 | 行为规范非管道步骤，减少命令数，降低使用门槛 |
 | 12 | SDD / 串行执行由用户选择 | Agent 从 plans.md header 读取执行策略作为推荐，用户决定使用 SDD 还是串行执行。策略在规划阶段写入，apply 阶段读取 |
-| 13 | retrospective 模板参考 superpowers-bridge | 纯 AI 生成，§0-§6 证据驱动，Forward-Pointer 保留审计线索 |
+| 13 | retrospective 模板参考 superpowers-bridge | 全周期审计，§0 量化全景（三来源自动收集）+ §4 三阶段技能审计（Agent 自报）+ §6 Promote Candidates 跨周期 carry-forward |
 | 14 | 不设子步骤状态追踪 | phase + worktree + 文件检查足够 Agent 判断恢复位置 |
 | 15 | CLI 守门，Skill 信任 | 环境依赖由 `alloy init` 确保，Skill 不做手动 fallback。依赖缺失时引导 `alloy init` |
 | 16 | scope 只控制 skill 安装位置 | Alloy + Superpowers skill 受 scope 控制；OpenSpec `openspec/` 目录始终在项目内；默认 project 级别 |

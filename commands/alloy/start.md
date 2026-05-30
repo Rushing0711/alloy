@@ -41,10 +41,13 @@ tags: [alloy, workflow]
 
 技能加载后，按其指引自由探索项目上下文和需求空间。
 
-**什么算不够（反例）：**
-- 只看了 README 就算"探查完成"
-- 没有实际读取任何代码文件
-- 没有检查已有的 OpenSpec spec 文件
+**额外上下文——来自历史 retrospective 的教训：** 在探查阶段，扫描 `openspec/changes/archive/` 下最近 3 个已归档 change 的 `retrospective.md`，提取以下信息作为本次 brainstorming 的参考：
+
+- **§5 意外发现**：上一次有哪些假设被推翻？这次可能也有类似盲区
+- **§6 值得推广**：有哪些未勾选的 carry-forward item？这次可以直接勾上
+- **§4 技能跳过模式**：如果连续两个 retrospective 中同一技能被 ✗，提醒用户该技能可能不适合本项目
+
+> 这些信息不是约束——只是在 brainstorming 时提醒 Agent 和用户"上次我们踩了这个坑"。
 
 ---
 

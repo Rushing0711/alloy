@@ -5,17 +5,84 @@
 > 2. 确认 verify.md 的 Overall Decision 不是 FAIL
 > 两项都通过后才生成 retrospective。每项结论引用具体 commit hash、文件路径或测试名称。
 
-## §0 量化证据
+## §0 量化全景
 
-- 提交数：
-- 变更规模（文件数/行数）：
-- 任务完成比：
-- 工作时间跨度：
-- Subagent 调度次数：
-- 新增外部依赖：
-- 验证状态：
-- 测试覆盖信号：
-- 提交链：`<base>..HEAD`
+### 全周期时间线
+<!-- 从 .alloy.yaml records 提取：created_at → 每个制品的 committed_at -->
+
+| 制品 | 审批人 | Hash | 审批时间 |
+|------|--------|------|---------|
+| draft | | | |
+| proposal | | | |
+| design | | | |
+| specs | | | |
+| tasks | | | |
+| plans | | | |
+| verify | | | |
+| retrospective | | | |
+
+### Commit 汇总（按 type）
+<!-- git log <base>..HEAD --oneline，按 Conventional Commits type 分组 -->
+
+| Type | 数量 |
+|------|-----|
+| feat | |
+| docs | |
+| chore | |
+| fix | |
+| test | |
+| 其他 | |
+
+### Commit 汇总（按阶段）
+<!-- 根据 commit message 前缀分组 -->
+
+| 阶段 | 数量 |
+|------|-----|
+| start | |
+| plan | |
+| apply | |
+
+### 阶段耗时
+<!-- .alloy.yaml created_at + git log 最后 commit 时间 -->
+
+| 阶段 | 开始 | 结束 | 耗时 |
+|------|------|------|-----|
+| start | | | |
+| plan | | | |
+| apply | | | |
+| **总计** | | | |
+
+### 任务完成比
+<!-- tasks.md checkbox -->
+
+已勾 / 总数 = xx%
+
+### 变更规模
+<!-- git diff --stat <base>..HEAD -->
+
+- 文件数：
+- 行数（+/-）：
+
+### Worktree 状态
+<!-- .alloy.yaml worktree -->
+
+### 计划策略 vs 实际策略
+<!-- plans.md frontmatter strategy vs Agent 自报 -->
+
+- 计划推荐：
+- 实际采用：
+- 偏差原因（如有）：
+
+### 验证状态
+<!-- verify.md Overall Decision -->
+
+### 测试覆盖信号
+<!-- 测试文件 vs 源文件变更比例 -->
+
+### 完整提交链
+<!-- git log <base>..HEAD --oneline -->
+```
+```
 
 ## §1 做对了什么
 
@@ -33,17 +100,37 @@
 
 <!-- 哪些 task 的范围在执行中发生了变化，为什么 -->
 
-## §4 技能遵循度
+| Plan task | What changed | Why |
+|-----------|-------------|-----|
+| | | |
 
-| 技能 | 使用 |
-|------|:----:|
-| superpowers:using-git-worktrees | |
-| superpowers:subagent-driven-development | |
-| superpowers:test-driven-development（transitive） | |
-| superpowers:requesting-code-review（transitive） | |
-| superpowers:verification-before-completion | |
+## §4 全周期技能审计
 
-默认期望所有行都是 ✓。
+### start 阶段
+
+| 技能/命令 | 使用 |
+|----------|:---:|
+| `opsx:explore` | |
+| `superpowers:brainstorming` | |
+
+### plan 阶段
+
+| 技能/命令 | 使用 |
+|----------|:---:|
+| `/opsx:continue` | |
+| `superpowers:writing-plans` | |
+
+### apply 阶段
+
+| 技能/命令 | 使用 |
+|----------|:---:|
+| `superpowers:using-git-worktrees` | |
+| `superpowers:subagent-driven-development` | |
+| `superpowers:executing-plans` | |
+| `superpowers:test-driven-development` | |
+| `superpowers:requesting-code-review` | |
+| `superpowers:verification-before-completion` | |
+| `/opsx:verify` | |
 
 ### Deliberately Skipped Skills
 

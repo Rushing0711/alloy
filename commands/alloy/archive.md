@@ -63,7 +63,13 @@ test -f openspec/changes/<name>/verify.md && ! grep -q '^- \[x\] ❌ FAIL' opens
 - `/opsx:archive` 返回错误（权限、冲突等）→ [HARD STOP]，不推进 phase
 - `/opsx:archive` 不可用（OpenSpec 未安装）→ 引导用户运行 `alloy init` 安装 OpenSpec
 
-归档成功后，Agent 执行 git commit（确保归档变更被版本追踪）：
+归档成功后，先处理跨周期反馈：
+
+**读取 retrospective.md §6 Promote Candidates：** 检查是否有标记 `→ Promote to: memory` 的条目。若有，将 Why/How to apply 写入 `~/.claude/memory/` 对应的 memory 文件（feedback 类型），使其在后续 session 中自动加载。
+
+> 这是 retrospective 从"死文档"变成"活反馈"的关键步骤——教训不跨 cycle 就不是教训。
+
+然后执行 git commit（确保归档变更被版本追踪）：
 ```bash
 git add openspec/specs/ openspec/changes/archive/ 2>/dev/null
 git commit -m "chore(<name>): Delta Spec 已同步并归档" 2>/dev/null

@@ -51,7 +51,7 @@ change-name 在 draft.md 完成后自然浮现。`/opsx:new <name>` 执行时会
 | │ │（无 subagent 支持时降级：`superpowers:executing-plans`） | |
 | ├ 代码层验证 | `superpowers:verification-before-completion` | 测试通过 |
 | ├ 制品层验证 | `/opsx:verify` | **`verify.md`**（7 项结构化检查） |
-| └ 复盘 | 纯 AI 生成 | **`retrospective.md`**（证据驱动 §0-§6） |
+| └ 复盘 | 纯 AI 生成（全周期审计） | **`retrospective.md`**（§0 量化全景 + §4 三阶段技能审计 + §1-§6 定性分析） |
 
 ### 收尾阶段
 
@@ -100,7 +100,7 @@ OpenSpec 执行:
         │     或 superpowers:executing-plans（无 subagent 支持时降级）
         ├── superpowers:verification-before-completion（代码层验证）
         ├── /opsx:verify → verify.md（制品层验证，7 项结构化检查）
-        └── retrospective.md（证据驱动复盘）
+        └── retrospective.md（全周期审计复盘）
 
 收尾:
     人工测试
