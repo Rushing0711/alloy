@@ -94,6 +94,30 @@ tags: [alloy, workflow]
 
 ---
 
+用户确认方案后，执行以下步骤：
+
+1. **建议 change name**——根据 draft 内容建议 kebab-case 名称，用户确认
+2. **调用 `/opsx:new <name>`** 创建 change 目录
+3. **将 draft.md 移入 change 目录** `openspec/changes/<name>/`
+4. **写入 state**：
+   ```bash
+   alloy _state write openspec/changes/<name> phase started
+   alloy _state write openspec/changes/<name> worktree null
+   alloy _state write openspec/changes/<name> schema_version 1
+   alloy _state write openspec/changes/<name> created_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+   ```
+5. **计算并记录 hash，然后 commit**：
+   ```bash
+   DRAFT_HASH=$(alloy _record compute openspec/changes/<name> draft)
+   APPROVED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+   APPROVER=$(git config user.name)
+   alloy _record write openspec/changes/<name> draft "$DRAFT_HASH" "$APPROVED_AT" "$APPROVER"
+   git add openspec/changes/<name>/
+   git commit -m "start(<name>): draft 已确认"
+   ```
+
+---
+
 ### 完成
 
 ```
@@ -101,12 +125,14 @@ tags: [alloy, workflow]
 │ Alloy [1/5] · Phase: Start — DONE    │
 └──────────────────────────────────────┘
 
-draft.md 已生成。
+→ Change: <name>
+→ Phase: started
+→ draft.md 已锁定（hash + commit）
 
 准备好后，运行 `/alloy:plan` 进入规划阶段。
 ```
 
-- draft.md 在项目根目录，change 目录由 plan 阶段创建
+- draft.md 已在 change 目录，项目根目录不再有 draft.md
 - 完成后不要自动进入 plan
 
 ---
