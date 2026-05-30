@@ -18,7 +18,7 @@ tags: [alloy, workflow]
 
 ## 前置检查
 
-1. 确认 `plan.md` 存在于 change 目录，不存在则报错
+1. 确认 `plans.md` 存在于 change 目录，不存在则报错
 2. 通过 `alloy _guard` 确认 change 的 phase 为 `planned`：
    ```bash
    alloy _guard openspec/changes/<name> applied
@@ -81,25 +81,38 @@ tags: [alloy, workflow]
 
 ### [Step 2/5] 任务实现
 
-> 按 plan.md 微步骤执行实现...
+> 按 plans.md 微步骤执行实现...
 
-**先评估，再让用户选择执行策略：**
+**先分析，再展示推荐方案：**
 
-1. 读取 `plan.md` 和 `tasks.md`，分析任务特征——任务数、独立性、耦合度、并行潜力
-2. 将分析结果展示给用户，附推荐方案和理由：
-   > [Step 2/5] 执行策略选择
-   > ──────────────────────────────────────
-   >
-   > **任务分析：** <N 个任务，哪些独立/哪些耦合>
-   >
-   > **推荐方案：** <SDD / 串行执行>
-   > **理由：** <一句话解释为什么>
-   >
-   > **1.** 使用 SDD — 派发子 agent 并行执行（任务独立、可并行时推荐）
-   > **2.** 串行执行 — 当前 session 逐步实现（任务紧密耦合时推荐）
+1. 读取 `plans.md` 的 YAML frontmatter，提取 `strategy` 和 `reason`
+2. 读取 `tasks.md`，分析任务特征——任务数、独立性、耦合度、并行潜力
+3. 展示推荐方案（来自 plans.md header），用户可覆写：
 
-   **必须等待用户明确选择后才能继续。**
-3. 用户选择后，加载对应技能，**按其内部指引执行**，alloy 不重复建造选择闸门
+   ```
+   [Step 2/5] 执行策略选择
+   ──────────────────────────────────────
+
+   任务分析：<N 个任务，哪些独立/哪些耦合>
+
+   推荐方案：<SDD / 串行>（规划阶段建议）
+   理由：<来自 plans.md reason>
+
+   1. SDD — 派发子 agent 并行执行（推荐）
+   2. 串行执行 — 当前 session 逐步实现
+   ```
+
+**如果 plans.md 有 strategy header：**
+- 对应选项标记为"（推荐）"
+- 用户不明确选择时，默认采用推荐方案
+
+**如果 plans.md 无 strategy header（兼容旧 change）：**
+- 分析任务特征后给出推荐
+- 两个选项不标记推荐，等用户明确选择
+
+**必须等待用户明确选择后才能继续。**
+
+4. 用户选择后，加载对应技能，**按其内部指引执行**，alloy 不重复建造选择闸门
 
 Superpowers 技能内部行为（alloy 仅编排，不替代）：
 - SDD：读取 plan → 分派子 agent → 每个子 agent TDD + 两阶段 review（spec + code quality）
@@ -162,16 +175,30 @@ Superpowers 技能内部行为（alloy 仅编排，不替代）：
 > ✓ retrospective.md  已生成
 ```
 
-**验证通过后提交所有变更：**
-```bash
-git add -A
-git commit -m "apply: <name> 实现完成——代码 + 制品验证 + 复盘"
-```
+**apply 阶段 commit 规则：**
+- 代码变更：SDD 过程中每次成功验证后立即 commit
+- verify.md：审批通过后 hash + commit：
+  ```bash
+  HASH=$(alloy _record compute openspec/changes/<name> verify)
+  APPROVED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  APPROVER=$(git config user.name)
+  alloy _record write openspec/changes/<name> verify "$HASH" "$APPROVED_AT" "$APPROVER"
+  git add openspec/changes/<name>/verify.md
+  git commit -m "apply(<name>): verify 已确认"
+  ```
+- retrospective.md：审批通过后 hash + commit：
+  ```bash
+  HASH=$(alloy _record compute openspec/changes/<name> retrospective)
+  alloy _record write openspec/changes/<name> retrospective "$HASH" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(git config user.name)"
+  git add openspec/changes/<name>/retrospective.md
+  git commit -m "apply(<name>): retrospective 已确认"
+  ```
 
 **通过 `alloy _guard` 校验并更新 phase：**
 ```bash
 alloy _guard openspec/changes/<name> applied --apply
 ```
+guard 自动校验 hash 一致性后推进 phase。
 
 ```
 💡 建议：可以执行 QA 测试或浏览器测试等质量检查，确认后再进入 archive。
@@ -187,3 +214,4 @@ alloy _guard openspec/changes/<name> applied --apply
 - **verify 不通过不结束 apply** —— 两层验证（代码层 + 制品层），任意 FAIL 回到 SDD
 - **retrospective PRECHECK** —— verify.md 不存在或 Overall Decision 是 FAIL 时 STOP
 - **apply 完成后不要自动进入 archive** —— archive 是人工闸门，留给用户空间做 QA
+- **每制品独立 commit** —— 不再使用 `git add -A`，verify 和 retrospective 单独 hash 锁定并 commit
