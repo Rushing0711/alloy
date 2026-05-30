@@ -23,7 +23,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { loadCompat } from "../../src/core/compat.js";
 import { detectEnv } from "../../src/core/detect.js";
-import { runHealthCheck } from "../../src/core/health.js";
+import { runHealthCheck, checkOpenSpec, checkSuperpowers } from "../../src/core/health.js";
 
 const MOCK_CONFIG = {
   compatible: {
@@ -367,5 +367,95 @@ describe("runHealthCheck", () => {
     expect(spResult).toBeDefined();
     expect(spResult!.status).toBe("fail");
     expect(spResult!.current).toBe("未安装");
+  });
+
+  describe("checkOpenSpec", () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it("已安装且版本兼容时返回 installed=true compatible=true", () => {
+      vi.mocked(execSync).mockReturnValue(Buffer.from("1.3.1\n") as any);
+
+      const result = checkOpenSpec(">=1.3.0 <2.0.0");
+      expect(result.installed).toBe(true);
+      expect(result.version).toBe("1.3.1");
+      expect(result.compatible).toBe(true);
+    });
+
+    it("已安装但版本不兼容时返回 compatible=false", () => {
+      vi.mocked(execSync).mockReturnValue(Buffer.from("1.2.0\n") as any);
+
+      const result = checkOpenSpec(">=1.3.0 <2.0.0");
+      expect(result.installed).toBe(true);
+      expect(result.compatible).toBe(false);
+    });
+
+    it("未安装时返回 installed=false", () => {
+      vi.mocked(execSync).mockImplementation(() => {
+        throw new Error("not found");
+      });
+
+      const result = checkOpenSpec(">=1.3.0 <2.0.0");
+      expect(result.installed).toBe(false);
+      expect(result.compatible).toBe(false);
+    });
+  });
+
+  describe("checkSuperpowers", () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it("Claude 插件已安装且版本兼容时返回 installed=true", async () => {
+      vi.mocked(readFile).mockResolvedValue(
+        JSON.stringify({
+          plugins: {
+            "superpowers@claude-plugins-official": [{ version: "5.1.0" }],
+          },
+        })
+      );
+
+      const result = await checkSuperpowers(">=5.0.0 <6.0.0");
+      expect(result.installed).toBe(true);
+      expect(result.version).toBe("5.1.0");
+      expect(result.compatible).toBe(true);
+    });
+
+    it("Claude 插件版本不兼容时返回 compatible=false", async () => {
+      vi.mocked(readFile).mockResolvedValue(
+        JSON.stringify({
+          plugins: {
+            "superpowers@claude-plugins-official": [{ version: "4.0.0" }],
+          },
+        })
+      );
+
+      const result = await checkSuperpowers(">=5.0.0 <6.0.0");
+      expect(result.installed).toBe(true);
+      expect(result.compatible).toBe(false);
+    });
+
+    it("插件文件不存在时 fallback 到 npx skills list", async () => {
+      vi.mocked(readFile).mockRejectedValue(new Error("ENOENT"));
+      vi.mocked(execSync).mockReturnValue(
+        Buffer.from("brainstorming\nusing-git-worktrees\ntdd\n") as any
+      );
+
+      const result = await checkSuperpowers(">=5.0.0 <6.0.0");
+      expect(result.installed).toBe(true);
+      expect(result.compatible).toBe(true);
+    });
+
+    it("均未安装时返回 installed=false", async () => {
+      vi.mocked(readFile).mockRejectedValue(new Error("ENOENT"));
+      vi.mocked(execSync).mockImplementation(() => {
+        throw new Error("not found");
+      });
+
+      const result = await checkSuperpowers(">=5.0.0 <6.0.0");
+      expect(result.installed).toBe(false);
+      expect(result.compatible).toBe(false);
+    });
   });
 });
