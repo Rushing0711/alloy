@@ -16,7 +16,6 @@ export interface DeployOptions {
 export interface EnvInfo {
   nodeVersion: string;
   gitInstalled: boolean;
-  claudeCodeInstalled: boolean;
 }
 
 export interface CompatConfig {

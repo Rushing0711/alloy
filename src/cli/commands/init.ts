@@ -62,10 +62,9 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   const env = detectEnv();
   console.log(`     Node.js ${env.nodeVersion} ✓`);
   console.log(`     git ${env.gitInstalled ? "✓" : "✗ 未安装"}`);
-  console.log(`     Claude Code ${env.claudeCodeInstalled ? "✓" : "✗ 未安装"}`);
 
-  if (!env.gitInstalled || !env.claudeCodeInstalled) {
-    console.error("\n  ❌ 缺少必要依赖，请先安装 git 和 Claude Code");
+  if (!env.gitInstalled) {
+    console.error("\n  ❌ 缺少必要依赖，请先安装 git");
     process.exit(1);
   }
 

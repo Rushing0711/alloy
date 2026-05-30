@@ -2,7 +2,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import { readFileSync, lstatSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
-import { deploySkills, deploySchema } from "../../core/skills.js";
+import { deployCommands, deploySchema } from "../../core/skills.js";
+import { detectDeployedAgents } from "../../core/agents.js";
 import { runHealthCheck } from "../../core/health.js";
 import { getPackageRoot } from "../../utils/fs.js";
 import { promptConfirm } from "../../utils/prompt.js";
@@ -20,14 +21,14 @@ function isDevMode(): boolean {
 }
 
 function detectScope(projectPath: string): "global" | "project" | null {
-  const probe = (dir: string) => existsSync(join(dir, "alloy"));
+  const probe = (dir: string) => existsSync(join(dir, "commands", "alloy"));
 
   // 先检测项目级别
-  if (probe(join(projectPath, ".claude", "skills"))) return "project";
+  if (probe(join(projectPath, ".claude"))) return "project";
 
   // 再检测全局
   const home = process.env.HOME || process.env.USERPROFILE || "~";
-  if (probe(join(home, ".claude", "skills"))) return "global";
+  if (probe(join(home, ".claude"))) return "global";
 
   return null;
 }
@@ -51,12 +52,6 @@ export async function updateCommand(projectPath: string): Promise<string[]> {
     results.push("⚠️ Alloy 未初始化，请先运行 alloy init");
     return results;
   }
-
-  const deployOpts: DeployOptions = {
-    scope,
-    injectClaudeMd: false,
-    projectPath,
-  };
 
   // 2. 开发模式 vs 用户模式
   const dev = isDevMode();
@@ -105,12 +100,25 @@ export async function updateCommand(projectPath: string): Promise<string[]> {
     }
   }
 
-  // 3. 部署 skill + schema
+  // 3. 部署 commands
+  const deployedAgents = detectDeployedAgents(scope, projectPath);
+  if (deployedAgents.length === 0) {
+    results.push("⚠️ 未检测到已部署的 Alloy commands，请先运行 alloy init");
+    return results;
+  }
+
+  const deployOpts: DeployOptions = {
+    scope,
+    injectClaudeMd: false,
+    projectPath,
+    targetAgents: deployedAgents,
+  };
+
   try {
-    const paths = await deploySkills(deployOpts);
-    results.push(`✓ skills/ → 部署 ${paths.length} 个 skill`);
+    const paths = await deployCommands(deployOpts);
+    results.push(`✓ commands/ → 部署 ${paths.length} 个文件到 ${deployedAgents.length} 个 agent`);
   } catch {
-    results.push("⚠️ skill 部署失败");
+    results.push("⚠️ command 部署失败");
   }
   try {
     await deploySchema(deployOpts);

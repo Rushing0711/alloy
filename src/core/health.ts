@@ -7,16 +7,9 @@ import type { DepCheckResult, HealthCheckResult } from "./types.js";
 import { loadCompat } from "./compat.js";
 import { detectEnv } from "./detect.js";
 
-const EXPECTED_SKILLS = [
-  "alloy",
-  "alloy-start",
-  "alloy-plan",
-  "alloy-apply",
-  "alloy-archive",
-  "alloy-discard",
-  "alloy-finish",
-  "alloy-fix",
-  "alloy-status",
+const EXPECTED_COMMAND_IDS = [
+  "start", "plan", "apply", "archive",
+  "finish", "fix", "discard", "status",
 ];
 
 /**
@@ -179,47 +172,45 @@ export async function runHealthCheck(
     });
   }
 
-  // 6. Skill 文件完整性（检查 .claude/skills/ 和 skills/ 两个路径）
+  // 6. Command 文件完整性
   try {
     const home = process.env.HOME || process.env.USERPROFILE || "~";
-    const skillsDir =
+    const commandsDir =
       scope === "global"
-        ? join(home, ".claude", "skills")
-        : join(projectPath, ".claude", "skills");
-    const sourceSkillsDir = join(projectPath, "skills");
+        ? join(home, ".claude", "commands")
+        : join(projectPath, ".claude", "commands");
 
-    let skillsStatus = checkSkillsIntegrity(skillsDir);
-    // 如果 .claude/skills/ 不完整，尝试检查 skills/（源码目录）
-    if (skillsStatus.status === "fail") {
-      const sourceStatus = checkSkillsIntegrity(sourceSkillsDir);
+    let commandsStatus = checkCommandsIntegrity(commandsDir);
+    // 如果 .claude/commands/ 不完整，尝试检查 commands/（源码目录）
+    if (commandsStatus.status === "fail") {
+      const sourceDir = join(projectPath, "commands");
+      const sourceStatus = checkCommandsIntegrity(sourceDir);
       if (sourceStatus.status === "pass") {
-        skillsStatus = {
+        commandsStatus = {
           ...sourceStatus,
-          current: `${sourceStatus.current}（来源: skills/）`,
+          current: `${sourceStatus.current}（来源: commands/）`,
         };
       }
     }
-    results.push(skillsStatus);
+    results.push(commandsStatus);
   } catch {
     results.push({
-      name: "Skills",
+      name: "Commands",
       current: "无法检测",
-      required: `9 个目录`,
+      required: `8 个文件`,
       status: "warn",
     });
   }
 
   // 7. 环境检测
-  const envOk = env.gitInstalled && env.claudeCodeInstalled;
+  const envOk = env.gitInstalled;
   const envDetails: string[] = [];
   if (env.gitInstalled) envDetails.push("git ✓");
   else envDetails.push("git ✗");
-  if (env.claudeCodeInstalled) envDetails.push("Claude Code ✓");
-  else envDetails.push("Claude Code ✗");
   results.push({
     name: "Environment",
     current: envDetails.join("  "),
-    required: "git + Claude Code",
+    required: "git",
     status: envOk ? "pass" : "warn",
   });
 
@@ -286,29 +277,30 @@ async function checkSchemaVersions(
 }
 
 /**
- * 检查 .claude/skills/ 下 9 个 alloy 技能目录是否完整。
+ * 检查 .claude/commands/alloy/ 下 8 个 alloy command 文件是否完整。
  * 内部 helper，不导出。
  */
-function checkSkillsIntegrity(skillsDir: string): HealthCheckResult {
+function checkCommandsIntegrity(commandsDir: string): HealthCheckResult {
+  const alloyDir = join(commandsDir, "alloy");
   const missing: string[] = [];
-  for (const name of EXPECTED_SKILLS) {
-    if (!existsSync(join(skillsDir, name))) {
-      missing.push(name);
+  for (const id of EXPECTED_COMMAND_IDS) {
+    if (!existsSync(join(alloyDir, `${id}.md`))) {
+      missing.push(id);
     }
   }
-  const found = EXPECTED_SKILLS.length - missing.length;
+  const found = EXPECTED_COMMAND_IDS.length - missing.length;
   if (missing.length === 0) {
     return {
-      name: "Skills",
-      current: `${found}/${EXPECTED_SKILLS.length} 目录完整`,
-      required: `${EXPECTED_SKILLS.length} 个目录`,
+      name: "Commands",
+      current: `${found}/${EXPECTED_COMMAND_IDS.length} 完整`,
+      required: `${EXPECTED_COMMAND_IDS.length} 个文件`,
       status: "pass",
     };
   }
   return {
-    name: "Skills",
-    current: `${found}/${EXPECTED_SKILLS.length}（缺失: ${missing.join(", ")}）`,
-    required: `${EXPECTED_SKILLS.length} 个目录`,
+    name: "Commands",
+    current: `${found}/${EXPECTED_COMMAND_IDS.length}（缺失: ${missing.join(", ")}）`,
+    required: `${EXPECTED_COMMAND_IDS.length} 个文件`,
     status: "fail",
     message: `缺失: ${missing.join(", ")}`,
   };

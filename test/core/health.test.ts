@@ -53,7 +53,6 @@ describe("runHealthCheck", () => {
     vi.mocked(detectEnv).mockReturnValue({
       nodeVersion: "20.0.0",
       gitInstalled: true,
-      claudeCodeInstalled: true,
     });
     vi.mocked(existsSync).mockReturnValue(true);
 
@@ -70,7 +69,6 @@ describe("runHealthCheck", () => {
     vi.mocked(detectEnv).mockReturnValue({
       nodeVersion: "16.0.0",
       gitInstalled: true,
-      claudeCodeInstalled: true,
     });
     vi.mocked(existsSync).mockReturnValue(true);
 
@@ -89,7 +87,6 @@ describe("runHealthCheck", () => {
     vi.mocked(detectEnv).mockReturnValue({
       nodeVersion: "20.0.0",
       gitInstalled: true,
-      claudeCodeInstalled: true,
     });
     vi.mocked(existsSync).mockReturnValue(true);
 
@@ -110,7 +107,6 @@ describe("runHealthCheck", () => {
     vi.mocked(detectEnv).mockReturnValue({
       nodeVersion: "20.0.0",
       gitInstalled: true,
-      claudeCodeInstalled: true,
     });
     vi.mocked(existsSync).mockReturnValue(true);
 
@@ -121,7 +117,7 @@ describe("runHealthCheck", () => {
     expect(osResult!.current).toBe("未安装");
   });
 
-  it("应检查环境（git + Claude Code）", async () => {
+  it("应检查环境（git）", async () => {
     vi.mocked(loadCompat).mockResolvedValue(MOCK_CONFIG);
     vi.mocked(execSync).mockReturnValue(Buffer.from("1.3.1\n") as any);
     vi.mocked(readFile).mockResolvedValue(
@@ -130,7 +126,6 @@ describe("runHealthCheck", () => {
     vi.mocked(detectEnv).mockReturnValue({
       nodeVersion: "20.0.0",
       gitInstalled: false,
-      claudeCodeInstalled: true,
     });
     vi.mocked(existsSync).mockReturnValue(true);
 
@@ -147,7 +142,6 @@ describe("runHealthCheck", () => {
     vi.mocked(detectEnv).mockReturnValue({
       nodeVersion: "20.0.0",
       gitInstalled: true,
-      claudeCodeInstalled: true,
     });
     vi.mocked(existsSync).mockReturnValue(true);
     // readFile: installed_plugins.json 返回有效插件数据，package.json 返回版本
@@ -182,7 +176,6 @@ describe("runHealthCheck", () => {
     vi.mocked(detectEnv).mockReturnValue({
       nodeVersion: "20.0.0",
       gitInstalled: true,
-      claudeCodeInstalled: true,
     });
     vi.mocked(existsSync).mockReturnValue(true);
     // readFile: installed_plugins.json 无 superpowers 条目 → fallback
@@ -211,7 +204,7 @@ describe("runHealthCheck", () => {
     expect(spResult!.current).toContain("已安装");
   });
 
-  it("Skills: .claude/skills/ 不完整但 skills/ 完整时应返回 pass（来源: skills/）", async () => {
+  it("Commands: .claude/commands/ 不完整但 commands/ 完整时应返回 pass（来源: commands/）", async () => {
     vi.mocked(loadCompat).mockResolvedValue(MOCK_CONFIG);
     vi.mocked(execSync).mockReturnValue(Buffer.from("1.3.1\n") as any);
     vi.mocked(readFile).mockImplementation((path: any) => {
@@ -231,27 +224,26 @@ describe("runHealthCheck", () => {
     vi.mocked(detectEnv).mockReturnValue({
       nodeVersion: "20.0.0",
       gitInstalled: true,
-      claudeCodeInstalled: true,
     });
-    // .claude/skills/ 中 alloy-plan 缺失，但 skills/ 中完整
+    // .claude/commands/ 中 plan.md 缺失，但 commands/ 中完整
     vi.mocked(existsSync).mockImplementation((path: any) => {
       const pathStr = String(path);
-      // .claude/skills/alloy-plan 缺失
-      if (pathStr.includes(".claude/skills/alloy-plan")) {
+      // .claude/commands/alloy/plan.md 缺失
+      if (pathStr.includes(".claude/commands/alloy/plan.md")) {
         return false;
       }
       return true;
     });
 
     const results = await runHealthCheck("/fake/packagedir", "/fake/project");
-    const skillsResult = results.find((r) => r.name === "Skills");
-    expect(skillsResult).toBeDefined();
-    expect(skillsResult!.status).toBe("pass");
-    expect(skillsResult!.current).toContain("来源: skills/");
+    const commandsResult = results.find((r) => r.name === "Commands");
+    expect(commandsResult).toBeDefined();
+    expect(commandsResult!.status).toBe("pass");
+    expect(commandsResult!.current).toContain("来源: commands/");
   });
 
-  // Issue 4: Skills fail 状态
-  it("Skills 目录缺失时应返回 fail", async () => {
+  // Issue 4: Commands fail 状态
+  it("Commands 目录缺失时应返回 fail", async () => {
     vi.mocked(loadCompat).mockResolvedValue(MOCK_CONFIG);
     vi.mocked(execSync).mockReturnValue(Buffer.from("1.3.1\n") as any);
     vi.mocked(readFile).mockResolvedValue(
@@ -260,24 +252,23 @@ describe("runHealthCheck", () => {
     vi.mocked(detectEnv).mockReturnValue({
       nodeVersion: "20.0.0",
       gitInstalled: true,
-      claudeCodeInstalled: true,
     });
-    // existsSync 对特定 skill 目录返回 false，模拟缺失
+    // existsSync 对特定 command 文件返回 false，模拟缺失
     vi.mocked(existsSync).mockImplementation((path: any) => {
       const pathStr = String(path);
-      if (pathStr.includes("alloy-plan") || pathStr.includes("alloy-archive")) {
+      if (pathStr.includes("plan.md") || pathStr.includes("archive.md")) {
         return false;
       }
       return true;
     });
 
     const results = await runHealthCheck("/fake/packagedir", "/fake/project");
-    const skillsResult = results.find((r) => r.name === "Skills");
-    expect(skillsResult).toBeDefined();
-    expect(skillsResult!.status).toBe("fail");
-    expect(skillsResult!.current).toContain("缺失");
-    expect(skillsResult!.message).toContain("alloy-plan");
-    expect(skillsResult!.message).toContain("alloy-archive");
+    const commandsResult = results.find((r) => r.name === "Commands");
+    expect(commandsResult).toBeDefined();
+    expect(commandsResult!.status).toBe("fail");
+    expect(commandsResult!.current).toContain("缺失");
+    expect(commandsResult!.message).toContain("plan");
+    expect(commandsResult!.message).toContain("archive");
   });
 
   // Issue 4: Schema 版本不匹配导致 warn
@@ -287,7 +278,6 @@ describe("runHealthCheck", () => {
     vi.mocked(detectEnv).mockReturnValue({
       nodeVersion: "20.0.0",
       gitInstalled: true,
-      claudeCodeInstalled: true,
     });
     vi.mocked(existsSync).mockReturnValue(true);
     // readdir 返回一个 change 目录
@@ -325,7 +315,6 @@ describe("runHealthCheck", () => {
     vi.mocked(detectEnv).mockReturnValue({
       nodeVersion: "20.0.0",
       gitInstalled: true,
-      claudeCodeInstalled: true,
     });
     vi.mocked(existsSync).mockReturnValue(true);
     // execSync 返回含关键 skill 的输出
@@ -351,7 +340,6 @@ describe("runHealthCheck", () => {
     vi.mocked(detectEnv).mockReturnValue({
       nodeVersion: "20.0.0",
       gitInstalled: true,
-      claudeCodeInstalled: true,
     });
     vi.mocked(existsSync).mockReturnValue(true);
     // execSync 返回不含关键 skill 的输出
