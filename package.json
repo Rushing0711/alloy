@@ -10,7 +10,7 @@
   "files": [
     "dist/",
     "compat.yaml",
-    "skills/",
+    "commands/",
     "openspec/schemas/alloy/"
   ],
   "scripts": {
