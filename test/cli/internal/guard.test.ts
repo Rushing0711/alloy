@@ -36,16 +36,16 @@ describe("alloy _guard", () => {
     await writeFile(join(changeDir, "proposal.md"), "");
     await writeFile(join(changeDir, "design.md"), "");
     await writeFile(join(changeDir, "tasks.md"), "");
-    await writeFile(join(changeDir, "plan.md"), "");
+    await writeFile(join(changeDir, "plans.md"), "");
     await mkdir(join(changeDir, "specs"));
     await guardCommand([changeDir, "planned", "--apply"]);
     const state = await readState(changeDir);
     expect(state.phase).toBe("planned");
   });
 
-  it("planned→applied plan.md 存在时通过", async () => {
+  it("planned→applied plans.md 存在时通过", async () => {
     await setupState("planned");
-    await writeFile(join(changeDir, "plan.md"), "");
+    await writeFile(join(changeDir, "plans.md"), "");
     await guardCommand([changeDir, "applied", "--apply"]);
     const state = await readState(changeDir);
     expect(state.phase).toBe("applied");
@@ -90,7 +90,7 @@ describe("alloy _guard", () => {
   it("started→planned proposal.md 缺失被阻断", async () => {
     await writeFile(join(changeDir, "design.md"), "");
     await writeFile(join(changeDir, "tasks.md"), "");
-    await writeFile(join(changeDir, "plan.md"), "");
+    await writeFile(join(changeDir, "plans.md"), "");
     await mkdir(join(changeDir, "specs"));
     await expect(
       guardCommand([changeDir, "planned"])
@@ -101,14 +101,34 @@ describe("alloy _guard", () => {
     await writeFile(join(changeDir, "proposal.md"), "");
     await writeFile(join(changeDir, "design.md"), "");
     await writeFile(join(changeDir, "tasks.md"), "");
-    await writeFile(join(changeDir, "plan.md"), "");
+    await writeFile(join(changeDir, "plans.md"), "");
     await expect(
       guardCommand([changeDir, "planned"])
     ).rejects.toThrow();
   });
 
-  it("planned→applied plan.md 缺失被阻断", async () => {
+  it("planned→applied plans.md 缺失被阻断", async () => {
     await setupState("planned");
+    await expect(
+      guardCommand([changeDir, "applied"])
+    ).rejects.toThrow();
+  });
+
+  it("planned→applied hash 不匹配时被阻断", async () => {
+    await writeFile(join(changeDir, "plans.md"), "real content here");
+    // 直接写入带错误 hash 的 .alloy.yaml，绕过 setupState
+    const yaml = [
+      "worktree: null",
+      "schema_version: 1",
+      "phase: planned",
+      'updated_at: "2020-01-01T00:00:00"',
+      "records:",
+      "  - artifact: plans",
+      '    hash: "wronghash123"',
+      '    approved_at: "2020-01-01T00:00:00"',
+      '    approver: "test"',
+    ].join("\n");
+    await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
     await expect(
       guardCommand([changeDir, "applied"])
     ).rejects.toThrow();
@@ -126,7 +146,7 @@ describe("alloy _guard", () => {
     await writeFile(join(changeDir, "proposal.md"), "");
     await writeFile(join(changeDir, "design.md"), "");
     await writeFile(join(changeDir, "tasks.md"), "");
-    await writeFile(join(changeDir, "plan.md"), "");
+    await writeFile(join(changeDir, "plans.md"), "");
     await mkdir(join(changeDir, "specs"));
     await guardCommand([changeDir, "planned"]);
     const state = await readState(changeDir);
