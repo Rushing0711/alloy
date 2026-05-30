@@ -91,18 +91,18 @@ alloy completion [shell] [options]
   }
 }
 
-const COMPLETION_LINE = "source <(alloy completion)";
-
 async function installCompletion(shell: string): Promise<void> {
   const home = process.env.HOME || process.env.USERPROFILE || "~";
-  const completionLine = COMPLETION_LINE;
 
   let rcFile: string | null = null;
+  let completionLine = "";
 
   if (shell.includes("zsh")) {
     rcFile = join(home, ".zshrc");
+    completionLine = "source <(alloy completion zsh)";
   } else if (shell.includes("bash")) {
     rcFile = join(home, ".bashrc");
+    completionLine = "source <(alloy completion bash)";
   } else if (shell.includes("pwsh") || shell.includes("powershell")) {
     console.log("PowerShell 用户请运行: alloy completion pwsh | Out-File -FilePath $PROFILE -Append");
     return;
@@ -246,22 +246,27 @@ async function main() {
         strict: true,
         allowPositionals: true,
       });
-      const shell = positionals[0] ?? process.env.SHELL ?? "bash";
 
       if (values.install) {
+        const shell = positionals[0] ?? process.env.SHELL ?? "bash";
         await installCompletion(shell);
         break;
       }
 
-      // 不带参数时输出提示到 stderr
-      if (!positionals[0]) {
-        const shellName = shell.includes("zsh") ? "zsh" : shell.includes("pwsh") || shell.includes("powershell") ? "pwsh" : "bash";
-        process.stderr.write(
-          `检测到 ${shellName}，生成补全脚本。运行 'alloy completion --install' 可自动注册。\n`
-        );
+      // 指定了 shell → 输出补全脚本（用于管道/重定向）
+      if (positionals[0]) {
+        console.log(generateCompletion(positionals[0]));
+        break;
       }
 
-      console.log(generateCompletion(shell));
+      // 无参数 → 显示友好使用说明
+      console.log("生成 shell 补全脚本，获取 Tab 自动补全能力。\n");
+      console.log("用法：");
+      console.log("  source <(alloy completion zsh)          # zsh 当前 session 生效");
+      console.log("  source <(alloy completion bash)         # bash 当前 session 生效");
+      console.log("  alloy completion --install              # 自动注册到 rc 文件，永久生效");
+      console.log("");
+      console.log("  alloy completion pwsh | Out-File $PROFILE  # PowerShell 永久生效");
       break;
     }
     case "_state": {

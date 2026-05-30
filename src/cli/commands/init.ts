@@ -121,13 +121,15 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   try {
     const home = process.env.HOME || process.env.USERPROFILE || "~";
     const shell = process.env.SHELL || "";
-    const completionLine = "source <(alloy completion)";
+    let completionLine = "source <(alloy completion bash)";
     let rcFile: string | null = null;
 
     if (shell.includes("zsh")) {
       rcFile = join(home, ".zshrc");
+      completionLine = "source <(alloy completion zsh)";
     } else if (shell.includes("bash")) {
       rcFile = join(home, ".bashrc");
+      completionLine = "source <(alloy completion bash)";
     }
 
     if (rcFile) {
