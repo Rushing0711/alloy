@@ -47,46 +47,58 @@ test -f openspec/changes/<name>/verify.md && ! grep -q '^- \[x\] ❌ FAIL' opens
 不满足 → "verify.md 不存在或 Overall Decision 为 FAIL。请先修复阻塞问题。"
 
 ---
-### [Step 2/3] openspec archive
+### [Step 2/3] /opsx:archive
 
-> 归档中...
-> 执行 openspec archive -y → delta spec 合并到主 spec → 移入 archive/
->
-> ```bash
-> alloy _archive <project-dir> <change-name>
-> ```
->
-> `alloy _archive` 自动完成：
-> 1. 验证 phase = applied
-> 2. 执行 `openspec archive -y --change <name>`（自有幂等检查，已归档则 Skip)
-> 3. Delta Spec 合并到主 spec
-> 4. 更新 phase → archived
-> 5. 提交归档变更（`git add` + `git commit`）
->
-> `alloy _archive` 内部区分两类错误：
-> - `openspec` CLI 不可用（command not found）→ ⚠️ 警告但继续，用户需稍后安装 OpenSpec CLI 重新归档
-> - `openspec archive` 实际执行失败（权限、磁盘、冲突等）→ [HARD STOP] 阻断，不推进 phase
->
-> ```
+> [Step 2/3] /opsx:archive
+> 正在归档——Delta Spec 合并到主 spec → 移入 archive/...
+
+使用 Slash 命令 `/opsx:archive` 执行归档。这是 OpenSpec 的标准归档命令，Alloy 不重复建造。
+
+**Agent 执行：** 调用 `/opsx:archive`，传入 change name。该命令自动完成：
+- Delta Spec 合并到主 spec（`openspec/specs/`）
+- Change 目录移至 `openspec/changes/archive/YYYY-MM-DD-<name>/`
+- 自有幂等检查——已归档则 Skip
+
+**错误处理：**
+- `/opsx:archive` 返回错误（权限、冲突等）→ [HARD STOP]，不推进 phase
+- `/opsx:archive` 不可用（OpenSpec 未安装）→ 引导用户运行 `alloy init` 安装 OpenSpec
+
+归档成功后，Agent 执行 git commit（确保归档变更被版本追踪）：
+```bash
+git add openspec/specs/ openspec/changes/archive/ 2>/dev/null
+git commit -m "chore(<name>): Delta Spec 已同步并归档" 2>/dev/null
+```
+（git commit 失败不阻断——可能没有变更或不在 git 仓库中）
+
 > ✓ Delta Spec 已合并到主 spec
 > ✓ Change 已归档到 archive/YYYY-MM-DD-<name>/
-> ✓ phase → archived
 > ✓ 归档变更已提交
-> ```
 
 ### Step 3/3：完成
+
+**通过 `alloy _guard` 校验并推进 phase：**
+```bash
+alloy _guard openspec/changes/<name> archived --apply
 ```
-┌──────────────────────────────────────┐
-│ Alloy [4/5] · Phase: Archive — DONE  │
-└──────────────────────────────────────┘
+
+```
+┌──────────────────────────────────────────────────────┐
+│ Alloy [4/5] · Phase: Archive — DONE                  │
+└──────────────────────────────────────────────────────┘
 ```
 
 > ✓ Delta Spec 已合并到主 spec
 > ✓ Change 已归档到 archive/YYYY-MM-DD-<name>/
 > ✓ phase → archived
-> ✓ 归档变更已提交
->
-> 代码尚未合入，分支仍保留。运行 `/alloy:finish` 完成代码合入与现场清理。
+
+**根据 worktree 状态动态提示：**
+
+```bash
+alloy _state read openspec/changes/<name> worktree
+```
+
+- worktree 有值 → 代码在独立 worktree 分支上，尚未合入。运行 `/alloy:finish` 完成代码合入与现场清理。
+- worktree 为 `null` → 代码在当前分支上。运行 `/alloy:finish` 完成收尾。
 
 ---
 

@@ -365,3 +365,71 @@ OpenSpec 执行阶段（8 个制品，后 2 个在 apply 中产出）:
 | verify/retrospective 是 schema 制品 | artifacts 从 6 个扩展到 8 个，DAG 完整 | 有模板、有指令、有依赖——具备制品的所有特征 |
 | bug 修复二向分流 | 不改 spec → 直接修；需改 spec → 以代码是否已落地为分水岭 | 无代码（phase < applied）：并入当前 change；有代码（phase ≥ applied）：开新 change |
 | 人工测试失败处理 | apply 内部验证失败 → 循环修复直到通过；人工测试失败 → 看是 spec 还是代码问题 | 不和 spec 变更混入同一 change，代码修复在 apply 内部闭环 |
+
+---
+
+## 八、各阶段技能/Slash 盘点与 Gap 分析
+
+> **更新：** 2026-05-30，与所有 command 文件（`commands/alloy/*.md`）对齐。
+> 下表列出每个阶段实际使用的技能（Skill）和斜杠命令，标注 precheck 覆盖情况和已知 Gap。
+
+### 8.1 阶段盘点
+
+| 阶段 | Precheck | 使用的 Skill | 使用的 Slash 命令 | Gap |
+|------|:---:|------|------|------|
+| **start** | 仅检查 `openspec/config.yaml` | `opsx:explore`、`superpowers:brainstorming` | `/opsx:new` | **Gap A**: 无 brainstorming 可用性预检——若该 Skill 缺失，Step 2/2 才暴露 |
+| **plan** | phase=started + draft.md 存在 | `superpowers:writing-plans`（仅在 tasks 完成后） | `/opsx:continue` | **Gap B**: writing-plans 未预检——用户走完 4 个制品后才发现缺失。**Gap C**: plan 不验证 draft.md 是否真正由 brainstorming 产出（可手工绕过） |
+| **apply** | phase=planned + git + **6 技能 precheck** ✓ | `using-git-worktrees`、`SDD`/`executing-plans`、`verification-before-completion` | `/opsx:verify` | **Gap D**: writing-plans→apply 策略传递仅靠 YAML frontmatter 文本字段，无结构化握手。**Gap E**: 串行路径 TDD 纪律依赖 Agent 自觉，不像 SDD 路径有 transitive 保证 |
+| **archive** | phase=applied + verify 非 FAIL | 无 | `/opsx:archive` | **已闭合** v1：从 `alloy _archive` 改为 `/opsx:archive`，与 OpenSpec 对齐 |
+| **finish** | phase=archived + 分支存在 | `finishing-a-development-branch` | 无 | **Gap F**: finish 无 finishing-a-development-branch 可用性预检 |
+| **fix** | **无 precheck** | `systematic-debugging` → `TDD` → `verification-before-completion` | 无 | **Gap G**: 无任何前置检查——Skill 缺失到 Step 2 才暴露。**Gap H**: fix 没有预检 phase 状态（如已 archived 不应允许直接修） |
+| **discard** | 无 | 无 | 无 | 无——discard 是清理操作，不依赖外部 Skill |
+| **status** | 无 | 无 | 无 | 无——status 是只读查询 |
+
+### 8.2 Gap 清单
+
+| ID | Gap | 阶段 | 严重度 | 影响 |
+|----|-----|------|:---:|------|
+| **A** | brainstorming 无预检 | start | P2 | Skill 缺失到 Step 2 才发现 |
+| **B** | writing-plans 无预检 | plan | P0 | 用户走完 4 制品后发现，浪费 |
+| **C** | plan 不验证 draft 来源 | plan | P2 | 可手工写 draft.md 绕过 brainstorming |
+| **D** | writing-plans→apply 策略传递断裂 | plan→apply | P0 | strategy 只有文本字段，无结构化握手；旧 change 兼容差 |
+| **E** | 串行路径 TDD 无 transitive 保证 | apply | P1 | Agent 可跳过 TDD，无硬闸门 |
+| **F** | finishing-a-development-branch 无预检 | finish | P2 | Skill 缺失到使用才暴露 |
+| **G** | fix 无 precheck | fix | P1 | Skill 缺失到 Step 2 才暴露 |
+| **H** | fix 不校验 phase | fix | P1 | archived change 不应允许 fix |
+
+### 8.3 已闭合 Gap
+
+| ID | 原 Gap | 修复方式 | 版本 |
+|----|--------|---------|------|
+| archive 用 `alloy _archive` | 自建 CLI 重复建造 | 改用 `/opsx:archive`，与 OpenSpec 对齐 | v1 |
+| apply 串行路径无 code review | 串行路径缺 `requesting-code-review` | apply.md Step 2 串行路径：executing-plans 后显式加载 `requesting-code-review` | v1 |
+| apply precheck 5→6 | 缺 `executing-plans` 预检 | precheck 扩展到 6 个技能 | v1 |
+| approver 不一致 | 每阶段重新 `git config user.name` | `alloy _record approver` 从首 record 继承 | v1 |
+
+### 8.4 全流程 Skill 依赖汇总
+
+| Skill | start | plan | apply | archive | finish | fix |
+|-------|:---:|:---:|:---:|:---:|:---:|:---:|
+| `opsx:explore` | ✓ | | | | | |
+| `superpowers:brainstorming` | ✓ | | | | | |
+| `superpowers:writing-plans` | | ✓ | | | | |
+| `superpowers:using-git-worktrees` | | | ✓ | | | |
+| `superpowers:subagent-driven-development` | | | ✓ | | | |
+| `superpowers:executing-plans` | | | ✓ | | | |
+| `superpowers:test-driven-development` | | | ✓(trans.) | | | ✓ |
+| `superpowers:requesting-code-review` | | | ✓(trans.) | | | ✓ |
+| `superpowers:verification-before-completion` | | | ✓ | | | ✓ |
+| `superpowers:finishing-a-development-branch` | | | | | ✓ | |
+| `superpowers:systematic-debugging` | | | | | | ✓ |
+
+### 8.5 全流程 Slash 命令汇总
+
+| 命令 | start | plan | apply | archive | finish | fix |
+|------|:---:|:---:|:---:|:---:|:---:|:---:|
+| `/opsx:explore` | ✓ | | | | | |
+| `/opsx:new` | ✓ | | | | | ✓(路径 B) |
+| `/opsx:continue` | | ✓ | | | | ✓(路径 B1) |
+| `/opsx:verify` | | | ✓ | | | |
+| `/opsx:archive` | | | | ✓ | | |

@@ -49,18 +49,25 @@ tags: [alloy, workflow]
    选 2：STOP，"请手动初始化 git 仓库后重新运行 `/alloy:apply`"
 
 ```
-┌──────────────────────────────────────┐
-│ Alloy [3/5] · Phase: Apply           │
-└──────────────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│ Alloy [3/5] · Phase: Apply                       │
+│ 开始时间：$(date -u +%Y-%m-%dT%H:%M:%SZ)          │
+└──────────────────────────────────────────────────┘
 
 [Step 0/5] 技能可用性预检（precheck）
 ──────────────────────────────────────
 
 前置检查通过：plan.md ✓  phase=planned ✓  git仓库 ✓
 
-检查以下 5 个 Superpowers 技能是否可用（缺一 STOP，不静默降级）：
+**记录阶段开始时间：**
+```bash
+APPLY_START=$(date +%s)
+```
+
+检查以下 6 个 Superpowers 技能是否可用（缺一 STOP，不静默降级）：
 - [ ] superpowers:using-git-worktrees
 - [ ] superpowers:subagent-driven-development
+- [ ] superpowers:executing-plans
 - [ ] superpowers:test-driven-development
 - [ ] superpowers:requesting-code-review
 - [ ] superpowers:verification-before-completion
@@ -68,7 +75,7 @@ tags: [alloy, workflow]
 任一缺失 → 输出缺失列表 → 引导 `alloy init` 重新安装 → STOP
 
 全部通过后：
-> precheck 通过：5/5 技能可用 ✓
+> precheck 通过：6/6 技能可用 ✓
 > 共 5 个步骤：隔离 → SDD → 代码验证 → 制品验证 → 复盘
 ```
 
@@ -122,8 +129,17 @@ tags: [alloy, workflow]
 4. 用户选择后，加载对应技能，**按其内部指引执行**，alloy 不重复建造选择闸门
 
 Superpowers 技能内部行为（alloy 仅编排，不替代）：
-- SDD：读取 plan → 分派子 agent → 每个子 agent TDD + 两阶段 review（spec + code quality）
-- 串行：当前 session 直接执行，每步有审查检查点
+
+**SDD 路径：** 加载 `superpowers:subagent-driven-development` 技能，由其内部驱动：
+- 读取 plan → 分派子 agent → 每个子 agent 独立执行 TDD + code review（transitive 激活）
+- 子 agent 各自勾选 tasks.md 中对应任务的 checkbox
+
+**串行路径：** 加载 `superpowers:executing-plans` 技能执行 plans.md 微步骤：
+- executing-plans 按 plans.md 逐步执行，每步完成后暂停审查
+- 执行过程中遵循 TDD 流程（先写测试→确认失败→实现→确认通过）
+- executing-plans 执行完成后，**必须加载 `superpowers:requesting-code-review` 技能**进行代码审查闸门
+
+> ⚠️ 串行路径不会 transitive 激活 TDD 或 code review。Agent 必须在 executing-plans 执行过程中自行遵循 TDD 纪律，并在完成后显式触发 code review。
 
 ### Step 3/5：代码层验证
 
@@ -138,6 +154,12 @@ Superpowers 技能内部行为（alloy 仅编排，不替代）：
 
 > [Step 4/5] 制品层验证
 > 正在验证制品结构——7 项结构化检查 → verify.md...
+
+**生成 verify 前，校验上游 plans 的 hash：**
+```bash
+alloy _record check openspec/changes/<name> plans
+```
+若 check 失败 → HARD STOP，plans 可能被未审批修改。
 
 1. 调用 `/opsx:verify` 执行结构化的 7 项检查
 2. `/opsx:verify` 的输出由 OpenSpec CLI 生成，其语言不由 Agent 控制。Agent 拿到输出后，**必须将 verify.md 重写为与 `instructions/verify.md` 和 `templates/verify.md` 一致的语言**，不得直接透传 CLI 输出
@@ -156,6 +178,12 @@ Superpowers 技能内部行为（alloy 仅编排，不替代）：
 
 **输出语言与 `instructions/retrospective.md` 和 `templates/retrospective.md` 保持一致。** 代码标识符、commit hash、文件名保持原始语言。
 
+**生成 retrospective 前，校验上游 verify 的 hash：**
+```bash
+alloy _record check openspec/changes/<name> verify
+```
+若 check 失败 → HARD STOP。
+
 **PRECHECK：** verify.md 存在且 Overall Decision 不是 FAIL，否则 STOP。
 
 **§0 Evidence：** 收集量化证据（git log、diff stat、任务完成比、提交链等）。
@@ -173,13 +201,22 @@ Superpowers 技能内部行为（alloy 仅编排，不替代）：
 
 ### 完成
 
+计算耗时：
+```bash
+APPLY_END=$(date +%s)
+DURATION=$((APPLY_END - APPLY_START))
 ```
-┌──────────────────────────────────────┐
-│ Alloy [3/5] · Phase: Apply — DONE    │
-└──────────────────────────────────────┘
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ Alloy [3/5] · Phase: Apply — DONE                            │
+│ 完成时间：$(date -u +%Y-%m-%dT%H:%M:%SZ)                      │
+│ 耗时：${DURATION}s                                            │
+└──────────────────────────────────────────────────────────────┘
+
 >
-> ✓ verify.md         已生成
-> ✓ retrospective.md  已生成
+> ✓ verify.md         已生成 — <verify hash short> — <verify committed_at>
+> ✓ retrospective.md  已生成 — <retrospective hash short> — <retrospective committed_at>
 ```
 
 **apply 阶段 commit 规则：**
@@ -188,17 +225,17 @@ Superpowers 技能内部行为（alloy 仅编排，不替代）：
   ```bash
   HASH=$(alloy _record compute openspec/changes/<name> verify)
   APPROVED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  APPROVER=$(git config user.name)
+  APPROVER=$(alloy _record approver openspec/changes/<name>)
   alloy _record write openspec/changes/<name> verify "$HASH" "$APPROVED_AT" "$APPROVER"
   git add openspec/changes/<name>/verify.md
-  git commit -m "apply(<name>): verify 已确认"
+  git commit -m "docs(<name>): verify 已确认"
   ```
 - retrospective.md：审批通过后 hash + commit：
   ```bash
   HASH=$(alloy _record compute openspec/changes/<name> retrospective)
-  alloy _record write openspec/changes/<name> retrospective "$HASH" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(git config user.name)"
+  alloy _record write openspec/changes/<name> retrospective "$HASH" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(alloy _record approver openspec/changes/<name>)"
   git add openspec/changes/<name>/retrospective.md
-  git commit -m "apply(<name>): retrospective 已确认"
+  git commit -m "docs(<name>): retrospective 已确认"
   ```
 
 **通过 `alloy _guard` 校验并更新 phase：**

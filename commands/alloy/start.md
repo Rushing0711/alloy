@@ -113,8 +113,39 @@ tags: [alloy, workflow]
    APPROVER=$(git config user.name)
    alloy _record write openspec/changes/<name> draft "$DRAFT_HASH" "$APPROVED_AT" "$APPROVER"
    git add openspec/changes/<name>/
-   git commit -m "start(<name>): draft 已确认"
+   git commit -m "feat(<name>): draft 已确认"
    ```
+
+6. **分支选择**——检测 git 状态，确认工作分支：
+
+   先获取当前分支：
+   ```bash
+   CURRENT_BRANCH=$(git branch --show-current)
+   echo "当前分支：$CURRENT_BRANCH"
+   ```
+
+   展示选项，让用户选择：
+
+   > **选择工作分支**
+   > ──────────────────────────────────────
+   > 当前在 `<$CURRENT_BRANCH>` 分支。
+   >
+   > **1.** 在当前分支继续 — 直接在此分支开发
+   > **2.** 切换到已有分支  — 选择一个已有分支
+   > **3.** 新建分支        — 创建新分支并切换
+
+   - **选 1：** 不操作，直接继续
+   - **选 2：** 展示已有分支列表（`git branch -a`），用户选择后执行 `git checkout <branch>`
+     - 如果该 change 后续使用 worktree，此分支名仅作参考记录
+   - **选 3：** 询问用户输入新分支名，执行 `git checkout -b <new-branch>`
+     - Agent 可建议分支名（如 `<change-name>`），由用户确认
+
+   分支选择完成后，记录到状态：
+   ```bash
+   alloy _state write openspec/changes/<name> worktree null
+   ```
+
+   > ⚠️ apply 阶段仍会通过 `using-git-worktrees` 再次确认隔离方式。此处的分支选择是给后续阶段一个推荐的开发分支。
 
 ---
 

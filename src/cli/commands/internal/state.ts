@@ -34,7 +34,9 @@ export async function stateCommand(args: string[]): Promise<void> {
         process.exit(1);
       }
       const state = await readState(changeDir);
-      (state as unknown as Record<string, unknown>)[field] = value;
+      // 将字符串 "null" 转换为真正的 null（shell 传入的 null 是字符串）
+      const resolved = value === "null" ? null : value;
+      (state as unknown as Record<string, unknown>)[field] = resolved;
       await writeState(changeDir, state);
       break;
     }

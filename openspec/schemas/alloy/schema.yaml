@@ -70,6 +70,7 @@ apply:
   precheck:
     - superpowers:using-git-worktrees
     - superpowers:subagent-driven-development
+    - superpowers:executing-plans
     - superpowers:test-driven-development
     - superpowers:requesting-code-review
     - superpowers:verification-before-completion

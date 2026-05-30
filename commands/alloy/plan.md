@@ -22,12 +22,18 @@ tags: [alloy, workflow]
 ## Step 1/3：确认 Change
 
 ```
-┌──────────────────────────────────────┐
-│ Alloy [2/5] · Phase: Plan            │
-└──────────────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│ Alloy [2/5] · Phase: Plan                        │
+│ 开始时间：$(date -u +%Y-%m-%dT%H:%M:%SZ)          │
+└──────────────────────────────────────────────────┘
 
 [Step 1/3] 确认 Change
 ──────────────────────────────────────
+```
+
+**记录阶段开始时间**（用于计算耗时）：
+```bash
+PLAN_START=$(date +%s)
 ```
 
 1. 确认 `openspec/changes/<name>/draft.md` 存在
@@ -109,13 +115,26 @@ proposal ──→ design ──→ specs ──→ tasks ──→ plans
 ```bash
 HASH=$(alloy _record compute openspec/changes/<name> <artifact>)
 APPROVED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-APPROVER=$(git config user.name)
+APPROVER=$(alloy _record approver openspec/changes/<name>)
 alloy _record write openspec/changes/<name> <artifact> "$HASH" "$APPROVED_AT" "$APPROVER"
 git add openspec/changes/<name>/
-git commit -m "plan(<name>): <artifact> 已确认"
+git commit -m "docs(<name>): <artifact> 已确认"
 ```
 
-commit message 格式：`plan(<change-name>): <artifact> 已确认`。`<artifact>` 为 proposal / design / specs / tasks / plans。
+commit message 格式：`docs(<change-name>): <artifact> 已确认`（Conventional Commits `docs` type）。`<artifact>` 为 proposal / design / specs / tasks / plans。
+
+**生成下一制品前，校验上游依赖制品的 hash 未被篡改：**
+```bash
+alloy _record check openspec/changes/<name> <upstream-artifact>
+```
+若 check 返回非零 → HARD STOP，hash 不匹配意味着有未审批的篡改。
+
+| 即将生成的制品 | 需校验的上游 |
+|--------------|------------|
+| design | proposal |
+| specs | proposal |
+| tasks | specs, design |
+| plans | tasks |
 
 ### tasks 审批通过后 → writing-plans 生成 plans.md
 
@@ -162,12 +181,33 @@ proposal.md 已更新 ✓
 
 ## Step 3/3：完成
 
+先读取所有 record 的时间戳用于汇总展示：
+```bash
+alloy _state read openspec/changes/<name> records
 ```
-┌──────────────────────────────────────┐
-│ Alloy [2/5] · Phase: Plan — DONE     │
-└──────────────────────────────────────┘
 
-所有制品已生成：draft ✓  proposal ✓  design ✓  specs ✓  tasks ✓  plans ✓
+计算耗时：
+```bash
+PLAN_END=$(date +%s)
+DURATION=$((PLAN_END - PLAN_START))
+```
+
+```
+┌──────────────────────────────────────────────────────────┐
+│ Alloy [2/5] · Phase: Plan — DONE                         │
+│ 完成时间：$(date -u +%Y-%m-%dT%H:%M:%SZ)                  │
+│ 耗时：${DURATION}s                                        │
+└──────────────────────────────────────────────────────────┘
+
+所有制品已生成并锁定：
+  制品         状态        Hash        创建时间
+  ─────────    ────────    ────────     ─────────────────────
+  draft         ✓          <short>      <YYYY-MM-DDTHH:MM:SSZ>
+  proposal      ✓          <short>      <...>
+  design        ✓          <short>      <...>
+  specs         ✓          <short>      <...>
+  tasks         ✓          <short>      <...>
+  plans         ✓          <short>      <...>
 ```
 
 每个制品已在审批时独立 commit，无需再次提交。

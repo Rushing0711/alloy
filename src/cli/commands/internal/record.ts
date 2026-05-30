@@ -2,6 +2,7 @@
 import { createHash } from "node:crypto";
 import { readFile, stat, readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { execSync } from "node:child_process";
 import { readState, writeState } from "../../utils/state.js";
 import type { ArtifactRecord } from "../../../core/types.js";
 
@@ -130,8 +131,24 @@ export async function recordCommand(args: string[]): Promise<void> {
       console.log(hash);
       break;
     }
+    case "approver": {
+      // 返回第一个 record 的 approver，无 records 时从 git config 获取
+      const state = await readState(changeDir);
+      const firstRecord = state.records?.[0];
+      if (firstRecord?.approver) {
+        console.log(firstRecord.approver);
+      } else {
+        try {
+          const gitUser = execSync("git config user.name", { encoding: "utf-8" }).trim();
+          console.log(gitUser || "unknown");
+        } catch {
+          console.log("unknown");
+        }
+      }
+      break;
+    }
     default:
-      console.error(`未知操作: ${action} (支持: write, check, compute)`);
+      console.error(`未知操作: ${action} (支持: write, check, compute, approver)`);
       process.exit(1);
   }
 }

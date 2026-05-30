@@ -172,3 +172,24 @@ describe("myFunction", () => {
 | 6 | worktree 断线重连无法识别 | alloy-apply 创建 worktree 后没写 `.alloy.yaml` | Step 1c 后立即 `alloy _state write worktree` |
 | 7 | `.alloy.yaml` phase 不更新 | guard `started→planned` 无制品检查 | 补充 5 制品缺失检查 |
 | 8 | `.alloy.yaml` 缺少 `created_at` 字段 | alloy-plan Step 1/3 只写了 worktree 和 schema_version | 补写 `phase started` + `created_at` |
+
+---
+
+## 八、Commit 消息格式
+
+Alloy 工作流中的 commit 遵循 [Conventional Commits](https://www.conventionalcommits.org/) 规范。按 commit 性质用不同 type：
+
+| 阶段 | Type | Scope | 格式示例 |
+|------|------|-------|---------|
+| **start** — draft 确认 | `feat` | change-name | `feat(feather-rush): draft 已确认` |
+| **plan** — proposal/design/specs/tasks/plans | `docs` | change-name | `docs(feather-rush): proposal 已确认` |
+| **apply** — verify/retrospective | `docs` | change-name | `docs(feather-rush): verify 已确认` |
+| **apply** — 代码实现（SDD） | `feat/fix/test/refactor` | — | 由 SDD 子 agent 按变更性质决定 |
+| **archive** — 归档 | `chore` | change-name | 由 `alloy _archive` 自动生成 |
+
+**规则：**
+- start 用 `feat` type——一个新功能/capability 的起点
+- plan 阶段的 artifacts（proposal/design/specs/tasks/plans）是规划文档，用 `docs` type
+- apply 阶段的 artifacts（verify/retrospective）是验证文档，用 `docs` type
+- 实际代码变更（SDD 过程中）按变更性质使用标准 Conventional Commits type
+- 所有 commit 末尾附 `Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>`
