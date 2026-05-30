@@ -45,10 +45,18 @@ export interface DepCheckResult {
   compatible: boolean;
 }
 
+export interface ArtifactRecord {
+  artifact: string;
+  hash: string;
+  approved_at: string;
+  approver: string;
+}
+
 export interface AlloyState {
   phase: "started" | "planned" | "applied" | "archived" | "finished";
   worktree: string | null;
   schema_version: number;
   created_at: string;
   updated_at: string;
+  records: ArtifactRecord[];
 }

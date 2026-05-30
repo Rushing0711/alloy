@@ -86,4 +86,32 @@ describe("state utils", () => {
     const changes = await findActiveChanges(changesDir);
     expect(changes.size).toBe(0);
   });
+
+  it("writeState 和 readState records 往返一致", async () => {
+    const changeDir = join(tmpDir, "test-change-records");
+    await mkdir(changeDir, { recursive: true });
+    const original = createInitialState();
+    original.records = [
+      {
+        artifact: "proposal.md",
+        hash: "abc123",
+        approved_at: "2025-01-15T10:30:00",
+        approver: "human",
+      },
+      {
+        artifact: "design.md",
+        hash: "def456",
+        approved_at: "2025-01-15T11:00:00",
+        approver: "human",
+      },
+    ];
+    await writeState(changeDir, original);
+    const loaded = await readState(changeDir);
+    expect(loaded.records).toEqual(original.records);
+  });
+
+  it("createInitialState 默认 records 为空数组", () => {
+    const state = createInitialState();
+    expect(state.records).toEqual([]);
+  });
 });
