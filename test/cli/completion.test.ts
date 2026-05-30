@@ -13,7 +13,7 @@ describe("generateCompletion", () => {
 
   it("zsh 补全应包含 -v 短选项", () => {
     const output = generateCompletion("zsh");
-    expect(output).toContain("{-v,--version}");
+    expect(output).toContain("'-v[显示版本号]'");
   });
 
   it("zsh 补全应用 compdef 注册而非顶层调用 _alloy", () => {
