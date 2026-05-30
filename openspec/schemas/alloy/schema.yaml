@@ -2,7 +2,7 @@ name: alloy
 version: 1
 description: >
   Alloy schema - 融合 OpenSpec 制品治理和 Superpowers 执行技能。
-  Pre-OpenSpec 阶段产出 draft.md，规划阶段依次生成 proposal → design → specs → tasks → plan。
+  Pre-OpenSpec 阶段产出 draft.md，规划阶段依次生成 proposal → design → specs → tasks → plans。
   执行阶段（apply）编排：worktree 隔离 → SDD(TDD) → 代码验证 → 制品验证 → 复盘。
   收尾阶段：/alloy-archive（归档），/alloy-finish（合入）。
 
@@ -42,11 +42,11 @@ artifacts:
     instruction: tasks.md
     requires: [specs, design]
 
-  - id: plan
+  - id: plans
     description: 执行脚本——给 Agent 执行的微步骤路线图（含代码片段）
-    generates: plan.md
-    template: plan.md
-    instruction: plan.md
+    generates: plans.md
+    template: plans.md
+    instruction: plans.md
     requires: [tasks]
 
   - id: verify
@@ -54,7 +54,7 @@ artifacts:
     generates: verify.md
     template: verify.md
     instruction: verify.md
-    requires: [plan]
+    requires: [plans]
 
   - id: retrospective
     description: 复盘报告——证据驱动的 §0-§6 结构化复盘
@@ -64,7 +64,7 @@ artifacts:
     requires: [verify]
 
 apply:
-  requires: [plan]
+  requires: [plans]
   tracks: tasks.md
 
   precheck:
