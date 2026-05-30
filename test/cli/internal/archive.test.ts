@@ -60,4 +60,5 @@ describe("alloy _archive", () => {
     const state = await readState(changeDir);
     expect(state.phase).toBe("applied"); // unchanged
   });
+
 });

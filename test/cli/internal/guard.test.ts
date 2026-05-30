@@ -1,5 +1,5 @@
 // test/cli/internal/guard.test.ts
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdir, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -180,6 +180,34 @@ describe("alloy _guard", () => {
     await guardCommand([changeDir, "applied", "--apply"]);
     const state = await readState(changeDir);
     expect(state.phase).toBe("applied");
+  });
+
+  it("缺少参数时 exit 1", async () => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    await guardCommand([changeDir]); // targetPhase 缺失
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    exitSpy.mockRestore();
+  });
+
+  it("record 指向不存在的文件时 hash 校验失败", async () => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    await writeFile(join(changeDir, "plans.md"), "content", "utf-8");
+    const yaml = [
+      "worktree: null",
+      "schema_version: 1",
+      "phase: planned",
+      'updated_at: "2020-01-01T00:00:00"',
+      "records:",
+      "  - artifact: tasks",
+      '    hash: "def456"',
+      '    approved_at: "2020-01-01T00:00:00"',
+      '    approver: "test"',
+    ].join("\n");
+    await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
+    // tasks.md 不存在 → computeArtifactHash 返回 null → mismatches → exit 1
+    await guardCommand([changeDir, "applied"]);
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    exitSpy.mockRestore();
   });
 
   // --apply flag behavior

@@ -114,4 +114,13 @@ describe("state utils", () => {
     const state = createInitialState();
     expect(state.records).toEqual([]);
   });
+
+  it("findActiveChanges 忽略非目录条目", async () => {
+    const changesDir = join(tmpDir, "openspec", "changes");
+    await mkdir(changesDir, { recursive: true });
+    await writeFile(join(changesDir, "some-file.txt"), "not a directory", "utf-8");
+
+    const changes = await findActiveChanges(changesDir);
+    expect(changes.size).toBe(0);
+  });
 });
