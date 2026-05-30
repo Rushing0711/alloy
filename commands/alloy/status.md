@@ -65,7 +65,7 @@ Worktree: .worktrees/login-feature/
   design    ✓
   specs     ✓
   tasks     ✓
-  plan      ✓
+  plans     ✓
 下一步:   等待 /alloy:apply
 ```
 
