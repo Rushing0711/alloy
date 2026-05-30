@@ -4,11 +4,12 @@ import { detectEnv } from "../../core/detect.js";
 import { runHealthCheck } from "../../core/health.js";
 import { installOpenSpecCli, initOpenSpecProject } from "../../core/openspec.js";
 import { installSuperpowers } from "../../core/superpowers.js";
-import { deploySkills, deploySchema } from "../../core/skills.js";
+import { deployCommands, deploySchema } from "../../core/skills.js";
 import { injectClaudeMd } from "../../core/claude-md.js";
-import type { DeployOptions } from "../../core/types.js";
+import { KNOWN_AGENTS } from "../../core/agents.js";
+import type { AgentInfo, DeployOptions } from "../../core/types.js";
 import { getPackageRoot } from "../../utils/fs.js";
-import { promptSelect } from "../../utils/prompt.js";
+import { promptSelect, promptMultiSelect } from "../../utils/prompt.js";
 
 export async function selectScope(passedScope?: string): Promise<"global" | "project"> {
   if (passedScope) return passedScope as "global" | "project";
@@ -17,6 +18,19 @@ export async function selectScope(passedScope?: string): Promise<"global" | "pro
     { name: "Project (current directory)", value: "project" },
     { name: "Global (home directory)", value: "global" },
   ]) as Promise<"global" | "project">;
+}
+
+export async function selectTargetAgents(): Promise<AgentInfo[]> {
+  const choices = KNOWN_AGENTS.map((a) => ({ name: a.label, value: a.id }));
+  const ids = await promptMultiSelect(
+    "请选择要安装的 AI 工具（可多选，至少选一项）：",
+    choices,
+    {
+      validate: (ids: string[]) =>
+        ids.length > 0 ? true : "请至少选择一个 AI 工具",
+    }
+  );
+  return KNOWN_AGENTS.filter((a) => ids.includes(a.id));
 }
 
 export interface InitOptions extends DeployOptions {}
@@ -85,11 +99,20 @@ export async function initCommand(opts: InitOptions): Promise<void> {
     console.log("     ⚠ Superpowers 安装失败，请稍后手动运行 alloy init 重试");
   }
 
-  // 5. 部署 Alloy skill + schema
-  console.log("\n  🚀 部署 Alloy...");
-  const skillPaths = await deploySkills(opts);
-  for (const p of skillPaths) {
-    console.log(`     ✓ ${p}`);
+  // 5. 部署 Alloy commands
+  console.log("\n  🚀 部署 Alloy commands...");
+  if (opts.targetAgents.length === 0) {
+    console.log("     ⚠ 未选择任何 AI 工具，跳过 command 部署");
+  } else {
+    try {
+      const paths = await deployCommands(opts);
+      for (const p of paths) {
+        console.log(`     ✓ ${p}`);
+      }
+    } catch (e) {
+      console.error(`     ✗ command 部署失败: ${(e as Error).message}`);
+      process.exit(1);
+    }
   }
   const schemaPath = await deploySchema(opts);
   console.log(`     ✓ 项目 schema → ${schemaPath}`);
@@ -161,5 +184,5 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   }
 
   console.log("\n  ✅ Alloy 就绪！");
-  console.log("     在 Claude Code 中输入 /alloy-start <topic> 开始工作\n");
+  console.log("     在 Claude Code 中输入 /alloy:start <topic> 开始工作\n");
 }

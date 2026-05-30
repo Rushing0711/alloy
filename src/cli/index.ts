@@ -185,12 +185,14 @@ async function main() {
         allowPositionals: true,
       });
       const projectPath = positionals[0] ?? process.cwd();
-      const { initCommand, selectScope } = await import("./commands/init.js");
+      const { initCommand, selectScope, selectTargetAgents } = await import("./commands/init.js");
       const scope = await selectScope(values.scope as string | undefined);
+      const targetAgents = await selectTargetAgents();
       await initCommand({
         scope,
         injectClaudeMd: (values["inject-claude-md"] as boolean) || false,
         projectPath,
+        targetAgents,
       });
       break;
     }
