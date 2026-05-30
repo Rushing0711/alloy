@@ -22,6 +22,7 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 | `alloy doctor` | `[path]` | 诊断：版本兼容性、文件一致性 |
 | | `--json` | JSON 格式输出 |
 | `alloy update` | `[path]` | 更新 Alloy skill 文件到最新版 |
+| `alloy completion` | `[bash\|zsh\|pwsh] [--install]` | 生成 shell 补全脚本，--install 自动注册 |
 | `alloy --version` | | 版本号 |
 | `alloy --help` | | 帮助 |
 
@@ -494,12 +495,12 @@ CLI（终端）
   ├── 安装依赖（OpenSpec CLI + Superpowers skill）
   ├── 部署文件（schema + skill）
   ├── 诊断（版本兼容性 + 文件一致性）
-  └── 内部命令（_state / _guard / _archive）供 Agent 调用
+  └── 内部命令（_state / _guard / _record / _archive）供 Agent 调用
 ```
 
 | 层 | 在哪运行 | 内容 | 可靠性 |
 |----|---------|------|--------|
-| CLI | 终端 | 安装、诊断、状态总览、内部命令（_state/_guard/_archive） | 确定性强（TypeScript） |
+| CLI | 终端 | 安装、诊断、状态总览、内部命令（_state/_guard/_record/_archive） | 确定性强（TypeScript） |
 | Skill | Agent 内部 | 流程编排、阶段检测、审查窗口 | 硬约束（SKILL.md 指令 + CLI 内部命令） |
 | AI 内容 | Agent 内部 | 文档生成、代码生成、交互决策 | 柔性（AI 发挥，人类审查） |
 
@@ -516,8 +517,11 @@ CLI（终端）
 ```yaml
 # Alloy 包内置
 compatible:
+  node: ">=18.0.0 <22.0.0"
   openspec: ">=1.3.0 <2.0.0"
   superpowers: ">=5.0.0 <6.0.0"
+  alloy: ">=0.1.0"
+  schema: 1
 
 install:
   openspec: "@fission-ai/openspec@1"
@@ -643,7 +647,7 @@ alloy update [path]
 | CLI（TypeScript） | init / status / doctor / update 四条命令 | 2-3 周 |
 | Slash Commands | 8 条 SKILL.md + 子步骤 prompt 模板 | 2-3 周 |
 | Schema + Templates | 从零构建，参考 superpowers-bridge + Comet | 2 周 |
-| Shell 脚本 | guard / state / archive（参考 Comet） | 1 周 |
+| Shell 脚本 | guard / state / record / archive（参考 Comet） | 1 周 |
 | 测试 | CLI 单元测试 + shell 脚本 Bats 测试 | 1 周 |
 
 ### 依赖稳定性

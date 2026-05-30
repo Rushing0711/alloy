@@ -8,7 +8,7 @@ const ARTIFACTS = [
   "design",
   "specs",
   "tasks",
-  "plan",
+  "plans",
 ] as const;
 
 function checkArtifacts(changePath: string): Record<string, boolean> {
@@ -124,7 +124,7 @@ function getNextStepDetail(
 ): string {
   switch (state.phase) {
     case "started":
-      return artifacts.plan ? "等待 /alloy-apply" : "继续 /alloy-plan，等待下一个制品生成";
+      return artifacts.plans ? "等待 /alloy-apply" : "继续 /alloy-plan，等待下一个制品生成";
     case "planned":
       return "等待 /alloy-apply";
     case "applied":

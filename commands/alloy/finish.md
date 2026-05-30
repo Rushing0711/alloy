@@ -100,11 +100,11 @@ Change: <name>
 用户确认后执行 merge：
 ```bash
 git checkout <base-branch>
-git pull
+git pull || echo "⚠️ git pull 失败（网络问题或冲突），请手动处理后再继续"
 git merge <change-name>
 ```
 
-合并成功后运行测试验证，然后更新 phase：
+若 `git pull` 失败（网络不可达、认证失败），输出警告并暂停，让用户决定是否跳过 pull 直接 merge。若 `git merge` 冲突，输出冲突文件列表，让用户手动解决后继续。
 ```bash
 alloy _guard openspec/changes/<name> finished --apply
 ```

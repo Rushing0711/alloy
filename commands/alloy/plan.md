@@ -13,9 +13,9 @@ tags: [alloy, workflow]
 
 ## 前置检查
 
-1. 确认 `openspec/changes/<name>/draft.md` 存在于项目根目录（由 `/alloy:start` 创建），不存在则报错："未找到 change '<name>' 的 draft.md，请先运行 `/alloy:start <topic>` 生成设计草案"
-2. 若指定 `[name]` 参数但未匹配到活跃 change：
-   - "未找到 change '<name>'，请先运行 `/alloy:start <name>` 创建 change"
+1. 确认 change 目录 `openspec/changes/<name>/` 存在且 `.alloy.yaml` phase 为 `started`（由 `/alloy:start` 完成），否则报错
+2. 若 change 目录存在但 `draft.md` 缺失 → 异常状态，提示重新运行 `/alloy:start`
+3. 若指定 `[name]` 参数但 change 不存在 → "未找到 change '<name>'，请先运行 `/alloy:start <name>` 创建 change"
 
 ---
 

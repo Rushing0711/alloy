@@ -83,7 +83,7 @@ tags: [alloy, workflow]
 修复流程：
 1. 使用 Skill 工具加载 `superpowers:test-driven-development` 技能 —— 先写失败测试，再修代码
 2. 使用 Skill 工具加载 `superpowers:verification-before-completion` 技能 —— 验证修复
-3. 直接提交或创建 PR
+3. 直接提交，或创建 PR 时加载 `superpowers:requesting-code-review` 技能进行审查
 
 ### 路径 B：需改 spec
 

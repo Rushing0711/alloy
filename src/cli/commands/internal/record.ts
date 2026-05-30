@@ -50,7 +50,7 @@ export async function recordCommand(args: string[]): Promise<void> {
   const changeDir = args[1];
 
   if (!action || !changeDir) {
-    console.error("用法: alloy _record <write|check|compute> <change-dir> [artifact] [hash] [approved_at] [approver]");
+    console.error("用法: alloy _record <write|check|compute> <change-dir> [artifact] [hash] [committed_at] [approver]");
     process.exit(1);
   }
 
@@ -62,13 +62,13 @@ export async function recordCommand(args: string[]): Promise<void> {
       const approver = args[5];
 
       if (!artifact || !hash || !approvedAt || !approver) {
-        console.error("用法: alloy _record write <change-dir> <artifact> <hash> <approved_at> <approver>");
+        console.error("用法: alloy _record write <change-dir> <artifact> <hash> <committed_at> <approver>");
         process.exit(1);
       }
 
       const state = await readState(changeDir);
       const existing = state.records.findIndex(r => r.artifact === artifact);
-      const record: ArtifactRecord = { artifact, hash, approved_at: approvedAt, approver };
+      const record: ArtifactRecord = { artifact, hash, committed_at: approvedAt, approver };
 
       if (existing >= 0) {
         state.records[existing] = record;

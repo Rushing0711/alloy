@@ -107,6 +107,29 @@ describe("alloy _guard", () => {
     ).rejects.toThrow();
   });
 
+  it("started→planned hash 不匹配时被阻断", async () => {
+    await writeFile(join(changeDir, "proposal.md"), "real proposal", "utf-8");
+    await writeFile(join(changeDir, "design.md"), "");
+    await writeFile(join(changeDir, "tasks.md"), "");
+    await writeFile(join(changeDir, "plans.md"), "");
+    await mkdir(join(changeDir, "specs"));
+    const yaml = [
+      "worktree: null",
+      "schema_version: 1",
+      "phase: started",
+      'updated_at: "2020-01-01T00:00:00"',
+      "records:",
+      "  - artifact: proposal",
+      '    hash: "wronghash123"',
+      '    committed_at: "2020-01-01T00:00:00"',
+      '    approver: "test"',
+    ].join("\n");
+    await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
+    await expect(
+      guardCommand([changeDir, "planned"])
+    ).rejects.toThrow();
+  });
+
   it("planned→applied plans.md 缺失被阻断", async () => {
     await setupState("planned");
     await expect(
@@ -125,7 +148,7 @@ describe("alloy _guard", () => {
       "records:",
       "  - artifact: plans",
       '    hash: "wronghash123"',
-      '    approved_at: "2020-01-01T00:00:00"',
+      '    committed_at: "2020-01-01T00:00:00"',
       '    approver: "test"',
     ].join("\n");
     await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
@@ -151,7 +174,7 @@ describe("alloy _guard", () => {
       "records:",
       "  - artifact: verify",
       '    hash: "wronghash999"',
-      '    approved_at: "2020-01-01T00:00:00"',
+      '    committed_at: "2020-01-01T00:00:00"',
       '    approver: "test"',
     ].join("\n");
     await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
@@ -173,7 +196,7 @@ describe("alloy _guard", () => {
       "records:",
       `  - artifact: plans`,
       `    hash: "${hash}"`,
-      '    approved_at: "2020-01-01T00:00:00"',
+      '    committed_at: "2020-01-01T00:00:00"',
       '    approver: "test"',
     ].join("\n");
     await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
@@ -200,7 +223,7 @@ describe("alloy _guard", () => {
       "records:",
       "  - artifact: tasks",
       '    hash: "def456"',
-      '    approved_at: "2020-01-01T00:00:00"',
+      '    committed_at: "2020-01-01T00:00:00"',
       '    approver: "test"',
     ].join("\n");
     await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");

@@ -75,7 +75,7 @@ describe("alloy _record", () => {
       expect(state.records[0]).toEqual({
         artifact: "proposal",
         hash: "abc123def456",
-        approved_at: "2025-01-15T10:30:00",
+        committed_at: "2025-01-15T10:30:00",
         approver: "alice",
       });
 
@@ -110,7 +110,7 @@ describe("alloy _record", () => {
       expect(state.records[0]).toEqual({
         artifact: "proposal",
         hash: "hash-v2",
-        approved_at: "2025-02-01T00:00:00",
+        committed_at: "2025-02-01T00:00:00",
         approver: "carol",
       });
 

@@ -129,6 +129,9 @@ tags: [alloy, workflow]
 → Phase: started
 → draft.md 已锁定（hash + commit）
 
+draft.md 已完成。
+💡 建议：可以用 grill-me 对需求进行深入拷问，确认后再进入 plan。
+
 准备好后，运行 `/alloy:plan` 进入规划阶段。
 ```
 

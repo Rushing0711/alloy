@@ -63,7 +63,9 @@ test -f openspec/changes/<name>/verify.md && ! grep -q '^- \[x\] ❌ FAIL' opens
 > 4. 更新 phase → archived
 > 5. 提交归档变更（`git add` + `git commit`）
 >
-> 如果 `openspec` CLI 不可用，警告但不阻断——spec 同步依赖 OpenSpec CLI。
+> `alloy _archive` 内部区分两类错误：
+> - `openspec` CLI 不可用（command not found）→ ⚠️ 警告但继续，用户需稍后安装 OpenSpec CLI 重新归档
+> - `openspec archive` 实际执行失败（权限、磁盘、冲突等）→ [HARD STOP] 阻断，不推进 phase
 >
 > ```
 > ✓ Delta Spec 已合并到主 spec

@@ -35,7 +35,7 @@ change-name 在 draft.md 完成后自然浮现。`/opsx:new <name>` 执行时会
 | 技术方案 | `/opsx:continue` → design | **`design.md`** |
 | 行为 spec | `/opsx:continue` → specs | **`specs/**/*.md`** |
 | 任务清单 | `/opsx:continue` → tasks | **`tasks.md`** |
-| 执行计划 | `/opsx:continue` → plan（隐含 `superpowers:writing-plans`） | **`plan.md`** |
+| 执行计划 | `superpowers:writing-plans`（独立步骤，不经过 `/opsx:continue`） | **`plans.md`** |
 
 ### OpenSpec 执行阶段
 
@@ -58,7 +58,8 @@ change-name 在 draft.md 完成后自然浮现。`/opsx:new <name>` 执行时会
 | 步骤 | 命令/技能 | 产出物 |
 |------|----------|--------|
 | 人工测试 |（人工） | 测试结论 |
-| 归档 + 收尾 | `/opsx:archive -y` → `superpowers:finishing-a-development-branch` | delta spec 合并 + merge / PR / keep |
+| 归档 | `/opsx:archive -y` | delta spec 合并 + 移入 archive/ |
+| 代码收尾 | `superpowers:finishing-a-development-branch` | merge / PR / keep |
 
 > PR 审查反馈通过自然对话处理，Agent 内部遵循 `superpowers:receiving-code-review` 行为规范（验证优先、不盲从、技术推理）。
 
@@ -86,7 +87,7 @@ OpenSpec 规划:
         ├── design    ← 读 draft.md + proposal，重组为结构化方案（产出: design.md）
         ├── specs     ← 按 proposal 的 Capabilities 写 Delta Spec（产出: specs/**/*.md）
         ├── tasks     ← 基于 specs + design 拆 checkbox（产出: tasks.md）
-        └── plan      ← 隐含 superpowers:writing-plans，拆 TDD 微步骤（产出: plan.md）
+        └── plans     ← 隐含 superpowers:writing-plans，拆 TDD 微步骤（产出: plans.md）
 
 OpenSpec 执行:
     /opsx:apply
@@ -103,9 +104,9 @@ OpenSpec 执行:
 
 收尾:
     人工测试
-    /opsx:archive -y（sync delta spec + 归档）
-        → 自动调用 superpowers:finishing-a-development-branch
-            选项1: 本地 merge / 选项2: 创建 PR / 选项3: 保持
+    /opsx:archive -y（sync delta spec + 移入 archive/）
+    superpowers:finishing-a-development-branch
+        选项1: 本地 merge / 选项2: 创建 PR / 选项3: 保持
     （选 PR 后，审查反馈通过自然对话处理，
       Agent 内部遵循 superpowers:receiving-code-review 行为规范）
 ```
@@ -157,7 +158,7 @@ superpowers:systematic-debugging
 Pre-OpenSpec 阶段:
     draft.md  ← /opsx:explore 隐含 superpowers:brainstorming 产出（无 DAG 依赖）
 
-OpenSpec 规划阶段（schema DAG，6 个制品）:
+OpenSpec 规划阶段（schema DAG，8 个制品）:
     proposal  ← 无 schema 依赖（instruction 读 draft.md）
         │
         ├──→ specs     ← 依赖 proposal
@@ -166,10 +167,10 @@ OpenSpec 规划阶段（schema DAG，6 个制品）:
         │      └──→ tasks   ← 依赖 specs + design
         │            │            （需"做什么"+"怎么做"）
         │            │
-        │            └──→ plan   ← 依赖 tasks
+        │            └──→ plans  ← 依赖 tasks
         │                  │   隐含: superpowers:writing-plans
         │                  │
-        │                  └──→ verify  ← 依赖 plan（apply 阶段产出）
+        │                  └──→ verify  ← 依赖 plans（apply 阶段产出）
         │                        │
         │                        └──→ retrospective ← 依赖 verify（apply 阶段产出）
         │
@@ -177,7 +178,7 @@ OpenSpec 规划阶段（schema DAG，6 个制品）:
                        （instruction 读 draft.md，受 proposal 范围约束）
 
 OpenSpec 执行阶段（8 个制品，后 2 个在 apply 中产出）:
-    apply  ← 依赖 plan
+    apply  ← 依赖 plans
         ├── precheck      ← 5 个 Superpowers 技能可用性检查
         ├── git-worktrees ← 隐含: superpowers:using-git-worktrees
         ├── 任务实现       ← 隐含: superpowers:subagent-driven-development（首选）
@@ -198,7 +199,7 @@ OpenSpec 执行阶段（8 个制品，后 2 个在 apply 中产出）:
 | design → proposal | 约束技术方案不超出 proposal 的 Capabilities 范围 |
 | design 读 draft | 重组 draft 中的 Q1-Qn 技术决策 |
 | tasks → specs + design | 需 specs 告诉"做什么" + design 告诉"怎么做" |
-| plan → tasks | 将粗粒度 checkbox 拆为 TDD 微步骤 |
+| plans → tasks | 将粗粒度 checkbox 拆为 TDD 微步骤 |
 
 ---
 
@@ -302,7 +303,10 @@ OpenSpec 执行阶段（8 个制品，后 2 个在 apply 中产出）:
                    └───────┘
                          │
                     /opsx:archive
-                 sync delta spec → finishing
+                 sync delta spec
+                         │
+                  superpowers:
+              finishing-a-development-branch
                    merge/PR/keep
                          │
                    （选 PR 后，反馈

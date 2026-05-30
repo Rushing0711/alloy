@@ -16,6 +16,7 @@ export interface DeployOptions {
 export interface EnvInfo {
   nodeVersion: string;
   gitInstalled: boolean;
+  claudeCodeInstalled: boolean;
 }
 
 export interface CompatConfig {
@@ -48,7 +49,7 @@ export interface DepCheckResult {
 export interface ArtifactRecord {
   artifact: string;
   hash: string;
-  approved_at: string;
+  committed_at: string;
   approver: string;
 }
 

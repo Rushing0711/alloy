@@ -32,7 +32,7 @@ tags: [alloy, workflow]
 
 ```
 活跃 Change：
-  login-feature  planned    artifacts: draft ✓ proposal ✓ design ✓ specs ✓ tasks ✓ plan ✓
+  login-feature  planned    artifacts: draft ✓ proposal ✓ design ✓ specs ✓ tasks ✓ plans ✓
   payment-fix    started    artifacts: draft ✓
 
 下一步：login-feature 等待 /alloy:apply，payment-fix 等待 /alloy:plan
@@ -75,5 +75,6 @@ Worktree: .worktrees/login-feature/
 
 每次 status 运行时自动检查：
 
-1. `.alloy.yaml` 中 `worktree` 字段有值但磁盘路径不存在 → "worktree 残留：.alloy.yaml 声称 worktree 在 `<path>` 但路径不可达"
-2. `git worktree list` 中存在孤立 worktree（`.worktrees/` 下存在目录但没有对应的 `.alloy.yaml`）→ 提示可能存在可清理的残留
+1. `.alloy.yaml` 中 `worktree` 字段有值但磁盘路径不存在 → "worktree 残留"
+2. `.alloy.yaml` 中 `worktree` 字段为 null 但 `.worktrees/<name>/` 目录存在 → "worktree 孤儿"（状态写入缺失，apply 阶段可能未正确记录 worktree 路径）
+3. `git worktree list` 中存在孤立 worktree（`.worktrees/` 下存在目录但没有对应的 `.alloy.yaml`）→ 提示可能存在可清理的残留

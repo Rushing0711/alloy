@@ -94,8 +94,8 @@ export async function guardCommand(args: string[]): Promise<void> {
     }
   }
 
-  // 3. hash 一致性校验（planned→applied 和 applied→archived）
-  if (transition === "planned->applied" || transition === "applied->archived") {
+  // 3. hash 一致性校验（started→planned、planned→applied、applied→archived）
+  if (transition === "started->planned" || transition === "planned->applied" || transition === "applied->archived") {
     const records = state.records || [];
     const mismatches: string[] = [];
     for (const record of records) {

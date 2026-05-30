@@ -95,13 +95,13 @@ describe("state utils", () => {
       {
         artifact: "proposal.md",
         hash: "abc123",
-        approved_at: "2025-01-15T10:30:00",
+        committed_at: "2025-01-15T10:30:00",
         approver: "human",
       },
       {
         artifact: "design.md",
         hash: "def456",
-        approved_at: "2025-01-15T11:00:00",
+        committed_at: "2025-01-15T11:00:00",
         approver: "human",
       },
     ];
