@@ -16,6 +16,7 @@ tags: [alloy, workflow]
 1. 确认 change 目录 `openspec/changes/<name>/` 存在且 `.alloy.yaml` phase 为 `started`（由 `/alloy:start` 完成），否则报错
 2. 若 change 目录存在但 `draft.md` 缺失 → 异常状态，提示重新运行 `/alloy:start`
 3. 若指定 `[name]` 参数但 change 不存在 → "未找到 change '<name>'，请先运行 `/alloy:start <name>` 创建 change"
+4. **Skill 预检：** 确认 `superpowers:writing-plans` 技能可用。若不可用 → 引导 `alloy init` → STOP。不在生成 tasks 后才暴露缺失。
 
 ---
 
@@ -36,7 +37,11 @@ tags: [alloy, workflow]
 PLAN_START=$(date +%s)
 ```
 
-1. 确认 `openspec/changes/<name>/draft.md` 存在
+1. 确认 `openspec/changes/<name>/draft.md` 存在，并验证来源：
+   ```bash
+   git log -1 --format="%s" -- openspec/changes/<name>/draft.md
+   ```
+   若 commit message 不含 `feat(<name>): draft 已确认`→ ⚠️ draft.md 可能未经过完整 `/alloy:start` 流程（手工创建），提示用户确认是否继续。不阻断——但给用户知情权。
 2. 确认 `.alloy.yaml` phase 为 `started`：
    ```bash
    alloy _state check openspec/changes/<name> started

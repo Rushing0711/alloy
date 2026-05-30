@@ -52,6 +52,8 @@ tags: [alloy, workflow]
 
 > 正在启动 brainstorming...
 
+**前置预检：** 确认 `superpowers:brainstorming` 技能可用。若不可用 → 引导用户运行 `alloy init` 重新安装 → STOP。不在 Step 2 才发现缺失。
+
 **立即执行：** 使用 Skill 工具加载 `superpowers:brainstorming` 技能。禁止跳过此步骤。
 
 将探查结果作为 ARGUMENTS 传入：

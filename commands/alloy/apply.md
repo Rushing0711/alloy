@@ -119,10 +119,12 @@ APPLY_START=$(date +%s)
 **如果 plans.md 有 strategy header：**
 - 对应选项标记为"（推荐）"
 - 用户不明确选择时，默认采用推荐方案
+- 展示推荐时，一起展示 writing-plans 给出的 `reason`（策略背后的分析理由）
 
 **如果 plans.md 无 strategy header（兼容旧 change）：**
 - 分析任务特征后给出推荐
 - 两个选项不标记推荐，等用户明确选择
+- **策略决定后，将 strategy 回写到 plans.md YAML frontmatter**，补充 `strategy` 和 `reason` 字段，然后重新 hash 锁定。这确保后续 apply（如断线重连）不会重复分析。
 
 **必须等待用户明确选择后才能继续。**
 
@@ -134,12 +136,20 @@ Superpowers 技能内部行为（alloy 仅编排，不替代）：
 - 读取 plan → 分派子 agent → 每个子 agent 独立执行 TDD + code review（transitive 激活）
 - 子 agent 各自勾选 tasks.md 中对应任务的 checkbox
 
-**串行路径：** 加载 `superpowers:executing-plans` 技能执行 plans.md 微步骤：
+**串行路径：** 分三步执行，确保不丢 TDD 和 code review 闸门：
+
+**1. 先加载 `superpowers:test-driven-development` 技能设定 TDD 预期：**
+- 加载后，TDD 纪律（RED→GREEN→REFACTOR）成为本次执行的硬约束
+- 不在 executing-plans 内部"顺便做"——先设定预期，再执行
+
+**2. 加载 `superpowers:executing-plans` 技能执行 plans.md 微步骤：**
 - executing-plans 按 plans.md 逐步执行，每步完成后暂停审查
 - 执行过程中遵循 TDD 流程（先写测试→确认失败→实现→确认通过）
-- executing-plans 执行完成后，**必须加载 `superpowers:requesting-code-review` 技能**进行代码审查闸门
 
-> ⚠️ 串行路径不会 transitive 激活 TDD 或 code review。Agent 必须在 executing-plans 执行过程中自行遵循 TDD 纪律，并在完成后显式触发 code review。
+**3. executing-plans 完成后，加载 `superpowers:requesting-code-review` 技能：**
+- 代码审查闸门——所有代码变更必须经过审查才能进入 Step 3 验证
+
+> 串行路径不会 transitive 激活 TDD 或 code review。以上三步通过**显式加载**来补偿——先设定 TDD 预期，再执行，最后审查。
 
 ### Step 3/5：代码层验证
 

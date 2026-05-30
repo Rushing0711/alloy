@@ -28,6 +28,8 @@ tags: [alloy, workflow]
 
 ### [Step 1/3] 前置检查
 
+**0. Skill 预检：** 确认 `superpowers:finishing-a-development-branch` 技能可用。若不可用 → 引导 `alloy init` → STOP。
+
 > phase 是否为 archived？ <检查结果>
 
 **phase 必须是 `archived`。** 如果 phase != archived：

@@ -18,6 +18,24 @@ tags: [alloy, workflow]
 
 ---
 
+## 前置检查
+
+在进入诊断前，先校验环境和权限：
+
+**1. Skill 预检：** 确认以下 3 个技能可用（缺一 STOP）：
+- `superpowers:systematic-debugging` — 根因诊断
+- `superpowers:test-driven-development` — 修复流程
+- `superpowers:verification-before-completion` — 验证修复
+
+任一缺失 → 输出缺失列表 → 引导 `alloy init` → STOP。
+
+**2. Phase 校验：** 若检测到活跃 change 的 `.alloy.yaml`，读取 phase：
+- phase = `archived` → ⚠️ "该 change 已归档，spec 已封存。如果修复需要改 spec，应开新 change。继续修复（不改 spec）？"
+- phase = `finished` → ⚠️ "该 change 已完成。建议开新 change 而非在此 change 上修复。"
+- 不阻断——fix 命令的用户可能不在任何 change 上下文中，仅做知情提示。
+
+---
+
 ## Step 1/3：环境感知
 
 ```
