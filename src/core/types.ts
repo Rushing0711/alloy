@@ -1,7 +1,16 @@
+export interface AgentInfo {
+  id: string;
+  label: string;
+  supportsColonCommands: boolean;
+  commandsDir: string;
+  globalOnly?: boolean;
+}
+
 export interface DeployOptions {
   scope: "global" | "project";
   injectClaudeMd: boolean;
   projectPath: string;
+  targetAgents: AgentInfo[];
 }
 
 export interface EnvInfo {
