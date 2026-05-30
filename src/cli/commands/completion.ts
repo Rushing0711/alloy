@@ -91,7 +91,8 @@ function zshCompletion(): string {
     "  esac",
     "}",
     "",
-    "_alloy",
+    "# 注册补全（source 和 compinit 两种方式均兼容）",
+    "compdef _alloy alloy 2>/dev/null",
     "",
   ].join("\n");
 }

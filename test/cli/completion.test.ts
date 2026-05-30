@@ -16,6 +16,12 @@ describe("generateCompletion", () => {
     expect(output).toContain("{-v,--version}");
   });
 
+  it("zsh 补全应用 compdef 注册而非顶层调用 _alloy", () => {
+    const output = generateCompletion("zsh");
+    expect(output).toContain("compdef _alloy alloy");
+    expect(output).not.toMatch(/^_alloy$/m);
+  });
+
   it("bash 补全应包含 -v 和 --version", () => {
     const output = generateCompletion("bash");
     expect(output).toContain("--version");
