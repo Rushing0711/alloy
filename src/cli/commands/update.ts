@@ -32,7 +32,7 @@ function detectScope(projectPath: string): "global" | "project" | null {
 
 async function checkLatestVersion(): Promise<string | null> {
   try {
-    return execSync("npm view @alloy/cli version", { stdio: "pipe" })
+    return execSync("npm view @flyin-ai/alloy version", { stdio: "pipe" })
       .toString()
       .trim();
   } catch {
@@ -82,7 +82,7 @@ export async function updateCommand(projectPath: string): Promise<string[]> {
 
       if (doUpdate) {
         try {
-          execSync("npm update -g @alloy/cli", { stdio: "pipe" });
+          execSync("npm update -g @flyin-ai/alloy", { stdio: "pipe" });
           results.push("✓ alloy CLI 已升级");
         } catch {
           results.push("⚠️ CLI 升级失败");

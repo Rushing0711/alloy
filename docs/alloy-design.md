@@ -557,7 +557,7 @@ alloy init --scope global:
 ### alloy init 流程
 
 ```
-$ npm install -g @alloy/cli
+$ npm install -g @flyin-ai/alloy
 $ cd your-project
 $ alloy init
 

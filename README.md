@@ -42,7 +42,7 @@ Alloy 把两个工具缝合到一起：
 ## 安装
 
 ```bash
-npm install -g @alloy/cli
+npm install -g @flyin-ai/alloy
 cd your-project
 alloy init
 ```

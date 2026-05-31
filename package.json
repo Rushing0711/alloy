@@ -1,5 +1,5 @@
 {
-  "name": "@alloy/cli",
+  "name": "@flyin-ai/alloy",
   "version": "0.1.0",
   "description": "Alloy - OpenSpec + Superpowers 编排层 CLI 工具",
   "type": "module",
