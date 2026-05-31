@@ -117,9 +117,18 @@ echo "SESSION_START=$(date "+%Y-%m-%d %H:%M:%S")"
    alloy _state init openspec/changes/<name>
    ```
 5. **确保 git 仓库就绪：**
+
    ```bash
-   git rev-parse --git-dir 2>/dev/null || git init
+   if ! git rev-parse --git-dir 2>/dev/null; then
+     git init
+     # 空项目：先提交基础设施作为锚点，确保 HEAD 存在以便后续创建分支
+     git add .claude/ .gitignore openspec/config.yaml openspec/schemas/ 2>/dev/null
+     [ -f CLAUDE.md ] && git add CLAUDE.md 2>/dev/null
+     git commit -m "chore: alloy init 项目初始化"
+   fi
    ```
+
+   已有项目则跳过（git repo 已存在，HEAD 已有锚点）。
 
 6. **分支选择**——检测 git 状态，确认工作分支：
 

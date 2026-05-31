@@ -62,9 +62,10 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
   → brainstorming 的详细设计论述写入 draft.md"关键决策"章节，不单独产出 superpowers spec 文件
   → brainstorming 确认后，调用 /opsx:new 创建 change，将 draft.md 移入 change 目录
   → 写入 .alloy.yaml（phase=started）
+  → git 仓库就绪：已有项目跳过；空项目先 git init → 基础设施 commit（锚点，确保可创建分支）
   → 分支选择：检测当前分支 → 展示 3 选项（在当前分支继续 / 切换到已有分支 / 新建分支），
     给后续 apply 阶段推荐开发分支（apply 阶段仍会通过 using-git-worktrees 再次确认隔离方式）
-  → 分支确认后，hash+commit（draft.md + .alloy.yaml），然后提交 alloy init 基础设施文件
+  → 分支确认后，hash+commit（draft.md + .alloy.yaml），已有项目同步提交 alloy init 基础设施文件
     （`.claude/` `.gitignore` `openspec/`，含 `CLAUDE.md` 如已注入），
     确保全部内容落在正确分支上。`.superpowers/` 已由 `.gitignore` 忽略
   → draft.md 存放在 change 目录内（openspec/changes/<name>/draft.md），非项目根目录
