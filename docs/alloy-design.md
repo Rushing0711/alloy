@@ -156,7 +156,7 @@ phase → planned
 
 执行步骤（共 5 步，每步自带幂等检查，验证失败回到 Step 2 修复）:
   1. superpowers:using-git-worktrees → 隔离环境设置。
-     幂等检查：worktree 路径已存在或为 null → 跳过此步骤。否则按技能指引执行。
+     幂等检查：worktree 路径存在 或 值为 "skipped" → 跳过此步骤。值为 null（首次）→ 加载技能让用户选择。
   2. 任务实现。Agent 从 plans.md header 读取执行策略（SDD 并行 vs 串行），作为推荐方案展示给用户确认。
      幂等检查：tasks.md checkbox 全部勾选 → 跳过。TDD 机制天然保证已实现 task 重跑时自动跳过。
   3. superpowers:verification-before-completion → 代码层验证（测试通过、行为正确）。天然幂等。
@@ -323,7 +323,7 @@ alloy doctor [path] [--json]
 ```yaml
 # openspec/changes/<name>/.alloy.yaml
 phase: started | planned | applied | archived | finished
-worktree: null | ".worktrees/<name>"
+worktree: null | ".worktrees/<name>" | "skipped"
 schema_version: 1
 created_at: "2026-05-28 09:00:00"
 updated_at: "2026-05-28 15:30:00"
@@ -348,7 +348,7 @@ records:
 | 字段 | 读写 | 含义 |
 |------|------|------|
 | `phase` | CLI + Agent | 当前阶段，决定 `/alloy:start` 的恢复路径 |
-| `worktree` | apply 阶段写入 | null=未创建；有值=apply 已开始，恢复时跳过创建 |
+| `worktree` | apply 阶段写入 | null=尚未决定；skipped=用户选择不创建；路径=已创建，恢复时跳过 |
 | `schema_version` | alloy init 写入 | 格式演进时用于兼容解析 |
 | `created_at` | alloy start 写入 | change 创建时间 |
 | `updated_at` | phase 变更时写入 | 最后状态变更时间，调试和排序用 |

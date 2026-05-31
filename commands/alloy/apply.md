@@ -74,10 +74,18 @@ print(json.dumps(d))
 " | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
 ```
 
+读取启动时间用于展示：
+```bash
+alloy _state read openspec/changes/<name> phase_timings | python3 -c "
+import sys,json
+print(json.loads(sys.stdin.read() or '{}').get('apply',{}).get('started_at',''))
+"
+```
+
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [3/5] · Phase: Apply           │
-│ 启动时间: 从 phase_timings.apply.started_at 读取                │
+│ 启动时间: <上面命令输出的 started_at 值>  │
 └──────────────────────────────────────┘
 
 [Step 0/5] 技能可用性预检（precheck）
@@ -143,12 +151,20 @@ alloy _state read openspec/changes/<name> worktree
 
 ```
 Step 1/5 进度检测:
-  worktree 值: ".worktrees/<name>/" → 路径已存在 → ✓ 已完成，跳过此步骤
-  worktree 值: null              → 用户选择不创建 → ✓ 已完成，跳过此步骤
-  worktree 值: ".worktrees/<name>/" → 路径不存在 → ⚠️ 残留记录，重新创建
+  worktree 值: ".worktrees/<name>/" → 路径存在 → ✓ 已完成，跳过此步骤
+  worktree 值: ".worktrees/<name>/" → 路径不存在 → ⚠️ 残留记录，重新处理
+  worktree 值: "skipped"           → ✓ 用户选择不创建，跳过此步骤
+  worktree 值: null（从未写入）      → ⚠️ 尚未决定，加载 using-git-worktrees
 ```
 
-worktree 路径存在或为 null 时，直接跳过 Step 1，进入 Step 2。
+路径存在、"skipped" 时，直接跳过 Step 1，进入 Step 2。
+
+null 时，加载 `superpowers:using-git-worktrees` 让用户选择。
+
+**when 用户选择不创建 worktree：** 写入 `skipped`（非 null）：
+```bash
+alloy _state write openspec/changes/<name> worktree skipped
+```
 
 > [Step 1/5] superpowers:using-git-worktrees
 >
@@ -156,7 +172,7 @@ worktree 路径存在或为 null 时，直接跳过 Step 1，进入 Step 2。
 
 技能执行完成后，将结果写入状态文件——这是断点恢复的关键数据：
 - 已创建 worktree → `alloy _state write openspec/changes/<name> worktree "<path>"`
-- 用户拒绝或已在隔离环境 → `alloy _state write openspec/changes/<name> worktree null`
+- 用户拒绝或已在隔离环境 → `alloy _state write openspec/changes/<name> worktree skipped`
 
 ### [Step 2/5] 任务实现
 

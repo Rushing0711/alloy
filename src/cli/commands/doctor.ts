@@ -37,7 +37,8 @@ export async function doctorCommand(
     const changePath = join(changesDir, name);
 
     // 检查 1: worktree 字段有值但磁盘路径不存在
-    if (state.worktree) {
+    // "skipped" 是用户明确选择不创建 worktree 的标记，跳过此项检查
+    if (state.worktree && state.worktree !== "skipped") {
       const worktreePath = join(projectPath, state.worktree);
       if (!existsSync(worktreePath)) {
         consistencyWarnings.push(
@@ -46,7 +47,8 @@ export async function doctorCommand(
       }
     }
 
-    // 检查 2: worktree 字段为 null 但 .worktrees/<name>/ 目录存在
+    // 检查 2: worktree 字段为 null（从未设置）但 .worktrees/<name>/ 目录存在
+    // "skipped" 不触发此检查——用户选择不创建，孤儿目录由 git worktree list 覆盖
     if (!state.worktree) {
       const orphanPath = join(projectPath, ".worktrees", name);
       if (existsSync(orphanPath)) {
