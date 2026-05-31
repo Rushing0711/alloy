@@ -89,6 +89,12 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 
 前置检查: change 目录存在且 .alloy.yaml phase=started（/alloy:start 已完成）
 
+若 phase 不匹配:
+  → planned → 自动路由到 /alloy:apply
+  → applied → 自动路由到 /alloy:apply
+  → archived → 自动路由到 /alloy:finish
+  → 唯一 HARD STOP：change 目录不存在、draft.md 缺失（前序阶段完全没做）
+
 若指定 name 但 change 不存在:
   → ⚠️ "未找到 change '<name>'，请先运行 /alloy:start <topic> 创建"
 
@@ -98,9 +104,11 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 流程:
   1. 确认 change 已存在 → 读取 .alloy.yaml 确认 phase=started
      （无需创建 change —— /alloy:start 已完成这一步）
-  2. 调用 /opsx:continue → 利用 schema DAG 按依赖顺序制品生成
+  2. 制品进度扫描 → 扫描已有制品（文件存在 + hash 有效），跳过已完成，
+     从第一个缺失制品开始生成
+  3. 调用 /opsx:continue → 利用 schema DAG 按依赖顺序制品生成
 制品生成: proposal → design → specs → tasks（/opsx:continue 停在 tasks）
-  3. 调用 superpowers:writing-plans → 按原始流程生成 plans.md（含末尾执行交接），
+  4. 调用 superpowers:writing-plans → 按原始流程生成 plans.md（含末尾执行交接），
 	     用户选定策略后，将决策注入 plans.md YAML frontmatter 供 apply 阶段读取
 每步生成后有审查窗口，可确认或要求修改
 始终分步，不提供一键生成
@@ -125,26 +133,31 @@ phase → planned
 ```
 /alloy:apply [name]（省略时从当前活跃 change 推断）
 
-前置检查（3 项）:
+前置检查（3 项 + phase 路由）:
   1. plans.md 存在
-  2. alloy _guard 确认 phase = planned
-  3. git 仓库检测 — 不是仓库时，展示选项让用户选择立即初始化还是稍后自行处理（有感决策，不静默 init）
+  2. alloy _guard 确认 phase：
+     ├── started → 自动路由到 /alloy:plan
+     ├── planned → 通过，继续执行
+     ├── applied → 通过（重入），步骤幂等处理断点
+     └── archived → 自动路由到 /alloy:finish
+  3. git 仓库检测 — 不是仓库时，展示选项让用户选择立即初始化还是稍后自行处理
 
 技能预检（6 个 Superpowers 技能可用性，缺一 STOP）
 
-执行步骤（共 5 步，验证失败回到 Step 2 修复）:
+执行步骤（共 5 步，每步自带幂等检查，验证失败回到 Step 2 修复）:
   1. superpowers:using-git-worktrees → 隔离环境设置。
-     技能内置询问环节，用户可选择创建 worktree 或在当前目录直接工作。
-     Agent 不重复建造选择闸门。结果写入 .alloy.yaml（worktree 路径或 null）。
+     幂等检查：worktree 路径已存在或为 null → 跳过此步骤。否则按技能指引执行。
   2. 任务实现。Agent 从 plans.md header 读取执行策略（SDD 并行 vs 串行），作为推荐方案展示给用户确认。
-     用户可选择 SDD（并行子 agent）或串行执行。用户选择后加载对应技能按内部指引执行。
-  3. superpowers:verification-before-completion → 代码层验证（测试通过、行为正确）
+     幂等检查：tasks.md checkbox 全部勾选 → 跳过。TDD 机制天然保证已实现 task 重跑时自动跳过。
+  3. superpowers:verification-before-completion → 代码层验证（测试通过、行为正确）。天然幂等。
   4. /opsx:verify → 制品层验证（7 项结构化检查 → verify.md）。
+     幂等检查：verify.md 存在且 hash 有效 → 跳过。
      CLI 输出语言不由 Agent 控制，Agent 必须将 verify.md 重写为与指令/模板一致的语言。
+     verify 过程中更新 tasks.md checkbox 后，必须重录 tasks hash（`alloy _record write`）。
   5. 纯 AI 生成 → retrospective.md（全周期复盘，§0-§6）。
+     幂等检查：retrospective.md 存在且 hash 有效 → 跳过。
      §0 量化全景：三来源自动收集——.alloy.yaml records（制品审批链）+ git log（全分支按 type/阶段分组）+ 文件系统（任务完成比、变更规模、测试覆盖信号）。
-     §4 全周期技能审计：Agent 自报 start/plan/apply 三阶段 11 项技能/命令使用情况。同一 session 亲历，无需推断。
-     输出语言与指令/模板上下文保持一致，代码标识符和 commit hash 保持原始语言。
+     §4 全周期技能审计：Agent 自报 start/plan/apply 三阶段 11 项技能/命令使用情况。
 
 验证通过后，verify.md 和 retrospective.md 各自 hash-lock + 单独 git commit，再通过 guard 校验。
 phase → applied
@@ -155,12 +168,20 @@ phase → applied
 ```
 /alloy:archive [name]（省略时从当前活跃 change 推断）
 
-前置检查（硬拒绝）: phase = applied + verify.md 存在且 Overall Decision 不是 FAIL
+前置检查（phase 路由）:
+  → phase = applied + verify.md 存在且非 FAIL → 通过，继续
+  → phase = planned → 自动路由到 /alloy:apply
+  → phase = started → 自动路由到 /alloy:plan
+  → phase = archived → 自动路由到 /alloy:finish
+  → 唯一 HARD STOP：change 目录不存在（前序阶段完全没做）
 
 执行:
   1. /opsx:archive → sync delta spec + 归档到 archive/YYYY-MM-DD-<name>/
-  2. 跨周期反馈：读取 retrospective.md §6 Promote Candidates，将 Promote to: memory 的条目写入 ~/.claude/memory/，让教训进入后续 session
-  3. git add + git commit → 提交归档变更（delta spec 合并 + 归档移动）
+  2. 跨周期反馈：读取 retrospective.md §6 Promote Candidates，将 Promote to: memory 的条目写入 ~/.claude/memory/
+  3. git add（精确路径）+ git commit：
+     git add openspec/specs/ openspec/changes/archive/
+     git add -u openspec/changes/<name>/  # cleanup mv residue
+     永远不用 git add -A——防止意外文件混入
   4. phase → archived
 
 archive 只做 spec 归档和归档提交，不涉及代码合并。代码合入由 /alloy:finish 完成。
@@ -175,7 +196,12 @@ archive 只做 spec 归档和归档提交，不涉及代码合并。代码合入
   1. /alloy:archive 完成后 → 代码合入与现场清理
   2. 手动调用 → archive 时选了 keep，后续想 merge / PR
 
-前置检查: phase = archived（spec 已归档）
+前置检查（phase 路由）:
+  → phase = archived → 通过，继续
+  → phase = applied → 自动路由到 /alloy:archive
+  → phase = planned → 自动路由到 /alloy:apply
+  → phase = start → 自动路由到 /alloy:plan
+  → HARD STOP：分支不存在（可能已 merge 或删除）
 
 执行: superpowers:finishing-a-development-branch
   → 3 选项:
@@ -291,6 +317,13 @@ worktree: null | ".worktrees/<name>"
 schema_version: 1
 created_at: "2026-05-28 09:00:00"
 updated_at: "2026-05-28 15:30:00"
+phase_timings:
+  start:
+    started_at: "2026-05-28 09:00:00"
+    completed_at: "2026-05-28 09:07:35"
+  plan:
+    started_at: "2026-05-28 09:07:47"
+    completed_at: "2026-05-28 09:15:30"
 records:
   - artifact: proposal
     hash: "abc123"
@@ -309,9 +342,10 @@ records:
 | `schema_version` | alloy init 写入 | 格式演进时用于兼容解析 |
 | `created_at` | alloy start 写入 | change 创建时间 |
 | `updated_at` | phase 变更时写入 | 最后状态变更时间，调试和排序用 |
+| `phase_timings` | 各阶段写入 | 每个阶段的 `started_at` / `completed_at`，接续时不丢失耗时数据 |
 | `records` | plan/apply 阶段写入 | 每个制品提交后的 hash 记录，格式 `ArtifactRecord[]`，含 artifact/hash/committed_at/approver |
 
-断点恢复：`/alloy:start` 检测到活跃 change → 读 phase + worktree + 文件系统 → 自动从断点继续。不设子步骤状态——Agent 通过检查文件存在性自判断。
+断点恢复：`/alloy:start` 检测到活跃 change → 读 phase + worktree + 文件系统 → 自动加载对应阶段命令。不设子步骤状态——Agent 通过文件存在性自判断。
 
 ### 阶段闸门检查规则
 
@@ -583,7 +617,7 @@ alloy update [path]
 | 11 | receiving-code-review 嵌入 agent 指令 | 行为规范非管道步骤，减少命令数，降低使用门槛 |
 | 12 | SDD / 串行执行由用户选择 | Agent 从 plans.md header 读取执行策略作为推荐，用户决定使用 SDD 还是串行执行。策略在规划阶段写入，apply 阶段读取 |
 | 13 | retrospective 模板参考 superpowers-bridge | 全周期审计，§0 量化全景（三来源自动收集）+ §4 三阶段技能审计（Agent 自报）+ §6 Promote Candidates 跨周期 carry-forward |
-| 14 | 不设子步骤状态追踪 | phase + worktree + 文件检查足够 Agent 判断恢复位置 |
+| 14 | 不设子步骤状态，通过路由 + 幂等实现接续 | precheck 不满足时自动路由到正确命令，阶段步骤自身幂等。退出回来随便打任何命令都能自动接续 |
 | 15 | CLI 守门，Skill 信任 | 环境依赖由 `alloy init` 确保，Skill 不做手动 fallback。依赖缺失时引导 `alloy init` |
 | 16 | scope 只控制 skill 安装位置 | Alloy + Superpowers skill 受 scope 控制；OpenSpec `openspec/` 目录始终在项目内；默认 project 级别 |
 | 17 | 项目就绪标记 = `openspec/config.yaml` | `alloy-start` 检查此文件判断项目是否已初始化，与 OpenSpec 自身的检测方式一致 |
@@ -592,6 +626,9 @@ alloy update [path]
 | 20 | 制品上下文一致性决定输出语言 | 不硬编码语言要求也不绑定特定平台机制。指令/模板写什么语言，Agent 自然产出什么语言 |
 | 21 | apply 关键决策点用户有感 | git 初始化、worktree 创建、执行策略（SDD vs 串行）三个决策点均展示选项让用户选择 |
 | 22 | 一个制品，一次提交 | 每个制品审查通过后立即 hash-lock + 单独 git commit，records 记录 hash。避免大爆炸提交，每个制品可独立回溯、独立 revert、独立 cherry-pick |
+| 23 | precheck 路由替代 HARD STOP | 命令 precheck 不满足时，自动转发到正确阶段命令而非报错退出。用户随便打任何命令都不会错——系统自己弄清楚该做什么 |
+| 24 | 阶段时间持久化到 phase_timings | 每个阶段的 started_at / completed_at 写入 .alloy.yaml，接续时读历史值不丢失耗时数据。替代 shell 变量存储（退出即失） |
+| 25 | git add 只用精确路径 | 所有 Alloy 触发的 git commit 只用精确路径，永远不用 `-A`/`-a`/`.`。防止意外文件混入提交。`.gitignore` 补齐 `*.local.*` |
 
 ---
 
