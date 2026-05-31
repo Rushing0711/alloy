@@ -39,7 +39,8 @@ COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
 TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
 echo "$TIMINGS" | python3 -c "
 import sys,json
-d=json.load(sys.stdin) if sys.stdin.read(1) else {}
+content = sys.stdin.read()
+d = json.loads(content) if content.strip() else {}
 d.setdefault('plan',{})['started_at']='$COMPLETED_AT'
 print(json.dumps(d))
 " | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
@@ -249,7 +250,8 @@ COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
 TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
 echo "$TIMINGS" | python3 -c "
 import sys,json
-d=json.load(sys.stdin) if sys.stdin.read(1) else {}
+content = sys.stdin.read()
+d = json.loads(content) if content.strip() else {}
 d.setdefault('plan',{})['completed_at']='$COMPLETED_AT'
 print(json.dumps(d))
 " | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done

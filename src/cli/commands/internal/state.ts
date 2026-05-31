@@ -16,6 +16,15 @@ function coerceValue(field: string, value: string | undefined): unknown {
     }
     return n;
   }
+  // 尝试解析 JSON 值（用于 phase_timings 等复杂字段）
+  if ((value.startsWith("{") && value.endsWith("}")) ||
+      (value.startsWith("[") && value.endsWith("]"))) {
+    try {
+      return JSON.parse(value);
+    } catch {
+      // 不是有效 JSON，保持原字符串
+    }
+  }
   return value;
 }
 

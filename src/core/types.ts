@@ -53,11 +53,25 @@ export interface ArtifactRecord {
   approver: string;
 }
 
+export interface PhaseTiming {
+  started_at: string;
+  completed_at: string | null;
+}
+
+export interface PhaseTimings {
+  start?: PhaseTiming;
+  plan?: PhaseTiming;
+  apply?: PhaseTiming;
+  archive?: PhaseTiming;
+  finish?: PhaseTiming;
+}
+
 export interface AlloyState {
   phase: "started" | "planned" | "applied" | "archived" | "finished";
   worktree: string | null;
   schema_version: number;
   created_at: string;
   updated_at: string;
+  phase_timings?: PhaseTimings;
   records: ArtifactRecord[];
 }
