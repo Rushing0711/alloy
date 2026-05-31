@@ -121,17 +121,7 @@ echo "SESSION_START=$(date "+%Y-%m-%d %H:%M:%S")"
    git rev-parse --git-dir 2>/dev/null || git init
    ```
 
-6. **计算并记录 hash，然后 commit**：
-   ```bash
-   DRAFT_HASH=$(alloy _record compute openspec/changes/<name> draft)
-   APPROVED_AT=$(date "+%Y-%m-%d %H:%M:%S")
-   APPROVER=$(git config user.name)
-   alloy _record write openspec/changes/<name> draft "$DRAFT_HASH" "$APPROVED_AT" "$APPROVER"
-   git add openspec/changes/<name>/
-   git commit -m "feat(<name>): draft 已确认"
-   ```
-
-7. **分支选择**——检测 git 状态，确认工作分支：
+6. **分支选择**——检测 git 状态，确认工作分支：
 
    先获取当前分支：
    ```bash
@@ -163,15 +153,27 @@ echo "SESSION_START=$(date "+%Y-%m-%d %H:%M:%S")"
    alloy _state write openspec/changes/<name> worktree null
    ```
 
-   **提交 alloy init 基础设施文件：** 分支确认后，将 init 部署的文件纳入版本追踪。
+   > ⚠️ apply 阶段仍会通过 `using-git-worktrees` 再次确认隔离方式。此处的分支选择是给后续阶段一个推荐的开发分支。
+
+7. **提交：**
+
+   **draft hash + commit：**
+   ```bash
+   DRAFT_HASH=$(alloy _record compute openspec/changes/<name> draft)
+   APPROVED_AT=$(date "+%Y-%m-%d %H:%M:%S")
+   APPROVER=$(git config user.name)
+   alloy _record write openspec/changes/<name> draft "$DRAFT_HASH" "$APPROVED_AT" "$APPROVER"
+   git add openspec/changes/<name>/
+   git commit -m "feat(<name>): draft 已确认"
+   ```
+
+   **alloy init 基础设施提交：**
    ```bash
    git add .claude/ .gitignore openspec/config.yaml openspec/schemas/ 2>/dev/null
    [ -f CLAUDE.md ] && git add CLAUDE.md 2>/dev/null
    git diff --cached --quiet || git commit -m "chore: alloy init 项目初始化"
    ```
    已提交过则自动跳过。`.superpowers/` 已在 `.gitignore` 中忽略，不入仓库。
-
-   > ⚠️ apply 阶段仍会通过 `using-git-worktrees` 再次确认隔离方式。此处的分支选择是给后续阶段一个推荐的开发分支。
 
 8. **记录阶段时间：**
    ```bash
