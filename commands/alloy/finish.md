@@ -20,10 +20,22 @@ tags: [alloy, workflow]
 
 ## 前置检查
 
+**记录阶段开始时间：**
+```bash
+COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
+TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
+echo "$TIMINGS" | python3 -c "
+import sys,json
+d=json.load(sys.stdin) if sys.stdin.read(1) else {}
+d.setdefault('finish',{})['started_at']='$COMPLETED_AT'
+print(json.dumps(d))
+" | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
+```
+
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [5/5] · Phase: Finish          │
-│ 启动时间: <TIMESTAMP>                │
+│ 启动时间: 从 phase_timings.finish.started_at 读取，若无则用 <TIMESTAMP>
 └──────────────────────────────────────┘
 ```
 
@@ -33,16 +45,26 @@ tags: [alloy, workflow]
 
 > phase 是否为 archived？ <检查结果>
 
-**phase 必须是 `archived`。** 如果 phase != archived：
-```
-[HARD STOP] Change '<name>' 的 phase 为 '<phase>'，finish 要求 phase=archived。
-请先运行 /alloy:archive 完成归档。
-```
+**phase 检查：**
 
 通过 `alloy _guard` 校验：
 ```bash
 alloy _guard openspec/changes/<name> finished
 ```
+
+若 guard 报错（phase 不匹配），读取当前 phase，按以下规则自动路由：
+
+| 当前 phase | 行为 |
+|-----------|------|
+| started | "尚未 plan，自动进入 /alloy:plan" → 加载 alloy-plan 指令 |
+| planned | "尚未 apply，自动进入 /alloy:apply" → 加载 alloy-apply 指令 |
+| applied | "尚未归档，自动进入 /alloy:archive" → 加载 alloy-archive 指令 |
+| archived | precheck 通过，继续收尾 |
+| finished | "工作流已完成" → STOP |
+
+**实现方式：** 输出对应命令文件的完整指令，将 change name 和当前进度信息作为上下文传入。
+
+**HARD STOP 保留场景：** 分支不存在（可能已 merge 或删除）→ 提示无需再次 finish。
 
 确认当前有对应的 git 分支存在：
 ```bash
@@ -137,12 +159,24 @@ alloy _guard openspec/changes/<name> finished --apply
 
 ### [Step 3/3] 完成
 
+**记录阶段完成时间：**
+```bash
+COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
+TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
+echo "$TIMINGS" | python3 -c "
+import sys,json
+d=json.load(sys.stdin) if sys.stdin.read(1) else {}
+d.setdefault('finish',{})['completed_at']='$COMPLETED_AT'
+print(json.dumps(d))
+" | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
+```
+
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [5/5] · Phase: Finish — DONE   │
-│ 启动时间: <created_at>               │
-│ 完成时间: <TIMESTAMP>                │
-│ 耗时: XmXs                           │
+│ 启动时间: 从 phase_timings.finish.started_at 读取
+│ 完成时间: 从 phase_timings.finish.completed_at 读取
+│ 耗时: completed_at - started_at       │
 └──────────────────────────────────────┘
 
 → Change: <name>
@@ -154,6 +188,8 @@ alloy _guard openspec/changes/<name> finished --apply
 
 ## 闸门规则
 
+- **git add 只用精确路径** — 永远不用 `-A`、`-a`、`.`。
+  finish 阶段不主动 add 代码文件，只由外部技能处理合入
 - **phase 必须为 archived** —— spec 已归档的 change 才能 finish
 - **分支必须存在** —— 分支已 merge 或删除时无需再次 finish
 - **不涉及 spec 变更** —— spec 已归档封存，任何 spec 级修改应走新 change

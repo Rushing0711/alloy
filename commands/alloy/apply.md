@@ -26,11 +26,21 @@ tags: [alloy, workflow]
 ## 前置检查
 
 1. 确认 `plans.md` 存在于 change 目录，不存在则报错
-2. 通过 `alloy _guard` 确认 change 的 phase 为 `planned`：
+2. 通过 `alloy _guard` 确认 change 的 phase：
    ```bash
    alloy _guard openspec/changes/<name> applied
    ```
-   若 guard 报错说明 phase 转换不合法——检查当前 phase 是否符合前置条件
+   若 guard 报错说明 phase 转换不合法——检查当前 phase：
+
+   | 当前 phase | 行为 |
+   |-----------|------|
+   | started | "plan 尚未完成，自动进入 /alloy:plan" → 加载 alloy-plan 指令 |
+   | planned | precheck 通过，继续执行 |
+   | applied | precheck 通过（重入），步骤幂等处理断点 |
+   | archived | "已归档，自动进入 /alloy:finish" → 加载 alloy-finish 指令 |
+   | finished | "工作流已完成" → STOP |
+
+   **实现方式：** 输出对应命令文件的完整指令，将 change name 和当前进度信息作为上下文传入。
 3. 确认当前目录在 git 仓库内：
    ```bash
    git rev-parse --git-dir
@@ -48,10 +58,23 @@ tags: [alloy, workflow]
    选 1：Agent 执行 `git init && git add -A && git commit -m "chore: 初始提交"`，完成后继续
    选 2：STOP，"请手动初始化 git 仓库后重新运行 `/alloy:apply`"
 
+**记录阶段开始时间：**
+
+```bash
+COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
+TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
+echo "$TIMINGS" | python3 -c "
+import sys,json
+d=json.load(sys.stdin) if sys.stdin.read(1) else {}
+d.setdefault('apply',{})['started_at']='$COMPLETED_AT'
+print(json.dumps(d))
+" | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
+```
+
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [3/5] · Phase: Apply           │
-│ 启动时间: <TIMESTAMP>                │
+│ 启动时间: 从 phase_timings.apply.started_at 读取，若无则用 <TIMESTAMP>                │
 └──────────────────────────────────────┘
 
 [Step 0/5] 技能可用性预检（precheck）
@@ -85,6 +108,20 @@ APPLY_START=$(date +%s)
 
 ### [Step 1/5] 隔离环境设置
 
+**幂等检查：** 先读取 worktree 状态：
+```bash
+alloy _state read openspec/changes/<name> worktree
+```
+
+```
+Step 1/5 进度检测:
+  worktree 值: ".worktrees/<name>/" → 路径已存在 → ✓ 已完成，跳过此步骤
+  worktree 值: null              → 用户选择不创建 → ✓ 已完成，跳过此步骤
+  worktree 值: ".worktrees/<name>/" → 路径不存在 → ⚠️ 残留记录，重新创建
+```
+
+worktree 路径存在或为 null 时，直接跳过 Step 1，进入 Step 2。
+
 > [Step 1/5] superpowers:using-git-worktrees
 >
 > 使用 Skill 工具加载 `superpowers:using-git-worktrees` 技能。该技能内置了完整的决策流程（检测现有隔离 → 询问用户是否创建 → 创建或跳过），Agent 不重复建造选择闸门，按其内部指引执行即可。
@@ -94,6 +131,17 @@ APPLY_START=$(date +%s)
 - 用户拒绝或已在隔离环境 → `alloy _state write openspec/changes/<name> worktree null`
 
 ### [Step 2/5] 任务实现
+
+**幂等检查：** 读取 `tasks.md`，扫描 checkbox 状态：
+
+```
+Step 2/5 进度检测:
+  tasks.md: 3/7 已勾选 → 已完成的 task TDD 测试仍通过，自然跳过
+                         → 从第一个未勾选的 task 开始执行
+  tasks.md: 7/7 已勾选 → ✓ 已完成，跳过此步骤
+```
+
+TDD 机制天然保证幂等——已实现的 task 对应测试已通过，重跑时自动跳过。无需额外检测。
 
 > 按 plans.md 微步骤执行实现...
 
@@ -162,6 +210,19 @@ Superpowers 技能内部行为（alloy 仅编排，不替代）：
 
 ### Step 4/5：制品层验证
 
+**幂等检查：** 检查 verify.md 是否存在且 hash 有效：
+```bash
+alloy _record check openspec/changes/<name> verify 2>/dev/null && echo "VERIFY_DONE" || echo "VERIFY_NEEDED"
+```
+
+```
+Step 4/5 进度检测:
+  verify.md 存在 + hash 有效 → ✓ 已完成，跳过此步骤
+  verify.md 缺失或 hash 无效 → 执行制品验证
+```
+
+verify.md 已完成时，跳过 Step 4，直接进入 Step 5。
+
 > [Step 4/5] 制品层验证
 > 正在验证制品结构——7 项结构化检查 → verify.md...
 
@@ -178,6 +239,12 @@ alloy _record check openspec/changes/<name> plans
 7 项检查：结构校验 → 任务完成 → Delta Spec 同步 → Design/Specs 一致性 → 实现信号 → 路由泄漏检测 → 延期任务对照。
 
 验证失败 → 修复 → 回到 Step 2/5（SDD）。verify 不通过不结束 apply。
+
+**tasks.md checkbox 已更新，重录 hash：**
+```bash
+HASH=$(alloy _record compute openspec/changes/<name> tasks)
+alloy _record write openspec/changes/<name> tasks "$HASH" "$(date "+%Y-%m-%d %H:%M:%S")" "$(alloy _record approver openspec/changes/<name>)"
+```
 
 **verify.md 生成后，展示审查窗口：**
 
@@ -202,6 +269,19 @@ git commit -m "docs(<name>): verify 已确认"
 选 (b)：调整 verify 内容后重新展示审查窗口。
 
 ### Step 5/5：复盘
+
+**幂等检查：** 检查 retrospective.md 是否存在且 hash 有效：
+```bash
+alloy _record check openspec/changes/<name> retrospective 2>/dev/null && echo "RETRO_DONE" || echo "RETRO_NEEDED"
+```
+
+```
+Step 5/5 进度检测:
+  retrospective.md 存在 + hash 有效 → ✓ 已完成，跳过此步骤
+  retrospective.md 缺失或 hash 无效 → 执行复盘
+```
+
+retrospective.md 已完成时，跳过 Step 5，直接进入完成阶段。
 
 > [Step 5/5] retrospective
 > 正在生成全周期复盘报告（§0-§6）...
@@ -259,14 +339,25 @@ git commit -m "docs(<name>): retrospective 已确认"
 
 ### 完成
 
-计算耗时：读取启动时间（来自 `.alloy.yaml` 的 `created_at`），与当前时间做差，格式化为人类可读 `XmXs`（`<60s` 显示 `Xs`）。
+**记录阶段完成时间：**
+
+```bash
+COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
+TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
+echo "$TIMINGS" | python3 -c "
+import sys,json
+d=json.load(sys.stdin) if sys.stdin.read(1) else {}
+d.setdefault('apply',{})['completed_at']='$COMPLETED_AT'
+print(json.dumps(d))
+" | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
+```
 
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [3/5] · Phase: Apply — DONE    │
-│ 启动时间: <created_at>               │
-│ 完成时间: <TIMESTAMP>                │
-│ 耗时: XmXs                           │
+│ 启动时间: 从 phase_timings.apply.started_at 读取               │
+│ 完成时间: 从 phase_timings.apply.completed_at 读取                │
+│ 耗时: completed_at - started_at 计算                       │
 └──────────────────────────────────────┘
 
 → Change: <name>
@@ -305,8 +396,10 @@ guard 自动校验 hash 一致性后推进 phase。
 
 ## 闸门规则
 
+- **git add 只用精确路径** — 永远不用 `-A`、`-a`、`.`。
+  代码变更只 add 本次改动的具体文件；反例：`git add .` 会把第三方依赖、临时文件一起提交
 - **precheck 不过不执行** —— 6 个技能任一缺失即 STOP，不静默降级
 - **verify 不通过不结束 apply** —— 两层验证（代码层 + 制品层），任意 FAIL 回到 SDD
 - **retrospective PRECHECK** —— verify.md 不存在或 Overall Decision 是 FAIL 时 STOP
 - **apply 完成后不要自动进入 archive** —— archive 是人工闸门，留给用户空间做 QA
-- **每制品独立 commit** —— 不再使用 `git add -A`，verify 和 retrospective 单独 hash 锁定并 commit
+- **每制品独立 commit** — verify 和 retrospective 单独 hash 锁定并 commit

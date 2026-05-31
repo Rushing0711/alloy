@@ -155,6 +155,13 @@ tags: [alloy, workflow]
 
    > ⚠️ apply 阶段仍会通过 `using-git-worktrees` 再次确认隔离方式。此处的分支选择是给后续阶段一个推荐的开发分支。
 
+7. **记录阶段时间：**
+   ```bash
+   COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
+   STARTED_AT=$(alloy _state read openspec/changes/<name> created_at)
+   alloy _state write openspec/changes/<name> phase_timings "{\"start\":{\"started_at\":\"$STARTED_AT\",\"completed_at\":\"$COMPLETED_AT\"}}"
+   ```
+
 ---
 
 ### 完成
@@ -181,6 +188,14 @@ tags: [alloy, workflow]
 
 - draft.md 已在 change 目录，项目根目录不再有 draft.md
 - 完成后不要自动进入 plan
+
+---
+
+## 闸门规则
+
+- **git add 只用精确路径** — 永远不用 `-A`、`-a`、`.`。
+  start 阶段只 add `openspec/changes/<name>/`；反例：`git add -A` 会把临时文件一起提交
+- **draft.md 必须在 change 目录内** — 不在项目根目录产生临时文件
 
 ---
 
@@ -227,17 +242,21 @@ tags: [alloy, workflow]
 → 下一步：<建议操作>
 ```
 
-### [Step 1/1] 状态展示与接续建议
+### [Step 1/1] 状态展示与自动接续
 
 先读取 `.alloy.yaml` 获取 phase 和 worktree 字段，再检查文件系统确认实际制品状态。
 
-| phase | 接续方式 |
-|-------|---------|
-| `started` | 引导用户继续 `/alloy:plan` |
-| `planned` | 引导用户继续 `/alloy:apply` |
-| `applied` | 引导用户继续 `/alloy:archive` |
-| `archived` | 引导用户继续 `/alloy:finish` |
-| `finished` | 工作流已完成——如需继续修改，使用自然对话提交新变更 |
+展示检测结果后，直接加载对应阶段命令继续执行：
+
+| phase | 自动加载命令 |
+|-------|-------------|
+| started | alloy-plan |
+| planned | alloy-apply |
+| applied | alloy-archive |
+| archived | alloy-finish |
+| finished | 工作流已完成——如需继续修改，使用自然对话提交新变更 |
+
+**实现方式：** 根据 phase 值，输出对应命令文件的完整指令（`commands/alloy/plan.md` / `apply.md` / `archive.md` / `finish.md`），将 change name 和检测到的进度信息作为上下文传入。Agent 无缝进入对应阶段。
 
 一致性检查（双向）：
 - worktree 字段有值但磁盘路径不存在 → ⚠️ "worktree 残留：.alloy.yaml 声称有 worktree 但磁盘不存在"

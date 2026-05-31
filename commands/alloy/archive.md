@@ -23,23 +23,44 @@ tags: [alloy, workflow]
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [4/5] · Phase: Archive         │
-│ 启动时间: <TIMESTAMP>                │
+│ 启动时间: 从 phase_timings.archive.started_at 读取，若无则用 <TIMESTAMP>
 └──────────────────────────────────────┘
 ```
 
 ### [Step 1/3] 前置检查
 
-**1. phase 必须是 `applied`。** 如果 phase != applied，硬拒绝：
+**记录阶段开始时间：**
+```bash
+COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
+TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
+echo "$TIMINGS" | python3 -c "
+import sys,json
+d=json.load(sys.stdin) if sys.stdin.read(1) else {}
+d.setdefault('archive',{})['started_at']='$COMPLETED_AT'
+print(json.dumps(d))
+" | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
+```
 
-```
-[HARD STOP] Change '<name>' 的 phase 为 '<phase>'，归档要求 phase=applied。
-当前 phase 不支持归档。请先运行 /alloy:apply 完成执行阶段。
-```
+**1. phase 检查：**
 
 先通过 `alloy _guard` 做硬校验：
 ```bash
 alloy _guard openspec/changes/<name> archived
 ```
+
+若 guard 报错（phase 不匹配），读取当前 phase，按以下规则自动路由：
+
+| 当前 phase | 行为 |
+|-----------|------|
+| started | "尚未 plan，自动进入 /alloy:plan" → 加载 alloy-plan 指令 |
+| planned | "尚未 apply，自动进入 /alloy:apply" → 加载 alloy-apply 指令 |
+| applied | precheck 通过，继续归档 |
+| archived | "已归档，自动进入 /alloy:finish" → 加载 alloy-finish 指令 |
+| finished | "工作流已完成" → STOP |
+
+**实现方式：** 输出对应命令文件的完整指令，将 change name 和当前进度信息作为上下文传入。
+
+**HARD STOP 保留场景：** change 目录不存在（前序阶段完全没做）→ 引导用户先运行 `/alloy:start`。
 
 **2. verify.md 存在且 Overall Decision 不是 FAIL：**
 ```bash
@@ -73,6 +94,7 @@ test -f openspec/changes/<name>/verify.md && ! grep -q '^- \[x\] ❌ FAIL' opens
 然后执行 git commit（确保归档变更被版本追踪）：
 ```bash
 git add openspec/specs/ openspec/changes/archive/ 2>/dev/null
+git add -u openspec/changes/<name>/ 2>/dev/null
 git commit -m "chore(<name>): Delta Spec 已同步并归档" 2>/dev/null
 ```
 （git commit 失败不阻断——可能没有变更或不在 git 仓库中）
@@ -83,6 +105,18 @@ git commit -m "chore(<name>): Delta Spec 已同步并归档" 2>/dev/null
 
 ### Step 3/3：完成
 
+**记录阶段完成时间：**
+```bash
+COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
+TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
+echo "$TIMINGS" | python3 -c "
+import sys,json
+d=json.load(sys.stdin) if sys.stdin.read(1) else {}
+d.setdefault('archive',{})['completed_at']='$COMPLETED_AT'
+print(json.dumps(d))
+" | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
+```
+
 **通过 `alloy _guard` 校验并推进 phase：**
 ```bash
 alloy _guard openspec/changes/<name> archived --apply
@@ -91,9 +125,9 @@ alloy _guard openspec/changes/<name> archived --apply
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [4/5] · Phase: Archive — DONE  │
-│ 启动时间: <created_at>               │
-│ 完成时间: <TIMESTAMP>                │
-│ 耗时: XmXs                           │
+│ 启动时间: 从 phase_timings.archive.started_at 读取
+│ 完成时间: 从 phase_timings.archive.completed_at 读取
+│ 耗时: completed_at - started_at       │
 └──────────────────────────────────────┘
 
 → Change: <name>
@@ -116,6 +150,8 @@ alloy _state read openspec/changes/<name> worktree
 
 ## 闸门规则
 
+- **git add 只用精确路径** — 永远不用 `-A`、`-a`、`.`。
+  archive 只 add `openspec/specs/` 和 `openspec/changes/archive/`，反例：`git add -A openspec/` 会把残留文件一起提交
 - **phase 必须为 applied** —— 只有 apply 完成的 change 才能归档
 - **verify.md 必须存在且非 FAIL** —— 阻塞问题必须先修复
 - **先归档后合入** —— spec 文档先锁定，代码后通过 `/alloy:finish` 合入，避免"代码合入了 spec 还没跟上"
