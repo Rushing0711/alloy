@@ -88,7 +88,7 @@ alloy completion [shell] [options]
 示例:
   source <(alloy completion)              # 当前 session 生效
   alloy completion --install              # 自动注册并立即生效
-  alloy completion pwsh | Out-File -FilePath $PROFILE -Append  # PowerShell
+  alloy completion pwsh | Out-File -FilePath $PROFILE -Append  # PowerShell（需先确保目录存在）
 `;
     default:
       return `未知命令: ${cmd}\n使用 alloy --help 查看可用命令。`;
@@ -108,7 +108,9 @@ async function installCompletion(shell: string): Promise<void> {
     rcFile = join(home, ".bashrc");
     completionLine = "source <(alloy completion bash)";
   } else if (shell.includes("pwsh") || shell.includes("powershell")) {
-    console.log("PowerShell 用户请运行: alloy completion pwsh | Out-File -FilePath $PROFILE -Append");
+    console.log("PowerShell 用户请依次运行:");
+    console.log("  New-Item -ItemType Directory -Force -Path (Split-Path $PROFILE)");
+    console.log("  alloy completion pwsh | Out-File -FilePath $PROFILE -Append");
     return;
   }
 
@@ -280,6 +282,7 @@ async function main() {
       console.log("  source <(alloy completion bash)         # bash 当前 session 生效");
       console.log("  alloy completion --install              # 自动注册到 rc 文件，永久生效");
       console.log("");
+      console.log("  # PowerShell（$PROFILE 目录可能需先创建: New-Item -ItemType Directory -Force -Path (Split-Path $PROFILE)）");
       console.log("  alloy completion pwsh | Out-File $PROFILE  # PowerShell 永久生效");
       break;
     }

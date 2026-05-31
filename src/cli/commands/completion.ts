@@ -105,7 +105,8 @@ function zshCompletion(): string {
 function powershellCompletion(): string {
   return [
     "# alloy PowerShell completion",
-    "# 添加到 PowerShell profile:",
+    "# 添加到 PowerShell profile（$PROFILE 所在目录可能不存在，需先创建）:",
+    "#   New-Item -ItemType Directory -Force -Path (Split-Path $PROFILE)",
     "#   alloy completion pwsh | Out-File -FilePath $PROFILE -Append",
     "",
     "Register-ArgumentCompleter -Native -CommandName alloy -ScriptBlock {",
