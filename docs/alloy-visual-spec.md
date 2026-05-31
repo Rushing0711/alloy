@@ -363,7 +363,125 @@ Start / Plan / Apply 阶段在完成框后展示。固定列宽保证对齐：
 
 ---
 
-## 十、时间格式
+## 十、非阶段命令格式
+
+fix、discard、status 不属于 5 阶段体系，使用简化但不失一致的格式——无 Phase 框，用命令名 + 下划线作为阶段标记，Step 标题与阶段命令保持一致。
+
+### 阶段标记
+
+```
+Alloy · <命令名>
+──────────────────────────────────────
+```
+
+下划线宽度与 Phase 框一致（38 字符），命令名使用中文简称：Bug 修复 / 放弃 Change / 状态查看。
+
+**完成标记：**
+
+```
+Alloy · <命令名> — DONE
+──────────────────────────────────────
+```
+
+**各命令的命令名：**
+
+| 命令 | 中文简称 |
+|------|---------|
+| `/alloy:fix` | Bug 修复 |
+| `/alloy:discard` | 放弃 Change |
+| `/alloy:status` | 状态查看 |
+
+### Step 标题
+
+与阶段命令一致：`[Step N/M] 标题` + 38 字符 `─` 下划线。
+
+```
+[Step 1/3] 环境感知
+──────────────────────────────────────
+```
+
+### 块引用和引导行
+
+复用 `>` 块引用和 `→` 引导行（规则同 §一）。
+
+### 硬阻断
+
+与阶段命令一致，使用 `[HARD STOP]` 前缀（中括号，全大写）：
+
+```
+[HARD STOP] Change '<name>' 的 phase 为 '<phase>'，archived 不可 discard。
+```
+
+### fix 命令完整示例
+
+```
+Alloy · Bug 修复
+──────────────────────────────────────
+
+[Step 1/3] 环境感知
+──────────────────────────────────────
+
+> 当前在 worktree `.worktrees/login-feature/`，在此修复并提交
+
+[Step 2/3] 根因诊断 · superpowers:systematic-debugging
+──────────────────────────────────────
+
+> 正在系统化诊断问题...
+
+[Step 3/3] 分流修复
+──────────────────────────────────────
+
+根因：<诊断结论>
+分流：不改 spec——代码偏离了现有 spec，修复实现即可
+
+→ 修复路径：TDD → verification → commit
+
+Alloy · Bug 修复 — DONE
+──────────────────────────────────────
+
+修复路径：<路径>
+诊断结论：<根因摘要>
+结果：<修复结果>
+```
+
+### discard 命令完整示例
+
+```
+Alloy · 放弃 Change
+──────────────────────────────────────
+
+将删除以下内容，不可恢复:
+
+  Change:     login-feature
+  Phase:      planned
+  分支:       login-feature
+  目录:       openspec/changes/login-feature/
+
+输入 'discard login-feature' 确认，或输入其他任意内容取消。
+
+Alloy · 放弃 Change — DONE
+──────────────────────────────────────
+
+✓ login-feature 已清理
+  已删除：openspec/changes/login-feature/
+```
+
+### status 命令完整示例
+
+```
+Alloy · 状态查看
+──────────────────────────────────────
+
+活跃 Change：
+  login-feature  planned    artifacts: draft ✓ proposal ✓ design ✓ specs ✓ tasks ✓ plans ✓
+  payment-fix    started    artifacts: draft ✓
+
+下一步：login-feature 等待 /alloy:apply，payment-fix 等待 /alloy:plan
+```
+
+---
+
+## 十一、时间格式
 
 统一使用本地时间 `YYYY-MM-DD HH:MM:SS`，无 `T`、无 `Z`、无时区偏移。
 

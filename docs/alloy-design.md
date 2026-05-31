@@ -62,6 +62,8 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
   → brainstorming 的详细设计论述写入 draft.md"关键决策"章节，不单独产出 superpowers spec 文件
   → brainstorming 确认后，调用 /opsx:new 创建 change，将 draft.md 移入 change 目录
   → 写入 .alloy.yaml（phase=started），hash+commit（draft.md + .alloy.yaml）
+  → 分支选择：检测当前分支 → 展示 3 选项（在当前分支继续 / 切换到已有分支 / 新建分支），
+    给后续 apply 阶段推荐开发分支（apply 阶段仍会通过 using-git-worktrees 再次确认隔离方式）
   → draft.md 存放在 change 目录内（openspec/changes/<name>/draft.md），非项目根目录
 
 无活跃 change + 无 topic:
@@ -449,12 +451,12 @@ CLI（终端）
   ├── 安装依赖（OpenSpec CLI + Superpowers skill）
   ├── 部署文件（schema + skill）
   ├── 诊断（版本兼容性 + 文件一致性）
-  └── 内部命令（_state / _guard / _record / _archive）供 Agent 调用
+  └── 内部命令（_state / _guard / _record）供 Agent 调用
 ```
 
 | 层 | 在哪运行 | 内容 | 可靠性 |
 |----|---------|------|--------|
-| CLI | 终端 | 安装、诊断、状态总览、内部命令（_state/_guard/_record/_archive） | 确定性强（TypeScript） |
+| CLI | 终端 | 安装、诊断、状态总览、内部命令（_state/_guard/_record） | 确定性强（TypeScript） |
 | Skill | Agent 内部 | 流程编排、阶段检测、审查窗口 | 硬约束（SKILL.md 指令 + CLI 内部命令） |
 | AI 内容 | Agent 内部 | 文档生成、代码生成、交互决策 | 柔性（AI 发挥，人类审查） |
 

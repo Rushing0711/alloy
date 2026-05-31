@@ -23,9 +23,8 @@ tags: [alloy, workflow]
 ## 无参数：总览模式
 
 ```
----
-## Alloy · 状态查看
----
+Alloy · 状态查看
+──────────────────────────────────────
 ```
 
 扫描 `openspec/changes/*/.alloy.yaml`，对每个活跃 change 读取 phase 并检查制品状态：

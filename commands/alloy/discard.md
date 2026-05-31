@@ -14,9 +14,8 @@ tags: [alloy, workflow]
 ## 读取当前状态
 
 ```
----
-## Alloy · 放弃 Change
----
+Alloy · 放弃 Change
+──────────────────────────────────────
 ```
 
 先通过 `alloy _state` 读取 phase 和 worktree：
@@ -73,9 +72,8 @@ alloy _state read openspec/changes/<name> worktree
 ### 完成
 
 ```
----
-### Alloy Discard 完成
----
+Alloy · 放弃 Change — DONE
+──────────────────────────────────────
 
 ✓ <name> 已清理
   已删除：<列出实际删除的内容>
