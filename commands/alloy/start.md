@@ -215,7 +215,7 @@ echo "SESSION_START=$(date "+%Y-%m-%d %H:%M:%S")"
 ## 闸门规则
 
 - **git add 只用精确路径** — 永远不用 `-A`、`-a`、`.`。
-  start 阶段只 add `openspec/changes/<name>/`；反例：`git add -A` 会把临时文件一起提交
+  start 阶段只 add `openspec/changes/<name>/` 和 init 基础设施文件（`.claude/` `.gitignore` `openspec/config.yaml` `openspec/schemas/`）；反例：`git add -A` 会把临时文件一起提交
 - **draft.md 必须在 change 目录内** — 不在项目根目录产生临时文件
 
 ---
