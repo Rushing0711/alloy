@@ -16,7 +16,7 @@ tags: [alloy, workflow]
 1. 确认 change 目录 `openspec/changes/<name>/` 存在且 `.alloy.yaml` phase 为 `started`（由 `/alloy:start` 完成），否则报错
 2. 若 change 目录存在但 `draft.md` 缺失 → 异常状态，提示重新运行 `/alloy:start`
 3. 若指定 `[name]` 参数但 change 不存在 → "未找到 change '<name>'，请先运行 `/alloy:start <name>` 创建 change"
-4. **Skill 预检：** 确认 `superpowers:writing-plans` 技能可用。若不可用 → 引导 `alloy init` → STOP。不在生成 tasks 后才暴露缺失。
+4. **Skill / 命令预检：** 确认 `opsx:continue` 和 `superpowers:writing-plans` 均可用。任一不可用 → 引导 `alloy init` → STOP。不在生成过程中才暴露缺失。
 
 ---
 
@@ -90,9 +90,11 @@ print(json.dumps(d))
 **[Step 2/3] 制品生成**
 ──────────────────────────────────────
 
-**调用 `/opsx:continue`** 驱动 schema DAG 按依赖顺序依次生成制品。`/opsx:continue` 自动读取 schema 定义的 DAG，按 `proposal → design → specs → tasks` 顺序依次产出。**tasks 是 `/opsx:continue` 生成的最后一个制品。**plans.md 由 `superpowers:writing-plans` 技能生成（见下文）。
+**每个制品（proposal / design / specs / tasks）必须通过 `/opsx:continue` 生成。禁止手动编写制品文件。** `/opsx:continue` 自动读取 schema DAG，按 `proposal → design → specs → tasks` 顺序依次产出，每次调用生成一个制品。**tasks 是 `/opsx:continue` 生成的最后一个制品。**plans.md 由 `superpowers:writing-plans` 技能生成（见下文）。
 
-作为编排器，你的职责是在 `/opsx:continue` 的每个制品生成后插入审查窗口。**始终分步，不提供一键生成。**
+作为编排器，你的职责是在每次 `/opsx:continue` 生成制品后插入审查窗口。**始终分步，不提供一键生成。**
+
+**执行方式：** 使用 Skill 工具加载 `opsx:continue` 技能，传入 change name。`opsx:continue` 自动获取 schema 指令并生成对应的制品文件——不要自行编写制品内容，不要一次生成多个制品。
 
 如果 `/opsx:continue` 不可用，引导用户运行 `alloy init` 完成环境初始化。
 
