@@ -117,8 +117,8 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 始终分步，不提供一键生成
 
 审查期间可沟通调整。plan 阶段处理"构建什么"，任何需求/设计层面的调整统一回到
-brainstorming 重新审视（`/alloy:start --new <topic>`），不做就地修补。typo/措辞修正除外。
-plan 完成后不允许手动修改制品文件。
+brainstorming 重新审视（在当前 change 内，不创建新 change），不做就地修补。
+typo/措辞修正除外。plan 完成后不允许手动修改制品文件。
 
 **plans.md 定位：** 执行脚本，非规格文档。tasks.md 是"做什么"的清单（给人确认），
 plans.md 是"怎么做"的剧本（给 Agent 执行，2-5 分钟微步骤粒度，可含代码片段）。
