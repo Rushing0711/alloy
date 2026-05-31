@@ -319,7 +319,7 @@ Start / Plan / Apply 阶段在完成框后展示。固定列宽保证对齐：
 [制品汇总表 — draft/proposal/design/specs/tasks/plans 六行]
 
 每个制品已在审批时独立 commit，无需再次提交。
-制品文件禁止手动修改，如需变更请通过对话驱动。
+制品文件禁止手动修改。如需变更，通过 `/alloy:start --new <topic>` 重新走 brainstorming 流程。
 
 准备好后，运行 /alloy:apply 进入执行阶段。
 ```

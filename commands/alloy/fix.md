@@ -118,10 +118,10 @@ Alloy · Bug 修复
 ──────────────────────────────────────
 
 spec 变更可并入当前 change <name>。
-回到 `/alloy:plan` 更新制品。
+运行 `/alloy:start <name>` 重新进入 brainstorming 流程——需求/设计调整从 draft 根重新审视。
 ```
 
-无需开新 change——规划阶段的制品还没落地代码，直接修改即可。
+无需开新 change——规划阶段的制品还没落地代码，回到 brainstorming 重新讨论即可。
 
 **B2 — 新开 change（无活跃 change 或 phase ≥ applied，已有代码落地）：**
 
