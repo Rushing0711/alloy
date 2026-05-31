@@ -128,9 +128,10 @@ describe("myFunction", () => {
 4. installSuperpowers() → npx skills add obra/superpowers@5
 5. deployCommands()  → 复制 commands/alloy/，自动生成冒号/横线双版本
 6. deploySchema()     → 复制 openspec/schemas/alloy/ + 写 config.yaml
-7. ensureGitignore()  → 追加 .worktrees/ worktrees/
+7. ensureGitignore()  → 追加 .worktrees/ worktrees/ .superpowers/
 8. injectClaudeMd()   → 可选（--inject-claude-md）
 9. checkCompat()      → 版本兼容性诊断
+10. gitCommit()        → 仅 project scope，提交基础设施文件（.claude/ .gitignore openspec/）
 ```
 
 **部署文件对应关系：**

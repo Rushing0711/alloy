@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { execSync } from "node:child_process";
 import { detectEnv } from "../../core/detect.js";
 import { runHealthCheck } from "../../core/health.js";
 import { installOpenSpecCli, initOpenSpecProject } from "../../core/openspec.js";
@@ -35,7 +36,7 @@ export async function selectTargetAgents(): Promise<AgentInfo[]> {
 
 export interface InitOptions extends DeployOptions {}
 
-const GITIGNORE_RULES = ["docs/superpowers/", ".worktrees/", "worktrees/", "*.local.*"];
+const GITIGNORE_RULES = ["docs/superpowers/", ".worktrees/", "worktrees/", "*.local.*", ".superpowers/"];
 
 async function ensureGitignore(projectPath: string): Promise<void> {
   const gitignorePath = join(projectPath, ".gitignore");
@@ -181,6 +182,52 @@ export async function initCommand(opts: InitOptions): Promise<void> {
     }
   } catch {
     // 注册失败不阻断 init，静默忽略
+  }
+
+  // 10. Git 初始提交（仅 project scope）
+  if (opts.scope === "project") {
+    console.log("\n  📝 Git 初始提交...");
+    try {
+      const gitDir = join(opts.projectPath, ".git");
+      try {
+        execSync("git rev-parse --git-dir", {
+          cwd: opts.projectPath,
+          stdio: "pipe",
+        });
+      } catch {
+        execSync("git init", { cwd: opts.projectPath, stdio: "pipe" });
+        console.log("     ✓ git init");
+      }
+
+      const addPaths = [
+        ".claude/",
+        ".gitignore",
+        "openspec/config.yaml",
+        "openspec/schemas/",
+      ];
+      if (injected) addPaths.push("CLAUDE.md");
+
+      execSync(`git add -- ${addPaths.join(" ")}`, {
+        cwd: opts.projectPath,
+        stdio: "pipe",
+      });
+
+      // 有变更才 commit
+      try {
+        execSync("git diff --cached --quiet", {
+          cwd: opts.projectPath,
+          stdio: "pipe",
+        });
+      } catch {
+        execSync(
+          'git commit -m "chore: alloy init 项目初始化"',
+          { cwd: opts.projectPath, stdio: "pipe" },
+        );
+        console.log("     ✓ 初始提交完成");
+      }
+    } catch {
+      console.log("     ⚠ git 提交失败，请手动提交");
+    }
   }
 
   console.log("\n  ✅ Alloy 就绪！");

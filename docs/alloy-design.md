@@ -573,6 +573,9 @@ $ alloy init
      ✓ OpenSpec v1.5.0（兼容范围 >=1.3.0 <2.0.0）
      ✓ Superpowers v5.1.0（兼容范围 >=5.0.0 <6.0.0）
 
+  📝 Git 初始提交...
+     ✓ 初始提交完成
+
   ✅ Alloy 就绪！
      在 Claude Code 中输入 /alloy:start <topic> 开始工作
 ```
@@ -584,6 +587,7 @@ $ alloy init
 3. **安装 Superpowers** — `npx skills add obra/superpowers -y --agent claude-code`（project scope 不加 `-g`）
 4. **部署 Alloy command + schema** — 从包复制 `commands/alloy/`，自动生成冒号版和横线版到各平台目录，写入 `openspec/schemas/alloy/`，追加 `schema: alloy` 到 `openspec/config.yaml`
 5. **兼容性检查** — 根据 `compat.yaml` 校验版本
+6. **Git 初始提交**（仅 project scope）— 将 init 部署的基础设施文件（`.claude/`、`.gitignore`、`openspec/config.yaml`、`openspec/schemas/`，以及注入过的 `CLAUDE.md`）纳入版本追踪。`.superpowers/` 加入 `.gitignore` 不入仓库。若目录非 git 仓库则自动 `git init`，失败不阻断
 
 CLAUDE.md 注入默认关闭。需要时使用 `--inject-claude-md`。Claude Code 必须由用户预先安装。
 
