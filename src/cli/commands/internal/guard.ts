@@ -20,6 +20,7 @@ const ARTIFACT_CHECKS: Record<string, string[]> = {
 };
 
 const ARTIFACT_FILES: Record<string, string> = {
+  draft: "draft.md",
   proposal: "proposal.md",
   design: "design.md",
   specs: "specs",

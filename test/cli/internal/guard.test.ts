@@ -294,6 +294,58 @@ describe("alloy _guard", () => {
     expect(state.phase).toBe("planned");
   });
 
+  // 包含 draft 记录的 hash 校验（回归：guard.ts ARTIFACT_FILES 曾遗漏 draft）
+  it("started→planned 包含 draft 记录且 hash 匹配时通过", async () => {
+    const { createHash } = await import("node:crypto");
+    const draftContent = "draft content here";
+    await writeFile(join(changeDir, "draft.md"), draftContent, "utf-8");
+    await writeFile(join(changeDir, "proposal.md"), "prop");
+    await writeFile(join(changeDir, "design.md"), "design");
+    await writeFile(join(changeDir, "tasks.md"), "tasks");
+    await writeFile(join(changeDir, "plans.md"), "plans");
+    await mkdir(join(changeDir, "specs"));
+    const draftHash = createHash("sha256").update(draftContent).digest("hex").substring(0, 12);
+    const yaml = [
+      "worktree: null",
+      "schema_version: 1",
+      "phase: started",
+      'updated_at: "2020-01-01T00:00:00"',
+      "records:",
+      "  - artifact: draft",
+      `    hash: "${draftHash}"`,
+      '    committed_at: "2020-01-01T00:00:00"',
+      '    approver: "test"',
+    ].join("\n");
+    await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
+    await guardCommand([changeDir, "planned", "--apply"]);
+    const state = await readState(changeDir);
+    expect(state.phase).toBe("planned");
+  });
+
+  it("started→planned draft hash 不匹配时被阻断", async () => {
+    await writeFile(join(changeDir, "draft.md"), "real draft", "utf-8");
+    await writeFile(join(changeDir, "proposal.md"), "");
+    await writeFile(join(changeDir, "design.md"), "");
+    await writeFile(join(changeDir, "tasks.md"), "");
+    await writeFile(join(changeDir, "plans.md"), "");
+    await mkdir(join(changeDir, "specs"));
+    const yaml = [
+      "worktree: null",
+      "schema_version: 1",
+      "phase: started",
+      'updated_at: "2020-01-01T00:00:00"',
+      "records:",
+      "  - artifact: draft",
+      '    hash: "wronghash000"',
+      '    committed_at: "2020-01-01T00:00:00"',
+      '    approver: "test"',
+    ].join("\n");
+    await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
+    await expect(
+      guardCommand([changeDir, "planned"])
+    ).rejects.toThrow();
+  });
+
   // --apply flag behavior
   it("无 --apply 时不修改 phase", async () => {
     await writeFile(join(changeDir, "proposal.md"), "");
