@@ -191,6 +191,20 @@ alloy _state write openspec/changes/<name> worktree skipped
 - 已创建 worktree → `alloy _state write openspec/changes/<name> worktree "<path>"`
 - 用户拒绝或已在隔离环境 → `alloy _state write openspec/changes/<name> worktree skipped`
 
+**Step 1/5 完成汇总：**
+
+```
+> [Step 1/5] 隔离环境 — 已跳过（用户选择不创建）
+
+或
+
+> [Step 1/5] 隔离环境 — 就绪
+>
+> 源分支:      feature/<name>
+> Worktree 分支: worktree-<name>
+> Worktree 路径: .claude/worktrees/<name>
+```
+
 ### [Step 2/5] 任务实现
 
 **幂等检查：** 读取 `tasks.md`，扫描 checkbox 状态：
