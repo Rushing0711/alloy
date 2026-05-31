@@ -68,6 +68,7 @@ export async function recordCommand(args: string[]): Promise<void> {
       }
 
       const state = await readState(changeDir);
+      if (!state.records) state.records = [];
       const existing = state.records.findIndex(r => r.artifact === artifact);
       const record: ArtifactRecord = { artifact, hash, committed_at: approvedAt, approver };
 
@@ -84,6 +85,7 @@ export async function recordCommand(args: string[]): Promise<void> {
     case "check": {
       const artifact = args[2];
       const state = await readState(changeDir);
+      if (!state.records) state.records = [];
 
       const targets = artifact
         ? state.records.filter(r => r.artifact === artifact)
@@ -132,18 +134,12 @@ export async function recordCommand(args: string[]): Promise<void> {
       break;
     }
     case "approver": {
-      // 返回第一个 record 的 approver，无 records 时从 git config 获取
-      const state = await readState(changeDir);
-      const firstRecord = state.records?.[0];
-      if (firstRecord?.approver) {
-        console.log(firstRecord.approver);
-      } else {
-        try {
-          const gitUser = execSync("git config user.name", { encoding: "utf-8" }).trim();
-          console.log(gitUser || "unknown");
-        } catch {
-          console.log("unknown");
-        }
+      // 始终从 git config 获取当前审批人，确保审批人一致性
+      try {
+        const gitUser = execSync("git config user.name", { encoding: "utf-8" }).trim();
+        console.log(gitUser || "unknown");
+      } catch {
+        console.log("unknown");
       }
       break;
     }

@@ -1,6 +1,23 @@
 // src/cli/commands/internal/state.ts
-import { readState, writeState } from "../../utils/state.js";
+import { readState, writeState, createInitialState } from "../../utils/state.js";
 import type { AlloyState } from "../../../core/types.js";
+
+// shell 传入的所有值都是字符串，需根据字段类型转换
+const NUMERIC_FIELDS = new Set(["schema_version"]);
+
+function coerceValue(field: string, value: string | undefined): unknown {
+  if (value === undefined) return undefined;
+  if (value === "null") return null;
+  if (NUMERIC_FIELDS.has(field)) {
+    const n = Number(value);
+    if (isNaN(n)) {
+      console.error(`字段 '${field}' 需要 number 类型，收到: ${value}`);
+      process.exit(1);
+    }
+    return n;
+  }
+  return value;
+}
 
 export async function stateCommand(args: string[]): Promise<void> {
   const action = args[0];
@@ -9,11 +26,18 @@ export async function stateCommand(args: string[]): Promise<void> {
   const value = args[3];
 
   if (!action || !changeDir) {
-    console.error("用法: alloy _state <read|write|check> <change-dir> [field] [value]");
+    console.error("用法: alloy _state <init|read|write|check> <change-dir> [field] [value]");
     process.exit(1);
   }
 
   switch (action) {
+    case "init": {
+      // 用 createInitialState() 创建完整 state——确保 records: [] 等所有字段存在
+      const initialState = createInitialState();
+      await writeState(changeDir, initialState);
+      console.log(`✓ state 已初始化: ${changeDir}`);
+      break;
+    }
     case "read": {
       if (!field) {
         console.error("用法: alloy _state read <change-dir> <field>");
@@ -23,6 +47,8 @@ export async function stateCommand(args: string[]): Promise<void> {
       const val = (state as unknown as Record<string, unknown>)[field];
       if (val === undefined || val === null) {
         console.log("null");
+      } else if (Array.isArray(val) || typeof val === "object") {
+        console.log(JSON.stringify(val));
       } else {
         console.log(String(val));
       }
@@ -33,10 +59,14 @@ export async function stateCommand(args: string[]): Promise<void> {
         console.error("用法: alloy _state write <change-dir> <field> <value>");
         process.exit(1);
       }
-      const state = await readState(changeDir);
-      // 将字符串 "null" 转换为真正的 null（shell 传入的 null 是字符串）
-      const resolved = value === "null" ? null : value;
-      (state as unknown as Record<string, unknown>)[field] = resolved;
+      // 如果文件不存在，用 createInitialState() 创建初始状态（确保 records: [] 等所有字段存在）
+      let state: AlloyState;
+      try {
+        state = await readState(changeDir);
+      } catch {
+        state = createInitialState();
+      }
+      (state as unknown as Record<string, unknown>)[field] = coerceValue(field, value);
       await writeState(changeDir, state);
       break;
     }
@@ -53,7 +83,7 @@ export async function stateCommand(args: string[]): Promise<void> {
       break;
     }
     default:
-      console.error(`未知操作: ${action} (支持: read, write, check)`);
+      console.error(`未知操作: ${action} (支持: init, read, write, check)`);
       process.exit(1);
   }
 }

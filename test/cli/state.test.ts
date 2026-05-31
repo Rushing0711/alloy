@@ -26,9 +26,9 @@ describe("state utils", () => {
     expect(state.phase).toBe("started");
     expect(state.worktree).toBeNull();
     expect(state.schema_version).toBe(1);
-    // 格式: YYYY-MM-DDTHH:MM:SS（与 shell 脚本一致）
-    expect(state.created_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
-    expect(state.updated_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
+    // 格式: YYYY-MM-DD HH:MM:SS（本地时间，人类可读）
+    expect(state.created_at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+    expect(state.updated_at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
   });
 
   it("writeState 和 readState 往返一致", async () => {
@@ -50,7 +50,7 @@ describe("state utils", () => {
     await writeState(changeDir, state);
     const loaded = await readState(changeDir);
     expect(loaded.updated_at).not.toBe("2020-01-01T00:00:00");
-    expect(loaded.updated_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
+    expect(loaded.updated_at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
   });
 
   it("findActiveChanges 过滤 finished change，保留 archived", async () => {

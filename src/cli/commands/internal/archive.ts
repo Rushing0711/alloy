@@ -89,8 +89,8 @@ export async function archiveCommand(args: string[]): Promise<void> {
   } catch {
     try {
       execSync(
-        "git add openspec/specs/ openspec/changes/ archive/ 2>/dev/null; " +
-          `git commit -m "archive: ${changeName} 归档——Delta Spec 已同步" 2>/dev/null`,
+        "git add openspec/specs/ openspec/changes/archive/ 2>/dev/null; " +
+          `git commit -m "chore(${changeName}): Delta Spec 已同步并归档" 2>/dev/null`,
         { stdio: "pipe", cwd: projectDir }
       );
     } catch {

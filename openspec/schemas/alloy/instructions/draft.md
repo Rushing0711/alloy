@@ -2,7 +2,7 @@
 
 **定位：** Pre-OpenSpec 阶段的需求设计草案。draft.md 是 proposal 和 design 的唯一需求输入——先把事情想清楚，再结构化。
 
-产出: `draft.md`（项目根目录，不在 change 目录内）
+产出: `draft.md`（start 阶段生成于项目根目录，确认后移入 `openspec/changes/<name>/`）
 依赖: 无
 
 ## 生成指令
@@ -34,6 +34,6 @@ brainstorming 技能将：
 
 ## 约束
 
-- 存放在项目根目录，不在 change 目录内（change 目录由 plan 阶段创建）
-- 生成即完成，不自动创建 change 目录
-- 完成后提示用户：可用 grill-me 深入拷问需求，确认后运行 `/alloy-plan`
+- draft.md 初始生成在项目根目录。start 阶段确认后由 `/opsx:new` 创建 change 目录，draft.md 移入 `openspec/changes/<name>/`
+- 不将 brainstorming 输出写入 `docs/superpowers/specs/`——draft.md 是唯一产出
+- 完成后提示用户：可用 grill-me 深入拷问需求，确认后运行 `/alloy:plan`

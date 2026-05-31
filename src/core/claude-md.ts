@@ -14,7 +14,7 @@ export async function injectClaudeMd(opts: DeployOptions): Promise<boolean> {
     CLAUDE_MD_MARKER_START,
     "## Alloy 工作流",
     "",
-    "本项目使用 [Alloy](https://github.com/user/alloy) 管理开发工作流。",
+    "本项目使用 [Alloy](https://github.com/Rushing0711/alloy) 管理开发工作流。",
     "",
     "常用命令：",
     "- `/alloy-start [topic]` - 智能入口",

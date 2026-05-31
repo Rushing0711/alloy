@@ -48,6 +48,9 @@ describe("status command", () => {
     expect(result).toContain("✓");
     // 确保不会出现 "plan ✓"（单数 bug）
     expect(result).not.toMatch(/plan\s+✓/);
+    // 验证显示创建时间和更新时间
+    expect(result).toContain("创建时间:");
+    expect(result).toContain("更新时间:");
   });
 
   it("详情模式 — plans.md 不存在时显示 plans ✗", async () => {

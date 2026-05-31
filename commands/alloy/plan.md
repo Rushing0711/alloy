@@ -23,10 +23,10 @@ tags: [alloy, workflow]
 ## Step 1/3：确认 Change
 
 ```
-┌──────────────────────────────────────────────────┐
-│ Alloy [2/5] · Phase: Plan                        │
-│ 开始时间：$(date -u +%Y-%m-%dT%H:%M:%SZ)          │
-└──────────────────────────────────────────────────┘
+┌──────────────────────────────────────┐
+│ Alloy [2/5] · Phase: Plan            │
+│ 启动时间: <TIMESTAMP>                │
+└──────────────────────────────────────┘
 
 [Step 1/3] 确认 Change
 ──────────────────────────────────────
@@ -119,7 +119,7 @@ proposal ──→ design ──→ specs ──→ tasks ──→ plans
 
 ```bash
 HASH=$(alloy _record compute openspec/changes/<name> <artifact>)
-APPROVED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+APPROVED_AT=$(date "+%Y-%m-%d %H:%M:%S")
 APPROVER=$(alloy _record approver openspec/changes/<name>)
 alloy _record write openspec/changes/<name> <artifact> "$HASH" "$APPROVED_AT" "$APPROVER"
 git add openspec/changes/<name>/
@@ -191,28 +191,29 @@ proposal.md 已更新 ✓
 alloy _state read openspec/changes/<name> records
 ```
 
-计算耗时：
-```bash
-PLAN_END=$(date +%s)
-DURATION=$((PLAN_END - PLAN_START))
-```
+计算耗时：读取启动时间（来自 `.alloy.yaml` 的 `created_at`），与当前时间做差，格式化为人类可读 `XmXs`（`<60s` 显示 `Xs`）。
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│ Alloy [2/5] · Phase: Plan — DONE                         │
-│ 完成时间：$(date -u +%Y-%m-%dT%H:%M:%SZ)                  │
-│ 耗时：${DURATION}s                                        │
-└──────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────┐
+│ Alloy [2/5] · Phase: Plan — DONE     │
+│ 启动时间: <created_at>               │
+│ 完成时间: <TIMESTAMP>                │
+│ 耗时: XmXs                           │
+└──────────────────────────────────────┘
+
+→ Change: <name>
+→ Phase: planned
 
 所有制品已生成并锁定：
-  制品         状态        Hash        创建时间
-  ─────────    ────────    ────────     ─────────────────────
-  draft         ✓          <short>      <YYYY-MM-DDTHH:MM:SSZ>
-  proposal      ✓          <short>      <...>
-  design        ✓          <short>      <...>
-  specs         ✓          <short>      <...>
-  tasks         ✓          <short>      <...>
-  plans         ✓          <short>      <...>
+
+  制品             状态    Hash          创建时间
+  ──────────────  ────    ────────────  ───────────────────
+  draft           ✓       <hash>        <timestamp>
+  proposal        ✓       <hash>        <timestamp>
+  design          ✓       <hash>        <timestamp>
+  specs           ✓       <hash>        <timestamp>
+  tasks           ✓       <hash>        <timestamp>
+  plans           ✓       <hash>        <timestamp>
 ```
 
 每个制品已在审批时独立 commit，无需再次提交。

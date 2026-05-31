@@ -1,3 +1,8 @@
+---
+strategy: sdd
+reason: 任务独立、可并行（由 writing-plans 技能分析后填入）
+---
+
 # [功能名称] 实现计划
 
 > **Goal:** [目标描述]

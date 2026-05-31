@@ -8,8 +8,8 @@ export type { AlloyState };
 function formatTimestamp(): string {
   const d = new Date();
   const pad = (n: number) => n.toString().padStart(2, "0");
-  // UTC ISO 8601 格式（与设计文档约定一致）
-  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+  // 本地时间，人类可读格式：YYYY-MM-DD HH:MM:SS
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 export function createInitialState(): AlloyState {
@@ -26,7 +26,15 @@ export function createInitialState(): AlloyState {
 
 export async function readState(changePath: string): Promise<AlloyState> {
   const yamlPath = join(changePath, ".alloy.yaml");
-  const content = await readFile(yamlPath, "utf-8");
+  let content: string;
+  try {
+    content = await readFile(yamlPath, "utf-8");
+  } catch (err: any) {
+    if (err.code === "ENOENT") {
+      throw new Error(`缺少 .alloy.yaml: ${changePath}`);
+    }
+    throw err;
+  }
   return parseYaml(content) as AlloyState;
 }
 

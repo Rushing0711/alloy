@@ -148,6 +148,8 @@ describe("alloy _archive", () => {
         throw new Error("有未提交变更"); // git diff 返回 1 → 抛出
       }
       if (cmd.includes("git commit")) {
+        // 验证 commit message 格式
+        expect(cmd).toContain("chore(test-change): Delta Spec 已同步并归档");
         gitCommitCalled = true;
         return Buffer.from("");
       }

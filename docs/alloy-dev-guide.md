@@ -126,7 +126,7 @@ describe("myFunction", () => {
 2. installOpenSpecCli() → npm install -g @fission-ai/openspec@1
 3. initOpenSpecProject() → openspec init <path> --tools claude
 4. installSuperpowers() → npx skills add obra/superpowers@5
-5. deploySkills()     → 复制 skills/alloy-*/ 到 .claude/skills/
+5. deployCommands()  → 复制 commands/alloy/，自动生成冒号/横线双版本
 6. deploySchema()     → 复制 openspec/schemas/alloy/ + 写 config.yaml
 7. ensureGitignore()  → 追加 .worktrees/ worktrees/
 8. injectClaudeMd()   → 可选（--inject-claude-md）
@@ -137,8 +137,7 @@ describe("myFunction", () => {
 
 | 源（包内） | 目标（用户项目） |
 |------|------|
-| `skills/alloy-*/SKILL.md` | `.claude/skills/alloy-*/SKILL.md` |
-| `skills/alloy/scripts/*.sh` | `.claude/skills/alloy/scripts/*.sh` |
+| `commands/alloy/*.md` | `.claude/commands/alloy/*.md`（冒号版）+ `alloy-*.md`（横线版，自动生成） |
 | `openspec/schemas/alloy/*` | `openspec/schemas/alloy/*` |
 
 ---
@@ -151,7 +150,7 @@ describe("myFunction", () => {
 [ ] 1. 设计文档 (docs/alloy-design.md) — 设计描述需要更新吗？
 [ ] 2. Schema    (openspec/schemas/alloy/) — DAG/制品/instructions 需要同步吗？
 [ ] 3. Guard     (src/cli/commands/internal/guard.ts) — 检查规则完整吗？
-[ ] 4. Skill 文档 (skills/alloy-*/SKILL.md) — 流程描述/闸门指令需要更新吗？
+[ ] 4. Skill 文档 (commands/alloy/*.md) — 流程描述/闸门指令需要更新吗？
 [ ] 5. CLI 代码  (src/) — 实现对齐了吗？
 [ ] 6. 测试      (test/) — 新增回归测试了吗？
 ```

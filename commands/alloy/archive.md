@@ -23,6 +23,7 @@ tags: [alloy, workflow]
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [4/5] · Phase: Archive         │
+│ 启动时间: <TIMESTAMP>                │
 └──────────────────────────────────────┘
 ```
 
@@ -88,14 +89,19 @@ alloy _guard openspec/changes/<name> archived --apply
 ```
 
 ```
-┌──────────────────────────────────────────────────────┐
-│ Alloy [4/5] · Phase: Archive — DONE                  │
-└──────────────────────────────────────────────────────┘
-```
+┌──────────────────────────────────────┐
+│ Alloy [4/5] · Phase: Archive — DONE  │
+│ 启动时间: <created_at>               │
+│ 完成时间: <TIMESTAMP>                │
+│ 耗时: XmXs                           │
+└──────────────────────────────────────┘
 
-> ✓ Delta Spec 已合并到主 spec
-> ✓ Change 已归档到 archive/YYYY-MM-DD-<name>/
-> ✓ phase → archived
+→ Change: <name>
+→ Phase: archived
+→ 归档位置: archive/YYYY-MM-DD-<name>/
+
+✓ Delta Spec 已合并到主 spec
+✓ Change 已归档
 
 **根据 worktree 状态动态提示：**
 

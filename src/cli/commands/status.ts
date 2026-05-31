@@ -85,6 +85,8 @@ async function detailMode(
     `阶段:    ${state.phase}`,
     `Change:  ${name}`,
     `路径:    ${changePath}`,
+    `创建时间: ${state.created_at}`,
+    `更新时间: ${state.updated_at}`,
     "制品状态:",
     ...ARTIFACTS.map(
       (a) => `  ${a.padEnd(12)} ${artifacts[a] ? "✓" : "✗"}`

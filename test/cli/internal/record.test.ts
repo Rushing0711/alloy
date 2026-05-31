@@ -417,4 +417,60 @@ describe("alloy _record", () => {
       errSpy.mockRestore();
     });
   });
+
+  describe("防御——state.records 为 undefined（生产 bug 复现）", () => {
+    beforeEach(async () => {
+      tmpDir = join(tmpdir(), `alloy-record-def-${Date.now()}`);
+      changeDir = join(tmpDir, "test-change");
+      await mkdir(changeDir, { recursive: true });
+      // 故意不写 records 字段——模拟 alloy:start 逐字段 _state write 的结果
+      const yaml = [
+        "phase: started",
+        "schema_version: 1",
+        "worktree: null",
+        'created_at: "2020-01-01T00:00:00Z"',
+        'updated_at: "2020-01-01T00:00:00Z"',
+      ].join("\n");
+      await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
+    });
+
+    afterEach(async () => {
+      await rm(tmpDir, { recursive: true, force: true });
+    });
+
+    it("write 在 records 缺失时正常工作（不崩溃）", async () => {
+      // 创建制品文件
+      await writeFile(join(changeDir, "proposal.md"), "test", "utf-8");
+
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+      await recordCommand([
+        "write",
+        changeDir,
+        "proposal",
+        "abc123",
+        "2025-06-01T00:00:00Z",
+        "tester",
+      ]);
+
+      const state = await readState(changeDir);
+      expect(state.records).toHaveLength(1);
+      expect(state.records[0].artifact).toBe("proposal");
+
+      exitSpy.mockRestore();
+    });
+
+    it("check 在 records 缺失时输出 WARN 并 exit 0", async () => {
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+      const out = await captureLog(() =>
+        recordCommand(["check", changeDir])
+      );
+
+      expect(out).toContain("[WARN] 无 records 可校验");
+      expect(exitSpy).toHaveBeenCalledWith(0);
+
+      exitSpy.mockRestore();
+    });
+  });
 });

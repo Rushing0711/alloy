@@ -18,11 +18,26 @@ IMPORTANT — 输出位置：
 
 writing-plans 技能将：
 1. 读取 tasks.md 和 design.md 获取上下文
-2. 将每个 task 拆为 2-5 分钟的 TDD 微步骤
-3. 每步包含：目标、文件路径、TDD 步骤（RED → GREEN → REFACTOR）、测试命令、预期输出
-4. 在每个 task 后添加 commit 点
+2. 分析任务特征，决定执行策略（SDD 并行 vs 串行），写入 YAML frontmatter
+3. 将每个 task 拆为 2-5 分钟的 TDD 微步骤
+4. 每步包含：目标、文件路径、TDD 步骤（RED → GREEN → REFACTOR）、测试命令、预期输出
+5. 在每个 task 后添加 commit 点
 
 ## plans.md 结构
+
+### YAML Frontmatter
+
+```yaml
+---
+strategy: sdd | serial
+reason: <策略背后的分析理由，apply 阶段展示给用户>
+---
+```
+
+- `strategy`: `sdd`（任务独立可并行）或 `serial`（任务耦合需串行）
+- `reason`: writing-plans 分析后的一两句话，apply 阶段展示给用户作为推荐依据
+
+### 微步骤格式
 
 每个微步骤应包含：
 - **目标：** 这一步要达成什么
