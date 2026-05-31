@@ -37,22 +37,22 @@ tags: [alloy, workflow]
    ```
    若命令成功 → 继续。
    若命令失败 → 项目还不是 git 仓库，worktree 隔离和版本追踪需要 git。展示选项：
-   > [Step 0/5] Git 仓库检测
+   > Git 仓库检测
    > ──────────────────────────────────────
    >
    > 检测到项目还不是 git 仓库。worktree 隔离和版本追踪依赖 git。
    >
-   > **1.** 立即初始化 — 执行 `git init` 并做一次初始提交（推荐）
-   > **2.** 稍后自行处理 — 手动初始化后再运行 `/alloy:apply`
+   > 1. 立即初始化     —— 执行 git init 并做一次初始提交（推荐）
+   > 2. 稍后自行处理   —— 手动初始化后再运行 /alloy:apply
    
    选 1：Agent 执行 `git init && git add -A && git commit -m "chore: 初始提交"`，完成后继续
    选 2：STOP，"请手动初始化 git 仓库后重新运行 `/alloy:apply`"
 
 ```
-┌──────────────────────────────────────────────────┐
-│ Alloy [3/5] · Phase: Apply                       │
-│ 开始时间：$(date -u +%Y-%m-%dT%H:%M:%SZ)          │
-└──────────────────────────────────────────────────┘
+┌──────────────────────────────────────┐
+│ Alloy [3/5] · Phase: Apply           │
+│ 启动时间: <TIMESTAMP>                │
+└──────────────────────────────────────┘
 
 [Step 0/5] 技能可用性预检（precheck）
 ──────────────────────────────────────
@@ -217,22 +217,30 @@ alloy _record check openspec/changes/<name> verify
 
 ### 完成
 
-计算耗时：
-```bash
-APPLY_END=$(date +%s)
-DURATION=$((APPLY_END - APPLY_START))
-```
+计算耗时：读取启动时间（来自 `.alloy.yaml` 的 `created_at`），与当前时间做差，格式化为人类可读 `XmXs`（`<60s` 显示 `Xs`）。
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│ Alloy [3/5] · Phase: Apply — DONE                            │
-│ 完成时间：$(date -u +%Y-%m-%dT%H:%M:%SZ)                      │
-│ 耗时：${DURATION}s                                            │
-└──────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────┐
+│ Alloy [3/5] · Phase: Apply — DONE    │
+│ 启动时间: <created_at>               │
+│ 完成时间: <TIMESTAMP>                │
+│ 耗时: XmXs                           │
+└──────────────────────────────────────┘
 
->
-> ✓ verify.md         已生成 — <verify hash short> — <verify committed_at>
-> ✓ retrospective.md  已生成 — <retrospective hash short> — <retrospective committed_at>
+→ Change: <name>
+→ Phase: applied
+→ Worktree: <path  或  当前分支>
+
+所有制品已生成并锁定：
+
+  制品             状态    Hash          创建时间
+  ──────────────  ────    ────────────  ───────────────────
+  plans           ✓       <hash>        <timestamp>
+  verify          ✓       <hash>        <timestamp>
+  retrospective   ✓       <hash>        <timestamp>
+
+→ 代码变更已提交
+→ 验证: <PASS  或  存在 N 个 WARN>
 ```
 
 **apply 阶段 commit 规则：**
@@ -240,7 +248,7 @@ DURATION=$((APPLY_END - APPLY_START))
 - verify.md：审批通过后 hash + commit：
   ```bash
   HASH=$(alloy _record compute openspec/changes/<name> verify)
-  APPROVED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  APPROVED_AT=$(date "+%Y-%m-%d %H:%M:%S")
   APPROVER=$(alloy _record approver openspec/changes/<name>)
   alloy _record write openspec/changes/<name> verify "$HASH" "$APPROVED_AT" "$APPROVER"
   git add openspec/changes/<name>/verify.md
@@ -249,7 +257,7 @@ DURATION=$((APPLY_END - APPLY_START))
 - retrospective.md：审批通过后 hash + commit：
   ```bash
   HASH=$(alloy _record compute openspec/changes/<name> retrospective)
-  alloy _record write openspec/changes/<name> retrospective "$HASH" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(alloy _record approver openspec/changes/<name>)"
+  alloy _record write openspec/changes/<name> retrospective "$HASH" "$(date "+%Y-%m-%d %H:%M:%S")" "$(alloy _record approver openspec/changes/<name>)"
   git add openspec/changes/<name>/retrospective.md
   git commit -m "docs(<name>): retrospective 已确认"
   ```
@@ -270,7 +278,7 @@ guard 自动校验 hash 一致性后推进 phase。
 
 ## 闸门规则
 
-- **precheck 不过不执行** —— 5 个技能任一缺失即 STOP，不静默降级
+- **precheck 不过不执行** —— 6 个技能任一缺失即 STOP，不静默降级
 - **verify 不通过不结束 apply** —— 两层验证（代码层 + 制品层），任意 FAIL 回到 SDD
 - **retrospective PRECHECK** —— verify.md 不存在或 Overall Decision 是 FAIL 时 STOP
 - **apply 完成后不要自动进入 archive** —— archive 是人工闸门，留给用户空间做 QA

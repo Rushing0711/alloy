@@ -47,21 +47,16 @@ commands/
     fix.md                 # /alloy:fix
     discard.md             # /alloy:discard
     status.md              # /alloy:status
-  alloy-start.md           # /alloy-start 完整指令（横线版，Cursor/OpenCode/Codex/Trae/Pi）
-  alloy-plan.md
-  alloy-apply.md
-  alloy-finish.md
-  alloy-archive.md
-  alloy-fix.md
-  alloy-discard.md
-  alloy-status.md
+
+以上为源文件（git 追踪）。alloy init 部署时将 commands/alloy/ → .claude/commands/alloy/（冒号版），
+并自动生成 .claude/commands/alloy-*.md（横线版，供 Cursor/OpenCode/Codex/Trae/Pi 使用）。
 
 openspec/schemas/alloy/
   schema.yaml           # 制品 DAG 依赖定义
   instructions/         # 制品指令文件（每制品一个 .md，定义生成规则）
   templates/            # 制品模板（proposal/design/specs/tasks/plan/retrospective）
 
-以上为源文件（git 追踪）。alloy init 部署时将 commands/ → .claude/commands/（自动适配冒号/横线格式），openspec/schemas/ → 项目 openspec/ 目录。
+部署时 openspec/schemas/ → 项目 openspec/ 目录。
 ```
 
 **三层架构：** CLI 控制层（TypeScript，确定性）→ Schema 制品层（DAG + instruction，硬约束）→ 大模型内容层（文档/代码生成，柔性+人类审查）。
@@ -70,8 +65,8 @@ openspec/schemas/alloy/
 
 以下要点不再复述完整设计——细节见 `docs/alloy-design.md`。这里只列 Agent 执行时必须遵守的硬约束：
 
-- Agent 不直接写 YAML——通过 `alloy-state.sh` 脚本操作 `.alloy.yaml`
-- 阶段转换必须通过 `alloy-guard.sh` 校验——不仅是 phase 合法性，还包含制品完整性检查
+- Agent 不直接写 YAML——通过 `alloy _state` 命令操作 `.alloy.yaml`
+- 阶段转换必须通过 `alloy _guard` 命令校验——不仅是 phase 合法性，还包含制品完整性检查
 - specs 不读 draft.md（防止行为契约被技术实现细节污染），design 读 draft 但受 proposal 范围约束
 - 命令中 `[name]` 省略时，从 `openspec/changes/*/.alloy.yaml` 自动推断活跃 change
 - 每个 change 状态文件字段：`phase` / `worktree` / `schema_version` / `created_at` / `updated_at`
@@ -92,6 +87,13 @@ openspec/schemas/alloy/
 ## 参考文档
 
 Agent 需要查阅以下文件时，直接 Read：
-- `docs/alloy-design.md` — 完整产品规格
-- `docs/alloy-dev-guide.md` — 构建命令、测试写法、踩坑记录
-- `docs/skill-writing-guide.md` — Skill 编写规范（修改 command 文件前必须读）
+
+| 文档 | 角色 | 何时读 |
+|------|------|--------|
+| `docs/alloy-design.md` | **WHAT** — 完整产品规格 | 理解命令行为、阶段闸门、状态管理 |
+| `docs/alloy-visual-spec.md` | **UI** — 终端输出视觉规范 | 写 Skill 输出格式时参考 |
+| `docs/alloy-dev-guide.md` | **DO** — 构建/测试/踩坑 | 修改代码后需要知道构建和测试流程 |
+| `docs/skill-writing-guide.md` | **SKILL** — Skill 编写规范 | 修改任何 `commands/alloy/*.md` 之前必读 |
+| `docs/workflow-design.md` | **WHY** — 设计推导过程 | 理解设计决策的上下文和来源 |
+| `docs/project-background.md` | **STORY** — 项目起源与背景 | 了解项目历史和竞品对比 |
+| `docs/openspec-vs-superpowers.md` | **RESEARCH** — 基础工具对比 | 理解 OpenSpec 和 Superpowers 各自职能

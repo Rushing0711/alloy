@@ -11,6 +11,8 @@ tags: [alloy, workflow]
 
 **核心原则：把实际工作委托给专门的技能，不要自己做。Alloy 是编排器，不是执行者。**
 
+> **`<TIMESTAMP>` 的含义：** 每次渲染阶段头部框时，执行 `date "+%Y-%m-%d %H:%M:%S"` 获取本地时间，替换 `<TIMESTAMP>`。不要输出字面字符串 `<TIMESTAMP>`。`<created_at>` 从 `.alloy.yaml` 的 `created_at` 字段读取。
+
 ---
 
 ## 状态检测
@@ -28,6 +30,7 @@ tags: [alloy, workflow]
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [1/5] · Phase: Start           │
+│ 启动时间: <TIMESTAMP>            │
 └──────────────────────────────────────┘
 ```
 
@@ -101,20 +104,17 @@ tags: [alloy, workflow]
 
 用户确认方案后，执行以下步骤：
 
-1. **建议 change name**——根据 draft 内容建议 kebab-case 名称，用户确认
+1. **建议 change name**——根据确认的方案建议 kebab-case 名称，用户确认
 2. **调用 `/opsx:new <name>`** 创建 change 目录
-3. **将 draft.md 移入 change 目录** `openspec/changes/<name>/`
-4. **写入 state**：
+3. **按模板生成 `draft.md`** 到 `openspec/changes/<name>/draft.md`（直接在 change 目录下生成，无需移动）
+4. **写入 state**——使用 `_state init` 一步创建完整初始状态（包含 `records: []`、正确类型），避免逐字段写入遗漏 records 数组：
    ```bash
-   alloy _state write openspec/changes/<name> phase started
-   alloy _state write openspec/changes/<name> worktree null
-   alloy _state write openspec/changes/<name> schema_version 1
-   alloy _state write openspec/changes/<name> created_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+   alloy _state init openspec/changes/<name>
    ```
 5. **计算并记录 hash，然后 commit**：
    ```bash
    DRAFT_HASH=$(alloy _record compute openspec/changes/<name> draft)
-   APPROVED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+   APPROVED_AT=$(date "+%Y-%m-%d %H:%M:%S")
    APPROVER=$(git config user.name)
    alloy _record write openspec/changes/<name> draft "$DRAFT_HASH" "$APPROVED_AT" "$APPROVER"
    git add openspec/changes/<name>/
@@ -131,13 +131,16 @@ tags: [alloy, workflow]
 
    展示选项，让用户选择：
 
-   > **选择工作分支**
+   > 选择工作分支
    > ──────────────────────────────────────
-   > 当前在 `<$CURRENT_BRANCH>` 分支。
    >
-   > **1.** 在当前分支继续 — 直接在此分支开发
-   > **2.** 切换到已有分支  — 选择一个已有分支
-   > **3.** 新建分支        — 创建新分支并切换
+   > 当前在 `<$CURRENT_BRANCH>` 分支
+   >
+   > 1. 在当前分支继续 —— 直接在此分支开发
+   > 2. 切换到已有分支 —— 选择一个已有分支
+   > 3. 新建分支       —— 创建新分支并切换
+   >
+   > → 建议新建 `<change-name>` 分支，保持 main 干净
 
    - **选 1：** 不操作，直接继续
    - **选 2：** 展示已有分支列表（`git branch -a`），用户选择后执行 `git checkout <branch>`
@@ -159,16 +162,21 @@ tags: [alloy, workflow]
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [1/5] · Phase: Start — DONE    │
+│ 启动时间: <created_at>               │
+│ 完成时间: <TIMESTAMP>                │
+│ 耗时: XmXs                           │
 └──────────────────────────────────────┘
 
 → Change: <name>
 → Phase: started
-→ draft.md 已锁定（hash + commit）
 
-draft.md 已完成。
-💡 建议：可以用 grill-me 对需求进行深入拷问，确认后再进入 plan。
+所有制品已生成并锁定：
 
-准备好后，运行 `/alloy:plan` 进入规划阶段。
+  制品             状态    Hash          创建时间
+  ──────────────  ────    ────────────  ───────────────────
+  draft           ✓       <hash>        <timestamp>
+
+准备好后，运行 /alloy:plan 进入规划阶段。
 ```
 
 - draft.md 已在 change 目录，项目根目录不再有 draft.md
@@ -181,6 +189,7 @@ draft.md 已完成。
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [1/5] · Phase: Start           │
+│ 启动时间: <TIMESTAMP>            │
 └──────────────────────────────────────┘
 ```
 
@@ -192,7 +201,9 @@ draft.md 已完成。
 
 **有上下文可读时：** 总结项目信息（技术栈、已有功能、最近变更），基于发现给用户 2-3 个建议方向或追问。目标是帮用户明确他想做什么，而不是抛回一句"请提供主题"。
 
-**空项目无可读上下文时：** 直接告诉用户："项目较新，没有太多上下文可供参考。请提供需求主题：`/alloy:start <topic>`"
+**空项目无可读上下文时：** 直接告诉用户："项目较新，没有太多上下文可供参考。请用 `/alloy:start <topic>` 重新调用，我会进入完整的需求设计流程。"
+
+> 关键：必须让用户重新输入 `/alloy:start <topic>`，而不是只输入 topic 文本。只有重新调用命令，alloy:start 技能才会被重新加载并进入"全新开始"路径。如果用户只输入 topic 文本而不带命令，Agent 将脱离 alloy:start 编排框架，导致关键闸门（change name 确认、分支选择、hash commitment）被跳过。
 
 ---
 
@@ -207,6 +218,7 @@ draft.md 已完成。
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [1/5] · Phase: Start           │
+│ 启动时间: <TIMESTAMP>            │
 └──────────────────────────────────────┘
 
 → 检测到活跃 change：<name>
@@ -239,6 +251,7 @@ draft.md 已完成。
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [1/5] · Phase: Start           │
+│ 启动时间: <TIMESTAMP>            │
 └──────────────────────────────────────┘
 
 → 检测到 <N> 个活跃 change，请选择。

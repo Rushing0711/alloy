@@ -23,6 +23,7 @@ tags: [alloy, workflow]
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [5/5] · Phase: Finish          │
+│ 启动时间: <TIMESTAMP>                │
 └──────────────────────────────────────┘
 ```
 
@@ -55,12 +56,14 @@ git branch --list <change-name>
 
 ### [Step 2/3] superpowers:finishing-a-development-branch
 
+> 选择处理方式
+> ──────────────────────────────────────
+>
 > phase=archived 已确认 ✓
 >
-> **请选择处理方式：**
-> **1.** 本地 merge  — 合入基础分支
-> **2.** 创建 PR    — 提交代码审查
-> **3.** 保持分支   — 暂不处理
+> 1. 本地 merge —— 合入基础分支
+> 2. 创建 PR    —— 提交代码审查
+> 3. 保持分支   —— 暂不处理
 
 使用 Skill 工具加载 `superpowers:finishing-a-development-branch` 技能，传入上下文：
 ```
@@ -85,17 +88,17 @@ Change: <name>
 >
 > | | |
 > |---|---|
-> | **源分支** | <change-name> |
-> | **目标分支** | <base-branch> |
+> | 源分支 | <change-name> |
+> | 目标分支 | <base-branch> |
 >
-> **即将合入的提交：**
+> 即将合入的提交：
 > ```
 > <git log base-branch..change-name --oneline 的输出>
 > ```
 >
 > 合并后 worktree 将被清理，分支将被删除。
 >
-> 输入 `merge <change-name> into <base-branch>` 确认，或输入其他内容取消。
+> 输入 merge <change-name> into <base-branch> 确认，或输入其他内容取消。
 
 **必须等待用户精确输入确认语句。** "好"、"可以"、"y" 都不算确认。
 
@@ -137,11 +140,15 @@ alloy _guard openspec/changes/<name> finished --apply
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [5/5] · Phase: Finish — DONE   │
+│ 启动时间: <created_at>               │
+│ 完成时间: <TIMESTAMP>                │
+│ 耗时: XmXs                           │
 └──────────────────────────────────────┘
-```
 
-> **处理方式：** <选择的方式>
-> **phase → finished**
+→ Change: <name>
+→ Phase: finished
+→ 处理方式: <本地 merge  /  PR  /  保留分支>
+→ 分支: <merged  /  已删除  /  保留>
 
 ---
 
