@@ -88,6 +88,15 @@ print(json.loads(sys.stdin.read() or '{}').get('apply',{}).get('started_at',''))
 │ 启动时间: <上面命令输出的 started_at 值>  │
 └──────────────────────────────────────┘
 
+**提交前置状态（worktree 创建前确保 .alloy.yaml 变更已落地）：**
+
+```bash
+git add openspec/changes/<name>/.alloy.yaml
+git diff --cached --quiet || git commit -m "chore(<name>): apply 阶段开始前状态快照"
+```
+
+`git diff --cached --quiet` 接续时无变更则跳过，不会产生空 commit。
+
 [Step 0/5] 技能可用性预检（precheck）
 ──────────────────────────────────────
 
@@ -159,16 +168,24 @@ Step 1/5 进度检测:
 
 路径存在、"skipped" 时，直接跳过 Step 1，进入 Step 2。
 
-null 时，加载 `superpowers:using-git-worktrees` 让用户选择。
+null 时，先展示摘要，再加载技能：
+
+```
+> [Step 1/5] 隔离环境设置
+>
+> 源分支:   <当前 git branch>
+> Worktree 分支: worktree-<change-name>
+> Worktree 路径: .claude/worktrees/<change-name>
+>
+> 加载 superpowers:using-git-worktrees...
+```
+
+使用 Skill 工具加载 `superpowers:using-git-worktrees` 技能。该技能内置了完整的决策流程，Agent 按其内部指引执行即可。
 
 **when 用户选择不创建 worktree：** 写入 `skipped`（非 null）：
 ```bash
 alloy _state write openspec/changes/<name> worktree skipped
 ```
-
-> [Step 1/5] superpowers:using-git-worktrees
->
-> 使用 Skill 工具加载 `superpowers:using-git-worktrees` 技能。该技能内置了完整的决策流程（检测现有隔离 → 询问用户是否创建 → 创建或跳过），Agent 不重复建造选择闸门，按其内部指引执行即可。
 
 技能执行完成后，将结果写入状态文件——这是断点恢复的关键数据：
 - 已创建 worktree → `alloy _state write openspec/changes/<name> worktree "<path>"`
