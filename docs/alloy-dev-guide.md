@@ -131,7 +131,6 @@ describe("myFunction", () => {
 7. ensureGitignore()  → 追加 .worktrees/ worktrees/ .superpowers/
 8. injectClaudeMd()   → 可选（--inject-claude-md）
 9. checkCompat()      → 版本兼容性诊断
-10. gitCommit()        → 仅 project scope，提交基础设施文件（.claude/ .gitignore openspec/）
 ```
 
 **部署文件对应关系：**

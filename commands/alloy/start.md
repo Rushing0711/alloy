@@ -163,6 +163,14 @@ echo "SESSION_START=$(date "+%Y-%m-%d %H:%M:%S")"
    alloy _state write openspec/changes/<name> worktree null
    ```
 
+   **提交 alloy init 基础设施文件：** 分支确认后，将 init 部署的文件纳入版本追踪。
+   ```bash
+   git add .claude/ .gitignore openspec/config.yaml openspec/schemas/ 2>/dev/null
+   [ -f CLAUDE.md ] && git add CLAUDE.md 2>/dev/null
+   git diff --cached --quiet || git commit -m "chore: alloy init 项目初始化"
+   ```
+   已提交过则自动跳过。`.superpowers/` 已在 `.gitignore` 中忽略，不入仓库。
+
    > ⚠️ apply 阶段仍会通过 `using-git-worktrees` 再次确认隔离方式。此处的分支选择是给后续阶段一个推荐的开发分支。
 
 8. **记录阶段时间：**
