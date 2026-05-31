@@ -28,7 +28,9 @@ echo "$TIMINGS" | python3 -c "
 import sys,json
 content = sys.stdin.read()
 d = json.loads(content) if content.strip() else {}
-d.setdefault('finish',{})['started_at']='$COMPLETED_AT'
+p = d.setdefault('finish',{})
+if 'started_at' not in p:
+    p['started_at']='$COMPLETED_AT'
 print(json.dumps(d))
 " | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
 ```
@@ -36,7 +38,7 @@ print(json.dumps(d))
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [5/5] · Phase: Finish          │
-│ 启动时间: 从 phase_timings.finish.started_at 读取，若无则用 <TIMESTAMP>
+│ 启动时间: 从 phase_timings.finish.started_at 读取
 └──────────────────────────────────────┘
 ```
 
@@ -168,9 +170,13 @@ echo "$TIMINGS" | python3 -c "
 import sys,json
 content = sys.stdin.read()
 d = json.loads(content) if content.strip() else {}
-d.setdefault('finish',{})['completed_at']='$COMPLETED_AT'
+p = d.setdefault('finish',{})
+if 'completed_at' not in p:
+    p['completed_at']='$COMPLETED_AT'
 print(json.dumps(d))
 " | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
+git add openspec/changes/<name>/
+git commit -m "chore(<name>): 记录 finish 阶段完成时间"
 ```
 
 ```

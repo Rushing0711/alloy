@@ -11,7 +11,7 @@ tags: [alloy, workflow]
 
 **核心原则：把实际工作委托给专门的技能，不要自己做。Alloy 是编排器，不是执行者。**
 
-> **`<TIMESTAMP>` 的含义：** 每次渲染阶段头部框时，执行 `date "+%Y-%m-%d %H:%M:%S"` 获取本地时间，替换 `<TIMESTAMP>`。不要输出字面字符串 `<TIMESTAMP>`。`<created_at>` 从 `.alloy.yaml` 的 `created_at` 字段读取。
+> **`<TIMESTAMP>` 的含义：** 每次渲染阶段头部框时，执行 `date "+%Y-%m-%d %H:%M:%S"` 获取本地时间，替换 `<TIMESTAMP>`。不要输出字面字符串 `<TIMESTAMP>`。`<SESSION_START>` 是"全新开始"路径在 header 渲染前捕获的会话启动时间，后续 step 8 写入 phase_timings 时复用该值。`<created_at>` 从 `.alloy.yaml` 的 `created_at` 字段读取。
 
 ---
 
@@ -27,10 +27,15 @@ tags: [alloy, workflow]
 
 ## 全新开始（无活跃 change + 用户提供了 topic）
 
+**记录会话启动时间**（后续写入 phase_timings.start.started_at）：
+```bash
+echo "SESSION_START=$(date "+%Y-%m-%d %H:%M:%S")"
+```
+
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [1/5] · Phase: Start           │
-│ 启动时间: <TIMESTAMP>            │
+│ 启动时间: 使用上面 SESSION_START 的值
 └──────────────────────────────────────┘
 ```
 
@@ -163,8 +168,11 @@ tags: [alloy, workflow]
 8. **记录阶段时间：**
    ```bash
    COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
-   STARTED_AT=$(alloy _state read openspec/changes/<name> created_at)
+   # STARTED_AT 使用步骤开始时捕获的 SESSION_START 值
+   STARTED_AT="<SESSION_START>"
    alloy _state write openspec/changes/<name> phase_timings "{\"start\":{\"started_at\":\"$STARTED_AT\",\"completed_at\":\"$COMPLETED_AT\"}}"
+   git add openspec/changes/<name>/
+   git commit -m "chore(<name>): 记录 start 阶段完成时间"
    ```
 
 ---
@@ -174,8 +182,8 @@ tags: [alloy, workflow]
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [1/5] · Phase: Start — DONE    │
-│ 启动时间: <created_at>               │
-│ 完成时间: <TIMESTAMP>                │
+│ 启动时间: 从 phase_timings.start.started_at 读取               │
+│ 完成时间: 从 phase_timings.start.completed_at 读取                │
 │ 耗时: XmXs                           │
 └──────────────────────────────────────┘
 
@@ -238,7 +246,7 @@ tags: [alloy, workflow]
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [1/5] · Phase: Start           │
-│ 启动时间: <TIMESTAMP>            │
+│ 启动时间: 从 phase_timings.start.started_at 读取，若无则从 created_at 读取            │
 └──────────────────────────────────────┘
 
 → 检测到活跃 change：<name>
@@ -275,7 +283,7 @@ tags: [alloy, workflow]
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [1/5] · Phase: Start           │
-│ 启动时间: <TIMESTAMP>            │
+│ 启动时间: 从 phase_timings.start.started_at 读取，若无则从 created_at 读取            │
 └──────────────────────────────────────┘
 
 → 检测到 <N> 个活跃 change，请选择。
