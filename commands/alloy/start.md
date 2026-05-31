@@ -111,7 +111,12 @@ tags: [alloy, workflow]
    ```bash
    alloy _state init openspec/changes/<name>
    ```
-5. **计算并记录 hash，然后 commit**：
+5. **确保 git 仓库就绪：**
+   ```bash
+   git rev-parse --git-dir 2>/dev/null || git init
+   ```
+
+6. **计算并记录 hash，然后 commit**：
    ```bash
    DRAFT_HASH=$(alloy _record compute openspec/changes/<name> draft)
    APPROVED_AT=$(date "+%Y-%m-%d %H:%M:%S")
@@ -121,7 +126,7 @@ tags: [alloy, workflow]
    git commit -m "feat(<name>): draft 已确认"
    ```
 
-6. **分支选择**——检测 git 状态，确认工作分支：
+7. **分支选择**——检测 git 状态，确认工作分支：
 
    先获取当前分支：
    ```bash
@@ -155,7 +160,7 @@ tags: [alloy, workflow]
 
    > ⚠️ apply 阶段仍会通过 `using-git-worktrees` 再次确认隔离方式。此处的分支选择是给后续阶段一个推荐的开发分支。
 
-7. **记录阶段时间：**
+8. **记录阶段时间：**
    ```bash
    COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
    STARTED_AT=$(alloy _state read openspec/changes/<name> created_at)
