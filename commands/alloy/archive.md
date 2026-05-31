@@ -88,7 +88,12 @@ test -f openspec/changes/<name>/verify.md && ! grep -q '^- \[x\] ❌ FAIL' opens
 - `/opsx:archive` 返回错误（权限、冲突等）→ [HARD STOP]，不推进 phase
 - `/opsx:archive` 不可用（OpenSpec 未安装）→ 引导用户运行 `alloy init` 安装 OpenSpec
 
-归档成功后，先处理跨周期反馈：
+归档成功后，确定归档路径并处理后续步骤：
+
+```bash
+# /opsx:archive 已将 change 目录移至 archive/，后续操作使用归档路径
+ARCHIVE_DIR="openspec/changes/archive/$(date +%Y-%m-%d)-<name>"
+```
 
 **读取 retrospective.md §6 Promote Candidates：** 检查是否有标记 `→ Promote to: memory` 的条目。若有，将 Why/How to apply 写入 `~/.claude/memory/` 对应的 memory 文件（feedback 类型），使其在后续 session 中自动加载。
 
@@ -97,13 +102,12 @@ test -f openspec/changes/<name>/verify.md && ! grep -q '^- \[x\] ❌ FAIL' opens
 然后执行 git commit（确保归档变更被版本追踪）：
 ```bash
 git add openspec/specs/ openspec/changes/archive/ 2>/dev/null
-git add -u openspec/changes/<name>/ 2>/dev/null
 git commit -m "chore(<name>): Delta Spec 已同步并归档" 2>/dev/null
 ```
 （git commit 失败不阻断——可能没有变更或不在 git 仓库中）
 
 > ✓ Delta Spec 已合并到主 spec
-> ✓ Change 已归档到 archive/YYYY-MM-DD-<name>/
+> ✓ Change 已归档到 $ARCHIVE_DIR
 > ✓ 归档变更已提交
 
 ### Step 3/3：完成
@@ -111,7 +115,7 @@ git commit -m "chore(<name>): Delta Spec 已同步并归档" 2>/dev/null
 **记录阶段完成时间：**
 ```bash
 COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
-TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
+TIMINGS=$(alloy _state read "$ARCHIVE_DIR" phase_timings 2>/dev/null || echo "{}")
 echo "$TIMINGS" | python3 -c "
 import sys,json
 content = sys.stdin.read()
@@ -120,14 +124,14 @@ p = d.setdefault('archive',{})
 if 'completed_at' not in p:
     p['completed_at']='$COMPLETED_AT'
 print(json.dumps(d))
-" | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
-git add openspec/changes/<name>/
+" | while read -r val; do alloy _state write "$ARCHIVE_DIR" phase_timings "$val"; done
+git add "$ARCHIVE_DIR/"
 git commit -m "chore(<name>): 记录 archive 阶段完成时间"
 ```
 
 **通过 `alloy _guard` 校验并推进 phase：**
 ```bash
-alloy _guard openspec/changes/<name> archived --apply
+alloy _guard "$ARCHIVE_DIR" archived --apply
 ```
 
 ```
@@ -148,7 +152,7 @@ alloy _guard openspec/changes/<name> archived --apply
 **根据 worktree 状态动态提示：**
 
 ```bash
-alloy _state read openspec/changes/<name> worktree
+alloy _state read "$ARCHIVE_DIR" worktree
 ```
 
 - worktree 有值 → 代码在独立 worktree 分支上，尚未合入。运行 `/alloy:finish` 完成代码合入与现场清理。
