@@ -113,7 +113,7 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
   3. 调用 /opsx:continue → 利用 schema DAG 按依赖顺序制品生成
 制品生成: proposal → design → specs → tasks（/opsx:continue 停在 tasks）
   4. 调用 superpowers:writing-plans → 按原始流程生成 plans.md（含末尾执行交接），
-	     用户选定策略后，将决策注入 plans.md YAML frontmatter 供 apply 阶段读取
+	     writing-plans 自行决定策略并写入 frontmatter。alloy 不在 plan 阶段询问策略——apply 阶段读取 frontmatter 并给用户确认
 每步生成后有审查窗口，可确认或要求修改
 始终分步，不提供一键生成
 

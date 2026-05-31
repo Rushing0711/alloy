@@ -209,16 +209,18 @@ alloy _record check openspec/changes/<name> <upstream-artifact>
 
 tasks 审批通过并 commit 后，**加载 `superpowers:writing-plans` 技能**生成 plans.md。
 
-> 使用 Skill 工具加载 `superpowers:writing-plans` 技能，将 tasks + specs + design 作为上下文传入。**遵循 writing-plans 的完整原始流程**——从文件结构设计、任务拆解、代码填充，到末尾的"执行交接"（Subagent-Driven / Inline Execution 二选一）。不要在此环节插入额外的策略询问——writing-plans 自身已包含。
+> 使用 Skill 工具加载 `superpowers:writing-plans` 技能，将 tasks + specs + design 作为上下文传入。**遵循 writing-plans 的完整原始流程**——从文件结构设计、任务拆解、代码填充，到末尾的"执行交接"。writing-plans 自行决定执行策略并写入 plans.md YAML frontmatter（`strategy` + `reason` 字段）。
 >
 > **注意：** writing-plans 默认保存路径为 `docs/superpowers/plans/`，Alloy 要求将 plans.md 保存到 `openspec/changes/<name>/plans.md`。加载 writing-plans 时需显式指定此路径。
+>
+> alloy 不在 plan 阶段额外询问策略选择——writing-plans 的决策直接保留在 frontmatter 中，apply 阶段再读取并给用户确认。
 
-writing-plans 完成并保存 plans.md、用户选定执行策略后，将策略注入 plans.md 顶部作为 YAML frontmatter（用于跨 session 传递到 apply 阶段）：
+writing-plans 完成并保存 plans.md（含 strategy frontmatter）后，直接进入 plans 审查窗口。frontmatter 格式：
 
 ```yaml
 ---
 strategy: sdd
-reason: <从 writing-plans 执行交接环节提取用户选择的理由>
+reason: <writing-plans 执行交接环节的策略分析理由>
 ---
 # 执行计划
 ...
