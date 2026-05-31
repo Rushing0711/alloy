@@ -7,6 +7,10 @@
   "bin": {
     "alloy": "dist/cli/index.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Rushing0711/alloy.git"
+  },
   "files": [
     "dist/",
     "compat.yaml",
