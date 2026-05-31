@@ -179,6 +179,28 @@ alloy _record check openspec/changes/<name> plans
 
 验证失败 → 修复 → 回到 Step 2/5（SDD）。verify 不通过不结束 apply。
 
+**verify.md 生成后，展示审查窗口：**
+
+> 制品 [1/2] verify ✓ 完成
+>
+> [展示 verify.md 完整内容]
+>
+> → 下一个：retrospective
+> → (a) 确认，锁定 verify 并继续 retrospective
+> → (b) 需要调整 — 说明修改点，修改后重新展示
+
+选 (a)：hash 锁定 verify 并 commit：
+```bash
+HASH=$(alloy _record compute openspec/changes/<name> verify)
+APPROVED_AT=$(date "+%Y-%m-%d %H:%M:%S")
+APPROVER=$(alloy _record approver openspec/changes/<name>)
+alloy _record write openspec/changes/<name> verify "$HASH" "$APPROVED_AT" "$APPROVER"
+git add openspec/changes/<name>/verify.md
+git commit -m "docs(<name>): verify 已确认"
+```
+
+选 (b)：调整 verify 内容后重新展示审查窗口。
+
 ### Step 5/5：复盘
 
 > [Step 5/5] retrospective
@@ -213,6 +235,26 @@ alloy _record check openspec/changes/<name> verify
 复盘是证据驱动的——每条结论都引用具体 commit 或文件。
 跳过策略：单 commit 小修可跳过，写 "Skipped: single-commit fix, no insights"。
 
+**retrospective.md 生成后，展示审查窗口：**
+
+> 制品 [2/2] retrospective ✓ 完成
+>
+> [展示 retrospective.md 完整内容]
+>
+> → 下一个：完成 apply 阶段
+> → (a) 确认，锁定 retrospective 并完成 apply
+> → (b) 需要调整 — 说明修改点，修改后重新展示
+
+选 (a)：hash 锁定 retrospective 并 commit：
+```bash
+HASH=$(alloy _record compute openspec/changes/<name> retrospective)
+alloy _record write openspec/changes/<name> retrospective "$HASH" "$(date "+%Y-%m-%d %H:%M:%S")" "$(alloy _record approver openspec/changes/<name>)"
+git add openspec/changes/<name>/retrospective.md
+git commit -m "docs(<name>): retrospective 已确认"
+```
+
+选 (b)：调整 retrospective 内容后重新展示审查窗口。
+
 ---
 
 ### 完成
@@ -245,22 +287,7 @@ alloy _record check openspec/changes/<name> verify
 
 **apply 阶段 commit 规则：**
 - 代码变更：SDD 过程中每次成功验证后立即 commit
-- verify.md：审批通过后 hash + commit：
-  ```bash
-  HASH=$(alloy _record compute openspec/changes/<name> verify)
-  APPROVED_AT=$(date "+%Y-%m-%d %H:%M:%S")
-  APPROVER=$(alloy _record approver openspec/changes/<name>)
-  alloy _record write openspec/changes/<name> verify "$HASH" "$APPROVED_AT" "$APPROVER"
-  git add openspec/changes/<name>/verify.md
-  git commit -m "docs(<name>): verify 已确认"
-  ```
-- retrospective.md：审批通过后 hash + commit：
-  ```bash
-  HASH=$(alloy _record compute openspec/changes/<name> retrospective)
-  alloy _record write openspec/changes/<name> retrospective "$HASH" "$(date "+%Y-%m-%d %H:%M:%S")" "$(alloy _record approver openspec/changes/<name>)"
-  git add openspec/changes/<name>/retrospective.md
-  git commit -m "docs(<name>): retrospective 已确认"
-  ```
+- verify.md / retrospective.md：用户通过审查窗口选 (a) 确认后，hash 锁定 + commit（具体命令已内联在上方各审查窗口中）
 
 **通过 `alloy _guard` 校验并更新 phase：**
 ```bash
