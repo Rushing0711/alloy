@@ -15,7 +15,8 @@
     "dist/",
     "compat.yaml",
     "commands/",
-    "openspec/schemas/alloy/"
+    "openspec/schemas/alloy/",
+    "vendor/"
   ],
   "scripts": {
     "build": "tsc",
