@@ -278,15 +278,16 @@ echo "SESSION_START=$(date "+%Y-%m-%d %H:%M:%S")"
 
 先读取 `.alloy.yaml` 获取 phase 和 worktree 字段，再检查文件系统确认实际制品状态。
 
-展示检测结果后，直接加载对应阶段命令继续执行：
+展示检测结果后，根据 phase 和制品状态决定路由：
 
-| phase | 自动加载命令 |
-|-------|-------------|
-| started | alloy-plan |
-| planned | alloy-apply |
-| applied | alloy-archive |
-| archived | alloy-finish |
-| finished | 工作流已完成——如需继续修改，使用自然对话提交新变更 |
+| phase | 制品状态 | 自动加载命令 |
+|-------|---------|-------------|
+| started | proposal.md 存在 | alloy-plan（正常接续——plan 制品已有，继续生成） |
+| started | proposal.md 不存在 | 重新进入 brainstorming（回溯后——以现有 draft.md 为基础重新讨论需求） |
+| planned | — | alloy-apply |
+| applied | — | alloy-archive |
+| archived | — | alloy-finish |
+| finished | — | 工作流已完成——如需继续修改，使用自然对话提交新变更 |
 
 **实现方式：** 根据 phase 值，输出对应命令文件的完整指令（`commands/alloy/plan.md` / `apply.md` / `archive.md` / `finish.md`），将 change name 和检测到的进度信息作为上下文传入。Agent 无缝进入对应阶段。
 
