@@ -108,6 +108,7 @@ function powershellCompletion(): string {
     "# 添加到 PowerShell profile（$PROFILE 所在目录可能不存在，需先创建）:",
     "#   New-Item -ItemType Directory -Force -Path (Split-Path $PROFILE)",
     "#   alloy completion pwsh | Out-File -FilePath $PROFILE -Append",
+    "#   重新加载 profile 使之生效: . $PROFILE（或重启 PowerShell）",
     "",
     "Register-ArgumentCompleter -Native -CommandName alloy -ScriptBlock {",
     "  param($wordToComplete, $commandAst, $cursorPosition)",

@@ -88,7 +88,7 @@ alloy completion [shell] [options]
 示例:
   source <(alloy completion)              # 当前 session 生效
   alloy completion --install              # 自动注册并立即生效
-  alloy completion pwsh | Out-File -FilePath $PROFILE -Append  # PowerShell（需先确保目录存在）
+  alloy completion pwsh | Out-File -FilePath $PROFILE -Append  # PowerShell（需先确保目录存在，完成后 . $PROFILE）
 `;
     default:
       return `未知命令: ${cmd}\n使用 alloy --help 查看可用命令。`;
@@ -111,6 +111,7 @@ async function installCompletion(shell: string): Promise<void> {
     console.log("PowerShell 用户请依次运行:");
     console.log("  New-Item -ItemType Directory -Force -Path (Split-Path $PROFILE)");
     console.log("  alloy completion pwsh | Out-File -FilePath $PROFILE -Append");
+    console.log("  . $PROFILE  # 重新加载 profile，或重启 PowerShell");
     return;
   }
 
@@ -282,8 +283,10 @@ async function main() {
       console.log("  source <(alloy completion bash)         # bash 当前 session 生效");
       console.log("  alloy completion --install              # 自动注册到 rc 文件，永久生效");
       console.log("");
-      console.log("  # PowerShell（$PROFILE 目录可能需先创建: New-Item -ItemType Directory -Force -Path (Split-Path $PROFILE)）");
-      console.log("  alloy completion pwsh | Out-File $PROFILE  # PowerShell 永久生效");
+      console.log("  # PowerShell（需先创建目录，再写入 profile，最后 . $PROFILE 或重启）");
+      console.log("  New-Item -ItemType Directory -Force -Path (Split-Path $PROFILE)");
+      console.log("  alloy completion pwsh | Out-File $PROFILE");
+      console.log("  . $PROFILE");
       break;
     }
     case "_state": {
