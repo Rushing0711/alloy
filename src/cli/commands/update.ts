@@ -1,5 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { readFileSync, lstatSync, existsSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { deployCommands, deploySchema } from "../../core/skills.js";
@@ -13,11 +13,8 @@ const CLAUDE_MD_MARKER_START = "<!-- ALLOY-WORKFLOW:START -->";
 const CLAUDE_MD_MARKER_END = "<!-- ALLOY-WORKFLOW:END -->";
 
 function isDevMode(): boolean {
-  try {
-    return lstatSync(getPackageRoot()).isSymbolicLink();
-  } catch {
-    return false;
-  }
+  // npm link 下包根目录不是 symlink，但 .git 存在标记了开发环境
+  return existsSync(join(getPackageRoot(), ".git"));
 }
 
 function detectScope(projectPath: string): "global" | "project" | null {
