@@ -149,6 +149,11 @@ phase → planned
 
 技能预检（6 个 Superpowers 技能可用性，缺一 STOP）
 
+需求变更闸门：apply 阶段用户提出需求/设计变更时，检查 tasks.md checkbox：
+全部 unchecked（未开始编码）→ 允许回溯到 brainstorming（当前 change 内）；
+有 [x]（已开始编码）→ 拒绝，应开新 change。
+详见 apply.md"需求变更处理"段落。
+
 执行步骤（共 5 步，每步自带幂等检查，验证失败回到 Step 2 修复）:
   1. superpowers:using-git-worktrees → 隔离环境设置。
      幂等检查：worktree 路径已存在或为 null → 跳过此步骤。否则按技能指引执行。

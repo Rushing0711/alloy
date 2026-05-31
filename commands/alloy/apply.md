@@ -102,6 +102,36 @@ print(json.dumps(d))
 
 ---
 
+---
+
+## 需求变更处理（Apply 阶段回溯闸门）
+
+apply 阶段用户提出需求/设计变更时，以"编码是否已开始"为分界线：
+
+**检查 tasks.md checkbox 状态：**
+```bash
+grep -c '\[x\]' openspec/changes/<name>/tasks.md
+```
+
+- 返回 0（全部 unchecked）→ 尚未开始编码，允许回溯
+- 返回 > 0（有已勾选任务）→ 编码已开始，拒绝回溯
+
+**未开始编码（全部 unchecked）：**
+
+> → (a) 确认变更，回到 brainstorming（清理 plan 制品，在当前 change 内修正）
+> → (b) 取消，继续 apply
+
+用户选 (a) → 执行 plan.md 的"回溯清理步骤"（删除 proposal/design/tasks/plans/specs，重置 records/phase_timings），回到 brainstorming。
+
+**编码已开始（有 [x]）：**
+
+> 编码已开始（<N> 个任务已完成），需求变更应开新 change:
+>   /alloy:start <建议名称>
+>
+> 当前 change 继续执行，或 /alloy:discard 放弃。
+
+不允许在当前 change 内回溯——已有代码落地，规格和代码不能分叉。
+
 ## 执行步骤
 
 ### [Step 1/5] 隔离环境设置
