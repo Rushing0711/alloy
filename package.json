@@ -1,6 +1,6 @@
 {
   "name": "@flyin-ai/alloy",
-  "version": "0.1.1-beta.0",
+  "version": "0.1.1",
   "description": "Alloy - OpenSpec + Superpowers 编排层 CLI 工具",
   "type": "module",
   "main": "dist/cli/index.js",
