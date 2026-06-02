@@ -1,6 +1,6 @@
 ---
 name: "Alloy: Finish"
-description: Alloy 收尾——archive 完成后，合入代码并清理现场
+description: Alloy 收尾阶段 - archive 完成后进入
 category: Workflow
 tags: [alloy, workflow]
 ---

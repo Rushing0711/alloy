@@ -433,13 +433,14 @@ start → plan → apply → archive → finish
 
 **执行流程：**
 
-1. 回顾整个 change 过程
-2. 生成 retrospective.md（回顾文档）
-3. 归档 change
+1. Delta Spec 合并到主 spec（`openspec/specs/`）
+2. Change 目录移至 `openspec/changes/archive/YYYY-MM-DD-<name>/`
+3. 处理 retrospective.md §6 Promote Candidates（写入 memory）
+4. 提交归档变更
 
-**产出物：** `openspec/changes/<name>/retrospective.md`
+**产出物：** 归档到 `openspec/changes/archive/YYYY-MM-DD-<name>/`
 
-**Commit：** `docs(<name>): archive 归档`
+**Commit：** `chore(<name>): Delta Spec 已同步并归档`
 
 ### 3.7 Finish 阶段
 

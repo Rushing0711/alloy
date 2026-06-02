@@ -1,6 +1,6 @@
 ---
 name: "Alloy: Plan"
-description: Alloy 规划阶段——将 draft.md 转化为结构化制品，始终分步，每步可审查
+description: Alloy 规划阶段 - draft.md 完成后进入
 category: Workflow
 tags: [alloy, workflow]
 ---

@@ -20,7 +20,7 @@
 |------|----------|--------|
 | 需求输入 |（离线/人工） | `requirement.md` |
 | 统一探索入口 | `/opsx:explore <topic>` | 无文件（上下文内消化） |
-| 设计草案 | `superpowers:brainstorming`（隐含） | **`draft.md`**（项目根目录，临时存放） |
+| 设计草案 | `superpowers:brainstorming`（隐含） | **`draft.md`**（change 目录内，`openspec/changes/<name>/draft.md`） |
 
 explore 自动分流：新项目 → 探索需求空间；存量项目 → 探索代码库 + 需求空间。
 

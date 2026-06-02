@@ -1,6 +1,6 @@
 ---
 name: "Alloy: Archive"
-description: Alloy 归档——apply 完成后，锁定 Delta Spec 并归档 change
+description: Alloy 归档阶段 - apply 完成后进入
 category: Workflow
 tags: [alloy, workflow]
 ---
