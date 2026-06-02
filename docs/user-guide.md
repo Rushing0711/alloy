@@ -338,7 +338,7 @@ alloy completion [shell] [options]
 **示例：**
 
 ```bash
-# 方式 1：自动安装（推荐，支持 bash/zsh/PowerShell）
+# 方式 1：自动安装（推荐，支持 bash/zsh/powershell）
 alloy completion --install
 
 # 方式 2：临时启用（当前 session）

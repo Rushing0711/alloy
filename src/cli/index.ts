@@ -88,7 +88,7 @@ alloy completion [shell] [options]
 
 行为说明:
   alloy completion <shell>        仅输出补全脚本（不安装）
-  alloy completion --install      自动安装到 rc 文件（永久生效，支持 bash/zsh/PowerShell）
+  alloy completion --install      自动安装到 rc 文件（永久生效，支持 bash/zsh/powershell）
   source <(alloy completion)      临时启用（当前 session）
 
 示例:
