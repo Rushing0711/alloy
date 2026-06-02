@@ -297,14 +297,9 @@ async function main() {
       // 无参数 → 显示友好使用说明
       console.log("生成 shell 补全脚本，获取 Tab 自动补全能力。\n");
       console.log("用法：");
-      console.log("  source <(alloy completion zsh)          # zsh 当前 session 生效");
-      console.log("  source <(alloy completion bash)         # bash 当前 session 生效");
-      console.log("  alloy completion --install              # 自动注册到 rc 文件，永久生效");
-      console.log("");
-      console.log("  # PowerShell（需先创建目录，再写入 profile，最后 . $PROFILE 或重启）");
-      console.log("  New-Item -ItemType Directory -Force -Path (Split-Path $PROFILE)");
-      console.log("  alloy completion pwsh | Out-File $PROFILE");
-      console.log("  . $PROFILE");
+      console.log("  alloy completion --install              # 自动安装（推荐，支持 bash/zsh/PowerShell）");
+      console.log("  source <(alloy completion zsh)          # 临时启用 zsh 补全");
+      console.log("  source <(alloy completion bash)         # 临时启用 bash 补全");
       break;
     }
     case "_state": {
