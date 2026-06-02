@@ -18,14 +18,19 @@
 
 ```
 src/cli/
-  index.ts              # CLI 入口（alloy init/status/doctor/update）
+  index.ts              # CLI 入口（alloy init/status/doctor/update/completion）
   commands/
     init.ts             # alloy init — 环境检测 → 依赖安装 → 部署 schema + commands
     status.ts           # alloy status — 活跃 change 总览
     doctor.ts           # alloy doctor — 版本兼容性 + 文件一致性诊断
     update.ts           # alloy update — 更新 command 文件到最新版
+    completion.ts       # alloy completion — shell 补全脚本生成
+    internal/
+      guard.ts          # alloy _guard — 阶段闸门校验
+      record.ts         # alloy _record — 制品 hash 记录
+      state.ts          # alloy _state — 状态文件读写
   utils/
-    state.ts            # .alloy.yaml 状态文件读写
+    state.ts            # .alloy.yaml 状态文件读写（CLI 层）
 src/core/
     types.ts            # 共享类型定义
     detect.ts           # 环境检测（Node.js / git）
@@ -34,8 +39,11 @@ src/core/
     skills.ts           # Alloy command + schema 部署
     claude-md.ts        # CLAUDE.md 注入
     compat.ts           # compat.yaml 兼容性检查
+    agents.ts           # 多 Agent 平台支持（8 个平台定义 + 部署检测）
+    health.ts           # 7 项健康检查（doctor 诊断 + init 兼容性检查）
 src/utils/
     fs.ts               # 文件系统工具（包根目录定位）
+    prompt.ts           # 交互式提示（select/confirm/multiSelect，Node 20+ 用 inquirer）
 
 commands/
   alloy/

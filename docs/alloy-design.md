@@ -450,7 +450,7 @@ openspec status --change <change-name>
 
 ### 平台兼容
 
-v1 仅支持 Claude Code。团队统一使用 Claude Code，聚焦质量而非覆盖面。后续版本视需求扩展其他平台。
+v1 支持 8 个 AI 编码平台：Claude Code、CodeBuddy、Qoder（冒号版命令）、Cursor、OpenCode、Codex、Trae、Pi（横线版命令）。`alloy init` 交互式选择安装目标，冒号版和横线版自动生成到各平台目录。平台定义见 `src/core/agents.ts`。
 
 ### 扩展点
 
@@ -566,6 +566,9 @@ $ alloy init
      git ✓
      Claude Code ✓
 
+  🎯 安装范围: Project (current directory)
+  🤖 目标 Agent: Claude Code, Cursor
+
   📥 OpenSpec CLI...
      ✓ @fission-ai/openspec@1 （v1.5.0）
 
@@ -573,15 +576,19 @@ $ alloy init
      ✓ openspec init 完成（项目）
 
   📥 Superpowers...
-     ✓ Claude Code → obra/superpowers@5 （v5.1.0）
+     ✓ obra/superpowers@5 （v5.1.0）
 
-  🚀 部署 Alloy...
-     ✓ Claude Code → .claude/commands/alloy/（project）
+  🚀 部署 Alloy commands...
+     ✓ .claude/commands/alloy/（project）
+     ✓ .cursor/commands/alloy-start.md 等（project）
      ✓ 项目 schema → openspec/schemas/alloy/
 
   🩺 兼容性检查...
      ✓ OpenSpec v1.5.0（兼容范围 >=1.3.0 <2.0.0）
      ✓ Superpowers v5.1.0（兼容范围 >=5.0.0 <6.0.0）
+
+  🐚 注册 shell 补全...
+     ✓ shell 补全已注册 → ~/.zshrc
 
   ✅ Alloy 就绪！
      在 Claude Code 中输入 /alloy:start <topic> 开始工作
@@ -589,11 +596,15 @@ $ alloy init
 
 关键步骤：
 
-1. **安装 OpenSpec CLI** — `npm install -g @fission-ai/openspec@1`
-2. **调用 openspec init** — `openspec init <path> --tools claude --profile custom`。传入临时 custom profile 确保全部 11 个 workflow（new / continue / verify 等）被启用。参考 Comet 的做法
-3. **安装 Superpowers** — `npx skills add obra/superpowers -y --agent claude-code`（project scope 不加 `-g`）
-4. **部署 Alloy command + schema** — 从包复制 `commands/alloy/`，自动生成冒号版和横线版到各平台目录，写入 `openspec/schemas/alloy/`，追加 `schema: alloy` 到 `openspec/config.yaml`
-5. **兼容性检查** — 根据 `compat.yaml` 校验版本
+1. **选择 scope** — 交互式选择 project（当前目录）或 global（home 目录），也可 `--scope` 参数指定
+2. **选择目标 Agent** — 交互式多选安装目标（Claude Code / Cursor / OpenCode 等 8 个平台）
+3. **安装 OpenSpec CLI** — `npm install -g @fission-ai/openspec@1`
+4. **调用 openspec init** — `openspec init <path> --tools claude --profile custom`。传入临时 custom profile 确保全部 11 个 workflow（new / continue / verify 等）被启用。参考 Comet 的做法
+5. **安装 Superpowers** — `npx skills add obra/superpowers -y --agent claude-code`（project scope 不加 `-g`）
+6. **部署 Alloy command + schema** — 从包复制 `commands/alloy/`，自动生成冒号版和横线版到各平台目录，写入 `openspec/schemas/alloy/`，追加 `schema: alloy` 到 `openspec/config.yaml`
+7. **更新 .gitignore** — 追加 5 条规则（`docs/superpowers/` `.worktrees/` `worktrees/` `*.local.*` `.superpowers/`）
+8. **注册 shell 补全** — 自动检测 shell 类型，注册 `alloy completion` 到 rc 文件
+9. **兼容性检查** — 根据 `compat.yaml` 校验版本
 
 CLAUDE.md 注入默认关闭。需要时使用 `--inject-claude-md`。Claude Code 必须由用户预先安装。
 

@@ -47,7 +47,15 @@ cd your-project
 alloy init
 ```
 
-`alloy init` 自动完成：检测环境（Node.js ≥ 18 + git）→ 安装 OpenSpec + Superpowers → 部署命令和 schema → 兼容性检查。
+`alloy init` 交互式完成：
+
+1. 检测环境（Node.js ≥ 18 + git）
+2. 选择安装范围（project / global）
+3. 选择目标 AI Agent（Claude Code、Cursor、OpenCode 等 8 个平台可多选）
+4. 安装 OpenSpec CLI + Superpowers
+5. 部署命令和 schema 到各平台目录
+6. 注册 shell 补全（bash/zsh/PowerShell）
+7. 兼容性检查
 
 ---
 
@@ -118,6 +126,12 @@ alloy init
 
 **越用越聪明：** 每次 change 的 retrospective 复盘数据自动反哺后续 change——上次踩的坑、跳过的技能、未完成的改进项，都带回新一轮 start，不会每次都从零开始。
 
+**多平台支持：** `alloy init` 交互式选择安装目标——Claude Code、Cursor、OpenCode、Codex、Trae、Pi、CodeBuddy、Qoder 共 8 个平台，冒号版和横线版命令自动生成。
+
+**制品独立提交 + 时间追踪：** 每个制品审查通过后立即 hash-lock + 单独 git commit，支持独立回溯、revert、cherry-pick。每个阶段的耗时数据持久化到 `.alloy.yaml`，掉线恢复不丢失。
+
+**Shell 补全：** `alloy completion` 生成 Tab 补全脚本，`alloy init` 时自动注册到 rc 文件。支持 bash / zsh / PowerShell。
+
 > 完整设计细节见 [alloy-design.md](docs/alloy-design.md)。
 
 ---
@@ -127,6 +141,7 @@ alloy init
 | 我想… | 读这个 |
 |-------|------|
 | 看完整产品规格 | [alloy-design.md](docs/alloy-design.md) |
+| 看终端输出视觉规范 | [alloy-visual-spec.md](docs/alloy-visual-spec.md) |
 | 构建、测试、调试 Alloy | [alloy-dev-guide.md](docs/alloy-dev-guide.md) |
 | 写或改 Alloy Skill | [skill-writing-guide.md](docs/skill-writing-guide.md) |
 | 理解为什么这么设计 | [workflow-design.md](docs/workflow-design.md) |
