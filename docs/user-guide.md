@@ -172,7 +172,7 @@ alloy status --json
   my-feature          started     artifacts: draft ✓ proposal ✗ design ✗ specs ✗ tasks ✗ plans ✗
   another-feature     planned     artifacts: draft ✓ proposal ✓ design ✓ specs ✗ tasks ✗ plans ✗
 
-下一步：my-feature 等待 /alloy-plan；another-feature 等待 /alloy-apply
+下一步：my-feature 等待 /alloy:plan；another-feature 等待 /alloy:apply
 ```
 
 **输出示例（详情模式）：**
@@ -359,7 +359,7 @@ start → plan → apply → archive → finish
 |------|------|--------|-------------|
 | Start | `/alloy:start <topic>` | draft.md | `docs(<name>): draft 已确认` |
 | Plan | `/alloy:plan [name]` | proposal.md, design.md, specs/, tasks.md | `docs(<name>): <artifact> 已确认` |
-| Apply | `/alloy:apply [name]` | 代码实现 | `feat(<name>): <实现内容>` |
+| Apply | `/alloy:apply [name]` | 代码实现、verify.md、retrospective.md | `feat(<name>): <实现内容>` |
 | Archive | `/alloy:archive [name]` | retrospective.md | `docs(<name>): archive 归档` |
 | Finish | `/alloy:finish [name]` | 状态更新为 finished | `chore(<name>): finish 收尾` |
 
@@ -409,12 +409,16 @@ start → plan → apply → archive → finish
 
 **执行流程：**
 
-1. 读取 tasks.md
-2. 按任务清单实现功能
-3. 遵循 TDD 原则
-4. 提交代码实现
+1. 创建 worktree 隔离环境
+2. 按任务清单实现功能（SDD + TDD）
+3. 代码验证
+4. 制品验证（生成 verify.md）
+5. 复盘（生成 retrospective.md）
 
-**产出物：** 代码实现
+**产出物：**
+- 代码实现
+- `openspec/changes/<name>/verify.md`
+- `openspec/changes/<name>/retrospective.md`
 
 **Commit：** `feat(<name>): <实现内容>`
 
