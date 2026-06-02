@@ -190,7 +190,7 @@ Change:  my-feature
   specs        ✗
   tasks        ✗
   plans        ✗
-下一步:   继续 /alloy-plan，等待下一个制品生成
+下一步:   继续 /alloy:plan，等待下一个制品生成
 ```
 
 ### 2.3 alloy doctor
