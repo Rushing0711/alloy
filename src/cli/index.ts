@@ -83,13 +83,19 @@ alloy completion [shell] [options]
   shell  目标 shell（bash / zsh / pwsh / powershell，默认从 $SHELL 检测）
 
 选项:
-  --install    自动注册到 shell 配置文件（~/.zshrc / ~/.bashrc / PowerShell profile）
+  --install    自动注册到 shell 配置文件（永久生效）
   --help, -h   显示本帮助
 
+行为说明:
+  alloy completion <shell>        仅输出补全脚本（不安装）
+  alloy completion --install      自动安装到 rc 文件（永久生效）
+  source <(alloy completion)      临时启用（当前 session）
+
 示例:
-  source <(alloy completion)              # 当前 session 生效
-  alloy completion --install              # 自动注册并立即生效
-  alloy completion pwsh | Out-File -FilePath $PROFILE -Append  # PowerShell（需先确保目录存在，完成后 . $PROFILE）
+  alloy completion --install              # 自动安装（推荐）
+  source <(alloy completion zsh)          # 临时启用 zsh 补全
+  source <(alloy completion bash)         # 临时启用 bash 补全
+  alloy completion pwsh | Out-File -FilePath $PROFILE -Append  # 手动安装 PowerShell 补全
 `;
     default:
       return `未知命令: ${cmd}\n使用 alloy --help 查看可用命令。`;
