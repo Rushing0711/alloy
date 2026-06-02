@@ -169,8 +169,8 @@ alloy status --json
 
 ```
 活跃 Change：
-  my-feature          started     draft ✓ proposal ✗ design ✗ specs ✗ tasks ✗ plans ✗
-  another-feature     planned     draft ✓ proposal ✓ design ✓ specs ✗ tasks ✗ plans ✗
+  my-feature          started     artifacts: draft ✓ proposal ✗ design ✗ specs ✗ tasks ✗ plans ✗
+  another-feature     planned     artifacts: draft ✓ proposal ✓ design ✓ specs ✗ tasks ✗ plans ✗
 
 下一步：my-feature 等待 /alloy-plan；another-feature 等待 /alloy-apply
 ```
@@ -226,16 +226,20 @@ alloy doctor --json
 
 ```
 健康检查：
-  ✓ node-version: v20.10.0（要求 >=18.0.0）
-  ✓ git-installed: true（要求 true）
-  ⚠️ alloy-cli: v0.1.0（要求 >=0.2.0）
+  ✓ Node.js: v20.10.0（要求 >=18.0.0）
+  ✓ OpenSpec: v1.2.0（要求 >=1.0.0）
+  ✓ Superpowers: 已安装 v5（要求 >=5.0.0）
+  ✓ Alloy: v0.1.1（要求 >=0.1.0）
+  ✓ Schema: 兼容（要求 v1）
+  ✓ Commands: 8/8 完整
+  ✓ Environment: git ✓
 
 文件一致性：✓ 无问题
 ```
 
 **检查项目：**
 
-- **健康检查：** Node.js 版本、git 安装、Alloy CLI 版本、OpenSpec CLI 版本、Superpowers 版本
+- **健康检查：** Node.js 版本、OpenSpec CLI 版本、Superpowers 版本、Alloy CLI 版本、Schema 版本兼容性、Commands 文件完整性、环境（git 安装）
 - **文件一致性：** worktree 残留检测、worktree 孤儿检测、孤立 worktree 检测
 
 ### 2.4 alloy update
@@ -501,16 +505,28 @@ openspec/
 ```
 .claude/
 └── commands/
-    └── alloy/               # 冒号版命令（Claude Code/Qoder/CodeBuddy）
-        ├── start.md         # /alloy:start
-        ├── plan.md          # /alloy:plan
-        ├── apply.md         # /alloy:apply
-        ├── archive.md       # /alloy:archive
-        ├── finish.md        # /alloy:finish
-        ├── fix.md           # /alloy:fix
-        ├── discard.md       # /alloy:discard
-        └── status.md        # /alloy:status
+    ├── alloy/               # 冒号版命令（Claude Code/Qoder/CodeBuddy）
+    │   ├── start.md         # /alloy:start
+    │   ├── plan.md          # /alloy:plan
+    │   ├── apply.md         # /alloy:apply
+    │   ├── archive.md       # /alloy:archive
+    │   ├── finish.md        # /alloy:finish
+    │   ├── fix.md           # /alloy:fix
+    │   ├── discard.md       # /alloy:discard
+    │   └── status.md        # /alloy:status
+    │
+    └── 横线版（自动生成，供 Cursor/OpenCode/Codex/Trae/Pi 使用）
+        ├── alloy-start.md
+        ├── alloy-plan.md
+        ├── alloy-apply.md
+        ├── alloy-archive.md
+        ├── alloy-finish.md
+        ├── alloy-fix.md
+        ├── alloy-discard.md
+        └── alloy-status.md
 ```
+
+> **注意：** `alloy init` 部署时会自动为不支持冒号的 Agent 生成横线版命令文件。冒号版和横线版内容相同，仅文件名和 frontmatter 中的 `:` 替换为 `-`。
 
 ---
 
@@ -607,10 +623,12 @@ alloy doctor
 **健康检查项目：**
 
 - ✓ Node.js 版本 >= 18.0.0
-- ✓ git 已安装
-- ✓ Alloy CLI 版本兼容
 - ✓ OpenSpec CLI 版本兼容
 - ✓ Superpowers 版本兼容
+- ✓ Alloy CLI 版本兼容
+- ✓ Schema 版本兼容性（校验各 change 的 schema_version）
+- ✓ Commands 文件完整性（检查 8 个 command 文件是否完整）
+- ✓ git 已安装
 
 **文件一致性检查：**
 
