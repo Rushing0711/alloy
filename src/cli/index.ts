@@ -30,8 +30,8 @@ Commands:
               生成 shell 补全脚本，--install 自动注册
 
 Options:
-  --version, -v, -V  版本号
-  --help, -h         帮助（alloy -h 或 alloy <command> -h）
+  --version, -v  版本号
+  --help, -h     帮助（alloy -h 或 alloy <command> -h）
 `;
 
 function commandHelp(cmd: string): string {
@@ -148,7 +148,7 @@ async function main() {
   const args = process.argv.slice(2);
 
   const isHelp = (a: string[]) => a.includes("--help") || a.includes("-h");
-  const isVersion = (a: string[]) => a.includes("--version") || a.includes("-v") || a.includes("-V");
+  const isVersion = (a: string[]) => a.includes("--version") || a.includes("-v");
 
   if (args.length === 0 || (args.length === 1 && isHelp(args))) {
     console.log(USAGE);

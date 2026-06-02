@@ -322,7 +322,6 @@ alloy update /path/to/project
 ```bash
 alloy --version
 alloy -v
-alloy -V
 ```
 
 **输出示例：**
