@@ -297,7 +297,7 @@ async function main() {
       // 无参数 → 显示友好使用说明
       console.log("生成 shell 补全脚本，获取 Tab 自动补全能力。\n");
       console.log("用法：");
-      console.log("  alloy completion --install              # 自动安装（推荐，支持 bash/zsh/PowerShell）");
+      console.log("  alloy completion --install              # 自动安装（推荐，支持 bash/zsh/powershell）");
       console.log("  source <(alloy completion zsh)          # 临时启用 zsh 补全");
       console.log("  source <(alloy completion bash)         # 临时启用 bash 补全");
       break;
