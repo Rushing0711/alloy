@@ -140,6 +140,7 @@ alloy init
 
 | 我想… | 读这个 |
 |-------|------|
+| **快速上手使用 Alloy** | [user-guide.md](docs/user-guide.md) |
 | 看完整产品规格 | [alloy-design.md](docs/alloy-design.md) |
 | 看终端输出视觉规范 | [alloy-visual-spec.md](docs/alloy-visual-spec.md) |
 | 构建、测试、调试 Alloy | [alloy-dev-guide.md](docs/alloy-dev-guide.md) |

@@ -192,3 +192,69 @@ Alloy 工作流中的 commit 遵循 [Conventional Commits](https://www.conventio
 - apply 阶段的 artifacts（verify/retrospective）是验证文档，用 `docs` type
 - 实际代码变更（SDD 过程中）按变更性质使用标准 Conventional Commits type
 - 所有 commit 末尾附 `Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>`
+
+---
+
+## 九、PR 工作流
+
+Alloy 项目使用 Pull Request 流程进行代码合并，确保代码质量和历史清晰。
+
+### 标准流程
+
+```bash
+# 1. 创建 feature 分支
+git checkout -b feature/<change-name>
+
+# 2. 开发并提交
+git commit -m "feat: xxx"
+
+# 3. 推送并创建 PR
+git push -u origin feature/<change-name>
+gh pr create
+
+# 4. 审查后合并（推荐 squash and merge）
+gh pr merge --squash
+
+# 5. 清理
+git checkout main && git pull
+git branch -d feature/<change-name>
+```
+
+### 合并方式
+
+| 方式 | 适用场景 | 说明 |
+|------|---------|------|
+| **Squash and merge** | 单功能多 commit | 压缩成一个 commit，历史干净 |
+| **Create a merge commit** | 多功能多 commit | 保留完整历史 |
+| **Rebase and merge** | 线性历史 | 逐个应用 commit |
+
+**推荐：Squash and merge** — 一个功能一个 commit，便于追溯和回滚。
+
+### PR 规范
+
+- **标题：** 使用 Conventional Commits 格式（如 `docs: 添加用户手册`）
+- **描述：** 包含变更摘要和测试计划
+- **审查：** 至少一人审查后合并（个人项目可自审）
+- **测试：** 合并前确保所有测试通过（`npm test`）
+
+### 示例 PR 描述
+
+```markdown
+## Summary
+- 添加用户手册 docs/user-guide.md
+- 包含快速开始、CLI 命令参考、AI Agent 工作流等章节
+
+## Test Plan
+- [x] 所有 146 个测试通过
+- [x] 文档与代码实现一致
+- [x] 覆盖所有验收标准
+```
+
+### 分支命名
+
+| 类型 | 前缀 | 示例 |
+|------|------|------|
+| 功能 | `feature/` | `feature/user-guide` |
+| 修复 | `fix/` | `fix/status-output` |
+| 文档 | `docs/` | `docs/user-guide` |
+| 重构 | `refactor/` | `refactor/state-module` |

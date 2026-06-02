@@ -98,10 +98,11 @@ Agent 需要查阅以下文件时，直接 Read：
 
 | 文档 | 角色 | 何时读 |
 |------|------|--------|
+| `docs/user-guide.md` | **USER** — 用户使用手册 | 终端用户使用 Alloy 时参考 |
 | `docs/alloy-design.md` | **WHAT** — 完整产品规格 | 理解命令行为、阶段闸门、状态管理 |
 | `docs/alloy-visual-spec.md` | **UI** — 终端输出视觉规范 | 写 Skill 输出格式时参考 |
 | `docs/alloy-dev-guide.md` | **DO** — 构建/测试/踩坑 | 修改代码后需要知道构建和测试流程 |
 | `docs/skill-writing-guide.md` | **SKILL** — Skill 编写规范 | 修改任何 `commands/alloy/*.md` 之前必读 |
 | `docs/workflow-design.md` | **WHY** — 设计推导过程 | 理解设计决策的上下文和来源 |
 | `docs/project-background.md` | **STORY** — 项目起源与背景 | 了解项目历史和竞品对比 |
-| `docs/openspec-vs-superpowers.md` | **RESEARCH** — 基础工具对比 | 理解 OpenSpec 和 Superpowers 各自职能
+| `docs/openspec-vs-superpowers.md` | **RESEARCH** — 基础工具对比 | 理解 OpenSpec 和 Superpowers 各自职能 |
