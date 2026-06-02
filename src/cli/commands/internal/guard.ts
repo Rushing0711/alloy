@@ -17,6 +17,7 @@ const ARTIFACT_CHECKS: Record<string, string[]> = {
   "started->planned": ["proposal.md", "design.md", "specs", "tasks.md", "plans.md"],
   "planned->applied": ["plans.md"],
   "applied->archived": ["verify.md"],
+  "archived->finished": ["retrospective.md"],
 };
 
 const ARTIFACT_FILES: Record<string, string> = {

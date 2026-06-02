@@ -343,7 +343,7 @@ describe("alloy _record", () => {
       exitSpy.mockRestore();
     });
 
-    it("无 records 时 check 输出 WARN 并 exit 0", async () => {
+    it("无 records 时 check 输出 WARN 并 exit 1", async () => {
       const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
 
       const out = await captureLog(() =>
@@ -351,7 +351,7 @@ describe("alloy _record", () => {
       );
 
       expect(out).toContain("[WARN] 无 records 可校验");
-      expect(exitSpy).toHaveBeenCalledWith(0);
+      expect(exitSpy).toHaveBeenCalledWith(1);
       exitSpy.mockRestore();
     });
 
@@ -460,7 +460,7 @@ describe("alloy _record", () => {
       exitSpy.mockRestore();
     });
 
-    it("check 在 records 缺失时输出 WARN 并 exit 0", async () => {
+    it("check 在 records 缺失时输出 WARN 并 exit 1", async () => {
       const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
 
       const out = await captureLog(() =>
@@ -468,7 +468,7 @@ describe("alloy _record", () => {
       );
 
       expect(out).toContain("[WARN] 无 records 可校验");
-      expect(exitSpy).toHaveBeenCalledWith(0);
+      expect(exitSpy).toHaveBeenCalledWith(1);
 
       exitSpy.mockRestore();
     });

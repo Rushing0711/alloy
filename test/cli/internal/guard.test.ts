@@ -72,8 +72,9 @@ describe("alloy _guard", () => {
     expect(state.phase).toBe("archived");
   });
 
-  it("archived→finished 无条件通过", async () => {
+  it("archived→finished retrospective.md 存在时通过", async () => {
     await setupState("archived");
+    await writeFile(join(changeDir, "retrospective.md"), "");
     await guardCommand([changeDir, "finished", "--apply"]);
     const state = await readState(changeDir);
     expect(state.phase).toBe("finished");

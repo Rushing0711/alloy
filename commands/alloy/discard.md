@@ -1,6 +1,6 @@
 ---
 name: "Alloy: Discard"
-description: Alloy 放弃 change - 按 phase 分级清理分支和目录
+description: Alloy 放弃 change - 需要放弃时调用
 category: Workflow
 tags: [alloy, workflow]
 ---

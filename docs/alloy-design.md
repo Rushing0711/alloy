@@ -393,7 +393,7 @@ alloy _config write . main_branch main  # 写入主分支名
 
 ### 阶段闸门检查规则
 
-`alloy _guard` 在每个阶段转换时进行硬校验。只验证 phase 转换合法性不管制品完整性，会导致制品缺失在下阶段才暴露（如 started→planned 缺 specs 却成功推进，apply 阶段才发现——错误发生在 plan 阶段）。
+`alloy _guard` 在每个阶段转换时进行硬校验，包括 phase 转换合法性和制品完整性检查。只验证 phase 转换合法性不管制品完整性，会导致制品缺失在下阶段才暴露（如 started→planned 缺 specs 却成功推进，apply 阶段才发现——错误发生在 plan 阶段）。
 
 **每个转换的必检清单（以 schema DAG 为准）：**
 
@@ -402,7 +402,7 @@ alloy _config write . main_branch main  # 写入主分支名
 | started → planned | proposal, design, specs/, tasks, plans | plan 阶段 5 个产出全部存在 |
 | planned → applied | plans | 执行依赖 plans.md |
 | applied → archived | verify | 归档依赖 verify.md |
-| archived → finished | — | 仅校验 phase 转换合法性 |
+| archived → finished | retrospective | 完成依赖 retrospective.md |
 
 **设计原则：** "不设子步骤状态"指不追踪每个制品的生成进度（用文件存在性自判断），但阶段闸门必须用 DAG 产出清单做完整性验证。两者不矛盾——前者是状态粒度，后者是防火墙。
 

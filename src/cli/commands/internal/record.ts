@@ -94,10 +94,10 @@ export async function recordCommand(args: string[]): Promise<void> {
       if (targets.length === 0) {
         if (artifact) {
           console.log(`[WARN] 未找到制品 '${artifact}' 的 record`);
-          process.exit(1);
+        } else {
+          console.log("[WARN] 无 records 可校验");
         }
-        console.log("[WARN] 无 records 可校验");
-        process.exit(0);
+        process.exit(1);
       }
 
       let allMatch = true;

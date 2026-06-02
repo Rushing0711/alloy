@@ -1,6 +1,6 @@
 ---
 name: "Alloy: Fix"
-description: Alloy Bug 修复入口 - 诊断 → 环境感知 → 分流
+description: Alloy Bug 修复入口 - 发现 bug 时调用
 category: Workflow
 tags: [alloy, workflow]
 ---
