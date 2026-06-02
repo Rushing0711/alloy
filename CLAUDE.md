@@ -92,6 +92,79 @@ openspec/schemas/alloy/
 - **任何 bug 修复或功能改动，必须做跨层复盘**——从设计文档 → schema/guard → Skill 文档 → CLI 代码 → 测试五个层面逐一检查影响，更新所有受影响的文件。不做"只改出 bug 那一行"的点状修复——这个规则本身就是一次点状修复的教训总结
 - **代码改动必须有测试覆盖**——改 shell 脚本补 bats 用例、改 TypeScript 补 vitest 用例。改 bug 先补一个能复现的失败测试、改功能先确定测试用例清单。测试覆盖范围：shell 脚本（阶段闸门、状态管理、归档）→ TypeScript core 模块（纯函数优先）→ CLI 命令（集成测试）。不允许"改完就跑"——规则源自 apply worktree 状态写入缺失的教训，若有测试就不会让 bug 存活到端到端测试才发现
 
+## PR 规范开发（强制）
+
+**⚠️ 必须使用 PR 规范开发，不接受直接在 main 分支修改并提交代码。**
+
+所有代码改动必须通过 Pull Request 流程进行，确保代码质量和历史清晰。
+
+### 标准流程
+
+```bash
+# 1. 创建 feature 分支（从 main 分支创建）
+git checkout -b <type>/<change-name>
+# 类型前缀：feature/、fix/、docs/、refactor/、test/、chore/
+
+# 2. 开发并提交（可以多次 commit）
+git add <具体文件>
+git commit -m "<type>: <描述>"
+
+# 3. 推送并创建 PR
+git push -u origin <type>/<change-name>
+gh pr create
+
+# 4. 审查后合并（推荐 squash and merge）
+gh pr merge --squash
+
+# 5. 清理本地分支
+git checkout main && git pull
+git branch -d <type>/<change-name>
+```
+
+### 强制规则
+
+1. **禁止直接在 main 分支提交代码**——所有改动必须在 feature 分支上进行
+2. **每个 PR 必须有明确的变更目的**——一个 PR 解决一个问题，不要混合多个不相关的改动
+3. **PR 标题使用 Conventional Commits 格式**——如 `fix: 修复工作流审查发现的问题`、`feat: 添加新功能`
+4. **PR 描述必须包含**：
+   - **Summary**：变更摘要（做了什么、为什么做）
+   - **Test Plan**：测试计划（测试了什么、测试结果）
+5. **合并前确保所有测试通过**——`npm test` 必须全部通过
+6. **推荐使用 Squash and merge**——一个功能一个 commit，便于追溯和回滚
+
+### 分支命名规范
+
+| 类型 | 前缀 | 示例 |
+|------|------|------|
+| 功能 | `feature/` | `feature/user-guide` |
+| 修复 | `fix/` | `fix/status-output` |
+| 文档 | `docs/` | `docs/user-guide` |
+| 重构 | `refactor/` | `refactor/state-module` |
+| 测试 | `test/` | `test/guard-logic` |
+| 杂项 | `chore/` | `chore/update-deps` |
+
+### PR 描述模板
+
+```markdown
+## Summary
+- 变更点 1
+- 变更点 2
+
+## Test Plan
+- [x] 测试项 1
+- [x] 测试项 2
+
+🤖 Generated with [Claude Code](https://claude.ai/code)
+```
+
+### 为什么必须使用 PR 规范
+
+1. **代码审查**——PR 提供了代码审查的机会，确保代码质量
+2. **历史清晰**——每个 PR 都有明确的变更目的和描述，便于追溯
+3. **回滚安全**——如果发现问题，可以轻松回滚整个 PR
+4. **CI/CD 集成**——PR 可以触发自动化测试和部署
+5. **协作规范**——统一的流程减少沟通成本，提高效率
+
 ## 参考文档
 
 Agent 需要查阅以下文件时，直接 Read：
