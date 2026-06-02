@@ -324,19 +324,28 @@ alloy completion [shell] [options]
 
 **选项：**
 
-- `--install` — 自动注册到 shell 配置文件
+- `--install` — 自动注册到 shell 配置文件（永久生效）
 - `--help, -h` — 显示帮助
+
+**行为说明：**
+
+| 命令 | 行为 |
+|------|------|
+| `alloy completion zsh` | 仅输出补全脚本（不安装） |
+| `alloy completion --install` | 自动安装到 rc 文件（永久生效） |
+| `source <(alloy completion zsh)` | 临时启用（当前 session） |
 
 **示例：**
 
 ```bash
-# 当前 session 生效
-source <(alloy completion zsh)
-
-# 自动注册到 rc 文件，永久生效
+# 方式 1：自动安装（推荐）
 alloy completion --install
 
-# PowerShell
+# 方式 2：临时启用（当前 session）
+source <(alloy completion zsh)
+source <(alloy completion bash)
+
+# 方式 3：手动安装 PowerShell
 alloy completion pwsh | Out-File -FilePath $PROFILE -Append
 ```
 
