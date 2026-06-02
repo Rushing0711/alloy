@@ -88,14 +88,13 @@ alloy completion [shell] [options]
 
 行为说明:
   alloy completion <shell>        仅输出补全脚本（不安装）
-  alloy completion --install      自动安装到 rc 文件（永久生效）
+  alloy completion --install      自动安装到 rc 文件（永久生效，支持 bash/zsh/PowerShell）
   source <(alloy completion)      临时启用（当前 session）
 
 示例:
   alloy completion --install              # 自动安装（推荐）
   source <(alloy completion zsh)          # 临时启用 zsh 补全
   source <(alloy completion bash)         # 临时启用 bash 补全
-  alloy completion pwsh | Out-File -FilePath $PROFILE -Append  # 手动安装 PowerShell 补全
 `;
     default:
       return `未知命令: ${cmd}\n使用 alloy --help 查看可用命令。`;
@@ -115,11 +114,18 @@ async function installCompletion(shell: string): Promise<void> {
     rcFile = join(home, ".bashrc");
     completionLine = "source <(alloy completion bash)";
   } else if (shell.includes("pwsh") || shell.includes("powershell")) {
-    console.log("PowerShell 用户请依次运行:");
-    console.log("  New-Item -ItemType Directory -Force -Path (Split-Path $PROFILE)");
-    console.log("  alloy completion pwsh | Out-File -FilePath $PROFILE -Append");
-    console.log("  . $PROFILE  # 重新加载 profile，或重启 PowerShell");
-    return;
+    // PowerShell 补全需要写入 $PROFILE 文件
+    const profileDir = join(home, "Documents", "PowerShell");
+    rcFile = join(profileDir, "Microsoft.PowerShell_profile.ps1");
+    // PowerShell 直接写入补全脚本内容
+    completionLine = generateCompletion("pwsh");
+
+    // 确保目录存在
+    const { mkdirSync, existsSync } = await import("node:fs");
+    if (!existsSync(profileDir)) {
+      mkdirSync(profileDir, { recursive: true });
+      console.log(`     ✓ 创建目录: ${profileDir}`);
+    }
   }
 
   if (!rcFile) {
@@ -139,15 +145,20 @@ async function installCompletion(shell: string): Promise<void> {
     return;
   }
 
-  const block = [
-    "",
-    "# Alloy shell 补全 — Tab 自动补全 alloy 命令",
-    completionLine,
-    "",
-  ].join("\n");
+  // PowerShell 直接写入补全脚本，bash/zsh 写入 source 命令
+  const isPowerShell = shell.includes("pwsh") || shell.includes("powershell");
+  const block = isPowerShell
+    ? completionLine  // PowerShell: 直接写入补全脚本
+    : ["", "# Alloy shell 补全 — Tab 自动补全 alloy 命令", completionLine, ""].join("\n");
+
   await writeFile(rcFile, content.trimEnd() + block, "utf-8");
   console.log(`✓ shell 补全已注册 → ${rcFile}`);
-  console.log(`  运行 'source ${rcFile}' 或重新打开终端使其生效`);
+
+  if (isPowerShell) {
+    console.log(`  运行 '. $PROFILE' 或重启 PowerShell 使其生效`);
+  } else {
+    console.log(`  运行 'source ${rcFile}' 或重新打开终端使其生效`);
+  }
 }
 
 async function main() {

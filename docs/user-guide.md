@@ -338,15 +338,12 @@ alloy completion [shell] [options]
 **示例：**
 
 ```bash
-# 方式 1：自动安装（推荐）
+# 方式 1：自动安装（推荐，支持 bash/zsh/PowerShell）
 alloy completion --install
 
 # 方式 2：临时启用（当前 session）
 source <(alloy completion zsh)
 source <(alloy completion bash)
-
-# 方式 3：手动安装 PowerShell
-alloy completion pwsh | Out-File -FilePath $PROFILE -Append
 ```
 
 ---
