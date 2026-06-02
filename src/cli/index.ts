@@ -9,6 +9,7 @@ import { doctorCommand, formatDoctorResult } from "./commands/doctor.js";
 import { updateCommand } from "./commands/update.js";
 import { generateCompletion } from "./commands/completion.js";
 import { stateCommand } from "./commands/internal/state.js";
+import { configCommand } from "./commands/internal/config.js";
 import { guardCommand } from "./commands/internal/guard.js";
 
 import { recordCommand } from "./commands/internal/record.js";
@@ -291,6 +292,10 @@ async function main() {
     }
     case "_state": {
       await stateCommand(restArgs);
+      break;
+    }
+    case "_config": {
+      await configCommand(restArgs);
       break;
     }
     case "_guard": {

@@ -74,4 +74,12 @@ export interface AlloyState {
   updated_at: string;
   phase_timings?: PhaseTimings;
   records: ArtifactRecord[];
+  feature_branch?: string;
+}
+
+export interface ProjectConfig {
+  schema: "alloy";
+  alloy: {
+    main_branch?: string;
+  };
 }

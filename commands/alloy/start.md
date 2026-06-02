@@ -130,51 +130,66 @@ echo "SESSION_START=$(date "+%Y-%m-%d %H:%M:%S")"
 
    已有项目则跳过（git repo 已存在，HEAD 已有锚点）。
 
-6. **分支选择**——检测 git 状态，确认工作分支：
+6. **分支选择**——确认主分支、选择 feature 分支：
 
-   先获取当前分支：
+   **① 识别主分支候选：**
+   ```bash
+   git branch -a
+   ```
+   优先匹配 `main` / `master` 作为候选。若都没有 → 直接列出所有分支，让用户选择。
+
+   **② 确认主分支：**
+
+   > 检测到以下分支：<列表>
+   > 请确认主分支名称（用于后续分支管理）：___
+
+   用户确认后写入项目级配置：
+   ```bash
+   # 读取现有配置，写入 main_branch
+   alloy _config write <project-root> main_branch <用户确认的主分支名>
+   ```
+   主分支是项目级概念，所有 change 共享，不写入 per-change 的 .alloy.yaml。
+
+   若 `openspec/config.yaml` 已有 `alloy.main_branch` 且与当前一致，跳过确认。
+
+   **③ 检测当前分支：**
    ```bash
    CURRENT_BRANCH=$(git branch --show-current)
-   echo "当前分支：$CURRENT_BRANCH"
    ```
 
-   展示选项，让用户选择：
+   **④ 当前分支 == 主分支？**
+   - **是** → HARD STOP："当前在主分支 `<main_branch>`，不允许在主分支开发。commit 会污染主分支历史，请新建或切换到 feature 分支。" → 只展示"新建分支"选项
+   - **否** → 展示选项（见⑤）
 
+   **⑤ 展示选项：**
+
+   非主分支的已有分支存在时：
    > 选择工作分支
    > ──────────────────────────────────────
    >
-   > 当前在 `<$CURRENT_BRANCH>` 分支
+   > 当前在 `<$CURRENT_BRANCH>` 分支，主分支：`<main_branch>`
    >
-   > 1. 在当前分支继续 —— 直接在此分支开发
-   > 2. 切换到已有分支 —— 选择一个已有分支
-   > 3. 新建分支       —— 创建新分支并切换
-   >
-   > → 建议新建 `<change-name>` 分支，保持 main 干净
+   > 1. 切换到已有分支 —— 选择非主分支的已有分支
+   > 2. 新建分支       —— 创建新 feature 分支并切换
 
-   - **选 1：** 不操作，直接继续
-   - **选 2：** 展示已有分支列表（`git branch -a`），用户选择后执行 `git checkout <branch>`
-     - 如果该 change 后续使用 worktree，此分支名仅作参考记录
-   - **选 3：** 询问用户输入新分支名，执行 `git checkout -b <new-branch>`
-     - Agent 可建议分支名（如 `<change-name>`），由用户确认
+   无可用的非主分支时 → 直接进入新建分支流程（跳过选项 1）。
+
+   每个 change 必须有独立的 feature 分支，确保 discard 时可安全清理。
+
+   - **选 1：** 展示非主分支的已有分支列表（`git branch` 排除主分支），用户选择后执行 `git checkout <branch>`
+   - **选 2：** 新建分支命名：
+     - 默认建议：`feature/<change-name>`
+     - 用户可输入自定义名称
+     - 校验：不允许与主分支同名
+     - `git checkout -b <branch-name>`
 
    分支选择完成后，记录到状态：
    ```bash
+   alloy _state write openspec/changes/<name> feature_branch <branch-name>
    alloy _state write openspec/changes/<name> worktree null
    ```
 
-   > ⚠️ apply 阶段仍会通过 `using-git-worktrees` 再次确认隔离方式。此处的分支选择是给后续阶段一个推荐的开发分支。
-
 7. **提交：**
-
-   **draft hash + commit：**
-   ```bash
-   DRAFT_HASH=$(alloy _record compute openspec/changes/<name> draft)
-   APPROVED_AT=$(date "+%Y-%m-%d %H:%M:%S")
-   APPROVER=$(git config user.name)
-   alloy _record write openspec/changes/<name> draft "$DRAFT_HASH" "$APPROVED_AT" "$APPROVER"
-   git add openspec/changes/<name>/
-   git commit -m "feat(<name>): draft 已确认"
-   ```
 
    **alloy init 基础设施提交：**
    ```bash
@@ -184,14 +199,17 @@ echo "SESSION_START=$(date "+%Y-%m-%d %H:%M:%S")"
    ```
    已提交过则自动跳过。`.superpowers/` 已在 `.gitignore` 中忽略，不入仓库。
 
-8. **记录阶段时间：**
+   **记录阶段时间 + draft hash-lock + commit：**
    ```bash
    COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
-   # STARTED_AT 使用步骤开始时捕获的 SESSION_START 值
    STARTED_AT="<SESSION_START>"
    alloy _state write openspec/changes/<name> phase_timings "{\"start\":{\"started_at\":\"$STARTED_AT\",\"completed_at\":\"$COMPLETED_AT\"}}"
+   DRAFT_HASH=$(alloy _record compute openspec/changes/<name> draft)
+   APPROVED_AT=$(date "+%Y-%m-%d %H:%M:%S")
+   APPROVER=$(git config user.name)
+   alloy _record write openspec/changes/<name> draft "$DRAFT_HASH" "$APPROVED_AT" "$APPROVER"
    git add openspec/changes/<name>/
-   git commit -m "chore(<name>): 记录 start 阶段完成时间"
+   git commit -m "docs(<name>): draft 已确认"
    ```
 
 ---

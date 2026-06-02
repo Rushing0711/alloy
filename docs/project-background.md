@@ -82,7 +82,7 @@ Superpowers 擅长                    OpenSpec 擅长
 
 经过 brainstorming 对话，确定了以下关键决策：
 
-- **v1 仅 Claude Code**：团队统一平台，聚焦质量
+- **多平台支持**：Claude Code / CodeBuddy / Qoder / Cursor / OpenCode / Codex / Trae / Pi 共 8 个平台
 - **Schema 从零构建**：不 fork superpowers-bridge，避免继承已知的 DAG 时序问题
 - **扩展点仅提示、不调用**：v1 可靠性优先，后续版本升级为可配置闸门
 - **Agent 内流程 + CLI 辅助**：核心工作流依赖 AI 编排，CLI 只做确定性操作

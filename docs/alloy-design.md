@@ -17,12 +17,12 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 | `alloy init` | `[path]` | 项目初始化：检测环境 → 安装依赖 → openspec init → 部署 schema + skill |
 | | `--inject-claude-md` | 注入 CLAUDE.md（默认关闭） |
 | | `--scope <global\|project>` | 安装范围，默认 project |
-| `alloy status` | `[path]` | 查看所有活跃 change 总览 |
+| `alloy status` | `[path\|name] [--json]` | 查看活跃 change 总览，指定 name 查看详情 |
 | | `--json` | JSON 格式输出 |
 | `alloy doctor` | `[path]` | 诊断：版本兼容性、文件一致性 |
 | | `--json` | JSON 格式输出 |
 | `alloy update` | `[path]` | 更新 Alloy skill 文件到最新版 |
-| `alloy completion` | `[bash\|zsh\|pwsh] [--install]` | 生成 shell 补全脚本，--install 自动注册 |
+| `alloy completion` | `[bash\|zsh\|pwsh\|powershell] [--install]` | 生成 shell 补全脚本，--install 自动注册 |
 | `alloy --version` | | 版本号 |
 | `alloy --help` | | 帮助 |
 
@@ -210,7 +210,7 @@ archive 只做 spec 归档和归档提交，不涉及代码合并。代码合入
   → phase = archived → 通过，继续
   → phase = applied → 自动路由到 /alloy:archive
   → phase = planned → 自动路由到 /alloy:apply
-  → phase = start → 自动路由到 /alloy:plan
+  → phase = started → 自动路由到 /alloy:plan
   → HARD STOP：分支不存在（可能已 merge 或删除）
 
 执行: superpowers:finishing-a-development-branch
@@ -496,12 +496,12 @@ CLI（终端）
   ├── 安装依赖（OpenSpec CLI + Superpowers skill）
   ├── 部署文件（schema + skill）
   ├── 诊断（版本兼容性 + 文件一致性）
-  └── 内部命令（_state / _guard / _record）供 Agent 调用
+  └── 内部命令（_state / _guard / _record / _config）供 Agent 调用
 ```
 
 | 层 | 在哪运行 | 内容 | 可靠性 |
 |----|---------|------|--------|
-| CLI | 终端 | 安装、诊断、状态总览、内部命令（_state/_guard/_record） | 确定性强（TypeScript） |
+| CLI | 终端 | 安装、诊断、状态总览、内部命令（_state/_guard/_record/_config） | 确定性强（TypeScript） |
 | Skill | Agent 内部 | 流程编排、阶段检测、审查窗口 | 硬约束（SKILL.md 指令 + CLI 内部命令） |
 | AI 内容 | Agent 内部 | 文档生成、代码生成、交互决策 | 柔性（AI 发挥，人类审查） |
 
@@ -662,8 +662,8 @@ alloy update [path]
 | CLI（TypeScript） | init / status / doctor / update 四条命令 | 2-3 周 |
 | Slash Commands | 8 条 SKILL.md + 子步骤 prompt 模板 | 2-3 周 |
 | Schema + Templates | 从零构建，参考 superpowers-bridge + Comet | 2 周 |
-| Shell 脚本 | guard / state / record / archive（参考 Comet） | 1 周 |
-| 测试 | CLI 单元测试 + shell 脚本 Bats 测试 | 1 周 |
+| 内部命令（TypeScript） | _guard / _state / _record / _config | 1 周 |
+| 测试 | CLI 单元测试（vitest） | 1 周 |
 
 ### 依赖稳定性
 
@@ -680,7 +680,7 @@ alloy update [path]
 |------|:--:|------|
 | Superpowers skill 行为变更导致编排失效 | 中 | compat.yaml 钉版本 + alloy update 同步更新 |
 | OpenSpec schema 格式演进 | 低 | alloy schema 独立构建，不依赖上游 schema |
-| Agent 不遵循 SKILL.md 闸门指令 | 中 | 参考 Comet 用 shell 脚本做 HARD STOP 校验，不可跳过 |
+| Agent 不遵循 SKILL.md 闸门指令 | 中 | 内部命令（TypeScript）做 HARD STOP 校验，不可跳过 |
 | plan 阶段上下文溢出 | 低 | 制品分步 + SDD subagent 上下文隔离 |
 | 并行 change 冲突 | 低 | OpenSpec 目录隔离 + worktree 独立 |
 
@@ -688,7 +688,7 @@ alloy update [path]
 
 1. **原型验证**（第 1-2 周）——写 `/alloy:start` + `/alloy:plan` 的 SKILL.md，在 Claude Code 中跑通 Pre-OpenSpec → 规划阶段，验证 OpenSpec + Superpowers 组合是否如设计运作
 2. **CLI + Schema**（第 3-5 周）——alloy init / status / doctor / update + alloy schema 从零构建，参考 Comet 架构
-3. **完整流程**（第 6-8 周）——补全 apply / finish / archive / fix / discard 的 SKILL.md + shell 脚本
+3. **完整流程**（第 6-8 周）——补全 apply / finish / archive / fix / discard 的 SKILL.md + 内部命令
 4. **测试 + 文档 + 推广**（第 9-10 周）——单元测试、团队推广、反馈收集
 
 > 实际开发时参照 `docs/alloy-dev-guide.md`（WHAT → HOW → DO 三文档体系），

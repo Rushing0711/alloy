@@ -98,6 +98,17 @@ describe("alloy _state", () => {
       expect(state.worktree).toBe(".worktrees/test-change");
     });
 
+    it("write + read feature_branch 往返一致", async () => {
+      await stateCommand(["write", changeDir, "feature_branch", "feat/login"]);
+      const state = await readState(changeDir);
+      expect(state.feature_branch).toBe("feat/login");
+    });
+
+    it("read feature_branch 不存在时返回 null", async () => {
+      const out = await captureOutput(() => stateCommand(["read", changeDir, "feature_branch"]));
+      expect(out).toBe("null");
+    });
+
     it("check phase 匹配时 exit 0", async () => {
       const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
       await stateCommand(["check", changeDir, "started"]);
@@ -155,6 +166,7 @@ describe("alloy _state", () => {
       expect(typeof state.schema_version).toBe("number");
       expect(state.worktree).toBeNull();
       expect(state.records).toEqual([]);
+      expect(state.feature_branch).toBeUndefined();
       expect(state.created_at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
       expect(state.updated_at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
 

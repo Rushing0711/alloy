@@ -51,7 +51,7 @@ print(json.dumps(d))
    ```bash
    git log -1 --format="%s" -- openspec/changes/<name>/draft.md
    ```
-   若 commit message 不含 `feat(<name>): draft 已确认`→ ⚠️ draft.md 可能未经过完整 `/alloy:start` 流程（手工创建），提示用户确认是否继续。不阻断——但给用户知情权。
+   若 commit message 不含 `docs(<name>): draft 已确认`→ ⚠️ draft.md 可能未经过完整 `/alloy:start` 流程（手工创建），提示用户确认是否继续。不阻断——但给用户知情权。
 2. 确认 `.alloy.yaml` phase 为 `started`：
    ```bash
    alloy _state check openspec/changes/<name> started
@@ -60,10 +60,7 @@ print(json.dumps(d))
    ```bash
    git rev-parse --git-dir
    ```
-   若失败 → 项目还不是 git 仓库，引导用户初始化：
-   ```
-   git init && git add -A && git commit -m "chore: 初始提交"
-   ```
+   若失败 → HARD STOP："项目还不是 git 仓库。请先运行 `/alloy:start` 完成初始化（包含 git init）。"
 
 前置检查通过：draft.md ✓  phase=started ✓  git ✓
 
@@ -190,6 +187,25 @@ git add openspec/changes/<name>/
 git commit -m "docs(<name>): <artifact> 已确认"
 ```
 
+**plans 是 plan 阶段最后一个制品。** plans 审批通过时，先写入 `phase_timings.plan.completed_at`，再执行 plans 的 hash-lock + commit。phase_timings 作为元数据附着在 plans 制品提交上，不单独 commit：
+
+```bash
+# plans 审批通过后，先写入完成时间
+COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
+TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
+echo "$TIMINGS" | python3 -c "
+import sys,json
+content = sys.stdin.read()
+d = json.loads(content) if content.strip() else {}
+p = d.setdefault('plan',{})
+if 'completed_at' not in p:
+    p['completed_at']='$COMPLETED_AT'
+print(json.dumps(d))
+" | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
+
+# 再执行 plans 的 hash-lock + commit（复用上方通用流程）
+```
+
 commit message 格式：`docs(<change-name>): <artifact> 已确认`（Conventional Commits `docs` type）。`<artifact>` 为 proposal / design / specs / tasks / plans。
 
 **生成下一制品前，校验上游依赖制品的 hash 未被篡改：**
@@ -226,7 +242,7 @@ reason: <writing-plans 执行交接环节的策略分析理由>
 ...
 ```
 
-plans.md 生成后展示审查窗口，审批通过后 hash 锁定并 commit。
+plans.md 生成后展示审查窗口，审批通过后先写入 phase_timings.completed_at，再 hash 锁定并 commit（phase_timings 作为元数据附着在 plans 制品提交上，不单独 commit）。
 
 ### 回溯修改：修改已确认的上游制品
 
@@ -289,23 +305,6 @@ git commit -m "chore(<name>): 回溯——清理 plan 制品，回到 brainstorm
 先读取所有 record 的时间戳用于汇总展示：
 ```bash
 alloy _state read openspec/changes/<name> records
-```
-
-**记录阶段完成时间：**
-```bash
-COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
-TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
-echo "$TIMINGS" | python3 -c "
-import sys,json
-content = sys.stdin.read()
-d = json.loads(content) if content.strip() else {}
-p = d.setdefault('plan',{})
-if 'completed_at' not in p:
-    p['completed_at']='$COMPLETED_AT'
-print(json.dumps(d))
-" | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
-git add openspec/changes/<name>/
-git commit -m "chore(<name>): 记录 plan 阶段完成时间"
 ```
 
 ```

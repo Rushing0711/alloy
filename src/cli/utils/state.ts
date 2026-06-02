@@ -1,9 +1,9 @@
-import { readFile, writeFile, readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile, writeFile, readdir, mkdir } from "node:fs/promises";
+import { join, dirname } from "node:path";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
-import type { AlloyState } from "../../core/types.js";
+import type { AlloyState, ProjectConfig } from "../../core/types.js";
 
-export type { AlloyState };
+export type { AlloyState, ProjectConfig };
 
 function formatTimestamp(): string {
   const d = new Date();
@@ -69,4 +69,35 @@ export async function findActiveChanges(
     // changes 目录可能不存在
   }
   return changes;
+}
+
+// --- 项目级配置（openspec/config.yaml）---
+
+function createDefaultProjectConfig(): ProjectConfig {
+  return { schema: "alloy", alloy: {} };
+}
+
+export async function readProjectConfig(projectRoot: string): Promise<ProjectConfig> {
+  const configPath = join(projectRoot, "openspec", "config.yaml");
+  try {
+    const content = await readFile(configPath, "utf-8");
+    const parsed = parseYaml(content) as ProjectConfig;
+    if (!parsed.alloy) parsed.alloy = {};
+    return parsed;
+  } catch (err: any) {
+    if (err.code === "ENOENT") {
+      return createDefaultProjectConfig();
+    }
+    throw err;
+  }
+}
+
+export async function writeProjectConfig(
+  projectRoot: string,
+  config: ProjectConfig
+): Promise<void> {
+  const configPath = join(projectRoot, "openspec", "config.yaml");
+  await mkdir(dirname(configPath), { recursive: true });
+  const content = stringifyYaml(config);
+  await writeFile(configPath, content, "utf-8");
 }

@@ -123,17 +123,32 @@ spec 变更可并入当前 change <name>。
 
 无需开新 change——规划阶段的制品还没落地代码，回到 brainstorming 重新讨论即可。
 
-**B2 — 新开 change（无活跃 change 或 phase ≥ applied，已有代码落地）：**
+**B2 — 需先处理当前 change（有活跃 change 且 phase ≥ applied）：**
+
+```
+[Step 3/3] 分流修复 · 需先处理当前 Change
+──────────────────────────────────────
+
+当前 change <name> 处于 <phase> 阶段，spec 需要修改。
+当前 change 的代码基于旧 spec，需要先处理。
+```
+
+提供选项：
+- **a. 先完成当前 change** → 推进测试、archive、finish，后续开新 change 修 spec + 修 bug（推荐，代码已落地，先确保当前工作完整交付）
+- **b. discard 当前 change** → 重新开始（spec + 代码一起重做，适用于代码本身有严重问题的场景）
+- **c. 记下建议名称** → 手动决定时机
+
+不自动创建新 change——让用户感知当前 change 的状态后再决定。
+
+**B2 — 直接开新 change（无活跃 change）：**
 
 ```
 [Step 3/3] 分流修复 · 新开 Change
 ──────────────────────────────────────
 
-修复需要变更 spec。已有代码已落地，需要独立追踪。
-请手动发起：/alloy:start <建议名称>
+修复需要变更 spec。建议名称：<name>
+运行 /alloy:start <建议名称> 进入需求设计流程。
 ```
-
-已有代码落地后，spec 变更应该独立追踪——不混入已有 change，也不跳过 Alloy 流程。
 
 ---
 

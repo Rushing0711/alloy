@@ -42,7 +42,7 @@ change-name 在 draft.md 完成后自然浮现。`/opsx:new <name>` 执行时会
 | 步骤 | 命令/技能 | 产出物 |
 |------|----------|--------|
 | 执行 | `/opsx:apply` | |
-| ├ 预检 | precheck：5 个 Superpowers 技能可用性 | |
+| ├ 预检 | precheck：6 个 Superpowers 技能可用性 | |
 | ├ 隔离 | 隐含 `superpowers:using-git-worktrees` | 隔离 workspace |
 | ├ 任务实现 | 隐含 `superpowers:subagent-driven-development`（首选） | 代码变更 |
 | │ │（SDD 内部：按任务分派子 agent） | |
@@ -91,7 +91,7 @@ OpenSpec 规划:
 
 OpenSpec 执行:
     /opsx:apply
-        ├── precheck：5 个 Superpowers 技能可用性检查
+        ├── precheck：6 个 Superpowers 技能可用性检查
         ├── superpowers:using-git-worktrees
         ├── superpowers:subagent-driven-development（首选）
         │     SDD 内部：按任务分派子 agent
@@ -179,7 +179,7 @@ OpenSpec 规划阶段（schema DAG，8 个制品）:
 
 OpenSpec 执行阶段（8 个制品，后 2 个在 apply 中产出）:
     apply  ← 依赖 plans
-        ├── precheck      ← 5 个 Superpowers 技能可用性检查
+        ├── precheck      ← 6 个 Superpowers 技能可用性检查
         ├── git-worktrees ← 隐含: superpowers:using-git-worktrees
         ├── 任务实现       ← 隐含: superpowers:subagent-driven-development（首选）
         │                      or superpowers:executing-plans（降级）

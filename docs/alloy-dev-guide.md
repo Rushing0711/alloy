@@ -90,7 +90,7 @@ describe("myFunction", () => {
 
 1. **Core 模块**（纯函数，可 mock 外部依赖）→ vitest
 2. **CLI 命令**（集成度高，依赖真实环境）→ vitest + 集成测试
-3. **内部命令**（`_state`/`_guard`/`_archive`）→ vitest 直接调用函数
+3. **内部命令**（`_state`/`_guard`/`_record`/`_config`）→ vitest 直接调用函数
 
 ---
 

@@ -46,17 +46,7 @@ tags: [alloy, workflow]
    git rev-parse --git-dir
    ```
    若命令成功 → 继续。
-   若命令失败 → 项目还不是 git 仓库，worktree 隔离和版本追踪需要 git。展示选项：
-   > Git 仓库检测
-   > ──────────────────────────────────────
-   >
-   > 检测到项目还不是 git 仓库。worktree 隔离和版本追踪依赖 git。
-   >
-   > 1. 立即初始化     —— 执行 git init 并做一次初始提交（推荐）
-   > 2. 稍后自行处理   —— 手动初始化后再运行 /alloy:apply
-   
-   选 1：Agent 执行 `git init && git add -A && git commit -m "chore: 初始提交"`，完成后继续
-   选 2：STOP，"请手动初始化 git 仓库后重新运行 `/alloy:apply`"
+   若命令失败 → HARD STOP："项目还不是 git 仓库。请先运行 `/alloy:start` 完成初始化（包含 git init）。"
 
 **记录阶段开始时间：**
 
@@ -400,23 +390,9 @@ alloy _record check openspec/changes/<name> verify
 > → (a) 确认，锁定 retrospective 并完成 apply
 > → (b) 需要调整 — 说明修改点，修改后重新展示
 
-选 (a)：hash 锁定 retrospective 并 commit：
+选 (a)：先写入 phase_timings.completed_at，再 hash 锁定 retrospective 并 commit（phase_timings 作为元数据附着在 retrospective 制品提交上，不单独 commit）：
 ```bash
-HASH=$(alloy _record compute openspec/changes/<name> retrospective)
-alloy _record write openspec/changes/<name> retrospective "$HASH" "$(date "+%Y-%m-%d %H:%M:%S")" "$(alloy _record approver openspec/changes/<name>)"
-git add openspec/changes/<name>/retrospective.md
-git commit -m "docs(<name>): retrospective 已确认"
-```
-
-选 (b)：调整 retrospective 内容后重新展示审查窗口。
-
----
-
-### 完成
-
-**记录阶段完成时间：**
-
-```bash
+# 先写入完成时间
 COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
 TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
 echo "$TIMINGS" | python3 -c "
@@ -428,9 +404,19 @@ if 'completed_at' not in p:
     p['completed_at']='$COMPLETED_AT'
 print(json.dumps(d))
 " | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
-git add openspec/changes/<name>/
-git commit -m "chore(<name>): 记录 apply 阶段完成时间"
+
+# 再 hash 锁定 + commit
+HASH=$(alloy _record compute openspec/changes/<name> retrospective)
+alloy _record write openspec/changes/<name> retrospective "$HASH" "$(date "+%Y-%m-%d %H:%M:%S")" "$(alloy _record approver openspec/changes/<name>)"
+git add openspec/changes/<name>/retrospective.md
+git commit -m "docs(<name>): retrospective 已确认"
 ```
+
+选 (b)：调整 retrospective 内容后重新展示审查窗口。
+
+---
+
+### 完成
 
 ```
 ┌──────────────────────────────────────┐

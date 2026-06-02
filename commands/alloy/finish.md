@@ -71,9 +71,15 @@ alloy _guard openspec/changes/<name> finished
 
 确认当前有对应的 git 分支存在：
 ```bash
-git branch --list <change-name>
+git branch --list <feature_branch>
 ```
-分支不存在 → "分支 <change-name> 不存在，可能已 merge 或删除。无需再次 finish。"
+分支不存在 → "分支 <feature_branch> 不存在，可能已 merge 或删除。无需再次 finish。"
+
+读取主分支作为默认合并目标：
+```bash
+alloy _config read . main_branch
+```
+若 `main_branch` 未记录 → 提示用户手动指定合并目标分支。
 
 ---
 
@@ -94,8 +100,8 @@ git branch --list <change-name>
 ```
 Change: <name>
 状态：phase=archived（spec 已归档，代码待合入）
-当前分支：<change-name>
-基础分支：<apply 阶段用户选择的分支>（merge 回合目标）
+当前分支：<feature_branch>
+基础分支：<main_branch>（从 openspec/config.yaml 读取）
 ```
 
 技能加载后，按其指引提供 3 个选项。
@@ -113,25 +119,25 @@ Change: <name>
 >
 > | | |
 > |---|---|
-> | 源分支 | <change-name> |
-> | 目标分支 | <base-branch> |
+> | 源分支 | <feature_branch> |
+> | 目标分支 | <main_branch> |
 >
 > 即将合入的提交：
 > ```
-> <git log base-branch..change-name --oneline 的输出>
+> <git log main_branch..feature_branch --oneline 的输出>
 > ```
 >
 > 合并后 worktree 将被清理，分支将被删除。
 >
-> 输入 merge <change-name> into <base-branch> 确认，或输入其他内容取消。
+> 输入 merge <feature_branch> into <main_branch> 确认，或输入其他内容取消。
 
 **必须等待用户精确输入确认语句。** "好"、"可以"、"y" 都不算确认。
 
 用户确认后执行 merge：
 ```bash
-git checkout <base-branch>
+git checkout <main_branch>
 git pull || echo "⚠️ git pull 失败（网络问题或冲突），请手动处理后再继续"
-git merge <change-name>
+git merge <feature_branch>
 ```
 
 若 `git pull` 失败（网络不可达、认证失败），输出警告并暂停，让用户决定是否跳过 pull 直接 merge。若 `git merge` 冲突，输出冲突文件列表，让用户手动解决后继续。
@@ -139,7 +145,7 @@ git merge <change-name>
 alloy _guard openspec/changes/<name> finished --apply
 ```
 
-提示："代码已合入 <base-branch>。Alloy 工作流完成。"
+提示："代码已合入 <main_branch>。Alloy 工作流完成。"
 
 **选项 2：创建 PR**
 - PR 创建后，更新 phase：

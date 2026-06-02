@@ -1,12 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdir, writeFile, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import {
   createInitialState,
   readState,
   writeState,
   findActiveChanges,
+  readProjectConfig,
+  writeProjectConfig,
 } from "../../src/cli/utils/state.js";
 
 describe("state utils", () => {
@@ -122,5 +124,80 @@ describe("state utils", () => {
 
     const changes = await findActiveChanges(changesDir);
     expect(changes.size).toBe(0);
+  });
+
+  it("feature_branch 默认不存在", () => {
+    const state = createInitialState();
+    expect(state.feature_branch).toBeUndefined();
+  });
+
+  it("writeState 和 readState feature_branch 往返一致", async () => {
+    const changeDir = join(tmpDir, "test-feature-branch");
+    await mkdir(changeDir, { recursive: true });
+    const state = createInitialState();
+    state.feature_branch = "feat/login";
+    await writeState(changeDir, state);
+    const loaded = await readState(changeDir);
+    expect(loaded.feature_branch).toBe("feat/login");
+  });
+
+  it("readState 无 feature_branch 时返回 undefined", async () => {
+    const changeDir = join(tmpDir, "test-no-branch");
+    await mkdir(changeDir, { recursive: true });
+    // 写入不含 feature_branch 的旧格式 yaml
+    const yaml = [
+      "worktree: null",
+      "schema_version: 1",
+      "phase: started",
+      'created_at: "2020-01-01 00:00:00"',
+      'updated_at: "2020-01-01 00:00:00"',
+      "records: []",
+    ].join("\n");
+    await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
+    const loaded = await readState(changeDir);
+    expect(loaded.feature_branch).toBeUndefined();
+  });
+});
+
+describe("project config", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = join(tmpdir(), `alloy-config-test-${Date.now()}`);
+    await mkdir(tmpDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("readProjectConfig 无文件时返回默认空配置", async () => {
+    const config = await readProjectConfig(tmpDir);
+    expect(config.schema).toBe("alloy");
+    expect(config.alloy.main_branch).toBeUndefined();
+  });
+
+  it("writeProjectConfig 和 readProjectConfig 往返一致", async () => {
+    const config = { schema: "alloy" as const, alloy: { main_branch: "main" } };
+    await writeProjectConfig(tmpDir, config);
+    const loaded = await readProjectConfig(tmpDir);
+    expect(loaded.schema).toBe("alloy");
+    expect(loaded.alloy.main_branch).toBe("main");
+  });
+
+  it("writeProjectConfig 自动创建 openspec 目录", async () => {
+    const config = { schema: "alloy" as const, alloy: { main_branch: "master" } };
+    await writeProjectConfig(tmpDir, config);
+    const loaded = await readProjectConfig(tmpDir);
+    expect(loaded.alloy.main_branch).toBe("master");
+  });
+
+  it("readProjectConfig 兼容无 alloy 字段的旧格式", async () => {
+    const configPath = join(tmpDir, "openspec", "config.yaml");
+    await mkdir(dirname(configPath), { recursive: true });
+    await writeFile(configPath, "schema: alloy\n", "utf-8");
+    const config = await readProjectConfig(tmpDir);
+    expect(config.schema).toBe("alloy");
+    expect(config.alloy).toEqual({});
   });
 });

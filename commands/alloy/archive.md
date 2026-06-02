@@ -99,21 +99,9 @@ ARCHIVE_DIR="openspec/changes/archive/$(date +%Y-%m-%d)-<name>"
 
 > 这是 retrospective 从"死文档"变成"活反馈"的关键步骤——教训不跨 cycle 就不是教训。
 
-然后执行 git commit（确保归档变更被版本追踪）：
+然后记录 phase_timings.completed_at 并执行 git commit（确保归档变更被版本追踪）：
 ```bash
-git add openspec/specs/ openspec/changes/archive/ 2>/dev/null
-git commit -m "chore(<name>): Delta Spec 已同步并归档" 2>/dev/null
-```
-（git commit 失败不阻断——可能没有变更或不在 git 仓库中）
-
-> ✓ Delta Spec 已合并到主 spec
-> ✓ Change 已归档到 $ARCHIVE_DIR
-> ✓ 归档变更已提交
-
-### Step 3/3：完成
-
-**记录阶段完成时间：**
-```bash
+# 写入完成时间
 COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
 TIMINGS=$(alloy _state read "$ARCHIVE_DIR" phase_timings 2>/dev/null || echo "{}")
 echo "$TIMINGS" | python3 -c "
@@ -125,9 +113,18 @@ if 'completed_at' not in p:
     p['completed_at']='$COMPLETED_AT'
 print(json.dumps(d))
 " | while read -r val; do alloy _state write "$ARCHIVE_DIR" phase_timings "$val"; done
-git add "$ARCHIVE_DIR/"
-git commit -m "chore(<name>): 记录 archive 阶段完成时间"
+
+# 一次 commit：主 spec 更新 + 归档目录 + 原 change 目录删除 + phase_timings
+git add openspec/specs/ openspec/changes/archive/ openspec/changes/<name>/
+git commit -m "chore(<name>): Delta Spec 已同步并归档"
 ```
+commit 失败必须阻断——归档变更未提交时，后续 finish 会清理分支，导致 spec 变更丢失。
+
+> ✓ Delta Spec 已合并到主 spec
+> ✓ Change 已归档到 $ARCHIVE_DIR
+> ✓ 归档变更已提交
+
+### Step 3/3：完成
 
 **通过 `alloy _guard` 校验并推进 phase：**
 ```bash
@@ -163,7 +160,7 @@ alloy _state read "$ARCHIVE_DIR" worktree
 ## 闸门规则
 
 - **git add 只用精确路径** — 永远不用 `-A`、`-a`、`.`。
-  archive 只 add `openspec/specs/` 和 `openspec/changes/archive/`，反例：`git add -A openspec/` 会把残留文件一起提交
+  archive 只 add `openspec/specs/`、`openspec/changes/archive/` 和 `openspec/changes/<name>/`（原 change 目录删除），反例：`git add -A openspec/` 会把残留文件一起提交
 - **phase 必须为 applied** —— 只有 apply 完成的 change 才能归档
 - **verify.md 必须存在且非 FAIL** —— 阻塞问题必须先修复
 - **先归档后合入** —— spec 文档先锁定，代码后通过 `/alloy:finish` 合入，避免"代码合入了 spec 还没跟上"
