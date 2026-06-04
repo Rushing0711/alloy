@@ -14,6 +14,26 @@ export function box(text: string, opts?: BoxenOptions): string {
   return boxen(text, { padding: 1, ...opts });
 }
 
+// ── Box Panel（带标题的面板） ──
+interface BoxOptions {
+  padding?: number;
+  margin?: number;
+  width?: number;
+  title?: string;
+  titleAlignment?: "left" | "center" | "right";
+}
+
+export function boxPanel(content: string, opts?: BoxOptions): string {
+  const boxenOpts: BoxenOptions = {
+    padding: opts?.padding ?? 1,
+    margin: opts?.margin ?? 0,
+    width: opts?.width,
+    title: opts?.title,
+    titleAlignment: opts?.titleAlignment ?? "left",
+  };
+  return boxen(content, boxenOpts);
+}
+
 // ── 无边框表格 ──
 export function table(headers: string[], rows: string[][]): string {
   const t = new cliTable({

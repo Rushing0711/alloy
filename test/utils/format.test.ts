@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   color,
   box,
+  boxPanel,
   table,
   borderedTable,
   spinner,
@@ -101,5 +102,31 @@ describe("stringWidth", () => {
 
   it("混合 ASCII 和 CJK 字符", () => {
     expect(stringWidth("hello中文")).toBe(9);
+  });
+});
+
+describe("boxPanel", () => {
+  it("生成带标题的面板", () => {
+    const result = boxPanel("Hello", { title: "Test" });
+    expect(result).toContain("Test");
+    expect(result).toContain("Hello");
+    expect(result).toContain("┌");
+    expect(result).toContain("┐");
+    expect(result).toContain("└");
+    expect(result).toContain("┘");
+  });
+
+  it("生成无标题的面板", () => {
+    const result = boxPanel("Hello");
+    expect(result).toContain("Hello");
+    expect(result).toContain("┌");
+    expect(result).toContain("┐");
+    expect(result).toContain("└");
+    expect(result).toContain("┘");
+  });
+
+  it("正确处理中文字符", () => {
+    const result = boxPanel("你好世界");
+    expect(result).toContain("你好世界");
   });
 });
