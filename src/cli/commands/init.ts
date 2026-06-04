@@ -82,7 +82,7 @@ export async function initCommand(opts: InitOptions): Promise<void> {
 
   // 3. 初始化 OpenSpec 项目结构（openspec/ 目录 + .claude/commands/opsx/）
   console.log("\n  📂 初始化 OpenSpec 项目结构...");
-  const initResult = await initOpenSpecProject(opts.projectPath, opts.scope);
+  const initResult = await initOpenSpecProject(opts.projectPath, opts.scope, opts.targetAgents);
   if (initResult === "failed") {
     console.error("     ✗ OpenSpec 项目初始化失败");
     process.exit(1);
@@ -90,7 +90,8 @@ export async function initCommand(opts: InitOptions): Promise<void> {
 
   // 4. 安装 Superpowers
   console.log("\n  📥 Superpowers...");
-  const superpowersResult = await installSuperpowers(opts.scope);
+  const claudeAgent = opts.targetAgents.find(a => a.id === "claude-code");
+  const superpowersResult = await installSuperpowers(opts.scope, claudeAgent, opts.projectPath);
   if (superpowersResult === "installed") {
     console.log("     ✓ obra/superpowers@5 已安装");
   } else if (superpowersResult === "skipped") {
