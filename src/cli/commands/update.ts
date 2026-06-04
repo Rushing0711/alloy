@@ -7,6 +7,7 @@ import { detectDeployedAgents } from "../../core/agents.js";
 import { runHealthCheck } from "../../core/health.js";
 import { getPackageRoot } from "../../utils/fs.js";
 import { promptConfirm } from "../../utils/prompt.js";
+import { color } from "../../utils/format.js";
 import type { DeployOptions } from "../../core/types.js";
 
 const CLAUDE_MD_MARKER_START = "<!-- ALLOY-WORKFLOW:START -->";
@@ -46,7 +47,7 @@ export async function updateCommand(projectPath: string): Promise<string[]> {
   // 1. 自动检测 scope
   const scope = detectScope(projectPath);
   if (!scope) {
-    results.push("⚠️ Alloy 未初始化，请先运行 alloy init");
+    results.push(`${color.yellow("⚠️")} Alloy 未初始化，请先运行 alloy init`);
     return results;
   }
 
@@ -63,7 +64,7 @@ export async function updateCommand(projectPath: string): Promise<string[]> {
     const latest = await checkLatestVersion();
 
     if (latest && latest !== currentVersion) {
-      console.log(`\n  发现新版本: v${latest}（当前 v${currentVersion}）`);
+      console.log(`\n  发现新版本: ${color.cyan(`v${latest}`)}（当前 v${currentVersion}）`);
 
       // 兼容性检查
       console.log("  🩺 兼容性检查…");
@@ -71,10 +72,10 @@ export async function updateCommand(projectPath: string): Promise<string[]> {
       const warnings = health.filter((h) => h.status !== "pass");
       if (warnings.length > 0) {
         for (const w of warnings) {
-          console.log(`     ⚠ ${w.name}: ${w.current}`);
+          console.log(`     ${color.yellow("⚠")} ${w.name}: ${color.cyan(w.current)}`);
         }
       } else {
-        console.log("     ✓ 兼容性检查通过");
+        console.log(`     ${color.green("✓")} 兼容性检查通过`);
       }
 
       // 询问确认
@@ -83,24 +84,24 @@ export async function updateCommand(projectPath: string): Promise<string[]> {
       if (doUpdate) {
         try {
           execSync("npm update -g @flyin-ai/alloy", { stdio: "pipe" });
-          results.push("✓ alloy CLI 已升级");
+          results.push(`${color.green("✓")} alloy CLI 已升级`);
         } catch {
-          results.push("⚠️ CLI 升级失败");
+          results.push(`${color.yellow("⚠️")} CLI 升级失败`);
         }
       } else {
         results.push("  已跳过 CLI 升级");
       }
     } else if (latest) {
-      results.push(`✓ Alloy v${currentVersion} 已是最新`);
+      results.push(`${color.green("✓")} Alloy v${currentVersion} 已是最新`);
     } else {
-      results.push(`⚠️ 无法检查更新（npm registry 不可达）`);
+      results.push(`${color.yellow("⚠️")} 无法检查更新（npm registry 不可达）`);
     }
   }
 
   // 3. 部署 commands
   const deployedAgents = detectDeployedAgents(scope, projectPath);
   if (deployedAgents.length === 0) {
-    results.push("⚠️ 未检测到已部署的 Alloy commands，请先运行 alloy init");
+    results.push(`${color.yellow("⚠️")} 未检测到已部署的 Alloy commands，请先运行 alloy init`);
     return results;
   }
 
@@ -113,15 +114,15 @@ export async function updateCommand(projectPath: string): Promise<string[]> {
 
   try {
     const paths = await deployCommands(deployOpts);
-    results.push(`✓ commands/ → 部署 ${paths.length} 个文件到 ${deployedAgents.length} 个 agent`);
+    results.push(`${color.green("✓")} commands/ → 部署 ${paths.length} 个文件到 ${deployedAgents.length} 个 agent`);
   } catch {
-    results.push("⚠️ command 部署失败");
+    results.push(`${color.yellow("⚠️")} command 部署失败`);
   }
   try {
     await deploySchema(deployOpts);
-    results.push("✓ schema/ → 已部署");
+    results.push(`${color.green("✓")} schema/ → 已部署`);
   } catch {
-    results.push(`⚠️ schema 部署失败`);
+    results.push(`${color.yellow("⚠️")} schema 部署失败`);
   }
 
   // 4. 更新 CLAUDE.md 标记区域
@@ -139,11 +140,11 @@ export async function updateCommand(projectPath: string): Promise<string[]> {
             latestFragment +
             content.slice(endIdx + CLAUDE_MD_MARKER_END.length);
           await writeFile(claudeMdPath, content, "utf-8");
-          results.push("✓ CLAUDE.md → Alloy 标记区域已更新");
+          results.push(`${color.green("✓")} CLAUDE.md → Alloy 标记区域已更新`);
         }
       }
     } catch {
-      results.push("⚠️ CLAUDE.md 更新失败");
+      results.push(`${color.yellow("⚠️")} CLAUDE.md 更新失败`);
     }
   }
 
