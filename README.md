@@ -52,8 +52,8 @@ alloy init
 1. 检测环境（Node.js ≥ 18 + git）
 2. 选择安装范围（project / global）
 3. 选择目标 AI Agent（Claude Code、Cursor、OpenCode 等 8 个平台可多选）
-4. 安装 OpenSpec CLI + Superpowers
-5. 部署命令和 schema 到各平台目录
+4. 安装 OpenSpec CLI + Superpowers（检测已有安装并提示用户决策）
+5. 部署命令和 schema 到各平台目录（检测已有部署并提示用户决策）
 6. 注册 shell 补全（bash/zsh/PowerShell）
 7. 兼容性检查
 

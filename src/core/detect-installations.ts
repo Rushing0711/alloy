@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import type { AgentInfo } from "./types.js";
@@ -65,7 +65,6 @@ export function detectSkill(name: string, agent: AgentInfo, projectPath: string)
   // 用户级 plugin（superpowers 插件）
   const pluginBase = join(home, ".claude", "plugins", "cache", "superpowers-marketplace", "superpowers");
   if (existsSync(pluginBase)) {
-    const { readdirSync } = require("node:fs");
     try {
       const versions = readdirSync(pluginBase, { withFileTypes: true });
       for (const v of versions) {

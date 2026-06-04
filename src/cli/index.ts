@@ -18,7 +18,7 @@ const USAGE = `
 alloy <command> [options]
 
 Commands:
-  init        [path] [--scope <project|global>] [--inject-claude-md]
+  init        [path] [--scope <project|global>] [--inject-claude-md] [--agents <id,id,...>]
               项目初始化：检测环境 → 安装依赖 → 部署 schema + skill
   status      [path|name] [--json]
               查看活跃 change 总览，指定 name 查看详情
@@ -43,6 +43,8 @@ alloy init [path] [options]
 选项:
   --scope <project|global>  安装范围，默认 project
   --inject-claude-md        注入 CLAUDE.md 工作流标记（默认关闭）
+  --agents <id,id,...>      非交互式模式，指定要安装的 AI 工具（逗号分隔）
+                            可用的 agent: claude-code, codebuddy, qoder, cursor, opencode, codex, tra
   --help, -h                显示本帮助
 `;
     case "status":
@@ -202,6 +204,7 @@ async function main() {
         options: {
           scope: { type: "string" },
           "inject-claude-md": { type: "boolean", default: false },
+          agents: { type: "string" },
         },
         strict: true,
         allowPositionals: true,
@@ -209,7 +212,23 @@ async function main() {
       const projectPath = positionals[0] ?? process.cwd();
       const { initCommand, selectScope, selectTargetAgents } = await import("./commands/init.js");
       const scope = await selectScope(values.scope as string | undefined);
-      const targetAgents = await selectTargetAgents();
+
+      let targetAgents;
+      if (values.agents) {
+        // 非交互式模式：从 --agents 选项解析
+        const { KNOWN_AGENTS } = await import("../core/agents.js");
+        const agentIds = (values.agents as string).split(",").map((s: string) => s.trim());
+        targetAgents = KNOWN_AGENTS.filter((a: { id: string }) => agentIds.includes(a.id));
+        if (targetAgents.length === 0) {
+          console.error(`未知的 agent: ${values.agents}`);
+          console.error(`可用的 agent: ${KNOWN_AGENTS.map((a: { id: string }) => a.id).join(", ")}`);
+          process.exit(1);
+        }
+      } else {
+        // 交互式模式
+        targetAgents = await selectTargetAgents();
+      }
+
       await initCommand({
         scope,
         injectClaudeMd: (values["inject-claude-md"] as boolean) || false,
