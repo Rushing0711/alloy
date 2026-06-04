@@ -117,5 +117,15 @@ export function statusLine(label: string, value: string, status: "success" | "wa
   return `     ${coloredIcon} ${label} ${pc.cyan(value)}`;
 }
 
+// ── 进度条 ──
+export function progressBar(value: number, total: number, width: number = 20): string {
+  const percentage = Math.round((value / total) * 100);
+  const filled = Math.round((value / total) * width);
+  const empty = width - filled;
+
+  const bar = "█".repeat(filled) + "░".repeat(empty);
+  return `${bar} ${percentage}%`;
+}
+
 // ── 工具函数 ──
 export { default as stripAnsi } from "strip-ansi";

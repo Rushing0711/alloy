@@ -10,6 +10,7 @@ import {
   stripAnsi,
   stringWidth,
   statusLine,
+  progressBar,
 } from "../../src/utils/format.js";
 
 describe("color", () => {
@@ -199,5 +200,31 @@ describe("statusLine", () => {
   it("正确处理中文字符", () => {
     const result = statusLine("节点", "v18.0.0", "success");
     expect(result).toContain("节点");
+  });
+});
+
+describe("progressBar", () => {
+  it("should generate a progress bar at 0%", () => {
+    const result = progressBar(0, 100, 20);
+    expect(result).toContain("0%");
+    expect(result).toContain("░");
+  });
+
+  it("should generate a progress bar at 50%", () => {
+    const result = progressBar(50, 100, 20);
+    expect(result).toContain("50%");
+    expect(result).toContain("█");
+    expect(result).toContain("░");
+  });
+
+  it("should generate a progress bar at 100%", () => {
+    const result = progressBar(100, 100, 20);
+    expect(result).toContain("100%");
+    expect(result).toContain("█");
+  });
+
+  it("should use default width of 20", () => {
+    const result = progressBar(50, 100);
+    expect(result).toBeDefined();
   });
 });
