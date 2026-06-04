@@ -27,9 +27,9 @@ tags: [alloy, workflow]
 
 ## 全新开始（无活跃 change + 用户提供了 topic）
 
-**记录会话启动时间**（后续写入 phase_timings.start.started_at）：
+**捕获阶段启动时间**（命令调用后第一时间，后续写入 phase_timings.start.started_at）：
 ```bash
-echo "SESSION_START=$(date "+%Y-%m-%d %H:%M:%S")"
+SESSION_START=$(date "+%Y-%m-%d %H:%M:%S")
 ```
 
 ```
@@ -41,11 +41,29 @@ echo "SESSION_START=$(date "+%Y-%m-%d %H:%M:%S")"
 
 ### [Step 1/2] 上下文探查
 
+**Skill 预检：** 执行以下检测脚本，确认 `opsx:explore` 和 `superpowers:brainstorming` 均可用：
+
+```bash
+MISSING=0
+for cmd in "opsx/explore"; do
+  if test -f ".claude/commands/$cmd.md"; then echo "  ✓ ${cmd//\//:}（项目级 command）"
+  elif test -f "$HOME/.claude/commands/$cmd.md"; then echo "  ✓ ${cmd//\//:}（用户级 command）"
+  else echo "  ✗ ${cmd//\//:} — 未找到"; MISSING=$((MISSING+1)); fi
+done
+for skill in "brainstorming"; do
+  if test -d ".claude/skills/$skill"; then echo "  ✓ superpowers:$skill（项目级 skill）"
+  elif test -d "$HOME/.claude/skills/$skill"; then echo "  ✓ superpowers:$skill（用户级 skill）"
+  elif for d in "$HOME/.claude/plugins/cache/superpowers-marketplace/superpowers/"*"/skills/$skill"; do test -d "$d" && break; done 2>/dev/null; then echo "  ✓ superpowers:$skill（用户级 plugin）"
+  else echo "  ✗ superpowers:$skill — 未找到"; MISSING=$((MISSING+1)); fi
+done
+if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。请运行: alloy init"; exit 1; fi
+```
+
+检测优先级：项目级 command → 项目级 skill → 用户级 command → 用户级 skill → 用户级 plugin。任一不可用 → 引导 `alloy init` → STOP。
+
 > 正在探查项目上下文和需求空间...
 
 **立即执行：** 使用 Skill 工具加载 `opsx:explore` 技能。禁止跳过此步骤。
-
-如果 `opsx:explore` 不可用（OpenSpec 未安装或命令不存在），引导用户运行 `alloy init` 完成环境初始化。
 
 技能加载后，按其指引自由探索项目上下文和需求空间。
 
@@ -62,8 +80,6 @@ echo "SESSION_START=$(date "+%Y-%m-%d %H:%M:%S")"
 ### [Step 2/2] 需求设计
 
 > 正在启动 brainstorming...
-
-**前置预检：** 确认 `superpowers:brainstorming` 技能可用。若不可用 → 引导用户运行 `alloy init` 重新安装 → STOP。不在 Step 2 才发现缺失。
 
 **立即执行：** 使用 Skill 工具加载 `superpowers:brainstorming` 技能。禁止跳过此步骤。
 
@@ -116,6 +132,21 @@ echo "SESSION_START=$(date "+%Y-%m-%d %H:%M:%S")"
    ```bash
    alloy _state init openspec/changes/<name>
    ```
+
+   **记录阶段启动时间：**
+   ```bash
+   TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
+   echo "$TIMINGS" | python3 -c "
+   import sys,json
+   content = sys.stdin.read()
+   d = json.loads(content) if content.strip() else {}
+   p = d.setdefault('start',{})
+   if 'started_at' not in p:
+       p['started_at']='$SESSION_START'
+   print(json.dumps(d))
+   " | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
+   ```
+
 5. **确保 git 仓库就绪：**
 
    ```bash
@@ -202,8 +233,15 @@ echo "SESSION_START=$(date "+%Y-%m-%d %H:%M:%S")"
    **记录阶段时间 + draft hash-lock + commit：**
    ```bash
    COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
-   STARTED_AT="<SESSION_START>"
-   alloy _state write openspec/changes/<name> phase_timings "{\"start\":{\"started_at\":\"$STARTED_AT\",\"completed_at\":\"$COMPLETED_AT\"}}"
+   TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
+   echo "$TIMINGS" | python3 -c "
+   import sys,json
+   content = sys.stdin.read()
+   d = json.loads(content) if content.strip() else {}
+   p = d.setdefault('start',{})
+   p['completed_at']='$COMPLETED_AT'
+   print(json.dumps(d))
+   " | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
    DRAFT_HASH=$(alloy _record compute openspec/changes/<name> draft)
    APPROVED_AT=$(date "+%Y-%m-%d %H:%M:%S")
    APPROVER=$(git config user.name)
