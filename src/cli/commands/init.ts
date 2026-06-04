@@ -57,12 +57,9 @@ async function ensureGitignore(projectPath: string): Promise<void> {
 }
 
 export async function initCommand(opts: InitOptions): Promise<void> {
-  const envSpinner = spinner(color.bold("检测环境..."));
-
-  // 1. 环境检测
-  const env = detectEnv();
-  envSpinner.stop();
+  // 1. 环境检测（detectEnv 是同步操作，无需 spinner）
   console.log("\n  " + color.bold("检测环境..."));
+  const env = detectEnv();
   console.log(`     Node.js ${color.cyan(env.nodeVersion)} ${color.green("✓")}`);
   console.log(`     git ${env.gitInstalled ? color.green("✓") : color.red("✗ 未安装")}`);
   console.log(`     Claude Code ${env.claudeCodeInstalled ? color.green("✓") : color.yellow("⚠ 未检测到 CLI，请确保已安装")}`);
@@ -94,12 +91,15 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   // 4. 安装 Superpowers
   console.log("\n  " + color.bold("安装 Superpowers..."));
   const claudeAgent = opts.targetAgents.find(a => a.id === "claude-code");
+  const spSpinner = spinner(color.bold("安装 Superpowers..."));
   const superpowersResult = await installSuperpowers(opts.scope, claudeAgent, opts.projectPath);
+  spSpinner.stop();
   if (superpowersResult === "installed") {
     console.log(`     ${color.green("✓")} obra/superpowers@5 已安装`);
   } else if (superpowersResult === "failed") {
     console.log(`     ${color.yellow("⚠")} Superpowers 安装失败，请稍后手动运行 alloy init 重试`);
   }
+  // "skipped" — installSuperpowers() 内部已输出跳过信息
 
   // 5. 部署 Alloy commands
   console.log("\n  " + color.bold("部署 Alloy commands..."));
