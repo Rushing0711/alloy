@@ -27,7 +27,7 @@ tags: [alloy, workflow]
 
 **使用方式：**
 ```typescript
-import { boxPanel, tableWithBorder, statusLine, progressBar } from "../../utils/format.js";
+import { boxPanel, tableWithBorder, statusLine, progressBar } from "../utils/format.js";
 
 // 生成面板
 console.log(boxPanel("内容", { title: "标题" }));
