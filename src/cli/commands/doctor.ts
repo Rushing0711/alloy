@@ -5,6 +5,7 @@ import { runHealthCheck } from "../../core/health.js";
 import type { HealthCheckResult } from "../../core/types.js";
 import { findActiveChanges } from "../utils/state.js";
 import { color } from "../../utils/format.js";
+import { section, check, warn } from "../../utils/output.js";
 
 export interface DoctorResult {
   healthResults: HealthCheckResult[];
@@ -124,4 +125,21 @@ export function formatDoctorResult(
   }
 
   return lines.join("\n");
+}
+
+export function printDoctorResult(result: DoctorResult): void {
+  section("健康检查");
+  for (const r of result.healthResults) {
+    check(r.name, `${r.current}（要求 ${r.required}）`, r.status);
+  }
+
+  if (result.consistencyWarnings.length > 0) {
+    section("文件一致性");
+    for (const w of result.consistencyWarnings) {
+      warn(w);
+    }
+  } else {
+    section("文件一致性");
+    check("一致性", "无问题", "pass");
+  }
 }
