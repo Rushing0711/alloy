@@ -55,12 +55,23 @@ info(msg: string): void
 - 删除整个"格式化工具函数"章节（函数列表 + 代码示例 + 最佳实践 + Agent 输出格式提示）
 - 保留阶段头框（简单单层框，不会错位）
 
+### Part 4：降级 @inquirer/prompts v8 → v7
+
+`@inquirer/prompts` v8 要求 Node >=20.12.0，导致 Node 18 无法使用箭头键交互选择，只能输入数字编号。v7 要求 Node >=18，API 完全兼容。
+
+**改动：**
+- `package.json`：`"@inquirer/prompts": "^8.5.0"` → `"^7.10.1"`
+- `src/utils/prompt.ts`：删除 `supportsInquirer` 判断和数字编号 fallback，Node 18 统一用 inquirer 交互
+
+**v8 → v7 不丢失功能：** v8 是纯现代化清理发布（ESM-only、Node 20+、移除废弃 API），无新特性。项目用到的 `select`/`checkbox`/`confirm` 三个 API 在 v7 和 v8 接口一致。
+
 ## 范围与边界
 
 **做：**
 - 新建 output.ts
 - 重构四个 CLI 命令的输出代码
 - 清理 8 个 skill 文件的格式化函数章节
+- 降级 @inquirer/prompts，简化 prompt.ts
 
 **不做：**
 - 不改 format.ts（底层原语保持不变）
