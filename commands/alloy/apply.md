@@ -18,6 +18,11 @@ tags: [alloy, workflow]
 
 **调用外部命令或技能前，先输出标题和状态描述，再执行操作。不要只出标题然后沉默。**
 
+**捕获阶段启动时间**（命令调用后第一时间，前置检查之前）：
+```bash
+PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
+```
+
 **什么算"apply 执行不到位"（反例）：**
 - precheck 发现技能缺失但继续执行——"先跑着，后面可能用不到"——后面会静默丢失 TDD 或 code review
 - 验证失败后直接改代码跳回验证，不经过 SDD——丢失了 TDD 安全网
@@ -47,11 +52,23 @@ tags: [alloy, workflow]
    ```
    若命令成功 → 继续。
    若命令失败 → HARD STOP："项目还不是 git 仓库。请先运行 `/alloy:start` 完成初始化（包含 git init）。"
+4. **Skill 预检：** 执行以下检测脚本，确认 6 个执行技能均可用：
 
-**记录阶段开始时间：**
+   ```bash
+   MISSING=0
+   for skill in "using-git-worktrees" "subagent-driven-development" "executing-plans" "test-driven-development" "requesting-code-review" "verification-before-completion"; do
+     if test -d ".claude/skills/$skill"; then echo "  ✓ superpowers:$skill（项目级 skill）"
+     elif test -d "$HOME/.claude/skills/$skill"; then echo "  ✓ superpowers:$skill（用户级 skill）"
+     elif for d in "$HOME/.claude/plugins/cache/superpowers-marketplace/superpowers/"*"/skills/$skill"; do test -d "$d" && break; done 2>/dev/null; then echo "  ✓ superpowers:$skill（用户级 plugin）"
+     else echo "  ✗ superpowers:$skill — 未找到"; MISSING=$((MISSING+1)); fi
+   done
+   if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。请运行: alloy init"; exit 1; fi
+   ```
 
+   检测优先级：项目级 skill → 用户级 skill → 用户级 plugin。任一缺失 → 输出缺失列表 → 引导 `alloy init` → STOP。不静默降级。
+
+**写入阶段启动时间**（前置检查通过后，使用命令开头捕获的 `PHASE_START`）：
 ```bash
-COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
 TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
 echo "$TIMINGS" | python3 -c "
 import sys,json
@@ -59,23 +76,15 @@ content = sys.stdin.read()
 d = json.loads(content) if content.strip() else {}
 p = d.setdefault('apply',{})
 if 'started_at' not in p:
-    p['started_at']='$COMPLETED_AT'
+    p['started_at']='$PHASE_START'
 print(json.dumps(d))
 " | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
-```
-
-读取启动时间用于展示：
-```bash
-alloy _state read openspec/changes/<name> phase_timings | python3 -c "
-import sys,json
-print(json.loads(sys.stdin.read() or '{}').get('apply',{}).get('started_at',''))
-"
 ```
 
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [3/5] · Phase: Apply           │
-│ 启动时间: <上面命令输出的 started_at 值>  │
+│ 启动时间: $PHASE_START               │
 └──────────────────────────────────────┘
 
 **提交前置状态（worktree 创建前确保 .alloy.yaml 变更已落地）：**
@@ -87,25 +96,11 @@ git diff --cached --quiet || git commit -m "chore(<name>): apply 阶段开始前
 
 `git diff --cached --quiet` 接续时无变更则跳过，不会产生空 commit。
 
-[Step 0/5] 技能可用性预检（precheck）
-──────────────────────────────────────
+---
 
-前置检查通过：plan.md ✓  phase=planned ✓  git仓库 ✓
+前置检查通过：plan.md ✓  phase=planned ✓  git ✓  技能 ✓
 
-检查以下 6 个 Superpowers 技能是否可用（缺一 STOP，不静默降级）：
-- [ ] superpowers:using-git-worktrees
-- [ ] superpowers:subagent-driven-development
-- [ ] superpowers:executing-plans
-- [ ] superpowers:test-driven-development
-- [ ] superpowers:requesting-code-review
-- [ ] superpowers:verification-before-completion
-
-任一缺失 → 输出缺失列表 → 引导 `alloy init` 重新安装 → STOP
-
-全部通过后：
-> precheck 通过：6/6 技能可用 ✓
 > 共 5 个步骤：隔离 → 任务实现 → 代码验证 → 制品验证 → 复盘
-```
 
 ---
 

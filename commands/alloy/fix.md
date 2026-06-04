@@ -22,12 +22,20 @@ tags: [alloy, workflow]
 
 在进入诊断前，先校验环境和权限：
 
-**1. Skill 预检：** 确认以下 3 个技能可用（缺一 STOP）：
-- `superpowers:systematic-debugging` — 根因诊断
-- `superpowers:test-driven-development` — 修复流程
-- `superpowers:verification-before-completion` — 验证修复
+**1. Skill 预检：** 执行以下检测脚本，确认 3 个诊断技能均可用：
 
-任一缺失 → 输出缺失列表 → 引导 `alloy init` → STOP。
+```bash
+MISSING=0
+for skill in "systematic-debugging" "test-driven-development" "verification-before-completion"; do
+  if test -d ".claude/skills/$skill"; then echo "  ✓ superpowers:$skill（项目级 skill）"
+  elif test -d "$HOME/.claude/skills/$skill"; then echo "  ✓ superpowers:$skill（用户级 skill）"
+  elif for d in "$HOME/.claude/plugins/cache/superpowers-marketplace/superpowers/"*"/skills/$skill"; do test -d "$d" && break; done 2>/dev/null; then echo "  ✓ superpowers:$skill（用户级 plugin）"
+  else echo "  ✗ superpowers:$skill — 未找到"; MISSING=$((MISSING+1)); fi
+done
+if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。请运行: alloy init"; exit 1; fi
+```
+
+检测优先级：项目级 skill → 用户级 skill → 用户级 plugin。任一缺失 → 输出缺失列表 → 引导 `alloy init` → STOP。
 
 **2. Phase 校验：** 若检测到活跃 change 的 `.alloy.yaml`，读取 phase：
 - phase = `archived` → ⚠️ "该 change 已归档，spec 已封存。如果修复需要改 spec，应开新 change。继续修复（不改 spec）？"
