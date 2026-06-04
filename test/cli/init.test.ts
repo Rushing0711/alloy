@@ -2,18 +2,29 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // Mock 所有外部依赖 - 使用 vi.hoisted 确保在 vi.mock 之前可用
-const { mockDetectEnv, mockRunHealthCheck, mockInstallOpenSpecCli, mockInitOpenSpecProject, mockInstallSuperpowers, mockDeployCommands, mockDeploySchema, mockInjectClaudeMd, mockPromptSelect, mockPromptMultiSelect } = vi.hoisted(() => ({
-  mockDetectEnv: vi.fn(),
-  mockRunHealthCheck: vi.fn(),
-  mockInstallOpenSpecCli: vi.fn(),
-  mockInitOpenSpecProject: vi.fn(),
-  mockInstallSuperpowers: vi.fn(),
-  mockDeployCommands: vi.fn(),
-  mockDeploySchema: vi.fn(),
-  mockInjectClaudeMd: vi.fn(),
-  mockPromptSelect: vi.fn(),
-  mockPromptMultiSelect: vi.fn(),
-}));
+const { mockDetectEnv, mockRunHealthCheck, mockInstallOpenSpecCli, mockInitOpenSpecProject, mockInstallSuperpowers, mockDeployCommands, mockDeploySchema, mockInjectClaudeMd, mockPromptSelect, mockPromptMultiSelect, mockSpinnerInstance, mockSpinner } = vi.hoisted(() => {
+  const mockSpinnerInstance = {
+    start: vi.fn().mockReturnThis(),
+    stop: vi.fn().mockReturnThis(),
+    succeed: vi.fn().mockReturnThis(),
+    fail: vi.fn().mockReturnThis(),
+  };
+  const mockSpinner = vi.fn(() => mockSpinnerInstance);
+  return {
+    mockDetectEnv: vi.fn(),
+    mockRunHealthCheck: vi.fn(),
+    mockInstallOpenSpecCli: vi.fn(),
+    mockInitOpenSpecProject: vi.fn(),
+    mockInstallSuperpowers: vi.fn(),
+    mockDeployCommands: vi.fn(),
+    mockDeploySchema: vi.fn(),
+    mockInjectClaudeMd: vi.fn(),
+    mockPromptSelect: vi.fn(),
+    mockPromptMultiSelect: vi.fn(),
+    mockSpinnerInstance,
+    mockSpinner,
+  };
+});
 
 vi.mock("../../src/core/detect.js", () => ({ detectEnv: mockDetectEnv }));
 vi.mock("../../src/core/health.js", () => ({ runHealthCheck: mockRunHealthCheck }));
@@ -31,6 +42,10 @@ vi.mock("../../src/utils/prompt.js", () => ({
   promptSelect: mockPromptSelect,
   promptMultiSelect: mockPromptMultiSelect,
 }));
+vi.mock("../../src/utils/format.js", async (importOriginal) => {
+  const orig = await importOriginal<typeof import("../../src/utils/format.js")>();
+  return { ...orig, spinner: mockSpinner };
+});
 
 import { selectScope, selectTargetAgents, initCommand } from "../../src/cli/commands/init.js";
 import { KNOWN_AGENTS } from "../../src/core/agents.js";
@@ -226,7 +241,7 @@ describe("init", () => {
       await initCommand(defaultOpts);
 
       expect(processExitSpy).not.toHaveBeenCalled();
-      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("Superpowers 安装失败"));
+      expect(mockSpinnerInstance.fail).toHaveBeenCalledWith(expect.stringContaining("Superpowers 安装失败"));
     });
 
     it("injectClaudeMd 为 true 时输出提示", async () => {
