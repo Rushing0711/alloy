@@ -22,7 +22,7 @@ tags: [alloy, workflow]
 **可用函数：**
 - `boxPanel(content, opts?)` — 生成带标题的面板
 - `tableWithBorder(headers, rows, opts?)` — 生成带边框的表格
-- `statusLine(label, value, status)` — 生成状态行
+- `statusLine(label, value, status, opts?)` — 生成状态行
 - `progressBar(value, total, width?)` — 生成进度条
 
 **使用方式：**
