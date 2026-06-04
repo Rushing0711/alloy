@@ -23,6 +23,43 @@ tags: [alloy, workflow]
 PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
 ```
 
+---
+
+## 格式化工具函数
+
+项目提供了终端格式化工具函数，用于生成格式化的输出，避免手绘 Unicode 表格导致的错位问题。
+
+**可用函数：**
+- `boxPanel(content, opts?)` — 生成带标题的面板
+- `tableWithBorder(headers, rows, opts?)` — 生成带边框的表格
+- `statusLine(label, value, status, opts?)` — 生成状态行
+- `progressBar(value, total, width?)` — 生成进度条
+
+**使用方式：**
+```typescript
+import { boxPanel, tableWithBorder, statusLine, progressBar } from "../utils/format.js";
+
+// 生成面板
+console.log(boxPanel("内容", { title: "标题" }));
+
+// 生成表格
+console.log(tableWithBorder(["列1", "列2"], [["值1", "值2"]]));
+
+// 生成状态行
+console.log(statusLine("Node.js", "v22.22.2", "success"));
+
+// 生成进度条
+console.log(progressBar(75, 100));
+```
+
+**最佳实践：**
+- 使用 boxPanel 代替手绘的 Unicode 表格
+- 使用 tableWithBorder 代替手绘的表格
+- 使用 statusLine 显示状态信息
+- 使用 progressBar 显示进度
+
+---
+
 **什么算"apply 执行不到位"（反例）：**
 - precheck 发现技能缺失但继续执行——"先跑着，后面可能用不到"——后面会静默丢失 TDD 或 code review
 - 验证失败后直接改代码跳回验证，不经过 SDD——丢失了 TDD 安全网

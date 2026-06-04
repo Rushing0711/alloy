@@ -16,6 +16,43 @@ tags: [alloy, workflow]
 PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
 ```
 
+---
+
+## 格式化工具函数
+
+项目提供了终端格式化工具函数，用于生成格式化的输出，避免手绘 Unicode 表格导致的错位问题。
+
+**可用函数：**
+- `boxPanel(content, opts?)` — 生成带标题的面板
+- `tableWithBorder(headers, rows, opts?)` — 生成带边框的表格
+- `statusLine(label, value, status, opts?)` — 生成状态行
+- `progressBar(value, total, width?)` — 生成进度条
+
+**使用方式：**
+```typescript
+import { boxPanel, tableWithBorder, statusLine, progressBar } from "../utils/format.js";
+
+// 生成面板
+console.log(boxPanel("内容", { title: "标题" }));
+
+// 生成表格
+console.log(tableWithBorder(["列1", "列2"], [["值1", "值2"]]));
+
+// 生成状态行
+console.log(statusLine("Node.js", "v22.22.2", "success"));
+
+// 生成进度条
+console.log(progressBar(75, 100));
+```
+
+**最佳实践：**
+- 使用 boxPanel 代替手绘的 Unicode 表格
+- 使用 tableWithBorder 代替手绘的表格
+- 使用 statusLine 显示状态信息
+- 使用 progressBar 显示进度
+
+---
+
 **什么算"finish 使用不当"（反例）：**
 - phase 不是 archived 时调 finish——"反正就合个代码"——跳过了 archive，spec 没有同步
 - 分支已 merge 或删除后重复调 finish——浪费操作，应该直接告知用户无需再次 finish

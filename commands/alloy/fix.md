@@ -11,6 +11,43 @@ tags: [alloy, workflow]
 
 **调用外部命令或技能前，先输出标题和状态描述，再执行操作。**
 
+---
+
+## 格式化工具函数
+
+项目提供了终端格式化工具函数，用于生成格式化的输出，避免手绘 Unicode 表格导致的错位问题。
+
+**可用函数：**
+- `boxPanel(content, opts?)` — 生成带标题的面板
+- `tableWithBorder(headers, rows, opts?)` — 生成带边框的表格
+- `statusLine(label, value, status, opts?)` — 生成状态行
+- `progressBar(value, total, width?)` — 生成进度条
+
+**使用方式：**
+```typescript
+import { boxPanel, tableWithBorder, statusLine, progressBar } from "../utils/format.js";
+
+// 生成面板
+console.log(boxPanel("内容", { title: "标题" }));
+
+// 生成表格
+console.log(tableWithBorder(["列1", "列2"], [["值1", "值2"]]));
+
+// 生成状态行
+console.log(statusLine("Node.js", "v22.22.2", "success"));
+
+// 生成进度条
+console.log(progressBar(75, 100));
+```
+
+**最佳实践：**
+- 使用 boxPanel 代替手绘的 Unicode 表格
+- 使用 tableWithBorder 代替手绘的表格
+- 使用 statusLine 显示状态信息
+- 使用 progressBar 显示进度
+
+---
+
 **什么算"fix 诊断不到位"（反例）：**
 - 没跑 systematic-debugging 就凭直觉修——"一看就知道是哪的问题"——根因可能完全错误
 - 诊断出需改 spec 但直接修代码不改 spec——spec 和代码从此分叉，下次换人（换 session）就断片
