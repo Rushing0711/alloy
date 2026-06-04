@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { runHealthCheck } from "../../core/health.js";
 import type { HealthCheckResult } from "../../core/types.js";
 import { findActiveChanges } from "../utils/state.js";
+import { color } from "../../utils/format.js";
 
 export interface DoctorResult {
   healthResults: HealthCheckResult[];
@@ -100,19 +101,26 @@ export function formatDoctorResult(
 
   const lines: string[] = [];
 
-  lines.push("健康检查：");
+  lines.push(color.bold("健康检查："));
   for (const r of result.healthResults) {
-    const mark = r.status === "pass" ? "✓" : r.status === "warn" ? "⚠️" : "✗";
-    lines.push(`  ${mark} ${r.name}: ${r.current}（要求 ${r.required}）`);
+    const mark =
+      r.status === "pass"
+        ? color.green("✓")
+        : r.status === "warn"
+          ? color.yellow("⚠️")
+          : color.red("✗");
+    lines.push(
+      `  ${mark} ${r.name}: ${color.cyan(r.current)}（要求 ${color.dim(r.required)}）`
+    );
   }
 
   if (result.consistencyWarnings.length > 0) {
-    lines.push("\n文件一致性：");
+    lines.push("\n" + color.bold("文件一致性："));
     for (const w of result.consistencyWarnings) {
-      lines.push(`  ⚠️ ${w}`);
+      lines.push(`  ${color.yellow("⚠️")} ${w}`);
     }
   } else {
-    lines.push("\n文件一致性：✓ 无问题");
+    lines.push("\n" + color.bold("文件一致性：") + color.green(" ✓ 无问题"));
   }
 
   return lines.join("\n");
