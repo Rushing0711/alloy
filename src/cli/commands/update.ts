@@ -8,6 +8,7 @@ import { runHealthCheck } from "../../core/health.js";
 import { getPackageRoot } from "../../utils/fs.js";
 import { promptConfirm } from "../../utils/prompt.js";
 import { color } from "../../utils/format.js";
+import { section, check, success, info } from "../../utils/output.js";
 import type { DeployOptions } from "../../core/types.js";
 
 const CLAUDE_MD_MARKER_START = "<!-- ALLOY-WORKFLOW:START -->";
@@ -55,7 +56,7 @@ export async function updateCommand(projectPath: string): Promise<string[]> {
   const dev = isDevMode();
 
   if (dev) {
-    console.log("  🔧 开发模式，从本地构建重新部署…");
+    info("🔧 开发模式，从本地构建重新部署…");
   } else {
     const pkg = JSON.parse(
       readFileSync(join(getPackageRoot(), "package.json"), "utf-8")
@@ -64,18 +65,19 @@ export async function updateCommand(projectPath: string): Promise<string[]> {
     const latest = await checkLatestVersion();
 
     if (latest && latest !== currentVersion) {
-      console.log(`\n  发现新版本: ${color.cyan(`v${latest}`)}（当前 v${currentVersion}）`);
+      section("版本检查");
+      info(`发现新版本: v${latest}（当前 v${currentVersion}）`);
 
       // 兼容性检查
-      console.log("  🩺 兼容性检查…");
+      section("兼容性检查");
       const health = await runHealthCheck(getPackageRoot(), projectPath);
       const warnings = health.filter((h) => h.status !== "pass");
       if (warnings.length > 0) {
         for (const w of warnings) {
-          console.log(`     ${color.yellow("⚠")} ${w.name}: ${color.cyan(w.current)}`);
+          check(w.name, w.current, "warn");
         }
       } else {
-        console.log(`     ${color.green("✓")} 兼容性检查通过`);
+        success("兼容性检查通过");
       }
 
       // 询问确认
