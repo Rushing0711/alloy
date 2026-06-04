@@ -10,7 +10,7 @@ import { KNOWN_AGENTS } from "../../core/agents.js";
 import type { AgentInfo, DeployOptions } from "../../core/types.js";
 import { getPackageRoot } from "../../utils/fs.js";
 import { promptSelect, promptMultiSelect } from "../../utils/prompt.js";
-import { color } from "../../utils/format.js";
+import { color, spinner } from "../../utils/format.js";
 
 export async function selectScope(passedScope?: string): Promise<"global" | "project"> {
   if (passedScope) return passedScope as "global" | "project";
@@ -57,10 +57,12 @@ async function ensureGitignore(projectPath: string): Promise<void> {
 }
 
 export async function initCommand(opts: InitOptions): Promise<void> {
-  console.log("\n  🔍 检测环境...");
+  const envSpinner = spinner(color.bold("检测环境..."));
 
   // 1. 环境检测
   const env = detectEnv();
+  envSpinner.stop();
+  console.log("\n  " + color.bold("检测环境..."));
   console.log(`     Node.js ${color.cyan(env.nodeVersion)} ${color.green("✓")}`);
   console.log(`     git ${env.gitInstalled ? color.green("✓") : color.red("✗ 未安装")}`);
   console.log(`     Claude Code ${env.claudeCodeInstalled ? color.green("✓") : color.yellow("⚠ 未检测到 CLI，请确保已安装")}`);
@@ -71,7 +73,7 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   }
 
   // 2. 安装 OpenSpec CLI（npm 全局包）
-  console.log("\n  📥 OpenSpec CLI...");
+  console.log("\n  " + color.bold("安装 OpenSpec CLI..."));
   const openspecResult = await installOpenSpecCli();
   if (openspecResult === "installed") {
     console.log(`     ${color.green("✓")} @fission-ai/openspec@1 已安装`);
@@ -82,7 +84,7 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   // "skipped" — 函数内部已输出跳过信息
 
   // 3. 初始化 OpenSpec 项目结构（openspec/ 目录 + .claude/commands/opsx/）
-  console.log("\n  📂 初始化 OpenSpec 项目结构...");
+  console.log("\n  " + color.bold("初始化 OpenSpec 项目结构..."));
   const initResult = await initOpenSpecProject(opts.projectPath, opts.scope, opts.targetAgents);
   if (initResult === "failed") {
     console.error(`     ${color.red("✗")} OpenSpec 项目初始化失败`);
@@ -90,7 +92,7 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   }
 
   // 4. 安装 Superpowers
-  console.log("\n  📥 Superpowers...");
+  console.log("\n  " + color.bold("安装 Superpowers..."));
   const claudeAgent = opts.targetAgents.find(a => a.id === "claude-code");
   const superpowersResult = await installSuperpowers(opts.scope, claudeAgent, opts.projectPath);
   if (superpowersResult === "installed") {
@@ -100,7 +102,7 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   }
 
   // 5. 部署 Alloy commands
-  console.log("\n  🚀 部署 Alloy commands...");
+  console.log("\n  " + color.bold("部署 Alloy commands..."));
   if (opts.targetAgents.length === 0) {
     console.log(`     ${color.yellow("⚠")} 未选择任何 AI 工具，跳过 command 部署`);
   } else {
@@ -127,7 +129,7 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   }
 
   // 8. 兼容性检查
-  console.log("\n  🩺 兼容性检查...");
+  console.log("\n  " + color.bold("兼容性检查..."));
   const packageDir = getPackageRoot();
   const results = await runHealthCheck(packageDir, opts.projectPath, opts.scope);
   for (const r of results) {
@@ -143,7 +145,7 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   }
 
   // 9. 自动注册 shell 补全（失败不阻断 init）
-  console.log("\n  🐚 注册 shell 补全...");
+  console.log("\n  " + color.bold("注册 shell 补全..."));
   try {
     const home = process.env.HOME || process.env.USERPROFILE || "~";
     const shell = process.env.SHELL || "";
