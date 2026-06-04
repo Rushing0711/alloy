@@ -1,0 +1,104 @@
+import { describe, it, expect } from "vitest";
+import {
+  color,
+  box,
+  table,
+  borderedTable,
+  spinner,
+  stripAnsi,
+  stringWidth,
+} from "../../src/utils/format.js";
+
+describe("color", () => {
+  it("导出 green/red/yellow/cyan/dim/bold 函数", () => {
+    expect(typeof color.green).toBe("function");
+    expect(typeof color.red).toBe("function");
+    expect(typeof color.yellow).toBe("function");
+    expect(typeof color.cyan).toBe("function");
+    expect(typeof color.dim).toBe("function");
+    expect(typeof color.bold).toBe("function");
+  });
+
+  it("在非 TTY 环境下输出不含 ANSI 转义序列", () => {
+    const result = color.green("hello");
+    expect(result).toBe("hello");
+  });
+});
+
+describe("box", () => {
+  it("生成带边框的文本", () => {
+    const result = box("hello");
+    expect(result).toContain("hello");
+    const hasBorder =
+      result.includes("─") || result.includes("-") || result.includes("=");
+    expect(hasBorder).toBe(true);
+  });
+
+  it("支持 title 选项", () => {
+    const result = box("content", { title: "标题" });
+    expect(result).toContain("content");
+  });
+
+  it("正确处理 CJK 字符对齐", () => {
+    const result = box("中文测试");
+    const lines = result.split("\n");
+    const nonEmpty = lines.filter((l) => l.trim().length > 0);
+    if (nonEmpty.length >= 2) {
+      const widths = nonEmpty.map((l) => stringWidth(l));
+      const firstWidth = widths[0];
+      expect(widths.every((w) => w === firstWidth)).toBe(true);
+    }
+  });
+});
+
+describe("table", () => {
+  it("生成无边框表格，包含表头和数据行", () => {
+    const result = table(["名称", "状态"], [["alloy", "已安装"]]);
+    expect(result).toContain("名称");
+    expect(result).toContain("状态");
+    expect(result).toContain("alloy");
+    expect(result).toContain("已安装");
+  });
+
+  it("无边框表格不包含 box-drawing 字符", () => {
+    const result = table(["A", "B"], [["x", "y"]]);
+    expect(result).not.toContain("│");
+    expect(result).not.toContain("─");
+    expect(result).not.toContain("┌");
+    expect(result).not.toContain("└");
+  });
+});
+
+describe("borderedTable", () => {
+  it("生成带边框表格", () => {
+    const result = borderedTable(["名称", "状态"], [["alloy", "已安装"]]);
+    expect(result).toContain("名称");
+    expect(result).toContain("alloy");
+    expect(result).toContain("│");
+  });
+});
+
+describe("spinner", () => {
+  it("返回 ora 实例，支持 succeed/fail/info", () => {
+    const s = spinner("测试");
+    expect(s).toBeDefined();
+    expect(typeof s.succeed).toBe("function");
+    expect(typeof s.fail).toBe("function");
+    expect(typeof s.info).toBe("function");
+    s.stop();
+  });
+});
+
+describe("stringWidth", () => {
+  it("正确计算 ASCII 字符宽度", () => {
+    expect(stringWidth("abc")).toBe(3);
+  });
+
+  it("正确计算 CJK 字符宽度", () => {
+    expect(stringWidth("中文")).toBe(4);
+  });
+
+  it("混合 ASCII 和 CJK 字符", () => {
+    expect(stringWidth("hello中文")).toBe(9);
+  });
+});
