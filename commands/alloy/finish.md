@@ -11,6 +11,11 @@ tags: [alloy, workflow]
 
 **finish 只做代码层面的收尾，不涉及 spec 变更。** 如果合入过程中（如 PR 审查）发现需要修改 spec，那是另一个 change 的事——当前 change 的 spec 已归档封存。
 
+**捕获阶段启动时间**（命令调用后第一时间，前置检查之前）：
+```bash
+PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
+```
+
 **什么算"finish 使用不当"（反例）：**
 - phase 不是 archived 时调 finish——"反正就合个代码"——跳过了 archive，spec 没有同步
 - 分支已 merge 或删除后重复调 finish——浪费操作，应该直接告知用户无需再次 finish
@@ -20,9 +25,8 @@ tags: [alloy, workflow]
 
 ## 前置检查
 
-**记录阶段开始时间：**
+**写入阶段启动时间**（前置检查通过后，使用命令开头捕获的 `PHASE_START`）：
 ```bash
-COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
 TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
 echo "$TIMINGS" | python3 -c "
 import sys,json
@@ -30,7 +34,7 @@ content = sys.stdin.read()
 d = json.loads(content) if content.strip() else {}
 p = d.setdefault('finish',{})
 if 'started_at' not in p:
-    p['started_at']='$COMPLETED_AT'
+    p['started_at']='$PHASE_START'
 print(json.dumps(d))
 " | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
 ```
@@ -38,13 +42,26 @@ print(json.dumps(d))
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [5/5] · Phase: Finish          │
-│ 启动时间: 从 phase_timings.finish.started_at 读取
+│ 启动时间: $PHASE_START
 └──────────────────────────────────────┘
 ```
 
 ### [Step 1/3] 前置检查
 
-**0. Skill 预检：** 确认 `superpowers:finishing-a-development-branch` 技能可用。若不可用 → 引导 `alloy init` → STOP。
+**0. Skill 预检：** 执行以下检测脚本，确认 `superpowers:finishing-a-development-branch` 可用：
+
+```bash
+MISSING=0
+for skill in "finishing-a-development-branch"; do
+  if test -d ".claude/skills/$skill"; then echo "  ✓ superpowers:$skill（项目级 skill）"
+  elif test -d "$HOME/.claude/skills/$skill"; then echo "  ✓ superpowers:$skill（用户级 skill）"
+  elif for d in "$HOME/.claude/plugins/cache/superpowers-marketplace/superpowers/"*"/skills/$skill"; do test -d "$d" && break; done 2>/dev/null; then echo "  ✓ superpowers:$skill（用户级 plugin）"
+  else echo "  ✗ superpowers:$skill — 未找到"; MISSING=$((MISSING+1)); fi
+done
+if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。请运行: alloy init"; exit 1; fi
+```
+
+检测优先级：项目级 skill → 用户级 skill → 用户级 plugin。任一不可用 → 引导 `alloy init` → STOP。
 
 > phase 是否为 archived？ <检查结果>
 
