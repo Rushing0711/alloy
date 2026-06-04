@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { findActiveChanges, readState, AlloyState } from "../utils/state.js";
 import { color, table } from "../../utils/format.js";
+import { section, check } from "../../utils/output.js";
 
 const ARTIFACTS = [
   "draft",
@@ -22,6 +23,46 @@ function checkArtifacts(changePath: string): Record<string, boolean> {
     }
   }
   return status;
+}
+
+export async function printStatusDetail(
+  projectPath: string,
+  name: string
+): Promise<void> {
+  const changesDir = join(projectPath, "openspec", "changes");
+  const changePath = join(changesDir, name);
+
+  if (!existsSync(changePath)) {
+    console.log(`未找到 change '${name}'`);
+    return;
+  }
+
+  let state: AlloyState;
+  try {
+    state = await readState(changePath);
+  } catch {
+    console.log(`change '${name}' 缺少 .alloy.yaml`);
+    return;
+  }
+
+  const artifacts = checkArtifacts(changePath);
+
+  section("Change 详情");
+  check("阶段", state.phase, "pass");
+  check("Change", name, "pass");
+  check("路径", changePath, "pass");
+  check("创建时间", state.created_at, "pass");
+  check("更新时间", state.updated_at, "pass");
+
+  section("制品状态");
+  for (const a of ARTIFACTS) {
+    check(a, artifacts[a] ? "✓" : "✗", artifacts[a] ? "pass" : "fail");
+  }
+
+  const nextStep = getNextStepDetail(state, artifacts);
+  if (nextStep) {
+    check("下一步", nextStep, "pass");
+  }
 }
 
 export async function statusCommand(

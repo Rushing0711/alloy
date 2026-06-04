@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { statusCommand } from "./commands/status.js";
+import { statusCommand, printStatusDetail } from "./commands/status.js";
 import { doctorCommand, formatDoctorResult } from "./commands/doctor.js";
 import { updateCommand } from "./commands/update.js";
 import { generateCompletion } from "./commands/completion.js";
@@ -258,10 +258,13 @@ async function main() {
         changeName = positionals[1];
       }
 
-      const result = await statusCommand(projectPath, changeName);
       if (useJson) {
+        const result = await statusCommand(projectPath, changeName);
         console.log(JSON.stringify({ output: result }, null, 2));
+      } else if (changeName) {
+        await printStatusDetail(projectPath, changeName);
       } else {
+        const result = await statusCommand(projectPath);
         console.log(result);
       }
       break;
