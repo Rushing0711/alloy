@@ -9,6 +9,7 @@ import {
   spinner,
   stripAnsi,
   stringWidth,
+  statusLine,
 } from "../../src/utils/format.js";
 
 describe("color", () => {
@@ -170,5 +171,33 @@ describe("tableWithBorder", () => {
     );
     expect(result).toContain("A");
     expect(result).toContain("B");
+  });
+});
+
+describe("statusLine", () => {
+  it("生成 success 状态行", () => {
+    const result = statusLine("Node.js", "v18.0.0", "success");
+    expect(result).toContain("Node.js");
+    expect(result).toContain("v18.0.0");
+    expect(result).toContain("✓");
+  });
+
+  it("生成 warning 状态行", () => {
+    const result = statusLine("OpenSpec", "v1.2.0", "warning");
+    expect(result).toContain("OpenSpec");
+    expect(result).toContain("v1.2.0");
+    expect(result).toContain("⚠");
+  });
+
+  it("生成 error 状态行", () => {
+    const result = statusLine("Git", "未安装", "error");
+    expect(result).toContain("Git");
+    expect(result).toContain("未安装");
+    expect(result).toContain("✗");
+  });
+
+  it("正确处理中文字符", () => {
+    const result = statusLine("节点", "v18.0.0", "success");
+    expect(result).toContain("节点");
   });
 });

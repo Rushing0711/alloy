@@ -98,5 +98,24 @@ export function spinner(text: string): Ora {
   return ora({ text, isEnabled: process.stdout.isTTY ?? false }).start();
 }
 
+// ── 状态行 ──
+interface StatusOptions {
+  icon?: string;
+  width?: number;
+}
+
+export function statusLine(label: string, value: string, status: "success" | "warning" | "error", opts?: StatusOptions): string {
+  const icons = {
+    success: "✓",
+    warning: "⚠",
+    error: "✗",
+  };
+
+  const icon = opts?.icon ?? icons[status];
+  const coloredIcon = status === "success" ? pc.green(icon) : status === "warning" ? pc.yellow(icon) : pc.red(icon);
+
+  return `     ${coloredIcon} ${label} ${pc.cyan(value)}`;
+}
+
 // ── 工具函数 ──
 export { default as stripAnsi } from "strip-ansi";
