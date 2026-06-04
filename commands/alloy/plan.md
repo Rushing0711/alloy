@@ -11,20 +11,42 @@ tags: [alloy, workflow]
 
 **调用外部命令或技能前，先输出标题和状态描述，再执行操作。不要只出标题然后沉默。**
 
+**捕获阶段启动时间**（命令调用后第一时间，前置检查之前）：
+```bash
+PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
+```
+
 ## 前置检查
 
 1. 确认 change 目录 `openspec/changes/<name>/` 存在且 `.alloy.yaml` phase 为 `started`（由 `/alloy:start` 完成），否则报错
 2. 若 change 目录存在但 `draft.md` 缺失 → 异常状态，提示重新运行 `/alloy:start`
 3. 若指定 `[name]` 参数但 change 不存在 → "未找到 change '<name>'，请先运行 `/alloy:start <name>` 创建 change"
-4. **Skill / 命令预检：** 确认 `opsx:continue` 和 `superpowers:writing-plans` 均可用。任一不可用 → 引导 `alloy init` → STOP。不在生成过程中才暴露缺失。
+4. **Skill / 命令预检：** 执行以下检测脚本，确认 `opsx:continue` 和 `superpowers:writing-plans` 均可用：
+
+   ```bash
+   MISSING=0
+   for cmd in "opsx/continue"; do
+     if test -f ".claude/commands/$cmd.md"; then echo "  ✓ ${cmd//\//:}（项目级 command）"
+     elif test -f "$HOME/.claude/commands/$cmd.md"; then echo "  ✓ ${cmd//\//:}（用户级 command）"
+     else echo "  ✗ ${cmd//\//:} — 未找到"; MISSING=$((MISSING+1)); fi
+   done
+   for skill in "writing-plans"; do
+     if test -d ".claude/skills/$skill"; then echo "  ✓ superpowers:$skill（项目级 skill）"
+     elif test -d "$HOME/.claude/skills/$skill"; then echo "  ✓ superpowers:$skill（用户级 skill）"
+     elif for d in "$HOME/.claude/plugins/cache/superpowers-marketplace/superpowers/"*"/skills/$skill"; do test -d "$d" && break; done 2>/dev/null; then echo "  ✓ superpowers:$skill（用户级 plugin）"
+     else echo "  ✗ superpowers:$skill — 未找到"; MISSING=$((MISSING+1)); fi
+   done
+   if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。请运行: alloy init"; exit 1; fi
+   ```
+
+   检测优先级：项目级 command → 项目级 skill → 用户级 command → 用户级 skill → 用户级 plugin。任一不可用 → 引导 `alloy init` → STOP。
 
 ---
 
 ## Step 1/3：确认 Change
 
-**记录阶段开始时间**（用于计算耗时）：
+**写入阶段启动时间**（前置检查通过后，使用命令开头捕获的 `PHASE_START`）：
 ```bash
-COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
 TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
 echo "$TIMINGS" | python3 -c "
 import sys,json
@@ -32,7 +54,7 @@ content = sys.stdin.read()
 d = json.loads(content) if content.strip() else {}
 p = d.setdefault('plan',{})
 if 'started_at' not in p:
-    p['started_at']='$COMPLETED_AT'
+    p['started_at']='$PHASE_START'
 print(json.dumps(d))
 " | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
 ```
@@ -40,7 +62,7 @@ print(json.dumps(d))
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [2/5] · Phase: Plan            │
-│ 启动时间: 从 phase_timings.plan.started_at 读取
+│ 启动时间: $PHASE_START
 └──────────────────────────────────────┘
 
 [Step 1/3] 确认 Change
@@ -62,7 +84,7 @@ print(json.dumps(d))
    ```
    若失败 → HARD STOP："项目还不是 git 仓库。请先运行 `/alloy:start` 完成初始化（包含 git init）。"
 
-前置检查通过：draft.md ✓  phase=started ✓  git ✓
+前置检查通过：draft.md ✓  phase=started ✓  git ✓  技能 ✓
 
 **若 phase 不匹配（phase != started）：**
 
