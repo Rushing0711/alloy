@@ -62,12 +62,26 @@ describe("installOpenSpecCli", () => {
     vi.mocked(loadCompat).mockResolvedValue(MOCK_CONFIG);
   });
 
-  it("已安装且兼容时跳过", async () => {
+  it("已安装且兼容时提示用户，拒绝覆盖则跳过", async () => {
     vi.mocked(checkOpenSpec).mockReturnValue({ installed: true, version: "1.5.0", compatible: true });
+    vi.mocked(promptConfirm).mockResolvedValue(false);
 
     const result = await installOpenSpecCli();
     expect(result).toBe("skipped");
+    expect(promptConfirm).toHaveBeenCalledWith("     是否覆盖安装？", false);
     expect(execSync).not.toHaveBeenCalled();
+  });
+
+  it("已安装且兼容，用户确认覆盖时执行安装", async () => {
+    vi.mocked(checkOpenSpec).mockReturnValue({ installed: true, version: "1.5.0", compatible: true });
+    vi.mocked(promptConfirm).mockResolvedValue(true);
+    vi.mocked(execSync).mockReturnValue(Buffer.from(""));
+
+    const result = await installOpenSpecCli();
+    expect(result).toBe("installed");
+    expect(execSync).toHaveBeenCalled();
+    const cmd = vi.mocked(execSync).mock.calls[0][0] as string;
+    expect(cmd).toContain("npm install -g @fission-ai/openspec@1");
   });
 
   it("已安装但不兼容时重新安装", async () => {

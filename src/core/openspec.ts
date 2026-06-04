@@ -42,8 +42,12 @@ export async function installOpenSpecCli(): Promise<"installed" | "skipped" | "f
   const dep = checkOpenSpec(config.compatible.openspec);
 
   if (dep.installed && dep.compatible) {
-    console.log(`     ✓ OpenSpec CLI ${dep.version} 已安装，跳过`);
-    return "skipped";
+    console.log(`     ℹ OpenSpec CLI ${dep.version} 已安装`);
+    const overwrite = await promptConfirm("     是否覆盖安装？", false);
+    if (!overwrite) {
+      console.log(`     ✓ OpenSpec CLI ${dep.version} 已安装，跳过`);
+      return "skipped";
+    }
   }
 
   if (dep.installed && !dep.compatible) {
