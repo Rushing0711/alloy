@@ -6,6 +6,9 @@ import { execSync } from "node:child_process";
 import { checkOpenSpec } from "./health.js";
 import { loadCompat } from "./compat.js";
 import { getPackageRoot } from "../utils/fs.js";
+import { detectCommand, detectSkill } from "./detect-installations.js";
+import { promptConfirm } from "../utils/prompt.js";
+import type { AgentInfo } from "./types.js";
 
 function createCustomProfile(): { env: NodeJS.ProcessEnv; cleanup: () => void } {
   const configHome = mkdtempSync(join(tmpdir(), "alloy-openspec-profile-"));
@@ -62,7 +65,8 @@ export async function installOpenSpecCli(): Promise<"installed" | "skipped" | "f
 
 export async function initOpenSpecProject(
   projectPath: string,
-  scope: "global" | "project"
+  scope: "global" | "project",
+  agents?: AgentInfo[]
 ): Promise<"initialized" | "skipped" | "failed"> {
   const home = process.env.HOME || process.env.USERPROFILE || "~";
   const targetPath = scope === "global" ? home : projectPath;
@@ -76,6 +80,29 @@ export async function initOpenSpecProject(
       return "skipped";
     } catch {
       // 文件不存在，需要初始化
+    }
+  }
+
+  // 检测已有 OpenSpec 安装
+  if (agents && agents.length > 0) {
+    let hasExisting = false;
+    for (const agent of agents) {
+      const cmdDetected = detectCommand("opsx/continue", agent, projectPath);
+      const skillDetected = detectSkill("openspec-explore", agent, projectPath);
+      if (cmdDetected.found || skillDetected.found) {
+        hasExisting = true;
+        const parts: string[] = [];
+        if (cmdDetected.found) parts.push(`commands: ✓（${cmdDetected.path}）`);
+        if (skillDetected.found) parts.push(`skills: ✓（${skillDetected.path}）`);
+        console.log(`     ℹ OpenSpec 已安装（${agent.label}：${parts.join(", ")}）`);
+      }
+    }
+    if (hasExisting) {
+      const overwrite = await promptConfirm("     openspec init 可能覆盖现有文件，继续？", false);
+      if (!overwrite) {
+        console.log("     ✓ 跳过 OpenSpec 项目初始化");
+        return "skipped";
+      }
     }
   }
 
