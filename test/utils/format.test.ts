@@ -260,3 +260,24 @@ describe("progressBar", () => {
     expect(result).toBe("50%");
   });
 });
+
+describe("integration", () => {
+  it("should combine multiple formatting functions", () => {
+    const panel = boxPanel("Test Panel", { title: "Integration" });
+    const tableResult = tableWithBorder(["Name", "Value"], [["Key", "Value"]]);
+    const status = statusLine("Status", "OK", "success");
+    const progress = progressBar(75, 100);
+
+    expect(panel).toBeDefined();
+    expect(tableResult).toBeDefined();
+    expect(status).toBeDefined();
+    expect(progress).toBeDefined();
+
+    // Verify they can be concatenated
+    const combined = `${panel}\n${tableResult}\n${status}\n${progress}`;
+    expect(combined).toContain("Test Panel");
+    expect(combined).toContain("Name");
+    expect(combined).toContain("Status");
+    expect(combined).toContain("75%");
+  });
+});
