@@ -3,6 +3,8 @@ import { join, resolve } from "node:path";
 import { getPackageRoot } from "../utils/fs.js";
 import type { DeployOptions } from "./types.js";
 import { getCommandTargetDir } from "./agents.js";
+import { detectCommand } from "./detect-installations.js";
+import { promptConfirm } from "../utils/prompt.js";
 
 export async function deployCommands(opts: DeployOptions): Promise<string[]> {
   const deployed: string[] = [];
@@ -14,6 +16,21 @@ export async function deployCommands(opts: DeployOptions): Promise<string[]> {
   const entries = await readdir(colonSourceDir, { withFileTypes: true });
 
   for (const agent of opts.targetAgents) {
+    // 检测已有 Alloy commands
+    const detected = detectCommand("alloy/start", agent, opts.projectPath);
+    if (detected.found) {
+      const locationLabel = ({
+        "project-command": "项目级",
+        "user-command": "用户级",
+      } as Record<string, string>)[detected.location!] || detected.location;
+      console.log(`     ℹ Alloy commands 已部署（${locationLabel}：${detected.path}）`);
+      const overwrite = await promptConfirm(`     是否覆盖 ${agent.label} 的 Alloy commands？`, false);
+      if (!overwrite) {
+        console.log(`     ✓ 跳过 ${agent.label} 的 Alloy commands 部署`);
+        continue;
+      }
+    }
+
     // Codex: project 模式跳过
     if (agent.globalOnly && opts.scope === "project") {
       console.log(`     ⚠ Codex commands 仅全局安装有效，跳过`);

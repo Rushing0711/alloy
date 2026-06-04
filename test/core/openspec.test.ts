@@ -22,6 +22,13 @@ vi.mock("../../src/core/compat.js", () => ({
 vi.mock("../../src/utils/fs.js", () => ({
   getPackageRoot: vi.fn(),
 }));
+vi.mock("../../src/core/detect-installations.js", () => ({
+  detectCommand: vi.fn(),
+  detectSkill: vi.fn(),
+}));
+vi.mock("../../src/utils/prompt.js", () => ({
+  promptConfirm: vi.fn(),
+}));
 
 import { execSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
@@ -29,7 +36,10 @@ import { mkdtempSync } from "node:fs";
 import { checkOpenSpec } from "../../src/core/health.js";
 import { loadCompat } from "../../src/core/compat.js";
 import { getPackageRoot } from "../../src/utils/fs.js";
+import { detectCommand, detectSkill } from "../../src/core/detect-installations.js";
+import { promptConfirm } from "../../src/utils/prompt.js";
 import { installOpenSpecCli, initOpenSpecProject } from "../../src/core/openspec.js";
+import type { AgentInfo } from "../../src/core/types.js";
 
 const MOCK_CONFIG = {
   compatible: {
@@ -126,5 +136,90 @@ describe("initOpenSpecProject", () => {
 
     const result = await initOpenSpecProject("/fake/project", "project");
     expect(result).toBe("failed");
+  });
+});
+
+const claudeAgent: AgentInfo = {
+  id: "claude-code",
+  label: "Claude Code",
+  supportsColonCommands: true,
+  commandsDir: ".claude/commands/",
+};
+
+describe("initOpenSpecProject — 检测逻辑", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(execSync).mockReturnValue(Buffer.from(""));
+    vi.mocked(mkdtempSync).mockReturnValue("/tmp/alloy-openspec-profile-XXXXX");
+    vi.mocked(readFile).mockRejectedValue(new Error("ENOENT"));
+    vi.mocked(detectCommand).mockReturnValue({ found: false, location: null, path: null, version: null });
+    vi.mocked(detectSkill).mockReturnValue({ found: false, location: null, path: null, version: null });
+  });
+
+  it("未传 agents 时跳过检测", async () => {
+    const result = await initOpenSpecProject("/fake/project", "project");
+
+    expect(result).toBe("initialized");
+    expect(detectCommand).not.toHaveBeenCalled();
+    expect(detectSkill).not.toHaveBeenCalled();
+  });
+
+  it("agents 为空数组时跳过检测", async () => {
+    const result = await initOpenSpecProject("/fake/project", "project", []);
+
+    expect(result).toBe("initialized");
+    expect(detectCommand).not.toHaveBeenCalled();
+  });
+
+  it("未检测到已有安装时正常初始化", async () => {
+    const result = await initOpenSpecProject("/fake/project", "project", [claudeAgent]);
+
+    expect(result).toBe("initialized");
+    expect(detectCommand).toHaveBeenCalledWith("opsx/continue", claudeAgent, "/fake/project");
+    expect(detectSkill).toHaveBeenCalledWith("openspec-explore", claudeAgent, "/fake/project");
+    expect(promptConfirm).not.toHaveBeenCalled();
+  });
+
+  it("检测到已有安装且用户拒绝覆盖时返回 skipped", async () => {
+    vi.mocked(detectCommand).mockReturnValue({
+      found: true, location: "project-command", path: "/fake/project/.claude/commands/opsx/continue.md", version: null,
+    });
+    vi.mocked(promptConfirm).mockResolvedValue(false);
+
+    const result = await initOpenSpecProject("/fake/project", "project", [claudeAgent]);
+
+    expect(result).toBe("skipped");
+    expect(promptConfirm).toHaveBeenCalledWith("     openspec init 可能覆盖现有文件，继续？", false);
+    expect(execSync).not.toHaveBeenCalled();
+  });
+
+  it("检测到已有安装且用户确认覆盖时继续初始化", async () => {
+    vi.mocked(detectSkill).mockReturnValue({
+      found: true, location: "user-skill", path: "/home/.claude/skills/openspec-explore", version: null,
+    });
+    vi.mocked(promptConfirm).mockResolvedValue(true);
+
+    const result = await initOpenSpecProject("/fake/project", "project", [claudeAgent]);
+
+    expect(result).toBe("initialized");
+    expect(execSync).toHaveBeenCalled();
+  });
+
+  it("多 agent 时遍历所有 agent 检测", async () => {
+    const cursorAgent: AgentInfo = {
+      id: "cursor", label: "Cursor", supportsColonCommands: false, commandsDir: ".cursor/commands/",
+    };
+    vi.mocked(detectCommand).mockImplementation((_name, agent) => {
+      if (agent.id === "cursor") {
+        return { found: true, location: "project-command", path: "/fake/project/.cursor/commands/opsx/continue.md", version: null };
+      }
+      return { found: false, location: null, path: null, version: null };
+    });
+    vi.mocked(promptConfirm).mockResolvedValue(false);
+
+    const result = await initOpenSpecProject("/fake/project", "project", [claudeAgent, cursorAgent]);
+
+    expect(result).toBe("skipped");
+    expect(detectCommand).toHaveBeenCalledTimes(2);
   });
 });

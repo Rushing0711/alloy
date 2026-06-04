@@ -7,8 +7,16 @@ import { tmpdir } from "node:os";
 vi.mock("../../src/utils/fs.js", () => ({
   getPackageRoot: vi.fn(),
 }));
+vi.mock("../../src/core/detect-installations.js", () => ({
+  detectCommand: vi.fn(),
+}));
+vi.mock("../../src/utils/prompt.js", () => ({
+  promptConfirm: vi.fn(),
+}));
 
 import { getPackageRoot } from "../../src/utils/fs.js";
+import { detectCommand } from "../../src/core/detect-installations.js";
+import { promptConfirm } from "../../src/utils/prompt.js";
 import { deployCommands, deploySchema } from "../../src/core/skills.js";
 import type { DeployOptions } from "../../src/core/types.js";
 
@@ -35,6 +43,7 @@ describe("deployCommands", () => {
     }
 
     vi.mocked(getPackageRoot).mockReturnValue(join(tmpDir, "package"));
+    vi.mocked(detectCommand).mockReturnValue({ found: false, location: null, path: null, version: null });
   });
 
   afterEach(async () => {
@@ -102,6 +111,53 @@ describe("deployCommands", () => {
     const dashFiles = deployed.filter(p => p.includes(".cursor/commands/"));
     expect(colonFiles.length).toBe(8);
     expect(dashFiles.length).toBe(8);
+  });
+
+  it("检测到已有安装且用户拒绝覆盖时跳过该 agent", async () => {
+    vi.mocked(detectCommand).mockReturnValue({
+      found: true, location: "project-command", path: `${projectPath}/.claude/commands/alloy/start.md`, version: null,
+    });
+    vi.mocked(promptConfirm).mockResolvedValue(false);
+
+    const opts: DeployOptions = {
+      scope: "project",
+      injectClaudeMd: false,
+      projectPath,
+      targetAgents: [{ id: "claude-code", label: "CC", supportsColonCommands: true, commandsDir: ".claude/commands/" }],
+    };
+    const deployed = await deployCommands(opts);
+    expect(deployed.length).toBe(0);
+    expect(promptConfirm).toHaveBeenCalledWith("     是否覆盖 CC 的 Alloy commands？", false);
+  });
+
+  it("检测到已有安装且用户确认覆盖时继续部署", async () => {
+    vi.mocked(detectCommand).mockReturnValue({
+      found: true, location: "user-command", path: "/home/.claude/commands/alloy/start.md", version: null,
+    });
+    vi.mocked(promptConfirm).mockResolvedValue(true);
+
+    const opts: DeployOptions = {
+      scope: "project",
+      injectClaudeMd: false,
+      projectPath,
+      targetAgents: [{ id: "claude-code", label: "CC", supportsColonCommands: true, commandsDir: ".claude/commands/" }],
+    };
+    const deployed = await deployCommands(opts);
+    expect(deployed.length).toBe(8);
+  });
+
+  it("未检测到已有安装时正常部署", async () => {
+    vi.mocked(detectCommand).mockReturnValue({ found: false, location: null, path: null, version: null });
+
+    const opts: DeployOptions = {
+      scope: "project",
+      injectClaudeMd: false,
+      projectPath,
+      targetAgents: [{ id: "claude-code", label: "CC", supportsColonCommands: true, commandsDir: ".claude/commands/" }],
+    };
+    const deployed = await deployCommands(opts);
+    expect(deployed.length).toBe(8);
+    expect(promptConfirm).not.toHaveBeenCalled();
   });
 });
 

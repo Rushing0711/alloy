@@ -149,8 +149,8 @@ describe("init", () => {
 
       expect(mockDetectEnv).toHaveBeenCalled();
       expect(mockInstallOpenSpecCli).toHaveBeenCalled();
-      expect(mockInitOpenSpecProject).toHaveBeenCalledWith(tmpDir, "project");
-      expect(mockInstallSuperpowers).toHaveBeenCalledWith("project");
+      expect(mockInitOpenSpecProject).toHaveBeenCalledWith(tmpDir, "project", []);
+      expect(mockInstallSuperpowers).toHaveBeenCalledWith("project", undefined, tmpDir);
       expect(mockDeploySchema).toHaveBeenCalled();
       expect(mockInjectClaudeMd).toHaveBeenCalled();
       expect(mockRunHealthCheck).toHaveBeenCalled();

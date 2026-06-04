@@ -5,9 +5,14 @@ import { join } from "node:path";
 import { checkSuperpowers } from "./health.js";
 import { loadCompat } from "./compat.js";
 import { getPackageRoot } from "../utils/fs.js";
+import { detectSkill } from "./detect-installations.js";
+import { promptConfirm } from "../utils/prompt.js";
+import type { AgentInfo } from "./types.js";
 
 export async function installSuperpowers(
-  scope: "global" | "project"
+  scope: "global" | "project",
+  agent?: AgentInfo,
+  projectPath?: string
 ): Promise<"installed" | "skipped" | "failed"> {
   const packageDir = getPackageRoot();
   const config = await loadCompat(packageDir);
@@ -24,6 +29,45 @@ export async function installSuperpowers(
     console.log(
       `     ⚠ Superpowers${versionInfo} 不满足要求 ${config.compatible.superpowers}，重新安装...`
     );
+  }
+
+  // 检测已有安装（含版本比较）
+  if (agent && projectPath) {
+    const detected = detectSkill("brainstorming", agent, projectPath);
+    if (detected.found) {
+      const locationLabel = ({
+        "project-skill": "项目级 skill",
+        "user-skill": "用户级 skill",
+        "user-plugin": "用户级 plugin",
+      } as Record<string, string>)[detected.location!] || detected.location;
+
+      const versionInfo = detected.version ? ` v${detected.version}` : "";
+      console.log(`     ℹ Superpowers 已安装（${locationLabel}${versionInfo}）`);
+
+      // 版本比较（如果有版本信息）
+      if (detected.version) {
+        const semver = (await import("semver")).default;
+        const required = config.compatible.superpowers;
+        const satisfies = semver.satisfies(detected.version, required);
+        if (!satisfies) {
+          console.log(`     ⚠ 版本 v${detected.version} 不满足要求 ${required}，需要升级`);
+          // 不提示，直接继续安装
+        } else {
+          const overwrite = await promptConfirm("     是否覆盖安装？", false);
+          if (!overwrite) {
+            console.log("     ✓ 跳过 Superpowers 安装");
+            return "skipped";
+          }
+        }
+      } else {
+        // 无版本信息，只做存在性提示
+        const overwrite = await promptConfirm("     是否覆盖安装？", false);
+        if (!overwrite) {
+          console.log("     ✓ 跳过 Superpowers 安装");
+          return "skipped";
+        }
+      }
+    }
   }
 
   // 尝试网络安装
