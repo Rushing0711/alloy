@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { findActiveChanges, readState, AlloyState } from "../utils/state.js";
-import { color } from "../../utils/format.js";
+import { color, table } from "../../utils/format.js";
 
 const ARTIFACTS = [
   "draft",
@@ -43,7 +43,7 @@ async function overviewMode(changesDir: string): Promise<string> {
     return "无活跃 change。使用 /alloy-start <topic> 开始新工作流。";
   }
 
-  const lines: string[] = [color.bold("活跃 Change：")];
+  const rows: string[][] = [];
   const nextSteps: string[] = [];
 
   for (const [name, state] of changes) {
@@ -51,15 +51,18 @@ async function overviewMode(changesDir: string): Promise<string> {
     const artifactStatus = ARTIFACTS.map(
       (a) => `${a} ${artifacts[a] ? color.green("✓") : color.red("✗")}`
     ).join(" ");
-    lines.push(
-      `  ${name.padEnd(20)} ${color.cyan(state.phase.padEnd(10))} artifacts: ${artifactStatus}`
-    );
+    rows.push([name, color.cyan(state.phase), artifactStatus]);
     const step = getNextStepSimple(state, artifacts, name);
     if (step) nextSteps.push(step);
   }
 
+  const lines: string[] = [
+    color.bold("活跃 Change："),
+    table(["名称", "阶段", "制品"], rows),
+  ];
+
   if (nextSteps.length > 0) {
-    lines.push(`\n下一步：${nextSteps.join("；")}`);
+    lines.push(`下一步：${nextSteps.join("；")}`);
   }
 
   return lines.join("\n");
