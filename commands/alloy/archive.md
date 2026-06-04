@@ -11,6 +11,11 @@ tags: [alloy, workflow]
 
 **核心原则：先锁定文档证据链，再合入代码。** archive 只负责 spec 归档，代码合入由后续的 `/alloy:finish` 完成。
 
+**捕获阶段启动时间**（命令调用后第一时间，前置检查之前）：
+```bash
+PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
+```
+
 **什么算"archive 操作不当"（反例）：**
 - verify.md 的 Overall Decision 是 FAIL 但仍然继续归档——阻塞问题被无视
 - 跳过 archive 直接手动 merge——Delta Spec 没有被同步，主 spec 落后于代码
@@ -22,9 +27,8 @@ tags: [alloy, workflow]
 
 ### [Step 1/3] 前置检查
 
-**记录阶段开始时间：**
+**写入阶段启动时间**（前置检查通过后，使用命令开头捕获的 `PHASE_START`）：
 ```bash
-COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
 TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
 echo "$TIMINGS" | python3 -c "
 import sys,json
@@ -32,7 +36,7 @@ content = sys.stdin.read()
 d = json.loads(content) if content.strip() else {}
 p = d.setdefault('archive',{})
 if 'started_at' not in p:
-    p['started_at']='$COMPLETED_AT'
+    p['started_at']='$PHASE_START'
 print(json.dumps(d))
 " | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
 ```
@@ -40,9 +44,23 @@ print(json.dumps(d))
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [4/5] · Phase: Archive         │
-│ 启动时间: 从 phase_timings.archive.started_at 读取
+│ 启动时间: $PHASE_START
 └──────────────────────────────────────┘
 ```
+
+**0. Skill 预检：** 执行以下检测脚本，确认 `opsx:archive` 可用：
+
+```bash
+MISSING=0
+for cmd in "opsx/archive"; do
+  if test -f ".claude/commands/$cmd.md"; then echo "  ✓ ${cmd//\//:}（项目级 command）"
+  elif test -f "$HOME/.claude/commands/$cmd.md"; then echo "  ✓ ${cmd//\//:}（用户级 command）"
+  else echo "  ✗ ${cmd//\//:} — 未找到"; MISSING=$((MISSING+1)); fi
+done
+if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。请运行: alloy init"; exit 1; fi
+```
+
+检测优先级：项目级 command → 用户级 command。任一不可用 → 引导 `alloy init` → STOP。
 
 **1. phase 检查：**
 
