@@ -10,6 +10,7 @@ import { KNOWN_AGENTS } from "../../core/agents.js";
 import type { AgentInfo, DeployOptions } from "../../core/types.js";
 import { getPackageRoot } from "../../utils/fs.js";
 import { promptSelect, promptMultiSelect } from "../../utils/prompt.js";
+import { color } from "../../utils/format.js";
 
 export async function selectScope(passedScope?: string): Promise<"global" | "project"> {
   if (passedScope) return passedScope as "global" | "project";
@@ -52,7 +53,7 @@ async function ensureGitignore(projectPath: string): Promise<void> {
 
   const block = `\n### Alloy + Superpowers 运行时 ###\n${missing.join("\n")}\n`;
   await writeFile(gitignorePath, content + block, "utf-8");
-  console.log(`     ✓ .gitignore → 已追加 ${missing.length} 条规则`);
+  console.log(`     ${color.green("✓")} .gitignore → 已追加 ${missing.length} 条规则`);
 }
 
 export async function initCommand(opts: InitOptions): Promise<void> {
@@ -60,12 +61,12 @@ export async function initCommand(opts: InitOptions): Promise<void> {
 
   // 1. 环境检测
   const env = detectEnv();
-  console.log(`     Node.js ${env.nodeVersion} ✓`);
-  console.log(`     git ${env.gitInstalled ? "✓" : "✗ 未安装"}`);
-  console.log(`     Claude Code ${env.claudeCodeInstalled ? "✓" : "⚠ 未检测到 CLI，请确保已安装"}`);
+  console.log(`     Node.js ${color.cyan(env.nodeVersion)} ${color.green("✓")}`);
+  console.log(`     git ${env.gitInstalled ? color.green("✓") : color.red("✗ 未安装")}`);
+  console.log(`     Claude Code ${env.claudeCodeInstalled ? color.green("✓") : color.yellow("⚠ 未检测到 CLI，请确保已安装")}`);
 
   if (!env.gitInstalled) {
-    console.error("\n  ❌ 缺少必要依赖，请先安装 git");
+    console.error("\n  " + color.red("❌ 缺少必要依赖，请先安装 git"));
     process.exit(1);
   }
 
@@ -73,9 +74,9 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   console.log("\n  📥 OpenSpec CLI...");
   const openspecResult = await installOpenSpecCli();
   if (openspecResult === "installed") {
-    console.log("     ✓ @fission-ai/openspec@1 已安装");
+    console.log(`     ${color.green("✓")} @fission-ai/openspec@1 已安装`);
   } else if (openspecResult === "failed") {
-    console.error("     ✗ OpenSpec CLI 安装失败");
+    console.error(`     ${color.red("✗")} OpenSpec CLI 安装失败`);
     process.exit(1);
   }
   // "skipped" — 函数内部已输出跳过信息
@@ -84,7 +85,7 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   console.log("\n  📂 初始化 OpenSpec 项目结构...");
   const initResult = await initOpenSpecProject(opts.projectPath, opts.scope, opts.targetAgents);
   if (initResult === "failed") {
-    console.error("     ✗ OpenSpec 项目初始化失败");
+    console.error(`     ${color.red("✗")} OpenSpec 项目初始化失败`);
     process.exit(1);
   }
 
@@ -93,30 +94,28 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   const claudeAgent = opts.targetAgents.find(a => a.id === "claude-code");
   const superpowersResult = await installSuperpowers(opts.scope, claudeAgent, opts.projectPath);
   if (superpowersResult === "installed") {
-    console.log("     ✓ obra/superpowers@5 已安装");
-  } else if (superpowersResult === "skipped") {
-    console.log("     ✓ Superpowers 已安装，跳过");
-  } else {
-    console.log("     ⚠ Superpowers 安装失败，请稍后手动运行 alloy init 重试");
+    console.log(`     ${color.green("✓")} obra/superpowers@5 已安装`);
+  } else if (superpowersResult === "failed") {
+    console.log(`     ${color.yellow("⚠")} Superpowers 安装失败，请稍后手动运行 alloy init 重试`);
   }
 
   // 5. 部署 Alloy commands
   console.log("\n  🚀 部署 Alloy commands...");
   if (opts.targetAgents.length === 0) {
-    console.log("     ⚠ 未选择任何 AI 工具，跳过 command 部署");
+    console.log(`     ${color.yellow("⚠")} 未选择任何 AI 工具，跳过 command 部署`);
   } else {
     try {
       const paths = await deployCommands(opts);
       for (const p of paths) {
-        console.log(`     ✓ ${p}`);
+        console.log(`     ${color.green("✓")} ${p}`);
       }
     } catch (e) {
-      console.error(`     ✗ command 部署失败: ${(e as Error).message}`);
+      console.error(`     ${color.red("✗")} command 部署失败: ${(e as Error).message}`);
       process.exit(1);
     }
   }
   const schemaPath = await deploySchema(opts);
-  console.log(`     ✓ 项目 schema → ${schemaPath}`);
+  console.log(`     ${color.green("✓")} 项目 schema → ${schemaPath}`);
 
   // 6. 确保 .gitignore 包含 Alloy 运行时目录
   await ensureGitignore(opts.projectPath);
@@ -124,7 +123,7 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   // 7. 注入 CLAUDE.md
   const injected = await injectClaudeMd(opts);
   if (injected) {
-    console.log("     ✓ CLAUDE.md → 已追加 Alloy 工作流提示");
+    console.log(`     ${color.green("✓")} CLAUDE.md → 已追加 Alloy 工作流提示`);
   }
 
   // 8. 兼容性检查
@@ -132,9 +131,14 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   const packageDir = getPackageRoot();
   const results = await runHealthCheck(packageDir, opts.projectPath, opts.scope);
   for (const r of results) {
-    const mark = r.status === "pass" ? "✓" : r.status === "warn" ? "⚠️" : "✗";
+    const mark =
+      r.status === "pass"
+        ? color.green("✓")
+        : r.status === "warn"
+          ? color.yellow("⚠️")
+          : color.red("✗");
     console.log(
-      `     ${mark} ${r.name} ${r.current}（要求 ${r.required}）`
+      `     ${mark} ${r.name} ${color.cyan(r.current)}（要求 ${color.dim(r.required)}）`
     );
   }
 
@@ -173,17 +177,17 @@ export async function initCommand(opts: InitOptions): Promise<void> {
           rcContent.trimEnd() + block,
           "utf-8"
         );
-        console.log(`     ✓ shell 补全已注册 → ${rcFile}`);
+        console.log(`     ${color.green("✓")} shell 补全已注册 → ${rcFile}`);
       } else {
-        console.log("     ✓ shell 补全已存在，跳过");
+        console.log(`     ${color.green("✓")} shell 补全已存在，跳过`);
       }
     } else {
-      console.log("     ⚠ 未检测到 bash/zsh，跳过补全注册");
+      console.log(`     ${color.yellow("⚠")} 未检测到 bash/zsh，跳过补全注册`);
     }
   } catch {
     // 注册失败不阻断 init，静默忽略
   }
 
-  console.log("\n  ✅ Alloy 就绪！");
+  console.log("\n  " + color.green("✅ Alloy 就绪！"));
   console.log("     在 Claude Code 中输入 /alloy:start <topic> 开始工作\n");
 }
