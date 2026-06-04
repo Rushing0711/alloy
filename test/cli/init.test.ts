@@ -262,7 +262,7 @@ describe("init", () => {
       await initCommand(defaultOpts);
 
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("✓ Node.js"));
-      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("⚠️ OpenSpec"));
+      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("⚠ OpenSpec"));
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("✗ Git"));
     });
   });
