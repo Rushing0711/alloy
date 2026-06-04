@@ -89,17 +89,18 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   }
 
   // 4. 安装 Superpowers
+  console.log("\n  " + color.bold("安装 Superpowers..."));
   const claudeAgent = opts.targetAgents.find(a => a.id === "claude-code");
-  const spSpinner = spinner(color.bold("安装 Superpowers..."));
   const superpowersResult = await installSuperpowers(opts.scope, claudeAgent, opts.projectPath);
-  if (superpowersResult === "installed") {
-    spSpinner.succeed(color.bold("obra/superpowers@5 已安装"));
-  } else if (superpowersResult === "failed") {
-    spSpinner.fail(color.bold("Superpowers 安装失败，请稍后手动运行 alloy init 重试"));
-  } else {
-    spSpinner.stop();
+  if (superpowersResult.status === "installed") {
+    console.log(`     ${color.green("✓")} Superpowers 已安装`);
+  } else if (superpowersResult.status === "failed") {
+    console.log(`     ${color.red("✗")} Superpowers 安装失败，请稍后手动运行 alloy init 重试`);
+  } else if (superpowersResult.status === "skipped") {
+    const versionInfo = superpowersResult.version ? ` v${superpowersResult.version}` : "";
+    const locationInfo = superpowersResult.location ? `（${superpowersResult.location}）` : "";
+    console.log(`     ${color.green("✓")} Superpowers${versionInfo} 已安装${locationInfo}，跳过`);
   }
-  // "skipped" — installSuperpowers() 内部已输出跳过信息
 
   // 5. 部署 Alloy commands
   console.log("\n  " + color.bold("部署 Alloy commands..."));

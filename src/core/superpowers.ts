@@ -2,34 +2,26 @@ import { execSync } from "node:child_process";
 import { cpSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { checkSuperpowers } from "./health.js";
 import { loadCompat } from "./compat.js";
 import { getPackageRoot } from "../utils/fs.js";
 import { detectSkill } from "./detect-installations.js";
 import { promptConfirm } from "../utils/prompt.js";
 import type { AgentInfo } from "./types.js";
 
+export interface SuperpowersInstallResult {
+  status: "installed" | "skipped" | "failed";
+  version?: string | null;
+  location?: string | null;
+  requiresUpgrade?: boolean;
+}
+
 export async function installSuperpowers(
   scope: "global" | "project",
   agent?: AgentInfo,
   projectPath?: string
-): Promise<"installed" | "skipped" | "failed"> {
+): Promise<SuperpowersInstallResult> {
   const packageDir = getPackageRoot();
   const config = await loadCompat(packageDir);
-  const dep = await checkSuperpowers(config.compatible.superpowers);
-
-  if (dep.installed && dep.compatible) {
-    const versionInfo = dep.version ? ` v${dep.version}` : "";
-    console.log(`     ✓ Superpowers${versionInfo} 已安装，跳过`);
-    return "skipped";
-  }
-
-  if (dep.installed && !dep.compatible) {
-    const versionInfo = dep.version ? ` v${dep.version}` : "";
-    console.log(
-      `     ⚠ Superpowers${versionInfo} 不满足要求 ${config.compatible.superpowers}，重新安装...`
-    );
-  }
 
   // 检测已有安装（含版本比较）
   if (agent && projectPath) {
@@ -41,30 +33,26 @@ export async function installSuperpowers(
         "user-plugin": "用户级 plugin",
       } as Record<string, string>)[detected.location!] || detected.location;
 
-      const versionInfo = detected.version ? ` v${detected.version}` : "";
-      console.log(`     ℹ Superpowers 已安装（${locationLabel}${versionInfo}）`);
-
       // 版本比较（如果有版本信息）
       if (detected.version) {
         const semver = (await import("semver")).default;
         const required = config.compatible.superpowers;
         const satisfies = semver.satisfies(detected.version, required);
         if (!satisfies) {
-          console.log(`     ⚠ 版本 v${detected.version} 不满足要求 ${required}，需要升级`);
-          // 不提示，直接继续安装
+          // 版本不满足要求，需要升级，不提示直接继续安装
+          // 继续执行后面的安装逻辑
         } else {
+          // 版本满足要求，提示用户是否覆盖安装
           const overwrite = await promptConfirm("     是否覆盖安装？", false);
           if (!overwrite) {
-            console.log("     ✓ 跳过 Superpowers 安装");
-            return "skipped";
+            return { status: "skipped", version: detected.version, location: locationLabel };
           }
         }
       } else {
         // 无版本信息，只做存在性提示
         const overwrite = await promptConfirm("     是否覆盖安装？", false);
         if (!overwrite) {
-          console.log("     ✓ 跳过 Superpowers 安装");
-          return "skipped";
+          return { status: "skipped", location: locationLabel };
         }
       }
     }
@@ -79,35 +67,29 @@ export async function installSuperpowers(
       stdio: "pipe",
       cwd: process.cwd(),
     });
-    return "installed";
+    return { status: "installed" };
   } catch {
-    console.log("     ⚠ 网络安装失败，从本地 vendor 副本部署...");
     return fallbackInstall(scope);
   }
 }
 
-function fallbackInstall(scope: "global" | "project"): "installed" | "failed" {
+function fallbackInstall(scope: "global" | "project"): SuperpowersInstallResult {
   try {
     const packageDir = getPackageRoot();
     const vendorSkills = join(packageDir, "vendor", "superpowers", "skills");
 
     if (!existsSync(vendorSkills)) {
-      console.log("     ✗ vendor/superpowers/skills/ 不存在，兜底安装失败");
-      return "failed";
+      return { status: "failed" };
     }
 
     const targetDir = scope === "global"
       ? join(homedir(), ".claude", "skills")
       : join(process.cwd(), ".claude", "skills");
 
-    console.log(`     → 从 vendor 复制到 ${targetDir}`);
-
     cpSync(vendorSkills, targetDir, { recursive: true });
 
-    console.log("     ✓ Superpowers 从本地副本部署完成");
-    return "installed";
+    return { status: "installed" };
   } catch (err) {
-    console.log(`     ✗ 兜底安装失败: ${err instanceof Error ? err.message : err}`);
-    return "failed";
+    return { status: "failed" };
   }
 }

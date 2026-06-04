@@ -106,7 +106,7 @@ describe("initOpenSpecProject", () => {
     vi.mocked(readFile).mockRejectedValue(new Error("ENOENT"));
   });
 
-  it("project scope — config.yaml 不存在时执行初始化", async () => {
+  it("project scope — 无 agents 时直接执行初始化", async () => {
     const result = await initOpenSpecProject("/fake/project", "project");
     expect(result).toBe("initialized");
     expect(execSync).toHaveBeenCalled();
@@ -114,13 +114,6 @@ describe("initOpenSpecProject", () => {
     expect(cmd).toContain("openspec init");
     expect(cmd).toContain("--tools claude");
     expect(cmd).toContain("--profile custom");
-  });
-
-  it("project scope — config.yaml 已存在时跳过", async () => {
-    vi.mocked(readFile).mockResolvedValue("schema: alloy\n");
-
-    const result = await initOpenSpecProject("/fake/project", "project");
-    expect(result).toBe("skipped");
   });
 
   it("global scope 使用 HOME 路径", async () => {

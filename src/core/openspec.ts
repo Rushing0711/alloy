@@ -72,18 +72,7 @@ export async function initOpenSpecProject(
   const targetPath = scope === "global" ? home : projectPath;
   const label = scope === "global" ? "全局" : "项目";
 
-  if (scope === "project") {
-    const configPath = join(projectPath, "openspec", "config.yaml");
-    try {
-      await readFile(configPath, "utf-8");
-      console.log(`     ✓ ${label}已初始化 OpenSpec，跳过`);
-      return "skipped";
-    } catch {
-      // 文件不存在，需要初始化
-    }
-  }
-
-  // 检测已有 OpenSpec 安装
+  // 检测已有 OpenSpec 安装（按每个 agent 独立检测）
   if (agents && agents.length > 0) {
     let hasExisting = false;
     for (const agent of agents) {

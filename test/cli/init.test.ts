@@ -76,7 +76,7 @@ describe("init", () => {
     mockRunHealthCheck.mockResolvedValue([]);
     mockInstallOpenSpecCli.mockResolvedValue("installed");
     mockInitOpenSpecProject.mockResolvedValue("success");
-    mockInstallSuperpowers.mockResolvedValue("installed");
+    mockInstallSuperpowers.mockResolvedValue({ status: "installed" });
     mockDeployCommands.mockResolvedValue([]);
     mockDeploySchema.mockResolvedValue(join(tmpDir, "openspec/schemas/alloy"));
     mockInjectClaudeMd.mockResolvedValue(false);
@@ -236,12 +236,12 @@ describe("init", () => {
     });
 
     it("Superpowers 安装失败时不 exit", async () => {
-      mockInstallSuperpowers.mockResolvedValue("failed");
+      mockInstallSuperpowers.mockResolvedValue({ status: "failed" });
 
       await initCommand(defaultOpts);
 
       expect(processExitSpy).not.toHaveBeenCalled();
-      expect(mockSpinnerInstance.fail).toHaveBeenCalledWith(expect.stringContaining("Superpowers 安装失败"));
+      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("Superpowers 安装失败"));
     });
 
     it("injectClaudeMd 为 true 时输出提示", async () => {
