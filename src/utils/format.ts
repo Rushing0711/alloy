@@ -10,24 +10,8 @@ export const color = pc;
 export { default as stringWidth } from "string-width";
 
 // ── Box 面板 ──
-function isUnicodeSupported(): boolean {
-  if ("CI" in process.env) return false;
-  if (process.platform === "win32") return false;
-  const term = process.env.TERM;
-  if (term && term.includes("256color")) return true;
-  const lang = process.env.LANG || "";
-  if (lang.includes("UTF-8") || lang.includes("utf8")) return true;
-  return true;
-}
-
-export interface BoxOptions extends BoxenOptions {}
-
-export function box(text: string, opts?: BoxOptions): string {
-  return boxen(text, {
-    padding: 1,
-    borderStyle: isUnicodeSupported() ? "round" : "single",
-    ...opts,
-  });
+export function box(text: string, opts?: BoxenOptions): string {
+  return boxen(text, { padding: 1, ...opts });
 }
 
 // ── 无边框表格 ──

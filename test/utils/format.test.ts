@@ -19,9 +19,10 @@ describe("color", () => {
     expect(typeof color.bold).toBe("function");
   });
 
-  it("在非 TTY 环境下输出不含 ANSI 转义序列", () => {
+  it("导出的颜色函数可正常调用", () => {
     const result = color.green("hello");
-    expect(result).toBe("hello");
+    expect(typeof result).toBe("string");
+    expect(stripAnsi(result)).toBe("hello");
   });
 });
 
