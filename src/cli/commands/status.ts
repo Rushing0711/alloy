@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { findActiveChanges, readState, AlloyState } from "../utils/state.js";
+import { color } from "../../utils/format.js";
 
 const ARTIFACTS = [
   "draft",
@@ -42,16 +43,16 @@ async function overviewMode(changesDir: string): Promise<string> {
     return "无活跃 change。使用 /alloy-start <topic> 开始新工作流。";
   }
 
-  const lines: string[] = ["活跃 Change："];
+  const lines: string[] = [color.bold("活跃 Change：")];
   const nextSteps: string[] = [];
 
   for (const [name, state] of changes) {
     const artifacts = checkArtifacts(join(changesDir, name));
     const artifactStatus = ARTIFACTS.map(
-      (a) => `${a} ${artifacts[a] ? "✓" : "✗"}`
+      (a) => `${a} ${artifacts[a] ? color.green("✓") : color.red("✗")}`
     ).join(" ");
     lines.push(
-      `  ${name.padEnd(20)} ${state.phase.padEnd(10)} artifacts: ${artifactStatus}`
+      `  ${name.padEnd(20)} ${color.cyan(state.phase.padEnd(10))} artifacts: ${artifactStatus}`
     );
     const step = getNextStepSimple(state, artifacts, name);
     if (step) nextSteps.push(step);
@@ -82,14 +83,14 @@ async function detailMode(
 
   const artifacts = checkArtifacts(changePath);
   const lines: string[] = [
-    `阶段:    ${state.phase}`,
-    `Change:  ${name}`,
-    `路径:    ${changePath}`,
-    `创建时间: ${state.created_at}`,
-    `更新时间: ${state.updated_at}`,
-    "制品状态:",
+    `${color.bold("阶段:")}    ${color.cyan(state.phase)}`,
+    `${color.bold("Change:")}  ${name}`,
+    `${color.bold("路径:")}    ${changePath}`,
+    `${color.bold("创建时间:")} ${state.created_at}`,
+    `${color.bold("更新时间:")} ${state.updated_at}`,
+    color.bold("制品状态:"),
     ...ARTIFACTS.map(
-      (a) => `  ${a.padEnd(12)} ${artifacts[a] ? "✓" : "✗"}`
+      (a) => `  ${a.padEnd(12)} ${artifacts[a] ? color.green("✓") : color.red("✗")}`
     ),
   ];
 
