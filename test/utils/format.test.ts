@@ -204,27 +204,59 @@ describe("statusLine", () => {
 });
 
 describe("progressBar", () => {
-  it("should generate a progress bar at 0%", () => {
+  it("生成 0% 进度条", () => {
     const result = progressBar(0, 100, 20);
     expect(result).toContain("0%");
     expect(result).toContain("░");
+    expect(result).not.toContain("█");
   });
 
-  it("should generate a progress bar at 50%", () => {
+  it("生成 50% 进度条", () => {
     const result = progressBar(50, 100, 20);
     expect(result).toContain("50%");
     expect(result).toContain("█");
     expect(result).toContain("░");
   });
 
-  it("should generate a progress bar at 100%", () => {
+  it("生成 100% 进度条", () => {
     const result = progressBar(100, 100, 20);
     expect(result).toContain("100%");
     expect(result).toContain("█");
+    expect(result).not.toContain("░");
   });
 
-  it("should use default width of 20", () => {
+  it("默认 width 为 20", () => {
     const result = progressBar(50, 100);
-    expect(result).toBeDefined();
+    // 默认 width=20，50% 应有 10 个填充块
+    expect(result).toContain("█".repeat(10));
+    expect(result).toContain("░".repeat(10));
+    expect(result).toContain("50%");
+  });
+
+  it("total 为 0 时不产生除零错误", () => {
+    const result = progressBar(0, 0, 20);
+    expect(result).toContain("0%");
+    expect(result).toContain("░".repeat(20));
+    expect(result).not.toContain("NaN");
+  });
+
+  it("value 超过 total 时 clamp 到 100%", () => {
+    const result = progressBar(150, 100, 20);
+    expect(result).toContain("100%");
+    expect(result).toContain("█".repeat(20));
+    expect(result).not.toContain("░");
+    expect(result).not.toContain("150%");
+  });
+
+  it("value 为负数时 clamp 到 0%", () => {
+    const result = progressBar(-10, 100, 20);
+    expect(result).toContain("0%");
+    expect(result).toContain("░".repeat(20));
+    expect(result).not.toContain("█");
+  });
+
+  it("width 为 0 时返回纯百分比", () => {
+    const result = progressBar(50, 100, 0);
+    expect(result).toBe("0%");
   });
 });

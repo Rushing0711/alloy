@@ -119,8 +119,13 @@ export function statusLine(label: string, value: string, status: "success" | "wa
 
 // ── 进度条 ──
 export function progressBar(value: number, total: number, width: number = 20): string {
-  const percentage = Math.round((value / total) * 100);
-  const filled = Math.round((value / total) * width);
+  if (width <= 0) return "0%";
+
+  if (total === 0) return `${"░".repeat(width)} 0%`;
+
+  const clampedValue = Math.max(0, Math.min(value, total));
+  const percentage = Math.round((clampedValue / total) * 100);
+  const filled = Math.round((clampedValue / total) * width);
   const empty = width - filled;
 
   const bar = "█".repeat(filled) + "░".repeat(empty);
