@@ -5,6 +5,7 @@ import {
   boxPanel,
   table,
   borderedTable,
+  tableWithBorder,
   spinner,
   stripAnsi,
   stringWidth,
@@ -128,5 +129,46 @@ describe("boxPanel", () => {
   it("正确处理中文字符", () => {
     const result = boxPanel("你好世界");
     expect(result).toContain("你好世界");
+  });
+});
+
+describe("tableWithBorder", () => {
+  it("生成带边框表格，包含表头和数据行", () => {
+    const result = tableWithBorder(
+      ["Name", "Age"],
+      [["Alice", "30"], ["Bob", "25"]]
+    );
+    expect(result).toContain("Name");
+    expect(result).toContain("Age");
+    expect(result).toContain("Alice");
+    expect(result).toContain("30");
+    expect(result).toContain("Bob");
+    expect(result).toContain("25");
+  });
+
+  it("正确处理中文字符表头", () => {
+    const result = tableWithBorder(
+      ["姓名", "年龄"],
+      [["张三", "30"]]
+    );
+    expect(result).toContain("姓名");
+    expect(result).toContain("年龄");
+    expect(result).toContain("张三");
+  });
+
+  it("处理空数据行", () => {
+    const result = tableWithBorder(["Name", "Age"], []);
+    expect(result).toContain("Name");
+    expect(result).toContain("Age");
+  });
+
+  it("支持自定义 headerStyle", () => {
+    const result = tableWithBorder(
+      ["A", "B"],
+      [["x", "y"]],
+      { headerStyle: "green" }
+    );
+    expect(result).toContain("A");
+    expect(result).toContain("B");
   });
 });

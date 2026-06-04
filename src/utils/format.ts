@@ -75,6 +75,24 @@ export function borderedTable(headers: string[], rows: string[][]): string {
   return t.toString();
 }
 
+// ── 带边框表格（扩展版） ──
+interface TableOptions {
+  width?: number;
+  headerStyle?: string;
+  borderStyle?: string;
+}
+
+export function tableWithBorder(headers: string[], rows: string[][], opts?: TableOptions): string {
+  const t = new cliTable({
+    head: headers,
+    style: { head: [opts?.headerStyle ?? "cyan"] },
+  });
+  for (const r of rows) {
+    t.push(r);
+  }
+  return t.toString();
+}
+
 // ── Spinner ──
 export function spinner(text: string): Ora {
   return ora({ text, isEnabled: process.stdout.isTTY ?? false }).start();
