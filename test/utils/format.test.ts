@@ -257,6 +257,6 @@ describe("progressBar", () => {
 
   it("width 为 0 时返回纯百分比", () => {
     const result = progressBar(50, 100, 0);
-    expect(result).toBe("0%");
+    expect(result).toBe("50%");
   });
 });

@@ -119,7 +119,7 @@ export function statusLine(label: string, value: string, status: "success" | "wa
 
 // ── 进度条 ──
 export function progressBar(value: number, total: number, width: number = 20): string {
-  if (width <= 0) return "0%";
+  if (width <= 0) return `${Math.round((Math.max(0, Math.min(value, total)) / (total || 1)) * 100)}%`;
 
   if (total === 0) return `${"░".repeat(width)} 0%`;
 
