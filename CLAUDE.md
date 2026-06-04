@@ -109,14 +109,19 @@ git checkout -b <type>/<change-name>
 git add <具体文件>
 git commit -m "<type>: <描述>"
 
-# 3. 推送并创建 PR
+# 3. 人工审查与测试（必须在 PR 之前完成）
+#    - Superpowers 的 TDD 和 code review 是自动化检查，不能替代人工测试
+#    - Agent 应提示用户进行人工审查：运行实际命令、检查输出、验证行为
+#    - 用户确认通过后，才能继续推送和创建 PR
+
+# 4. 推送并创建 PR
 git push -u origin <type>/<change-name>
 gh pr create
 
-# 4. 审查后合并（推荐 squash and merge）
+# 5. 审查后合并（推荐 squash and merge）
 gh pr merge --squash
 
-# 5. 清理本地分支
+# 6. 清理本地分支
 git checkout main && git pull
 git branch -d <type>/<change-name>
 ```
@@ -129,8 +134,9 @@ git branch -d <type>/<change-name>
 4. **PR 描述必须包含**：
    - **Summary**：变更摘要（做了什么、为什么做）
    - **Test Plan**：测试计划（测试了什么、测试结果）
-5. **合并前确保所有测试通过**——`npm test` 必须全部通过
-6. **推荐使用 Squash and merge**——一个功能一个 commit，便于追溯和回滚
+5. **PR 前必须经过人工审查与测试**——Superpowers 的 TDD 和 code review 是自动化检查，不能替代人工测试。Agent 必须在推送前提示用户进行人工审查（运行实际命令、检查输出、验证行为），用户确认通过后才能创建 PR
+6. **合并前确保所有测试通过**——`npm test` 必须全部通过
+7. **推荐使用 Squash and merge**——一个功能一个 commit，便于追溯和回滚
 
 ### 分支创建时机（强制）
 
