@@ -2,7 +2,7 @@
 
 > **目标读者：** 人类开发者 + AI Agent
 > **职责：** Alloy Slash Command 在终端输出的统一视觉格式规范。写 Skill 时参考本文档。
-> **来源：** 从 [alloy-design.md](alloy-design.md) 提取独立，以实际落地格式为准。
+> **来源：** 从 [alloy-design.md](01-product-spec.md) 提取独立，以实际落地格式为准。
 
 ---
 
@@ -379,7 +379,6 @@ Start / Plan / Apply 阶段在完成框后展示。固定列宽保证对齐：
 ```
 → Change: <name>
 → Phase: applied
-→ Worktree: <path  或  当前分支>
 
 [制品汇总表 — plans/verify/retrospective 三行]
 
@@ -387,6 +386,7 @@ Start / Plan / Apply 阶段在完成框后展示。固定列宽保证对齐：
 → 验证: <PASS  或  存在 N 个 WARN>
 
 准备好后，运行 /alloy:archive 进入归档阶段。
+（worktree 已在 apply 完成阶段合并清理，此时不存在）
 ```
 
 ### Archive [4/5]（无制品汇总表）

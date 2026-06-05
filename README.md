@@ -132,7 +132,7 @@ alloy init
 
 **Shell 补全：** `alloy completion` 生成 Tab 补全脚本，`alloy init` 时自动注册到 rc 文件。支持 bash / zsh / PowerShell。
 
-> 完整设计细节见 [alloy-design.md](docs/alloy-design.md)。
+> 完整设计细节见 [产品规格](docs/specification/01-product-spec.md)。
 
 ---
 
@@ -140,14 +140,12 @@ alloy init
 
 | 我想… | 读这个 |
 |-------|------|
-| **快速上手使用 Alloy** | [user-guide.md](docs/user-guide.md) |
-| 看完整产品规格 | [alloy-design.md](docs/alloy-design.md) |
-| 看终端输出视觉规范 | [alloy-visual-spec.md](docs/alloy-visual-spec.md) |
-| 构建、测试、调试 Alloy | [alloy-dev-guide.md](docs/alloy-dev-guide.md) |
-| 写或改 Alloy Skill | [skill-writing-guide.md](docs/skill-writing-guide.md) |
-| 理解为什么这么设计 | [workflow-design.md](docs/workflow-design.md) |
-| 看 OpenSpec vs Superpowers 对比 | [openspec-vs-superpowers.md](docs/openspec-vs-superpowers.md) |
-| 了解项目起源 | [project-background.md](docs/project-background.md) |
+| **快速上手使用 Alloy** | [handbook.md](docs/handbook.md) |
+| 看完整产品规格 | [specification/01-product-spec.md](docs/specification/01-product-spec.md) |
+| 看终端输出视觉规范 | [specification/02-visual-spec.md](docs/specification/02-visual-spec.md) |
+| 写或改 Alloy Skill | [reference/skill-writing-guide.md](docs/reference/skill-writing-guide.md) |
+| 理解设计背景与推导 | [background/](docs/background/) — 项目起源 / 工具对比 / 流程推导 |
+| 构建、测试、调试 Alloy | [handbook.md](docs/handbook.md#五构建与测试) |
 
 ---
 

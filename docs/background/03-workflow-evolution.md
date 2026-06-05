@@ -4,7 +4,7 @@
 >
 > 这份文档写于 Alloy 自身技能体系诞生之前。它分析的是 OpenSpec 和 Superpowers **原始技能**的编排融合方式，因此文中使用的是 `/opsx:` 和 `superpowers:` 命名（如 `/opsx:explore`、`superpowers:brainstorming`），而非 Alloy 封装后的 `/alloy-` 命令。这正是本文档的价值——它记录了"为什么要这么编排"的分析过程，是 alloy-design.md 中每一条设计决策的推导来源。
 >
-> 如果你在找"怎么用 Alloy 命令"，请看 [alloy-design.md](alloy-design.md)。如果你想理解"Alloy 为什么这样设计"，本文档就是起点。
+> 如果你在找"怎么用 Alloy 命令"，请看 [alloy-design.md](../specification/01-product-spec.md)。如果你想理解"Alloy 为什么这样设计"，本文档就是起点。
 
 本文档融合 OpenSpec 和 Superpowers，设计一套完整的开发工作流，覆盖 4 个阶段：Pre-OpenSpec → OpenSpec 规划 → OpenSpec 执行 → 收尾。
 
@@ -361,7 +361,7 @@ OpenSpec 执行阶段（8 个制品，后 2 个在 apply 中产出）:
 | verification-before-completion + /opsx:verify 双层验证 | 代码层验证（测试、行为）→ 制品层验证（7 项结构化检查） | 先确保代码正确，再确保制品完整；任意 FAIL 回到 SDD 修复 |
 | apply 不含 archive/finish | archive + finish 独立为收尾阶段 | 不给未验证代码建 PR，不假设 AI 实现正确 |
 | archive 先于 finish | 归档（sync delta spec）→ 自动 finish（merge/PR/keep） | 先锁定文档证据链，再合入代码；避免"代码合入了但 spec 没跟上" |
-| /alloy-finish 可独立调用 | archive 时选 keep 后，后续可手动调 finish | 分支还在，spec 已归档，随时可以合入 |
+| `/alloy:finish` 可独立调用 | archive 时选 keep 后，后续可手动调 finish | 分支还在，spec 已归档，随时可以合入 |
 | verify/retrospective 是 schema 制品 | artifacts 从 6 个扩展到 8 个，DAG 完整 | 有模板、有指令、有依赖——具备制品的所有特征 |
 | bug 修复二向分流 | 不改 spec → 直接修；需改 spec → 以代码是否已落地为分水岭 | 无代码（phase < applied）：并入当前 change；有代码（phase ≥ applied）：开新 change |
 | 人工测试失败处理 | apply 内部验证失败 → 循环修复直到通过；人工测试失败 → 看是 spec 还是代码问题 | 不和 spec 变更混入同一 change，代码修复在 apply 内部闭环 |
@@ -379,7 +379,7 @@ OpenSpec 执行阶段（8 个制品，后 2 个在 apply 中产出）:
 |------|:---:|------|------|
 | **start** | `config.yaml` + brainstorming 预检 | `[Slash] opsx:explore` `[Skill] superpowers:brainstorming` `[Slash] /opsx:new` | **A** (P2): brainstorming 无可用性预检 → 在 Step 2 前加入预检，不可用时引导 `alloy init` |
 | **plan** | phase=started + draft.md + writing-plans 预检 + draft 来源验证 | `[Slash] /opsx:continue` `[Skill] superpowers:writing-plans` | **B** (P0): writing-plans 无预检 → 前置检查加入可用性预检。**C** (P2): draft 可手工绕过 → Step 1 验证 draft commit message 格式 |
-| **apply** | phase=planned + git + 6 技能预检 | `[Skill] using-git-worktrees` `[Skill] SDD` / `executing-plans`（串行：TDD→executing-plans→code-review 三步） `[Skill] verification-before-completion` `[Slash] /opsx:verify` | **D** (P0): writing-plans→apply 策略传递断裂 → 旧 change 缺 strategy 时分析并回写 plans.md。**E** (P1): 串行路径 TDD 无闸门 → 串行改为三步：先加载 TDD 设定预期 → executing-plans → code review |
+| **apply** | phase=planned + git + 6 技能预检 | `[Skill] using-git-worktrees` `[Skill] SDD` / `executing-plans`（串行：TDD→executing-plans→spec 合规审查→code-review 四步） `[Skill] verification-before-completion` `[Slash] /opsx:verify` | **D** (P0): writing-plans→apply 策略传递断裂 → 旧 change 缺 strategy 时分析并回写 plans.md。**E** (P1): 串行路径 TDD 无闸门 → 串行改为四步：先加载 TDD 设定预期 → executing-plans → spec 合规审查（tasks.md checkbox 对代码实现、检查 over-building）→ code review |
 | **archive** | phase=applied + verify 非 FAIL | `[Slash] /opsx:archive` | 自建 CLI `alloy _archive` 重复建造 → 改为 `/opsx:archive`，与 OpenSpec 对齐 |
 | **finish** | phase=archived + 分支存在 + Skill 预检 | `[Skill] finishing-a-development-branch` | **F** (P2): finishing-a-development-branch 无预检 → 前置检查加入 Skill 可用性预检 |
 | **fix** | 3 技能预检 + phase 校验 | `[Skill] systematic-debugging` `[Skill] TDD` `[Skill] verification-before-completion` | **G** (P1): 无前置检查 → 加入 3 技能预检。**H** (P1): 不校验 phase → 前置检查加入 phase 校验，archived/finished 时警告 |

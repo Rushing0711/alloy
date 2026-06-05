@@ -2,7 +2,7 @@
 
 > **目标读者：** 想了解 Alloy 起源的人（人类）
 > **职责：** 讲清楚"为什么会有 Alloy"——从发现两个工具，到调研对比，到融合设计，到产品化。
-> **不放入：** 产品规格 → 见 [alloy-design.md](alloy-design.md)；工具对比细节 → 见 [openspec-vs-superpowers.md](openspec-vs-superpowers.md)；工作流编排推导 → 见 [workflow-design.md](workflow-design.md)。
+> **不放入：** 产品规格 → 见 [alloy-design.md](alloy-design.md)；工具对比细节 → 见 [openspec-vs-superpowers.md](openspec-vs-superpowers.md)；工作流编排推导 → 见 [workflow-design.md](../background/03-workflow-evolution.md)。
 
 ## 一、起点：两个工具的发现
 
@@ -43,23 +43,26 @@ Superpowers 擅长                    OpenSpec 擅长
 
 ## 三、融合设计：混合工作流
 
-基于对比分析，设计了一套融合两工具的工作流。产出 [`workflow-design.md`](workflow-design.md)。
+基于对比分析，设计了一套融合两工具的工作流。产出 [`workflow-design.md`](../background/03-workflow-evolution.md)。
 
 核心思路：用 OpenSpec 管理需求和变更追踪，用 Superpowers 的流程闸门增强执行纪律。
 
-### 四阶段流程
+### 四阶段流程 → 五阶段流程
 
-| 阶段 | 主要活动 | 关键工具 |
+> **演进说明：** 初版设计将 archive（文档归档）和 finish（代码合入）合并为"收尾"阶段。实际开发中将 archive 和 finish 拆分为独立阶段——先锁定文档证据链，再合入代码。当前 Alloy 工作流为 5 阶段：`start → plan → apply → archive → finish`。
+
+| 阶段（原型） | 主要活动 | 关键工具 |
 |------|----------|----------|
 | Pre-OpenSpec | 需求探索、设计草案 | `/opsx:explore` + brainstorming → draft.md |
 | OpenSpec 规划 | 制品生成、审查 | proposal → design → specs → tasks → plan |
 | OpenSpec 执行 | 隔离开发、TDD、验证 | worktree + SDD(TDD) + verify + retrospective |
-| 收尾 | 人工测试、合并、归档 | finish + archive（人工闸门） |
+| 归档（Archive） | Delta Spec 合并、change 归档 | `/opsx:archive` |
+| 代码收尾（Finish） | 本地 merge / PR / 保留分支 | `superpowers:finishing-a-development-branch` |
 
 ### 三种场景覆盖
 
-1. **从 0 到 1 开发新项目**：需求探索 → 规划 → 执行 → 收尾
-2. **存量项目开发新功能**：代码探查 → 需求探索 → 规划 → 执行 → 收尾
+1. **从 0 到 1 开发新项目**：需求探索 → 规划 → 执行 → 归档 → 收尾
+2. **存量项目开发新功能**：代码探查 → 需求探索 → 规划 → 执行 → 归档 → 收尾
 3. **Bug 修复**：诊断 → 分流（不改 spec 直接修，需改 spec 则走完整 change 流程）
 
 ## 四、Alloy 设计：从工作流到工具

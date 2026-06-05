@@ -8,7 +8,7 @@
 
 | 要修改的文件 | 先读 | 再问分支 |
 |-------------|------|---------|
-| `commands/alloy/*.md`（Skill 文件） | `docs/skill-writing-guide.md` | 是 |
+| `commands/alloy/*.md`（Skill 文件） | `docs/reference/skill-writing-guide.md` | 是 |
 | `openspec/schemas/`（Schema） | — | 是 |
 | `src/`（TypeScript 源码） | — | 是 |
 | `docs/superpowers/specs/`（设计文档） | — | 是 |
@@ -66,4 +66,4 @@ openspec/schemas/ # 制品 schema 定义
 🤖 Generated with [Claude Code](https://claude.ai/code)
 ```
 
-**合并方式：** 推荐 squash and merge
+**合并方式：** 推荐 squash and merge（包括本地 merge）。所有分支合并默认 `git merge --squash`，产生的单个 commit 使用 Conventional Commits 格式。这保持历史干净，每个功能/修复一个入口点。

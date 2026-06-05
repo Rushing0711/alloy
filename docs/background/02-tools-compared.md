@@ -2,7 +2,7 @@
 
 > **目标读者：** 想理解 Alloy 设计基础的人（人类）
 > **职责：** 记录 OpenSpec 和 Superpowers 各自的命令/技能、优缺点、互补关系——这是 Alloy 融合设计的基础调研。
-> **不放入：** 融合编排方案 → 见 [workflow-design.md](workflow-design.md)；Alloy 产品规格 → 见 [alloy-design.md](alloy-design.md)。
+> **不放入：** 融合编排方案 → 见 [workflow-design.md](../background/03-workflow-evolution.md)；Alloy 产品规格 → 见 [alloy-design.md](../specification/01-product-spec.md)。
 
 ## 官方文档
 
