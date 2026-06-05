@@ -472,6 +472,19 @@ git commit -m "docs(<name>): retrospective 已确认"
 - 代码变更：SDD 过程中每次成功验证后立即 commit
 - verify.md / retrospective.md：用户通过审查窗口选 (a) 确认后，hash 锁定 + commit（具体命令已内联在上方各审查窗口中）
 
+**SDD commit 前检查 untracked 文件：**
+
+commit 实现代码前，先检查是否有未跟踪文件：
+```bash
+UNTRACKED=$(git status --porcelain | grep '^??' | sed 's/^?? //')
+```
+
+对每个未跟踪文件，判断：
+- **构建产物或临时文件**（`.vite/`、`dist/`、`build/`、`.next/`、`.cache/`、`*.log`、`node_modules/` 等）→ 追加到 `.gitignore`，`git add .gitignore` 一起提交
+- **项目源码**（`.ts`、`.vue`、`.css` 等新创建的文件）→ 按精准路径 `git add`
+
+不需要穷举目录——Agent 根据项目上下文判断即可。比如项目用了 vite，看到 `.vite/` 就知道该 ignore。判断不准时，询问用户确认。
+
 **Worktree 合并清理（如果 apply 期间使用了 worktree）：**
 
 ```bash
