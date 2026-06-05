@@ -112,6 +112,7 @@
 
 | 技能/命令 | 使用 |
 |----------|:---:|
+| `/opsx:new` | |
 | `opsx:explore` | |
 | `superpowers:brainstorming` | |
 

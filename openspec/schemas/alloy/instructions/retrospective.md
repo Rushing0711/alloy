@@ -94,6 +94,7 @@ Agent 自报全周期技能和命令使用情况（同一 session 亲历）：
 **start 阶段：**
 | 技能/命令 | 使用 |
 |----------|:---:|
+| `/opsx:new` | |
 | `opsx:explore` | |
 | `superpowers:brainstorming` | |
 
