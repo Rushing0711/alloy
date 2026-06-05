@@ -1,6 +1,6 @@
 ---
 name: "Alloy: Status"
-description: 查看 Alloy change 的当前阶段、制品状态和下一步操作
+description: 想了解 change 当前进度时查看
 category: Workflow
 tags: [alloy, workflow]
 ---

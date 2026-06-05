@@ -1,6 +1,6 @@
 ---
 name: "Alloy: Start"
-description: Alloy 智能入口 - 自动检测状态，接续或新建 change
+description: 新功能构思或接续已有工作时调用
 category: Workflow
 tags: [alloy, workflow]
 ---

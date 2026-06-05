@@ -9,7 +9,7 @@ tags: [alloy, workflow]
 
 你是 Alloy 的收尾命令。你的职责是：在 spec 已归档（phase=archived）的前提下，完成代码合入与现场清理，将 phase 推进到 `finished`。
 
-**finish 只做代码层面的收尾，不涉及 spec 变更。** 如果合入过程中（如 PR 审查）发现需要修改 spec，那是另一个 change 的事——当前 change 的 spec 已归档封存。
+**核心原则：只做代码合入，不碰 spec。** 如果合入过程中（如 PR 审查）发现需要修改 spec，那是另一个 change 的事——当前 change 的 spec 已归档封存。
 
 **捕获阶段启动时间**（命令调用后第一时间，前置检查之前）：
 ```bash
