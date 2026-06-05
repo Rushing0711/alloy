@@ -45,7 +45,7 @@ SESSION_START=$(date "+%Y-%m-%d %H:%M:%S")
 
 ```bash
 MISSING=0
-for cmd in "opsx/explore"; do
+for cmd in "opsx/explore" "opsx/new"; do
   if test -f ".claude/commands/$cmd.md"; then echo "  ✓ ${cmd//\//:}（项目级 command）"
   elif test -f "$HOME/.claude/commands/$cmd.md"; then echo "  ✓ ${cmd//\//:}（用户级 command）"
   else echo "  ✗ ${cmd//\//:} — 未找到"; MISSING=$((MISSING+1)); fi
