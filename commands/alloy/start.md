@@ -161,53 +161,70 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
 
    已有项目则跳过（git repo 已存在，HEAD 已有锚点）。
 
-6. **分支选择**——确认主分支、选择 feature 分支：
+6. **分支选择**——自动检测主分支、选择或创建 feature 分支：
 
-   **① 识别主分支候选：**
+   **① 自动识别主分支：**
+
+   按以下优先级检测：
+
    ```bash
-   git branch -a
+   # 1. remote HEAD（标准默认分支）
+   DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')
+   # 2. 本地 init.defaultBranch 配置
+   [ -z "$DEFAULT_BRANCH" ] && DEFAULT_BRANCH=$(git config --get init.defaultBranch 2>/dev/null)
+   # 3. 名称匹配
+   [ -z "$DEFAULT_BRANCH" ] && DEFAULT_BRANCH=$(git branch --list 'main' --list 'master' | head -1 | sed 's/[* ]//g')
    ```
-   优先匹配 `main` / `master` 作为候选。若都没有 → 直接列出所有分支，让用户选择。
+
+   若 `openspec/config.yaml` 已有 `alloy.main_branch` 记录，直接用记录值，跳过检测和确认。
 
    **② 确认主分支：**
 
-   > 检测到以下分支：<列表>
-   > 请确认主分支名称（用于后续分支管理）：___
+   自动检测到主分支后，让用户确认（Y/n）：
+   ```bash
+   echo "  主分支: $DEFAULT_BRANCH"
+   ```
+
+   > 使用 `<DEFAULT_BRANCH>` 作为基础分支？[Y/n]
+
+   选 Y 或直接回车 → 使用自动检测结果；选 n → 让用户输入自定义名称。
 
    用户确认后写入项目级配置：
    ```bash
-   # 读取现有配置，写入 main_branch
    alloy _config write <project-root> main_branch <用户确认的主分支名>
    ```
    主分支是项目级概念，所有 change 共享，不写入 per-change 的 .alloy.yaml。
 
-   若 `openspec/config.yaml` 已有 `alloy.main_branch` 且与当前一致，跳过确认。
-
    **③ 检测当前分支：**
    ```bash
    CURRENT_BRANCH=$(git branch --show-current)
+   CHANGENAME="<name>"
    ```
 
-   **④ 当前分支 == 主分支？**
-   - **是** → HARD STOP："当前在主分支 `<main_branch>`，不允许在主分支开发。commit 会污染主分支历史，请新建或切换到 feature 分支。" → 只展示"新建分支"选项
-   - **否** → 展示选项（见⑤）
+   **④ 按当前分支位置决策：**
+
+   - **在主分支上** → HARD STOP："当前在主分支 `<main_branch>`，不允许在主分支开发。commit 会污染主分支历史。" → 只展示"新建分支"选项
+   - **在 feature 分支上且名称包含 change 名**（如 `feature/<name>` 或 `fix/<name>`）→ 提示"当前已在 `<$CURRENT_BRANCH>`，直接在该分支上继续工作？[Y/n]"
+     - 选 Y → 使用当前分支，跳到步骤 7
+     - 选 n → 展示选项（见⑤）
+   - **在非主分支的已有分支上** → 展示选项（见⑤）
 
    **⑤ 展示选项：**
 
-   非主分支的已有分支存在时：
+   本地非主分支（排除刚确认的主分支）存在时：
    > 选择工作分支
    > ──────────────────────────────────────
    >
-   > 当前在 `<$CURRENT_BRANCH>` 分支，主分支：`<main_branch>`
+   > 当前在 `<$CURRENT_BRANCH>`，主分支：`<main_branch>`
    >
    > 1. 切换到已有分支 —— 选择非主分支的已有分支
    > 2. 新建分支       —— 创建新 feature 分支并切换
 
-   无可用的非主分支时 → 直接进入新建分支流程（跳过选项 1）。
+   无可用本地非主分支时 → 直接进入新建分支流程（跳过选项 1）。
 
    每个 change 必须有独立的 feature 分支，确保 discard 时可安全清理。
 
-   - **选 1：** 展示非主分支的已有分支列表（`git branch` 排除主分支），用户选择后执行 `git checkout <branch>`
+   - **选 1：** 列出本地非主分支（`git branch` 排除主分支），用户选择后执行 `git checkout <branch>`
    - **选 2：** 新建分支命名：
      - 默认建议：`feature/<change-name>`
      - 用户可输入自定义名称
