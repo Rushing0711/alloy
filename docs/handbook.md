@@ -268,6 +268,7 @@ altoggle() {
 
   if grep -q "^alias alloy=" "$rc" 2>/dev/null; then
     sed -i '' '/^alias alloy=/s/^/#/' "$rc"          # Linux 用 sed -i 不加 ''
+    unalias alloy 2>/dev/null
     echo "→ alloy 开发 alias 已关闭（使用稳定版）"
   elif grep -q "^#alias alloy=" "$rc" 2>/dev/null; then
     sed -i '' '/^#alias alloy=/s/^#//' "$rc"         # Linux 用 sed -i 不加 ''
@@ -299,6 +300,7 @@ function altoggle {
       Write-Host "→ alloy 开发 alias 已开启（使用本地 dist）"
     } else {
       $newContent | Set-Content $profilePath
+      Remove-Item Alias:alloy -ErrorAction SilentlyContinue
       Write-Host "→ alloy 开发 alias 已关闭（使用稳定版）"
     }
   } else {
