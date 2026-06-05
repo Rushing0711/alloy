@@ -127,8 +127,7 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
 
 1. **建议 change name**——根据确认的方案建议 kebab-case 名称，用户确认
 2. **调用 `/opsx:new <name>`** 创建 change 目录
-3. **按模板生成 `draft.md`** 到 `openspec/changes/<name>/draft.md`（直接在 change 目录下生成，无需移动）
-4. **写入 state**——使用 `_state init` 一步创建完整初始状态（包含 `records: []`、正确类型），避免逐字段写入遗漏 records 数组：
+3. **写入 state**——使用 `_state init` 一步创建完整初始状态（包含 `records: []`、正确类型），避免逐字段写入遗漏 records 数组：
    ```bash
    alloy _state init openspec/changes/<name>
    ```
@@ -147,7 +146,7 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
    " | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
    ```
 
-5. **确保 git 仓库就绪：**
+4. **确保 git 仓库就绪：**
 
    ```bash
    if ! git rev-parse --git-dir 2>/dev/null; then
@@ -161,7 +160,7 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
 
    已有项目则跳过（git repo 已存在，HEAD 已有锚点）。
 
-6. **分支选择**——自动检测主分支、选择或创建 feature 分支：
+5. **分支选择**——自动检测主分支、选择或创建 feature 分支：
 
    **① 自动识别主分支：**
 
@@ -205,7 +204,7 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
 
    - **在主分支上** → HARD STOP："当前在主分支 `<main_branch>`，不允许在主分支开发。commit 会污染主分支历史。" → 只展示"新建分支"选项
    - **在 feature 分支上且名称包含 change 名**（如 `feature/<name>` 或 `fix/<name>`）→ 提示"当前已在 `<$CURRENT_BRANCH>`，直接在该分支上继续工作？[Y/n]"
-     - 选 Y → 使用当前分支，跳到步骤 7
+     - 选 Y → 使用当前分支，跳到步骤 6
      - 选 n → 展示选项（见⑤）
    - **在非主分支的已有分支上** → 展示选项（见⑤）
 
@@ -236,6 +235,8 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
    alloy _state write openspec/changes/<name> feature_branch <branch-name>
    alloy _state write openspec/changes/<name> worktree null
    ```
+
+6. **按模板生成 `draft.md`** 到 `openspec/changes/<name>/draft.md`（直接在 change 目录下生成，无需移动）
 
 7. **提交：**
 
