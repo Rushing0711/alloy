@@ -1,3 +1,5 @@
+> 生成时间: <timestamp>
+
 # Retrospective
 
 > 生成前 PRECHECK：
@@ -19,7 +21,7 @@
 | tasks | | | |
 | plans | | | |
 | verify | | | |
-| retrospective | | | |
+| retrospective | | | <timestamp> |
 
 ### Commit 汇总（按 type）
 <!-- git log <base>..HEAD --oneline，按 Conventional Commits type 分组 -->

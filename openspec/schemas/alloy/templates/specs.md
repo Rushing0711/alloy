@@ -1,3 +1,5 @@
+> 生成时间: <timestamp>
+
 <!--
   Delta spec 模板 — 跟踪对 capability spec 的变更。
   路径：openspec/changes/<change-name>/specs/<capability>/spec.md
