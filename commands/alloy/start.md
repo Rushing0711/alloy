@@ -126,27 +126,8 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
 用户确认方案后，执行以下步骤：
 
 1. **建议 change name**——根据确认的方案建议 kebab-case 名称，用户确认
-2. **调用 `/opsx:new <name>`** 创建 change 目录
-3. **写入 state**——使用 `_state init` 一步创建完整初始状态（包含 `records: []`、正确类型），避免逐字段写入遗漏 records 数组：
-   ```bash
-   alloy _state init openspec/changes/<name>
-   ```
 
-   **记录阶段启动时间：**
-   ```bash
-   TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
-   echo "$TIMINGS" | python3 -c "
-   import sys,json
-   content = sys.stdin.read()
-   d = json.loads(content) if content.strip() else {}
-   p = d.setdefault('start',{})
-   if 'started_at' not in p:
-       p['started_at']='$SESSION_START'
-   print(json.dumps(d))
-   " | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
-   ```
-
-4. **确保 git 仓库就绪：**
+2. **确保 git 仓库就绪：**
 
    ```bash
    if ! git rev-parse --git-dir 2>/dev/null; then
@@ -160,7 +141,7 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
 
    已有项目则跳过（git repo 已存在，HEAD 已有锚点）。
 
-5. **分支选择**——自动检测主分支、选择或创建 feature 分支：
+3. **分支选择**——在创建 change 目录之前完成分支切换，确保所有制品落在 feature 分支上：
 
    **① 自动识别主分支：**
 
@@ -204,7 +185,7 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
 
    - **在主分支上** → HARD STOP："当前在主分支 `<main_branch>`，不允许在主分支开发。commit 会污染主分支历史。" → 只展示"新建分支"选项
    - **在 feature 分支上且名称包含 change 名**（如 `feature/<name>` 或 `fix/<name>`）→ 提示"当前已在 `<$CURRENT_BRANCH>`，直接在该分支上继续工作？[Y/n]"
-     - 选 Y → 使用当前分支，跳到步骤 6
+     - 选 Y → 使用当前分支，继续步骤 4
      - 选 n → 展示选项（见⑤）
    - **在非主分支的已有分支上** → 展示选项（见⑤）
 
@@ -234,6 +215,27 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
    ```bash
    alloy _state write openspec/changes/<name> feature_branch <branch-name>
    alloy _state write openspec/changes/<name> worktree null
+   ```
+
+4. **调用 `/opsx:new <name>`** 创建 change 目录（已在 feature 分支上，目录直接落在正确分支）
+
+5. **写入 state**——使用 `_state init` 一步创建完整初始状态（包含 `records: []`、正确类型），避免逐字段写入遗漏 records 数组：
+   ```bash
+   alloy _state init openspec/changes/<name>
+   ```
+
+   **记录阶段启动时间：**
+   ```bash
+   TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
+   echo "$TIMINGS" | python3 -c "
+   import sys,json
+   content = sys.stdin.read()
+   d = json.loads(content) if content.strip() else {}
+   p = d.setdefault('start',{})
+   if 'started_at' not in p:
+       p['started_at']='$SESSION_START'
+   print(json.dumps(d))
+   " | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
    ```
 
 6. **按模板生成 `draft.md`** 到 `openspec/changes/<name>/draft.md`（直接在 change 目录下生成，无需移动）

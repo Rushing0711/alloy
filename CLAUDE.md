@@ -4,19 +4,24 @@
 
 ## 修改前置检查（修改任何项目文件前必须执行）
 
+**准备编辑文件时，停下来执行以下自检：**
+
+1. 我要改的文件属于哪类？（对照下表）
+2. 需要先读参考文档吗？
+3. 需要问分支吗？（对照"分支规则"）
+4. 确认后开始编辑
+
 按文件类型执行对应的前置检查，**读完即执行，不可跳过**：
 
-| 要修改的文件 | 先读 | 再问分支 |
+| 要修改的文件 | 先读 | 分支规则 |
 |-------------|------|---------|
-| `commands/alloy/*.md`（Skill 文件） | `docs/reference/skill-writing-guide.md` | 是 |
-| `openspec/schemas/`（Schema） | — | 是 |
-| `src/`（TypeScript 源码） | — | 是 |
-| `docs/superpowers/specs/`（设计文档） | — | 是 |
-| `docs/superpowers/plans/`（实现计划） | — | 是 |
+| `commands/alloy/*.md`（Skill 文件） | `docs/reference/skill-writing-guide.md` | 默认问分支。用户说"直接改"、纯读取、测试验证时不触发 |
+| `openspec/schemas/`（Schema） | — | 同上 |
+| `src/`（TypeScript 源码） | — | 同上 |
+| `docs/superpowers/specs/`（设计文档） | — | 同上 |
+| `docs/superpowers/plans/`（实现计划） | — | 同上 |
 
 **分支规范：** 先问"是否建分支"，用户确认后执行。分支命名：`feature/`、`fix/`、`docs/`、`refactor/`、`test/`、`chore/`
-
-**不触发分支的场景：** 用户明确说直接改、纯读取探索、测试验证阶段、修改全局配置（`~/.claude/`）
 
 ## 仓库用途
 
