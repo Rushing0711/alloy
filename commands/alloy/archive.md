@@ -166,14 +166,7 @@ alloy _guard "$ARCHIVE_DIR" archived --apply
 ✓ Delta Spec 已合并到主 spec
 ✓ Change 已归档
 
-**根据 worktree 状态动态提示：**
-
-```bash
-alloy _state read "$ARCHIVE_DIR" worktree
-```
-
-- worktree 有值 → 代码在独立 worktree 分支上，尚未合入。运行 `/alloy:finish` 完成代码合入与现场清理。
-- worktree 为 `null` → 代码在当前分支上。运行 `/alloy:finish` 完成收尾。
+> → 代码合入由 `/alloy:finish` 处理
 
 ---
 

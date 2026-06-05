@@ -2,6 +2,22 @@
 
 本文件为 Claude Code (claude.ai/code) 在此仓库中工作时提供指导。
 
+## 修改前置检查（修改任何项目文件前必须执行）
+
+按文件类型执行对应的前置检查，**读完即执行，不可跳过**：
+
+| 要修改的文件 | 先读 | 再问分支 |
+|-------------|------|---------|
+| `commands/alloy/*.md`（Skill 文件） | `docs/skill-writing-guide.md` | 是 |
+| `openspec/schemas/`（Schema） | — | 是 |
+| `src/`（TypeScript 源码） | — | 是 |
+| `docs/superpowers/specs/`（设计文档） | — | 是 |
+| `docs/superpowers/plans/`（实现计划） | — | 是 |
+
+**分支规范：** 先问"是否建分支"，用户确认后执行。分支命名：`feature/`、`fix/`、`docs/`、`refactor/`、`test/`、`chore/`
+
+**不触发分支的场景：** 用户明确说直接改、纯读取探索、测试验证阶段、修改全局配置（`~/.claude/`）
+
 ## 仓库用途
 
 **Alloy** 是一套融合 OpenSpec（Fission-AI）和 Superpowers（obra）的开发工作流 CLI 工具。用 OpenSpec 管理"构建什么"（需求追踪、Delta Spec、审计归档），用 Superpowers 管理"如何构建"（流程闸门、TDD、系统化调试、验证）。
@@ -10,7 +26,7 @@
 
 - Node.js ≥ 18，TypeScript 源码在 `src/`，编译产物输出到 `dist/`
 - 修改代码后运行 `npm test`（vitest 全量）
-- **每次修复/功能更新完成后**：确保测试通过，运行 `npm run build && npm link` 保证 dist 最新，方便人工测试
+- **每次修复/功能更新完成后**：确保测试通过，运行 `npm run build`。本地开发用 `aldev` 测试（`node /Users/wenqiu/AIAgent/alloy/dist/cli/index.js`），不依赖 npm link
 
 ## 代码架构
 
@@ -28,30 +44,12 @@ openspec/schemas/ # 制品 schema 定义
 
 1. **Agent 不直接写 YAML**——通过 `alloy _state` 命令操作 `.alloy.yaml`
 2. **阶段转换必须通过 `alloy _guard` 校验**
-3. **修改 Skill 文件前必须读 `docs/skill-writing-guide.md`**
-4. **修改 schema 后必须运行 `openspec schemas` 验证**
-5. **代码改动必须有测试覆盖**
-
-## 分支规范
-
-**核心原则：Agent 建议，用户决策。** 每次修改项目文件前，必须询问用户是否创建分支。
-
-**触发条件**（满足任一即询问）：
-- 修改项目源码（TypeScript、Skill 文件、Schema）
-- Bug 修复、功能开发
-
-**不触发条件**（可跳过询问）：
-- 用户明确说"不需要分支"或"直接修改"
-- 修改全局配置（~/.claude/ 等）
-- 测试验证阶段
-
-**完成方式决策**：每次修改前，询问用户是采用当前分支直接完成，还是通过 PR 方式完成。
-
-分支命名：`feature/`、`fix/`、`docs/`、`refactor/`、`test/`、`chore/`
+3. **修改 schema 后必须运行 `openspec schemas` 验证**
+4. **代码改动必须有测试覆盖**
 
 ## PR 规范
 
-当用户选择创建 PR 时，遵循以下规范：
+当用户选择创建 PR 时：
 
 **PR 标题：** Conventional Commits 格式（如 `fix: 修复工作流审查发现的问题`）
 
@@ -69,10 +67,3 @@ openspec/schemas/ # 制品 schema 定义
 ```
 
 **合并方式：** 推荐 squash and merge
-
-## 参考文档
-
-需要时直接 Read：
-- `docs/alloy-design.md` — 完整产品规格
-- `docs/alloy-dev-guide.md` — 构建/测试/踩坑
-- `docs/skill-writing-guide.md` — Skill 编写规范
