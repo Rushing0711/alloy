@@ -167,7 +167,7 @@ null 时，先展示摘要，再加载技能：
 > 正在加载 superpowers:using-git-worktrees 技能...
 ```
 
-使用 Skill 工具加载 `superpowers:using-git-worktrees` 技能。传入参数 "工作目录偏好: .claude/worktrees/<name>"（EnterWorktree 原生工具使用此路径，fallback 也保持一致）。该技能内置了完整的决策流程（Step 0 问询 → 创建或跳过）和执行步骤，Agent 按其内部指引执行即可。
+使用 Skill 工具加载 `superpowers:using-git-worktrees` 技能。传入参数 "工作目录偏好: 如果 .claude/ 目录存在则优先 .claude/worktrees/<name>，否则 .worktrees/<name>"。该技能内置了完整的决策流程（Step 0 问询 → 创建或跳过）和执行步骤，Agent 按其内部指引执行即可。
 
 **when 用户选择不创建 worktree：** 写入 `skipped`（非 null）：
 ```bash
