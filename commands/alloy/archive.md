@@ -31,16 +31,7 @@ PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
 
 **写入阶段启动时间**（前置检查通过后，使用命令开头捕获的 `PHASE_START`）：
 ```bash
-TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
-echo "$TIMINGS" | python3 -c "
-import sys,json
-content = sys.stdin.read()
-d = json.loads(content) if content.strip() else {}
-p = d.setdefault('archive',{})
-if 'started_at' not in p:
-    p['started_at']='$PHASE_START'
-print(json.dumps(d))
-" | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
+alloy _state merge openspec/changes/<name> phase_timings "{\"archive\":{\"started_at\":\"$PHASE_START\"}}"
 ```
 
 ```
@@ -123,16 +114,8 @@ ARCHIVE_DIR="openspec/changes/archive/$(date +%Y-%m-%d)-<name>"
 ```bash
 # 写入完成时间
 COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
-TIMINGS=$(alloy _state read "$ARCHIVE_DIR" phase_timings 2>/dev/null || echo "{}")
-echo "$TIMINGS" | python3 -c "
-import sys,json
-content = sys.stdin.read()
-d = json.loads(content) if content.strip() else {}
-p = d.setdefault('archive',{})
-if 'completed_at' not in p:
-    p['completed_at']='$COMPLETED_AT'
-print(json.dumps(d))
-" | while read -r val; do alloy _state write "$ARCHIVE_DIR" phase_timings "$val"; done
+COMPLETED_AT_JSON=$(python3 -c "import json; print(json.dumps({'archive':{'completed_at': '$COMPLETED_AT'}}))")
+alloy _state merge "$ARCHIVE_DIR" phase_timings "$COMPLETED_AT_JSON"
 
 # 一次 commit：主 spec 更新 + 归档目录 + 原 change 目录删除 + phase_timings
 git add openspec/specs/ openspec/changes/archive/ openspec/changes/<name>/
