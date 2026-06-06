@@ -28,6 +28,35 @@ function coerceValue(field: string, value: string | undefined): unknown {
   return value;
 }
 
+function deepMerge(target: unknown, source: unknown): unknown {
+  if (target === null || target === undefined) return source;
+  if (source === null) return source;
+  if (typeof target !== "object" || typeof source !== "object") return source;
+  if (Array.isArray(target) || Array.isArray(source)) return source;
+
+  const result: Record<string, unknown> = { ...(target as Record<string, unknown>) };
+  const src = source as Record<string, unknown>;
+
+  for (const key of Object.keys(src)) {
+    if (!(key in result)) {
+      // 新 key：直接添加
+      result[key] = src[key];
+    } else if (
+      typeof src[key] === "object" &&
+      src[key] !== null &&
+      !Array.isArray(src[key]) &&
+      typeof result[key] === "object" &&
+      result[key] !== null &&
+      !Array.isArray(result[key])
+    ) {
+      // 双方都是对象：递归合并（已有嵌套 key 不被覆盖）
+      result[key] = deepMerge(result[key], src[key]);
+    }
+    // else: key 在两边都存在且至少一方是 leaf → 跳过（幂等）
+  }
+  return result;
+}
+
 export async function stateCommand(args: string[]): Promise<void> {
   const action = args[0];
   const changeDir = args[1];
@@ -35,7 +64,7 @@ export async function stateCommand(args: string[]): Promise<void> {
   const value = args[3];
 
   if (!action || !changeDir) {
-    console.error("用法: alloy _state <init|read|write|check> <change-dir> [field] [value]");
+    console.error("用法: alloy _state <init|read|write|merge|check> <change-dir> [field] [value]");
     process.exit(1);
   }
 
@@ -79,6 +108,26 @@ export async function stateCommand(args: string[]): Promise<void> {
       await writeState(changeDir, state);
       break;
     }
+    case "merge": {
+      const field = args[2];
+      const value = args[3];
+      if (!field || value === undefined) {
+        console.error("用法: alloy _state merge <change-dir> <field> <partial-json>");
+        process.exit(1);
+      }
+      let state: AlloyState;
+      try {
+        state = await readState(changeDir);
+      } catch {
+        state = createInitialState();
+      }
+      const currentValue = (state as unknown as Record<string, unknown>)[field];
+      const parsedValue = coerceValue(field, value);
+      (state as unknown as Record<string, unknown>)[field] = deepMerge(currentValue, parsedValue);
+      await writeState(changeDir, state);
+      console.log(`✓ ${field} 已 merge: ${changeDir}`);
+      break;
+    }
     case "check": {
       if (!field) {
         console.error("用法: alloy _state check <change-dir> <phase>");
@@ -92,7 +141,7 @@ export async function stateCommand(args: string[]): Promise<void> {
       break;
     }
     default:
-      console.error(`未知操作: ${action} (支持: init, read, write, check)`);
+      console.error(`未知操作: ${action} (支持: init, read, write, merge, check)`);
       process.exit(1);
   }
 }

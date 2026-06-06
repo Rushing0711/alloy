@@ -172,6 +172,66 @@ describe("state utils", () => {
     const loaded = await readState(changeDir);
     expect(loaded.worktree_branch).toBe("worktree-test-feat");
   });
+
+  it("_state merge 可追加新字段", async () => {
+    const changeDir = join(tmpDir, "merge-add");
+    await mkdir(changeDir, { recursive: true });
+    const state = createInitialState();
+    state.phase_timings = { start: { started_at: "2026-06-06 08:00:00", completed_at: "2026-06-06 09:00:00" } };
+    await writeState(changeDir, state);
+
+    const { stateCommand } = await import("../../src/cli/commands/internal/state.js");
+    await stateCommand(["merge", changeDir, "phase_timings", JSON.stringify({ plan: { started_at: "2026-06-06 09:30:00" } })]);
+
+    const loaded = await readState(changeDir);
+    expect(loaded.phase_timings?.start).toBeDefined();
+    expect(loaded.phase_timings?.start?.started_at).toBe("2026-06-06 08:00:00");
+    expect(loaded.phase_timings?.plan).toBeDefined();
+    expect(loaded.phase_timings?.plan?.started_at).toBe("2026-06-06 09:30:00");
+  });
+
+  it("_state merge 不覆盖已有 leaf 值", async () => {
+    const changeDir = join(tmpDir, "merge-idempotent");
+    await mkdir(changeDir, { recursive: true });
+    const state = createInitialState();
+    state.phase_timings = { start: { started_at: "2026-06-06 08:00:00" } };
+    await writeState(changeDir, state);
+
+    const { stateCommand } = await import("../../src/cli/commands/internal/state.js");
+    await stateCommand(["merge", changeDir, "phase_timings", JSON.stringify({ start: { started_at: "SHOULD_NOT_OVERWRITE" } })]);
+
+    const loaded = await readState(changeDir);
+    expect(loaded.phase_timings?.start?.started_at).toBe("2026-06-06 08:00:00");
+  });
+
+  it("_state merge 嵌套对象递归合并", async () => {
+    const changeDir = join(tmpDir, "merge-nested");
+    await mkdir(changeDir, { recursive: true });
+    const state = createInitialState();
+    state.phase_timings = { start: { started_at: "08:00", completed_at: "09:00" } };
+    await writeState(changeDir, state);
+
+    const { stateCommand } = await import("../../src/cli/commands/internal/state.js");
+    await stateCommand(["merge", changeDir, "phase_timings", JSON.stringify({ plan: { started_at: "09:30" } })]);
+
+    const loaded = await readState(changeDir);
+    expect(loaded.phase_timings?.start?.started_at).toBe("08:00");
+    expect(loaded.phase_timings?.start?.completed_at).toBe("09:00");
+    expect(loaded.phase_timings?.plan?.started_at).toBe("09:30");
+  });
+
+  it("_state merge phase_timings 字段不存在时等价于 write", async () => {
+    const changeDir = join(tmpDir, "merge-from-scratch");
+    await mkdir(changeDir, { recursive: true });
+    const state = createInitialState();
+    await writeState(changeDir, state); // 无 phase_timings
+
+    const { stateCommand } = await import("../../src/cli/commands/internal/state.js");
+    await stateCommand(["merge", changeDir, "phase_timings", JSON.stringify({ apply: { started_at: "10:00" } })]);
+
+    const loaded = await readState(changeDir);
+    expect(loaded.phase_timings?.apply?.started_at).toBe("10:00");
+  });
 });
 
 describe("project config", () => {
