@@ -18,8 +18,10 @@
 | `commands/alloy/*.md`（Skill 文件） | `docs/reference/skill-writing-guide.md` | 默认问分支。用户说"直接改"、纯读取、测试验证时不触发 |
 | `openspec/schemas/`（Schema） | — | 同上 |
 | `src/`（TypeScript 源码） | — | 同上 |
-| `docs/superpowers/specs/`（设计文档） | — | 同上 |
-| `docs/superpowers/plans/`（实现计划） | — | 同上 |
+| `docs/specification/`（产品规格） | — | 同上 |
+| `docs/handbook.md`（开发手册） | — | 同上 |
+
+> **ignore目录：** `docs/superpowers/` 是开发过程产物（53 个 design spec + plan 的历史快照），已不维护。不要读取、不要参考、不要在"文档对齐代码"时检查。真相源是 `docs/specification/`。
 
 **分支规范：** 先问"是否建分支"，用户确认后执行。分支命名：`feature/`、`fix/`、`docs/`、`refactor/`、`test/`、`chore/`
 
