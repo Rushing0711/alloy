@@ -220,7 +220,7 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
 
    **记录阶段启动时间：**
    ```bash
-   alloy _state merge openspec/changes/<name> phase_timings "{\"start\":{\"started_at\":\"$SESSION_START\"}}"
+   alloy _state merge openspec/changes/<name> phase_timings "{\"start\":{\"started_at\":\"${SESSION_START:-$(date '+%Y-%m-%d %H:%M:%S')}\"}}"
    ```
 
 6. **记录分支信息**——将 feature_branch 和 worktree null 写入 state：
@@ -244,7 +244,7 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
    **记录阶段时间 + draft hash-lock + commit：**
    ```bash
    COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
-   alloy _state merge openspec/changes/<name> phase_timings "{\"start\":{\"completed_at\":\"$COMPLETED_AT\"}}"
+   alloy _state merge openspec/changes/<name> phase_timings "{\"start\":{\"completed_at\":\"${COMPLETED_AT:-$(date '+%Y-%m-%d %H:%M:%S')}\"}}"
    DRAFT_HASH=$(alloy _record compute openspec/changes/<name> draft)
    APPROVED_AT=$(date "+%Y-%m-%d %H:%M:%S")
    APPROVER=$(git config user.name)

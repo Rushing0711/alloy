@@ -29,7 +29,7 @@ PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
 
 **写入阶段启动时间**（前置检查通过后，使用命令开头捕获的 `PHASE_START`）：
 ```bash
-alloy _state merge openspec/changes/<name> phase_timings "{\"finish\":{\"started_at\":\"$PHASE_START\"}}"
+alloy _state merge openspec/changes/<name> phase_timings "{\"finish\":{\"started_at\":\"${PHASE_START:-$(date '+%Y-%m-%d %H:%M:%S')}\"}}"
 ```
 
 ```
@@ -181,7 +181,7 @@ alloy _guard openspec/changes/<name> finished --apply
 **记录阶段完成时间：**
 ```bash
 COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
-alloy _state merge openspec/changes/<name> phase_timings "{\"finish\":{\"completed_at\":\"$COMPLETED_AT\"}}"
+alloy _state merge openspec/changes/<name> phase_timings "{\"finish\":{\"completed_at\":\"${COMPLETED_AT:-$(date '+%Y-%m-%d %H:%M:%S')}\"}}"
 git add openspec/changes/<name>/
 git commit -m "chore(<name>): 记录 finish 阶段完成时间"
 ```

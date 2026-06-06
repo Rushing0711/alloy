@@ -51,7 +51,7 @@ PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
 
 **写入阶段启动时间**（前置检查通过后，使用命令开头捕获的 `PHASE_START`）：
 ```bash
-alloy _state merge openspec/changes/<name> phase_timings "{\"plan\":{\"started_at\":\"$PHASE_START\"}}"
+alloy _state merge openspec/changes/<name> phase_timings "{\"plan\":{\"started_at\":\"${PHASE_START:-$(date '+%Y-%m-%d %H:%M:%S')}\"}}"
 ```
 
 ```
@@ -209,7 +209,7 @@ git commit -m "docs(<name>): <artifact> 已确认"
 ```bash
 # plans 审批通过后，先写入完成时间
 COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
-alloy _state merge openspec/changes/<name> phase_timings "{\"plan\":{\"completed_at\":\"$COMPLETED_AT\"}}"
+alloy _state merge openspec/changes/<name> phase_timings "{\"plan\":{\"completed_at\":\"${COMPLETED_AT:-$(date '+%Y-%m-%d %H:%M:%S')}\"}}"
 
 # 再执行 plans 的 hash-lock + commit（复用上方通用流程）
 ```
@@ -285,6 +285,8 @@ print(json.dumps(draft))
 alloy _state write openspec/changes/<name> records "$DRAFT_RECORD"
 
 # 3. 清理 phase_timings（清除 plan/apply/archive/finish 记录，重置 start.completed_at）
+# ⚠️ 此处是 phase_timings 唯一允许 _state write 的场景：回溯需要删除 key + 覆盖值，merge 语义不支持。
+# 所有其他 phase_timings 更新必须使用 _state merge，禁止 _state write。
 TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
 echo "$TIMINGS" | python3 -c "
 import sys,json

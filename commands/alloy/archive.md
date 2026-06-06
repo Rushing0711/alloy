@@ -31,7 +31,7 @@ PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
 
 **写入阶段启动时间**（前置检查通过后，使用命令开头捕获的 `PHASE_START`）：
 ```bash
-alloy _state merge openspec/changes/<name> phase_timings "{\"archive\":{\"started_at\":\"$PHASE_START\"}}"
+alloy _state merge openspec/changes/<name> phase_timings "{\"archive\":{\"started_at\":\"${PHASE_START:-$(date '+%Y-%m-%d %H:%M:%S')}\"}}"
 ```
 
 ```
@@ -112,8 +112,8 @@ ARCHIVE_DIR="openspec/changes/archive/$(date +%Y-%m-%d)-<name>"
 
 然后记录 phase_timings.completed_at 并执行 git commit（确保归档变更被版本追踪）：
 ```bash
-# 写入完成时间
-COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
+# 写入完成时间（:="${...:-...}" 兜底：防 Agent 漏 capture）
+COMPLETED_AT="${COMPLETED_AT:-$(date '+%Y-%m-%d %H:%M:%S')}"
 COMPLETED_AT_JSON=$(python3 -c "import json; print(json.dumps({'archive':{'completed_at': '$COMPLETED_AT'}}))")
 alloy _state merge "$ARCHIVE_DIR" phase_timings "$COMPLETED_AT_JSON"
 
