@@ -51,16 +51,7 @@ PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
 
 **写入阶段启动时间**（前置检查通过后，使用命令开头捕获的 `PHASE_START`）：
 ```bash
-TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
-echo "$TIMINGS" | python3 -c "
-import sys,json
-content = sys.stdin.read()
-d = json.loads(content) if content.strip() else {}
-p = d.setdefault('plan',{})
-if 'started_at' not in p:
-    p['started_at']='$PHASE_START'
-print(json.dumps(d))
-" | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
+alloy _state merge openspec/changes/<name> phase_timings "{\"plan\":{\"started_at\":\"$PHASE_START\"}}"
 ```
 
 ```
@@ -218,16 +209,7 @@ git commit -m "docs(<name>): <artifact> 已确认"
 ```bash
 # plans 审批通过后，先写入完成时间
 COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
-TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
-echo "$TIMINGS" | python3 -c "
-import sys,json
-content = sys.stdin.read()
-d = json.loads(content) if content.strip() else {}
-p = d.setdefault('plan',{})
-if 'completed_at' not in p:
-    p['completed_at']='$COMPLETED_AT'
-print(json.dumps(d))
-" | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
+alloy _state merge openspec/changes/<name> phase_timings "{\"plan\":{\"completed_at\":\"$COMPLETED_AT\"}}"
 
 # 再执行 plans 的 hash-lock + commit（复用上方通用流程）
 ```
@@ -305,11 +287,10 @@ alloy _state write openspec/changes/<name> records "$DRAFT_RECORD"
 TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
 echo "$TIMINGS" | python3 -c "
 import sys,json
-d = json.loads(sys.stdin.read() or '{}')
-# 清除下游阶段
+content = sys.stdin.read().strip()
+d = json.loads(content) if content and content != 'null' else {}
 for k in ['plan','apply','archive','finish']:
     d.pop(k, None)
-# 重置 start 完成时间——start 重新变为进行中
 if 'start' in d:
     d['start']['completed_at'] = None
 print(json.dumps(d))
