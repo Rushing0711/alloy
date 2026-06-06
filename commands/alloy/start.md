@@ -262,7 +262,7 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
 │ Alloy [1/5] · Phase: Start — DONE    │
 │ 启动时间: 从 phase_timings.start.started_at 读取               │
 │ 完成时间: 从 phase_timings.start.completed_at 读取                │
-│ 耗时: XmXs                           │
+│ 耗时: (phase_timings.start.completed_at - started_at 计算)  
 └──────────────────────────────────────┘
 
 → Change: <name>
