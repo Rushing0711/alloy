@@ -143,10 +143,10 @@ alloy _state read openspec/changes/<name> worktree
 
 ```
 Step 1/5 进度检测:
-  worktree 值: ".worktrees/<name>/" → 路径存在 → ✓ 已完成，跳过此步骤
-  worktree 值: ".worktrees/<name>/" → 路径不存在 → ⚠️ 残留记录，重新处理
-  worktree 值: "skipped"           → ✓ 用户选择不创建，跳过此步骤
-  worktree 值: null（从未写入）      → ⚠️ 尚未决定，加载 using-git-worktrees
+  worktree 值: 有效路径（如 `.claude/worktrees/<name>/` 或 `.worktrees/<name>/`）→ 路径存在 → ✓ 已完成，跳过此步骤
+  worktree 值: 有效路径 → 路径不存在 → ⚠️ 残留记录，重新处理
+  worktree 值: "skipped"                                                → ✓ 用户选择不创建，跳过此步骤
+  worktree 值: null（从未写入）                                           → ⚠️ 尚未决定，加载 using-git-worktrees
 ```
 
 路径存在、"skipped" 时，直接跳过 Step 1，进入 Step 2。
@@ -167,7 +167,9 @@ null 时，先展示摘要，再加载技能：
 > 正在加载 superpowers:using-git-worktrees 技能...
 ```
 
-使用 Skill 工具加载 `superpowers:using-git-worktrees` 技能。传入参数 "工作目录偏好: 如果 .claude/ 目录存在则优先 .claude/worktrees/<name>，否则 .worktrees/<name>"。该技能内置了完整的决策流程（Step 0 问询 → 创建或跳过）和执行步骤，Agent 按其内部指引执行即可。
+使用 Skill 工具加载 `superpowers:using-git-worktrees` 技能。传入参数 "工作目录偏好: .claude/worktrees/<name>"。该技能内置了完整的决策流程（Step 0 问询 → 创建或跳过）和执行步骤，Agent 按其内部指引执行即可。
+
+**路径偏好说明：** 使用无条件路径 `.claude/worktrees/<name>`，因为 `.claude/` 是 alloy 初始化时的固定目录（存在 commands/skills 等子目录）。显式指定路径后，Agent 在 git worktree fallback（EnterWorktree 不可用时）会直接使用该路径，不会因条件判断错误而回退到 `.worktrees/`。
 
 **when 用户选择不创建 worktree：** 写入 `skipped`（非 null）：
 ```bash
@@ -188,6 +190,9 @@ if [ "$GIT_DIR" != "$GIT_COMMON" ]; then
   alloy _state write openspec/changes/<name> worktree "$WORKTREE_PATH"
   alloy _state write openspec/changes/<name> worktree_branch "$WORKTREE_BRANCH"
   echo "  ✓ worktree 已记录: 分支=$WORKTREE_BRANCH  路径=$WORKTREE_PATH"
+  # commit 确保断点恢复时 state 不丢失
+  git add openspec/changes/<name>/.alloy.yaml
+  git diff --cached --quiet || git commit -m "chore(<name>): record worktree state"
 else
   # EnterWorktree 失败后的 git worktree fallback
   # 优先检测 .claude/worktrees/（EnterWorktree 原生路径），回退 .worktrees/
@@ -203,6 +208,16 @@ else
     alloy _state write openspec/changes/<name> worktree "$WT_PATH"
     alloy _state write openspec/changes/<name> worktree_branch "$WORKTREE_BRANCH"
     echo "  ✓ worktree fallback 已记录: 分支=$WORKTREE_BRANCH  路径=$WT_PATH"
+    # 提交 source repo 的 state
+    git add openspec/changes/<name>/.alloy.yaml
+    git diff --cached --quiet || git commit -m "chore(<name>): record worktree state"
+    # worktree 内也写入并提交——bash cd 不跨工具调用持久化，
+    # 若只在 source repo 写，agent 后续进入 worktree 后读到的 state 仍为 null
+    cd "$WT_PATH" && \
+      alloy _state write openspec/changes/<name> worktree "$WT_PATH" && \
+      alloy _state write openspec/changes/<name> worktree_branch "$WORKTREE_BRANCH" && \
+      git add openspec/changes/<name>/.alloy.yaml && \
+      git diff --cached --quiet || git commit -m "chore(<name>): record worktree state (worktree)"
   else
     echo "  ℹ 未检测到 worktree，按用户选择记录"
     alloy _state write openspec/changes/<name> worktree skipped
