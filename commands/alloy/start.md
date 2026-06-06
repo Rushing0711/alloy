@@ -220,16 +220,7 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
 
    **记录阶段启动时间：**
    ```bash
-   TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
-   echo "$TIMINGS" | python3 -c "
-   import sys,json
-   content = sys.stdin.read()
-   d = json.loads(content) if content.strip() else {}
-   p = d.setdefault('start',{})
-   if 'started_at' not in p:
-       p['started_at']='$SESSION_START'
-   print(json.dumps(d))
-   " | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
+   alloy _state merge openspec/changes/<name> phase_timings "{\"start\":{\"started_at\":\"$SESSION_START\"}}"
    ```
 
 6. **记录分支信息**——将 feature_branch 和 worktree null 写入 state：
@@ -253,15 +244,7 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
    **记录阶段时间 + draft hash-lock + commit：**
    ```bash
    COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
-   TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
-   echo "$TIMINGS" | python3 -c "
-   import sys,json
-   content = sys.stdin.read()
-   d = json.loads(content) if content.strip() else {}
-   p = d.setdefault('start',{})
-   p['completed_at']='$COMPLETED_AT'
-   print(json.dumps(d))
-   " | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
+   alloy _state merge openspec/changes/<name> phase_timings "{\"start\":{\"completed_at\":\"$COMPLETED_AT\"}}"
    DRAFT_HASH=$(alloy _record compute openspec/changes/<name> draft)
    APPROVED_AT=$(date "+%Y-%m-%d %H:%M:%S")
    APPROVER=$(git config user.name)
