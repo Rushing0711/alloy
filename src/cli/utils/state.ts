@@ -17,6 +17,8 @@ export function createInitialState(): AlloyState {
   return {
     phase: "started",
     worktree: null,
+    feature_branch: null,
+    worktree_branch: null,
     schema_version: 1,
     created_at: now,
     updated_at: now,

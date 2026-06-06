@@ -128,7 +128,7 @@ describe("state utils", () => {
 
   it("feature_branch 默认不存在", () => {
     const state = createInitialState();
-    expect(state.feature_branch).toBeUndefined();
+    expect(state.feature_branch).toBeNull();
   });
 
   it("writeState 和 readState feature_branch 往返一致", async () => {
@@ -160,7 +160,7 @@ describe("state utils", () => {
 
   it("worktree_branch 默认不存在", () => {
     const state = createInitialState();
-    expect(state.worktree_branch).toBeUndefined();
+    expect(state.worktree_branch).toBeNull();
   });
 
   it("writeState 和 readState worktree_branch 往返一致", async () => {
