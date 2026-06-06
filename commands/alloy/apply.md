@@ -76,16 +76,7 @@ PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
 
 **写入阶段启动时间**（前置检查通过后，使用命令开头捕获的 `PHASE_START`）：
 ```bash
-TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
-echo "$TIMINGS" | python3 -c "
-import sys,json
-content = sys.stdin.read()
-d = json.loads(content) if content.strip() else {}
-p = d.setdefault('apply',{})
-if 'started_at' not in p:
-    p['started_at']='$PHASE_START'
-print(json.dumps(d))
-" | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
+alloy _state merge openspec/changes/<name> phase_timings "{\"apply\":{\"started_at\":\"$PHASE_START\"}}"
 ```
 
 ```
@@ -198,13 +189,26 @@ if [ "$GIT_DIR" != "$GIT_COMMON" ]; then
   alloy _state write openspec/changes/<name> worktree_branch "$WORKTREE_BRANCH"
   echo "  ✓ worktree 已记录: 分支=$WORKTREE_BRANCH  路径=$WORKTREE_PATH"
 else
-  # 未创建 worktree（用户选择不创建或 sandbox 限制）
-  echo "  ℹ 未检测到 worktree，按用户选择记录"
-  alloy _state write openspec/changes/<name> worktree skipped
+  # 检查是否通过 EnterWorktree 失败后的 git worktree fallback 创建了目录
+  WT_DIR=".worktrees/<name>"
+  if [ -d "$WT_DIR" ]; then
+    WORKTREE_PATH=$(cd "$WT_DIR" 2>/dev/null && pwd -P)
+    if [ -n "$WORKTREE_PATH" ]; then
+      WORKTREE_BRANCH=$(cd "$WORKTREE_PATH" && git branch --show-current 2>/dev/null)
+      alloy _state write openspec/changes/<name> worktree "$WORKTREE_PATH"
+      alloy _state write openspec/changes/<name> worktree_branch "$WORKTREE_BRANCH"
+      echo "  ✓ worktree fallback 已记录: 分支=$WORKTREE_BRANCH  路径=$WORKTREE_PATH"
+    else
+      echo "  ℹ 未检测到 worktree，按用户选择记录"
+      alloy _state write openspec/changes/<name> worktree skipped
+    fi
+  else
+    echo "  ℹ 未检测到 worktree，按用户选择记录"
+    alloy _state write openspec/changes/<name> worktree skipped
+  fi
 fi
-```
 
-技能执行完成后，将结果写入状态文件——这是断点恢复的关键数据（已在上方检测逻辑中自动写入）：
+技能执行完成后，将结果写入状态文件技能执行完成后，将结果写入状态文件——这是断点恢复的关键数据（已在上方检测逻辑中自动写入）：
 - 已创建 worktree → worktree 路径（已在检测中自动写入到 state）
 - 用户拒绝或已在隔离环境 → `skipped`（已在检测中自动写入到 state）
 
@@ -438,16 +442,7 @@ alloy _record check openspec/changes/<name> verify
 ```bash
 # 先写入完成时间
 COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
-TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
-echo "$TIMINGS" | python3 -c "
-import sys,json
-content = sys.stdin.read()
-d = json.loads(content) if content.strip() else {}
-p = d.setdefault('apply',{})
-if 'completed_at' not in p:
-    p['completed_at']='$COMPLETED_AT'
-print(json.dumps(d))
-" | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
+alloy _state merge openspec/changes/<name> phase_timings "{\"apply\":{\"completed_at\":\"$COMPLETED_AT\"}}"
 
 # 再 hash 锁定 + commit
 HASH=$(alloy _record compute openspec/changes/<name> retrospective)
