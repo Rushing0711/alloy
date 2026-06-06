@@ -48,30 +48,23 @@ p = d.setdefault('start',{})  # AttributeError: 'NoneType' has no attribute 'set
 
 ## 修复方案
 
-### Fix A：python3 pipeline 增加 None 类型保护
+### Fix A：保留的 python3 pipeline 增加 None 类型保护
 
-所有 `json.loads` 调用处增加 `None` 检查：
+主要路径（8 处 `started_at`/`completed_at` 写入）已通过 Fix B+C 直接消除，不再经过 python3 pipeline。仅在 2 处无法消除的复杂操作中加固：
 
+**plan.md 回溯清理** — 需要删除多个 key + 重置值：
 ```python
-d = json.loads(content) if content and content.strip() and content.strip() != 'null' else {}
-```
-
-改为更健壮的防御式写法：
-
-```python
-import sys, json
 content = sys.stdin.read().strip()
-d = {}
-if content:
-    try:
-        parsed = json.loads(content)
-        if isinstance(parsed, dict):
-            d = parsed
-    except json.JSONDecodeError:
-        pass
+d = json.loads(content) if content and content != 'null' else {}
 ```
 
-这样无论 `null`、`{}`、空串还是非法 JSON，都安全降级为空 dict。
+**plan.md DRAFT_RECORD 过滤** — records 字段的 json.loads 同样可能收到 `null`：
+```python
+content = sys.stdin.read().strip()
+records = json.loads(content) if content and content != 'null' else []
+```
+
+`content and content != 'null'` 防止 `json.loads("null")` 返回 Python `None`。
 
 ### Fix B：新增 `_state merge` 子命令
 
@@ -86,40 +79,50 @@ if content:
 
 语义：读取 `state[field]`（必须是 object 或 null/undefined），对传入的 partial-json 做递归合并，写回。
 
-实现策略：
+实现策略（幂等语义——已有 leaf 不覆盖）：
 
 ```typescript
-function deepMerge(target: any, source: any): any {
-  if (typeof target !== 'object' || target === null) return source;
-  if (typeof source !== 'object' || source === null) return target;
-  const result = { ...target };
-  for (const key of Object.keys(source)) {
-    if (source[key] !== null && typeof source[key] === 'object' && !Array.isArray(source[key])) {
-      result[key] = deepMerge(result[key], source[key]);
-    } else {
-      result[key] = source[key];
+function deepMerge(target: unknown, source: unknown): unknown {
+  // null/undefined/primitive → replace
+  if (target === null || target === undefined) return source;
+  if (source === null) return source;
+  if (typeof target !== "object" || typeof source !== "object") return source;
+  if (Array.isArray(target) || Array.isArray(source)) return source;
+
+  const result = { ...(target as Record<string, unknown>) };
+  const src = source as Record<string, unknown>;
+
+  for (const key of Object.keys(src)) {
+    if (!(key in result)) {
+      result[key] = src[key];           // 新 key：直接添加
+    } else if (
+      // 双方都是嵌套对象 → 递归
+      typeof src[key] === "object" && src[key] !== null &&
+      !Array.isArray(src[key]) &&
+      typeof result[key] === "object" && result[key] !== null &&
+      !Array.isArray(result[key])
+    ) {
+      result[key] = deepMerge(result[key], src[key]);
     }
+    // else：已有 leaf → 跳过（幂等，不覆盖）
   }
   return result;
 }
 ```
 
-这消除所有 bash+python merge pipeline 的脆弱性。
+这消除所有 bash+python merge pipeline 的脆弱性。Merge 语义：新 key 追加、已有 leaf 不覆盖、数组整体替换、字段不存在时等价于 write。
 
-### Fix C：skill 文件 phase_timings 写入全部换用 `_state merge`
+### Fix C：skill 文件 phase_timings 写入换用 `_state merge`
 
-替换 start.md、plan.md、apply.md、archive.md、finish.md 中所有：
-
-```bash
-TIMINGS=$(alloy _state read ... phase_timings ...)
-echo "$TIMINGS" | python3 -c "..." | while read -r val; do ...
-```
-
-为：
+5 个 skill 文件共 8 处 `started_at`/`completed_at` 写入由 python3 pipeline 替换为单行 `alloy _state merge`：
 
 ```bash
-alloy _state merge ... phase_timings '{"phase_key":{"started_at":"...","completed_at":"..."}}'
+alloy _state merge openspec/changes/<name> phase_timings "{\"phase\":{\"key\":\"$TIMESTAMP\"}}"
 ```
+
+**保留 2 处 python3 pipeline**（加 None 安全保护）：
+- plan.md 回溯清理（需删除多个 key + 重置值，merge 语义不支持删除）
+- plan.md DRAFT_RECORD 过滤（records 数组过滤，非 phase_timings 写入）
 
 ### Fix D：createInitialState 预声明所有字段（P2）
 
@@ -140,21 +143,28 @@ export function createInitialState(): AlloyState {
 
 确保 YAML 字段顺序固定，且 `feature_branch` / `worktree_branch` 与 `worktree` 相邻。
 
-### Fix E：worktree 路径标准化与检测健壮化
+### Fix E：worktree fallback 路径检测健壮化
 
-EnterWorktree 失败后的 fallback 流程：
+EnterWorktree 失败后（`using-git-worktrees` 技能回退至 Step 1b），`else` 分支不再假定 `cd .worktrees/<name>` 一定成功，先检测目录是否存在：
 
-1. 确认当前在 git repo 根目录
-2. `git worktree add .claude/worktrees/<name> -b worktree-<name>`
-3. 验证目录已创建
-4. 从 worktree 实际路径检测分支名然后写入 state
+```bash
+WT_DIR=".worktrees/<name>"
+if [ -d "$WT_DIR" ]; then
+  WORKTREE_PATH=$(cd "$WT_DIR" 2>/dev/null && pwd -P)
+  if [ -n "$WORKTREE_PATH" ]; then
+    WORKTREE_BRANCH=$(cd "$WORKTREE_PATH" && git branch --show-current)
+    # 写 worktree 路径和分支到 state
+  fi
+fi
+```
 
-不依赖相对路径假定。
+用 `[ -d "$WT_DIR" ]` 预检替代直接 `cd`，消除 `no such file or directory` 错误。
 
 ## 影响范围
 
 | 文件 | 改动 |
 |------|------|
+| `src/core/types.ts` | `feature_branch?` / `worktree_branch?` 类型扩展为 `string \| null` |
 | `src/cli/commands/internal/state.ts` | 新增 `merge` action，deepMerge 函数 |
 | `src/cli/utils/state.ts` | `createInitialState()` 预声明 feature_branch/worktree_branch |
 | `commands/alloy/start.md` | phase_timings 写入改用 `_state merge`，兼容 SESSION_START 变量 |
@@ -168,4 +178,4 @@ EnterWorktree 失败后的 fallback 流程：
 
 - Guard 的 HARD STOP 逻辑保留不变（脏状态检测是安全的）
 - `_state write` 的现有行为不变，`merge` 是新增加的，不是替换
-- TypeScript 接口 `AlloyState` 不修改（`feature_branch?` 和 `worktree_branch?` 已经是可选字符串）
+- TypeScript 接口 `AlloyState` 的 `feature_branch?` 和 `worktree_branch?` 从 `string` 扩展为 `string | null`（配套 `createInitialState` 设 null 的编译要求）

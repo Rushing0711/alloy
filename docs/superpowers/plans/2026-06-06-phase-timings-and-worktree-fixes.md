@@ -512,3 +512,13 @@ Expected: 显示用法提示
 git add -A
 git commit -m "chore: 构建 + 全量测试通过后提交产物"
 ```
+
+---
+
+### 执行中的附带修复（未在原始计划中）
+
+| 发现项 | Task | 修复 |
+|--------|------|------|
+| `types.ts` 类型不兼容 null | 2（构建报错） | `feature_branch?` / `worktree_branch?` → `string \| null` |
+| apply.md 行 211 注释文本重复 | 5（审查发现） | 去重 |
+| plan.md DRAFT_RECORD pipeline 缺 None 保护 | 最终审查发现 | `content and content != 'null'` 加固 |
