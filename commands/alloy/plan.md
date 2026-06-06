@@ -277,7 +277,8 @@ rm -rf openspec/changes/<name>/specs/
 # 2. 清理 records（只保留 draft）
 DRAFT_RECORD=$(alloy _state read openspec/changes/<name> records | python3 -c "
 import sys,json
-records = json.loads(sys.stdin.read() or '[]')
+content = sys.stdin.read().strip()
+records = json.loads(content) if content and content != 'null' else []
 draft = [r for r in records if r.get('artifact') == 'draft']
 print(json.dumps(draft))
 ")
