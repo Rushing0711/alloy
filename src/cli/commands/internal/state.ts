@@ -109,8 +109,6 @@ export async function stateCommand(args: string[]): Promise<void> {
       break;
     }
     case "merge": {
-      const field = args[2];
-      const value = args[3];
       if (!field || value === undefined) {
         console.error("用法: alloy _state merge <change-dir> <field> <partial-json>");
         process.exit(1);
