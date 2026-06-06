@@ -167,7 +167,7 @@ null 时，先展示摘要，再加载技能：
 > 正在加载 superpowers:using-git-worktrees 技能...
 ```
 
-使用 Skill 工具加载 `superpowers:using-git-worktrees` 技能。该技能内置了完整的决策流程（Step 0 问询 → 创建或跳过）和执行步骤，Agent 按其内部指引执行即可。
+使用 Skill 工具加载 `superpowers:using-git-worktrees` 技能。传入参数 "工作目录偏好: .claude/worktrees/<name>"（EnterWorktree 原生工具使用此路径，fallback 也保持一致）。该技能内置了完整的决策流程（Step 0 问询 → 创建或跳过）和执行步骤，Agent 按其内部指引执行即可。
 
 **when 用户选择不创建 worktree：** 写入 `skipped`（非 null）：
 ```bash
@@ -189,19 +189,20 @@ if [ "$GIT_DIR" != "$GIT_COMMON" ]; then
   alloy _state write openspec/changes/<name> worktree_branch "$WORKTREE_BRANCH"
   echo "  ✓ worktree 已记录: 分支=$WORKTREE_BRANCH  路径=$WORKTREE_PATH"
 else
-  # 检查是否通过 EnterWorktree 失败后的 git worktree fallback 创建了目录
-  WT_DIR=".worktrees/<name>"
-  if [ -d "$WT_DIR" ]; then
-    WORKTREE_PATH=$(cd "$WT_DIR" 2>/dev/null && pwd -P)
-    if [ -n "$WORKTREE_PATH" ]; then
-      WORKTREE_BRANCH=$(cd "$WORKTREE_PATH" && git branch --show-current 2>/dev/null)
-      alloy _state write openspec/changes/<name> worktree "$WORKTREE_PATH"
-      alloy _state write openspec/changes/<name> worktree_branch "$WORKTREE_BRANCH"
-      echo "  ✓ worktree fallback 已记录: 分支=$WORKTREE_BRANCH  路径=$WORKTREE_PATH"
-    else
-      echo "  ℹ 未检测到 worktree，按用户选择记录"
-      alloy _state write openspec/changes/<name> worktree skipped
+  # EnterWorktree 失败后的 git worktree fallback
+  # 优先检测 .claude/worktrees/（EnterWorktree 原生路径），回退 .worktrees/
+  WT_PATH=""
+  for CANDIDATE in ".claude/worktrees/<name>" ".worktrees/<name>"; do
+    if [ -d "$CANDIDATE" ]; then
+      WT_PATH=$(cd "$CANDIDATE" 2>/dev/null && pwd -P)
+      break
     fi
+  done
+  if [ -n "$WT_PATH" ]; then
+    WORKTREE_BRANCH=$(cd "$WT_PATH" && git branch --show-current 2>/dev/null)
+    alloy _state write openspec/changes/<name> worktree "$WT_PATH"
+    alloy _state write openspec/changes/<name> worktree_branch "$WORKTREE_BRANCH"
+    echo "  ✓ worktree fallback 已记录: 分支=$WORKTREE_BRANCH  路径=$WT_PATH"
   else
     echo "  ℹ 未检测到 worktree，按用户选择记录"
     alloy _state write openspec/changes/<name> worktree skipped
