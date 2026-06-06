@@ -157,6 +157,21 @@ describe("state utils", () => {
     const loaded = await readState(changeDir);
     expect(loaded.feature_branch).toBeUndefined();
   });
+
+  it("worktree_branch 默认不存在", () => {
+    const state = createInitialState();
+    expect(state.worktree_branch).toBeUndefined();
+  });
+
+  it("writeState 和 readState worktree_branch 往返一致", async () => {
+    const changeDir = join(tmpDir, "test-wt-branch");
+    await mkdir(changeDir, { recursive: true });
+    const state = createInitialState();
+    state.worktree_branch = "worktree-test-feat";
+    await writeState(changeDir, state);
+    const loaded = await readState(changeDir);
+    expect(loaded.worktree_branch).toBe("worktree-test-feat");
+  });
 });
 
 describe("project config", () => {

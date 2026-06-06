@@ -165,7 +165,7 @@ null 时，先展示摘要，再加载技能：
 ```
 > [Step 1/5] 隔离环境设置
 >
-> 当前在 feature/<name> 分支，未在隔离 worktree 中。
+> 当前在 `<由 alloy _state read ... feature_branch 获取，回退 feature/<name>>`。未在隔离 worktree 中。
 >
 > 分支隔离的是提交历史，但同一时间只能有一个分支在工作目录里。
 > Worktree 隔离的是工作目录——每个 worktree 有独立的文件副本，可同时 checkout 不同分支。
@@ -173,27 +173,40 @@ null 时，先展示摘要，再加载技能：
 > 如果你的 feature 开发期间要切到其他分支（如修紧急 bug、切 main 查东西），
 > worktree 让你无需 stash/commit 当前进度，直接进另一个目录操作。
 >
-> 你想创建隔离 worktree 吗？
->
->   > Would you like me to set up an isolated worktree?
->   > It protects your current branch from changes.
->
-> - 是 → 创建 .claude/worktrees/<name> worktree，在隔离环境中实现
-> - 否 → 在当前 feature/<name> 分支直接工作
->
-> 加载 superpowers:using-git-worktrees 技能...
+> 正在加载 superpowers:using-git-worktrees 技能...
 ```
 
-使用 Skill 工具加载 `superpowers:using-git-worktrees` 技能。该技能内置了完整的决策流程，Agent 按其内部指引执行即可。
+使用 Skill 工具加载 `superpowers:using-git-worktrees` 技能。该技能内置了完整的决策流程（Step 0 问询 → 创建或跳过）和执行步骤，Agent 按其内部指引执行即可。
 
 **when 用户选择不创建 worktree：** 写入 `skipped`（非 null）：
 ```bash
 alloy _state write openspec/changes/<name> worktree skipped
 ```
 
-技能执行完成后，将结果写入状态文件——这是断点恢复的关键数据：
-- 已创建 worktree → `alloy _state write openspec/changes/<name> worktree "<path>"`
-- 用户拒绝或已在隔离环境 → `alloy _state write openspec/changes/<name> worktree skipped`
+```bash
+echo "  正在检测 worktree 实际状态..."
+
+# 判断是否已在 worktree 中：GIT_DIR != GIT_COMMON 表示在 linked worktree 中
+GIT_DIR=$(cd "$(git rev-parse --git-dir)" 2>/dev/null && pwd -P)
+GIT_COMMON=$(cd "$(git rev-parse --git-common-dir)" 2>/dev/null && pwd -P)
+
+if [ "$GIT_DIR" != "$GIT_COMMON" ]; then
+  # 已在 worktree 中，获取实际路径和分支名
+  WORKTREE_PATH=$(cd "$(git rev-parse --show-toplevel)" 2>/dev/null && pwd -P)
+  WORKTREE_BRANCH=$(cd "$WORKTREE_PATH" && git branch --show-current)
+  alloy _state write openspec/changes/<name> worktree "$WORKTREE_PATH"
+  alloy _state write openspec/changes/<name> worktree_branch "$WORKTREE_BRANCH"
+  echo "  ✓ worktree 已记录: 分支=$WORKTREE_BRANCH  路径=$WORKTREE_PATH"
+else
+  # 未创建 worktree（用户选择不创建或 sandbox 限制）
+  echo "  ℹ 未检测到 worktree，按用户选择记录"
+  alloy _state write openspec/changes/<name> worktree skipped
+fi
+```
+
+技能执行完成后，将结果写入状态文件——这是断点恢复的关键数据（已在上方检测逻辑中自动写入）：
+- 已创建 worktree → worktree 路径（已在检测中自动写入到 state）
+- 用户拒绝或已在隔离环境 → `skipped`（已在检测中自动写入到 state）
 
 **Step 1/5 完成汇总：**
 
@@ -204,9 +217,9 @@ alloy _state write openspec/changes/<name> worktree skipped
 
 > [Step 1/5] 隔离环境 — 就绪
 >
-> 源分支:      feature/<name>
-> Worktree 分支: feature/<name>--wt
-> Worktree 路径: .claude/worktrees/<name>
+> 源分支:      <由 state.feature_branch 获取，回退 feature/<name>>
+> Worktree 分支: <由 state.worktree_branch 获取，无则显示 N/A>
+> Worktree 路径: <由 state.worktree 获取，无则显示 N/A>
 ```
 
 ### [Step 2/5] 任务实现
@@ -494,27 +507,40 @@ UNTRACKED=$(git status --porcelain | grep '^??' | sed 's/^?? //')
 
 ```bash
 WORKTREE_PATH=$(alloy _state read openspec/changes/<name> worktree 2>/dev/null)
+FEATURE_BRANCH=$(alloy _state read openspec/changes/<name> feature_branch 2>/dev/null)
+WORKTREE_BRANCH=$(alloy _state read openspec/changes/<name> worktree_branch 2>/dev/null)
+
 if [ "$WORKTREE_PATH" != "null" ] && [ -n "$WORKTREE_PATH" ] && [ "$WORKTREE_PATH" != "skipped" ]; then
   echo "     ℹ 检测到 worktree（$WORKTREE_PATH），正在合并回 feature 分支..."
 
+  # 向下兼容：遗留 change 无 feature_branch → 退回到 feature/<name>
+  if [ -z "$FEATURE_BRANCH" ] || [ "$FEATURE_BRANCH" = "null" ]; then
+    FEATURE_BRANCH="feature/<name>"
+  fi
+
+  # 向下兼容：遗留 change 无 worktree_branch → 退回到 worktree-<name>
+  if [ -z "$WORKTREE_BRANCH" ] || [ "$WORKTREE_BRANCH" = "null" ]; then
+    WORKTREE_BRANCH="worktree-<name>"
+  fi
+
   # 切回主仓库目录
   MAIN_ROOT=$(cd "$WORKTREE_PATH" && git rev-parse --show-toplevel 2>/dev/null)
-  FEATURE_BRANCH=$(cd "$MAIN_ROOT" && git branch --show-current)
 
   # 从 worktree 分支合并代码到 feature 分支
   cd "$MAIN_ROOT"
-  git merge "feature/<name>--wt" --no-edit
+  git merge "$WORKTREE_BRANCH" --no-edit
 
   if [ $? -eq 0 ]; then
     # 删除 worktree 目录和分支
     git worktree remove "$WORKTREE_PATH"
-    git branch -d "feature/<name>--wt"
+    git branch -d "$WORKTREE_BRANCH"
     # 清理 worktree 状态
     alloy _state write openspec/changes/<name> worktree null
-    echo "     ✓ worktree 已合并至 feature 分支并清理"
+    alloy _state write openspec/changes/<name> worktree_branch null
+    echo "     ✓ worktree 已合并至 $FEATURE_BRANCH 分支并清理"
   else
     echo "     ⚠ merge 冲突，请手动解决后再继续"
-    echo "     先: git checkout feature/<name> && git merge feature/<name>--wt"
+    echo "     先: git checkout $FEATURE_BRANCH && git merge $WORKTREE_BRANCH"
     exit 1
   fi
 fi

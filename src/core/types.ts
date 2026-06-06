@@ -69,6 +69,7 @@ export interface PhaseTimings {
 export interface AlloyState {
   phase: "started" | "planned" | "applied" | "archived" | "finished";
   worktree: string | null;
+  worktree_branch?: string;       // worktree 内 checkout 的分支名
   schema_version: number;
   created_at: string;
   updated_at: string;

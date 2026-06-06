@@ -37,7 +37,7 @@ export async function selectTargetAgents(): Promise<AgentInfo[]> {
 
 export interface InitOptions extends DeployOptions {}
 
-const GITIGNORE_RULES = ["docs/superpowers/", ".worktrees/", "worktrees/", "*.local.*", ".superpowers/"];
+const GITIGNORE_RULES = ["docs/superpowers/", ".claude/worktrees/", ".worktrees/", "worktrees/", ".superpowers/", "*.local.*"];
 
 async function ensureGitignore(projectPath: string): Promise<void> {
   const gitignorePath = join(projectPath, ".gitignore");

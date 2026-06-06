@@ -211,12 +211,6 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
      - 校验：不允许与主分支同名
      - `git checkout -b <branch-name>`
 
-   分支选择完成后，记录到状态：
-   ```bash
-   alloy _state write openspec/changes/<name> feature_branch <branch-name>
-   alloy _state write openspec/changes/<name> worktree null
-   ```
-
 4. **调用 `/opsx:new <name>`** 创建 change 目录（已在 feature 分支上，目录直接落在正确分支）
 
 5. **写入 state**——使用 `_state init` 一步创建完整初始状态（包含 `records: []`、正确类型），避免逐字段写入遗漏 records 数组：
@@ -238,9 +232,15 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
    " | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
    ```
 
-6. **按模板生成 `draft.md`** 到 `openspec/changes/<name>/draft.md`（直接在 change 目录下生成，无需移动）
+6. **记录分支信息**——将 feature_branch 和 worktree null 写入 state：
+   ```bash
+   alloy _state write openspec/changes/<name> feature_branch <branch-name>
+   alloy _state write openspec/changes/<name> worktree null
+   ```
 
-7. **提交：**
+7. **按模板生成 `draft.md`** 到 `openspec/changes/<name>/draft.md`（直接在 change 目录下生成，无需移动）
+
+8. **提交：**
 
    **alloy init 基础设施提交：**
    ```bash
