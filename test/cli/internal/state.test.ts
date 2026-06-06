@@ -166,7 +166,7 @@ describe("alloy _state", () => {
       expect(typeof state.schema_version).toBe("number");
       expect(state.worktree).toBeNull();
       expect(state.records).toEqual([]);
-      expect(state.feature_branch).toBeUndefined();
+      expect(state.feature_branch).toBeNull();
       expect(state.created_at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
       expect(state.updated_at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
 
