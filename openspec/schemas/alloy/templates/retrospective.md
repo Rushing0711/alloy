@@ -21,7 +21,7 @@
 | tasks | | | |
 | plans | | | |
 | verify | | | |
-| retrospective | | <hash> | 待确认 |
+| retrospective | | — | 待确认 |
 
 ### Commit 汇总（按 type）
 <!-- git log <base>..HEAD --oneline，按 Conventional Commits type 分组 -->

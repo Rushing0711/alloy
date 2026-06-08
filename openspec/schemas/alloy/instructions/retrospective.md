@@ -36,7 +36,7 @@ alloy _state read openspec/changes/<name> worktree
 ```
 
 提取每个制品的 artifact / hash / approver / committed_at，构建审批链。
-**retrospective 行特殊处理：** hash 用 `alloy _record compute` 计算当前文件（文件已存在），审批时间填"待确认"——等用户审查通过后再补。
+**retrospective 行特殊处理：** hash 列填 `—`（自指 hash 悖论：写入 hash 会导致文件变化、hash 失效），审批时间填"待确认"——等用户审查通过后再补。hash 仅记录在 `.alloy.yaml` 中。
 
 **来源二：git log（全周期 commit 全景）**
 ```bash

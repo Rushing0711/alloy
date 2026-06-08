@@ -463,13 +463,11 @@ alloy _record check openspec/changes/<name> verify
 选 (a)：补填审批时间 + hash 锁定 + 提交，一个 commit 包含所有累积变更（retrospective + 阶段完成时间 + worktree 状态），不拆开：
 ```bash
 APPROVAL_TIME=$(date "+%Y-%m-%d %H:%M:%S")
-# 将 §0 表格中 retrospective 行的"待确认"替换为实际审批时间
-sed -i '' "s/| retrospective |.*| 待确认 |/| retrospective | $(alloy _record approver openspec/changes/<name>) | <hash> | ${APPROVAL_TIME} |/" openspec/changes/<name>/retrospective.md
+# 将 §0 表格中 retrospective 行的"待确认"替换为实际审批时间（hash 列保持 "—"，避免自指悖论）
+sed -i '' "s/| retrospective |.*| 待确认 |/| retrospective | $(alloy _record approver openspec/changes/<name>) | — | ${APPROVAL_TIME} |/" openspec/changes/<name>/retrospective.md
 COMPLETED_AT="${APPROVAL_TIME}"
 alloy _state merge openspec/changes/<name> phase_timings "{\"apply\":{\"completed_at\":\"${COMPLETED_AT:-$(date '+%Y-%m-%d %H:%M:%S')}\"}}"
 HASH=$(alloy _record compute openspec/changes/<name> retrospective)
-# 用实际 hash 替换占位符 <hash>
-sed -i '' "s/<hash>/$HASH/" openspec/changes/<name>/retrospective.md
 alloy _record write openspec/changes/<name> retrospective "$HASH" "$APPROVAL_TIME" "$(alloy _record approver openspec/changes/<name>)"
 git add openspec/changes/<name>/
 git commit -m "docs(<name>): retrospective 已确认"
