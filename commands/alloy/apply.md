@@ -522,11 +522,13 @@ UNTRACKED=$(git status --porcelain | grep '^??' | sed 's/^?? //')
 
 不需要穷举目录——Agent 根据项目上下文判断即可。比如项目用了 vite，看到 `.vite/` 就知道该 ignore。判断不准时，询问用户确认。
 
-**通过 `alloy _guard` 校验并更新 phase：**
+**通过 `alloy _guard` 校验并更新 phase（必须在 worktree 中执行，若使用了 worktree）：**
 ```bash
 alloy _guard openspec/changes/<name> applied --apply
+git add openspec/changes/<name>/.alloy.yaml
+git commit -m "chore(<name>): phase → applied"
 ```
-guard 自动校验 hash 一致性后推进 phase。
+guard 自动校验 hash 一致性后推进 phase。phase 变更必须 commit，否则 worktree 清理时未提交的变更会丢失。
 
 ```
 💡 建议：可以执行 QA 测试或浏览器测试等质量检查，确认后再进入 archive。
