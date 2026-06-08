@@ -11,7 +11,7 @@ tags: [alloy, workflow]
 
 **核心原则：把实际工作委托给专门的技能，不要自己做。Alloy 是编排器，不是执行者。**
 
-> **`<TIMESTAMP>` 的含义：** 每次渲染阶段头部框时，执行 `date "+%Y-%m-%d %H:%M:%S"` 获取本地时间，替换 `<TIMESTAMP>`。不要输出字面字符串 `<TIMESTAMP>`。`<SESSION_START>` 是"全新开始"路径在 header 渲染前捕获的会话启动时间，后续 step 8 写入 phase_timings 时复用该值。`<created_at>` 从 `.alloy.yaml` 的 `created_at` 字段读取。
+> **`<TIMESTAMP>` 的含义：** 每次渲染阶段头部框时，执行 `date "+%Y-%m-%d %H:%M:%S"` 获取本地时间，替换 `<TIMESTAMP>`。不要输出字面字符串 `<TIMESTAMP>`。`<START_TIME>` 是"全新开始"路径中捕获的当前时间——agent 捕获 date 命令的输出后，在 header 渲染和 phase_timings 写入时复用该值。`<created_at>` 从 `.alloy.yaml` 的 `created_at` 字段读取。
 
 ---
 
@@ -27,15 +27,16 @@ tags: [alloy, workflow]
 
 ## 全新开始（无活跃 change + 用户提供了 topic）
 
-**捕获阶段启动时间**（命令调用后第一时间，后续写入 phase_timings.start.started_at）：
+**捕获阶段启动时间**（命令调用后第一时间输出当前时间，agent 捕获输出值后在 header 和 phase_timings 中复用）：
 ```bash
-SESSION_START=$(date "+%Y-%m-%d %H:%M:%S")
+date "+%Y-%m-%d %H:%M:%S"
 ```
+> 提示：不要混用 bash 变量——bash 状态在两次工具调用间不持久。直接捕获 date 的输出文本，填入 `<START_TIME>`。
 
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [1/5] · Phase: Start           │
-│ 启动时间: 使用上面 SESSION_START 的值
+│ 启动时间: <START_TIME>
 └──────────────────────────────────────┘
 ```
 
@@ -218,7 +219,7 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
 
    **记录阶段启动时间：**
    ```bash
-   alloy _state merge openspec/changes/<name> phase_timings "{\"start\":{\"started_at\":\"${SESSION_START:-$(date '+%Y-%m-%d %H:%M:%S')}\"}}"
+   alloy _state merge openspec/changes/<name> phase_timings "{\"start\":{\"started_at\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}}"
    ```
 
 6. **记录分支信息**——将 feature_branch 和 worktree null 写入 state：
