@@ -99,6 +99,17 @@ test -f openspec/changes/<name>/verify.md && ! grep -q '^- \[x\] ❌ FAIL' opens
 - `/opsx:archive` 返回错误（权限、冲突等）→ [HARD STOP]，不推进 phase
 - `/opsx:archive` 不可用（OpenSpec 未安装）→ 引导用户运行 `alloy init` 安装 OpenSpec
 
+**归档变更提交（必须在 worktree 清理之前）：**
+
+`/opsx:archive` 执行 `mv` 移动目录，但不负责 git commit。如果当前在 worktree 中，变更必须先 commit 到 worktree 分支，否则 worktree 清理时 merge 会丢失归档操作。
+
+```bash
+git add -A openspec/specs/ openspec/changes/
+git diff --cached --quiet || git commit -m "chore(<name>): 归档目录移动"
+```
+
+`git diff --cached --quiet` 在无变更时跳过（`opsx:archive` 已自行 commit 的场景）。
+
 归档成功后，确定归档路径并处理后续步骤：
 
 ```bash
@@ -125,9 +136,17 @@ if [ "$WORKTREE_PATH" != "null" ] && [ -n "$WORKTREE_PATH" ] && [ "$WORKTREE_PAT
     FEATURE_BRANCH="feature/<name>"
   fi
 
-  # 向下兼容：遗留 change 无 worktree_branch → 退回到 worktree-<name>
+  # 向下兼容：遗留 change 无 worktree_branch → 从 worktree 实际状态检测
   if [ -z "$WORKTREE_BRANCH" ] || [ "$WORKTREE_BRANCH" = "null" ]; then
-    WORKTREE_BRANCH="worktree-<name>"
+    WORKTREE_BRANCH=$(git worktree list --porcelain | awk -v path="$WORKTREE_PATH" '
+      /^worktree / { wt = substr($0, 10) }
+      /^branch / && wt == path { gsub(/^refs\/heads\//, "", $2); print $2; exit }
+    ')
+    if [ -z "$WORKTREE_BRANCH" ]; then
+      echo "  ⚠ 无法检测 worktree 分支名（worktree_branch 为空且 git worktree list 未匹配）"
+      echo "  请手动指定: git merge <worktree-branch> && git worktree remove $WORKTREE_PATH"
+      exit 1
+    fi
   fi
 
   # 切回主仓库目录
@@ -163,16 +182,16 @@ COMPLETED_AT="${COMPLETED_AT:-$(date '+%Y-%m-%d %H:%M:%S')}"
 COMPLETED_AT_JSON=$(python3 -c "import json; print(json.dumps({'archive':{'completed_at': '$COMPLETED_AT'}}))")
 alloy _state merge "$ARCHIVE_DIR" phase_timings "$COMPLETED_AT_JSON"
 
-# 一次 commit：主 spec 更新 + 归档目录新增 + 原 change 目录删除（归入 archive/）+ .alloy.yaml 变更
-# -A 限路径：只追踪 openspec/specs/ 和 openspec/changes/ 的新增/修改/删除，不扫全仓
+# commit：.alloy.yaml 变更（phase_timings + worktree_merged_at）
+# 归档目录移动已在 worktree 清理前提交（或无 worktree 时在上方提交）
 git add -A openspec/specs/ openspec/changes/
-git commit -m "chore(<name>): Delta Spec 已同步并归档"
+git commit -m "chore(<name>): 归档阶段完成"
 ```
-commit 失败必须阻断——归档变更未提交时，后续 finish 会清理分支，导致 spec 变更丢失。
+commit 失败必须阻断——.alloy.yaml 变更未提交时，后续 finish 阶段状态不一致。
 
 > ✓ Delta Spec 已合并到主 spec
 > ✓ Change 已归档到 $ARCHIVE_DIR
-> ✓ 归档变更已提交
+> ✓ 归档变更已提交（目录移动 + 阶段完成时间）
 
 ### Step 3/3：完成
 
