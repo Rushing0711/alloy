@@ -411,7 +411,10 @@ alloy doctor [path] [--json]
 ```yaml
 # openspec/changes/<name>/.alloy.yaml
 phase: started | planned | applied | archived | finished
-worktree: null | ".worktrees/<name>" | "skipped"
+worktree: null | ".claude/worktrees/<name>" | "skipped"
+worktree_branch: null | "worktree-<name>"   # worktree 分支名
+worktree_created_at: null | "2026-05-28 09:10:00"
+worktree_merged_at: null | "2026-05-28 12:00:00"  # archive 阶段合并后写入
 feature_branch: "feat/login"    # 本次 change 使用的 feature 分支
 schema_version: 1
 created_at: "2026-05-28 09:00:00"
@@ -438,6 +441,9 @@ records:
 |------|------|------|
 | `phase` | CLI + Agent | 当前阶段，决定 `/alloy:start` 的恢复路径 |
 | `worktree` | apply 阶段写入 | null=尚未决定；skipped=用户选择不创建；路径=已创建，恢复时跳过 |
+| `worktree_branch` | apply 阶段写入 | worktree 分支名（如 `worktree-<name>`），archive 清理时用于 merge |
+| `worktree_created_at` | apply 阶段写入 | worktree 创建时间 |
+| `worktree_merged_at` | archive 阶段写入 | worktree 合并回 feature 分支的时间，null 表示未使用 worktree 或未合并 |
 | `feature_branch` | start 阶段写入 | 本次 change 使用的 feature 分支名，discard 时用于安全清理分支 |
 | `schema_version` | alloy init 写入 | 格式演进时用于兼容解析 |
 | `created_at` | alloy start 写入 | change 创建时间 |
@@ -758,10 +764,12 @@ alloy update [path]
 | 22 | 一个制品，一次提交 | 每个制品审查通过后立即 hash-lock + 单独 git commit，records 记录 hash。避免大爆炸提交，每个制品可独立回溯、独立 revert、独立 cherry-pick |
 | 23 | precheck 路由替代 HARD STOP | 命令 precheck 不满足时，自动转发到正确阶段命令而非报错退出。用户随便打任何命令都不会错——系统自己弄清楚该做什么 |
 | 24 | 阶段时间持久化到 phase_timings | 每个阶段的 started_at / completed_at 写入 .alloy.yaml，接续时读历史值不丢失耗时数据。替代 shell 变量存储（退出即失） |
-| 25 | git add 只用精确路径 | 所有 Alloy 触发的 git commit 只用精确路径，永远不用 `-A`/`-a`/`.`。防止意外文件混入提交。`.gitignore` 补齐 `*.local.*` |
-| 26 | worktree 在 apply 生命周期内闭环 | worktree 在 apply Step 1 按需创建、在 apply 结束前合并清理回到 feature 分支。archive/finish 阶段感知不到 worktree 的存在——worktree 是 apply 的本地实现细节，不影响后续阶段的逻辑 |
+| 25 | git add 规则：`-A` 限定路径可用 | `git add -A <路径>` 可用（只扫描指定目录的新增/修改/删除），无路径限定的 `git add -A`/`-a`/`.` 禁止。防止意外文件混入提交。`.gitignore` 补齐 `*.local.*` |
+| 26 | worktree 在 archive 阶段清理 | worktree 在 apply Step 1 按需创建，apply 结束时不清理（只推进 phase）。archive 阶段归档变更提交后，执行 worktree merge + remove + branch -d，写入 worktree_merged_at。finish 阶段感知不到 worktree 的存在 |
 | 27 | executing-plans 路径补偿 TDD + spec 合规审查 | executing-plans 不含 TDD 和 code review 闸门，apply 在加载前先加载 TDD 设定硬约束、执行后执行 spec 合规审查（tasks.md checkbox 对代码实现）、再加 code review。串行路径共 4 步：TDD → executing-plans → spec 合规审查 → code review |
 | 28 | 策略选择场景化对比 | 不只在 plans.md 写 strategy frontmatter——apply Step 2 以场景对比表格展示 SDD（多任务并行）和 executing-plans（少任务串行）的适用场景，用户根据实际任务特征选择 |
+| 29 | `_guard --apply` 后补 commit | guard 校验 hash 一致性后自动推进 phase，但 phase 变更必须 commit（否则 worktree 清理或 squash merge 时未提交的变更会丢失）。每个阶段末尾 guard + commit 是固定模式 |
+| 30 | 归档 commit 在 worktree 清理之前 | `/opsx:archive` 执行 `mv` 移动目录但不 git commit。如果在 worktree 中，变更必须先 commit 到 worktree 分支，否则 worktree merge 时会丢失归档操作。顺序：归档 commit → worktree 清理 → 完成时间 commit → guard commit |
 
 ---
 
