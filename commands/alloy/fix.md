@@ -249,12 +249,34 @@ fix-from: <原 change 名>"
    git add <精确路径>
    git commit -m "fix: <描述>"
    ```
-4. 合并回主分支：
+4. 确认合并并合并回主分支：
+
+   在执行 merge 之前，先展示合并信息并等待用户确认：
+
+   > 确认合并
+   > ──────────────────────────────────────
+   >
+   > 即将合并热修分支到主分支：
+   >
+   > | | |
+   > |---|---|
+   > | 源分支 | `hotfix/<desc>` |
+   > | 目标分支 | `<MAIN_BRANCH>` |
+   >
+   > 提交：
+   > ```
+   > <git log <MAIN_BRANCH>..hotfix/<desc> --oneline 的输出>
+   > ```
+   >
+   > 合并到主分支后，热修分支会被删除。
+
+   展示合并摘要后，使用 [Y/n] 让用户确认。选 Y 后执行合并：
    ```bash
    git checkout <MAIN_BRANCH>
    git merge hotfix/<desc> --no-ff
    git branch -d hotfix/<desc>
    ```
+   选 n 则提示："取消合并。热修分支 hotfix/<desc> 保留，可后续手动合并。"
 
 ---
 
