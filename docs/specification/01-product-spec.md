@@ -233,15 +233,21 @@ phase → planned
 
 执行:
   1. /opsx:archive → sync delta spec + 归档到 archive/YYYY-MM-DD-<name>/
-  2. 跨周期反馈：读取 retrospective.md §6 Promote Candidates，将 Promote to: memory 的条目写入 ~/.claude/memory/
-  3. hash-lock verify.md（archive 依赖 verify.md hash 校验）：
-     `alloy _record compute` + `alloy _record write`（如未在 apply 阶段锁定）
-  4. git add（精确路径）+ git commit：
-     git add openspec/specs/ openspec/changes/archive/
-     git add -u openspec/changes/<name>/  # cleanup mv residue
-     git commit -m "chore(<name>): Delta Spec 已同步并归档"
-     永远不用 git add -A——防止意外文件混入
-  5. phase → archived（通过 `alloy _guard ... --apply`）
+  2. 归档变更提交（必须在 worktree 清理之前——如果在 worktree 中，变更必须先 commit 到 worktree 分支，否则 merge 会丢失归档操作）：
+     git add -A openspec/specs/ openspec/changes/
+     git diff --cached --quiet || git commit -m "chore(<name>): 归档目录移动"
+  3. 跨周期反馈：读取 retrospective.md §6 Promote Candidates，将 Promote to: memory 的条目写入 ~/.claude/memory/
+  4. Worktree 清理（如果 apply 期间使用了 worktree）：
+     读取 worktree_path / feature_branch / worktree_branch → 向下兼容检测（遗留 change 无 feature_branch/worktree_branch 时自动推断）
+     → cd 主仓库 → git merge worktree_branch → git worktree remove → git branch -d
+     → 写入 worktree_merged_at
+     未使用 worktree（null 或 skipped）则跳过
+  5. 记录完成时间 + 提交（所有 .alloy.yaml 变更在 commit 之前完成）：
+     git add -A openspec/specs/ openspec/changes/
+     git commit -m "chore(<name>): 归档阶段完成"
+  6. phase → archived（通过 `alloy _guard ... --apply` + guard 后补 commit）
+
+git add 规则：`-A` 限定路径可用（如 `git add -A openspec/specs/ openspec/changes/`），无路径限定的 `git add -A` 禁止——防止意外文件混入。
 
 archive 只做 spec 归档和归档提交，不涉及代码合并。代码合入由 /alloy:finish 完成。
 ```
