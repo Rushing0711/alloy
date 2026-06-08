@@ -42,7 +42,7 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 |------|------|------|
 | `/alloy:start` | `[topic]` | 智能入口：自动检测状态，接续或新建 |
 | `/alloy:plan` | `[name]` | 制品生成设计文档，始终分步，每步可审查 |
-| `/alloy:apply` | `[name]` | 执行：隔离 worktree → SDD → 代码验证 → 制品验证 → 复盘（worktree 在 apply 结束前自动合并清理） |
+| `/alloy:apply` | `[name]` | 执行：隔离 worktree → SDD → 代码验证 → 制品验证 → 复盘 |
 | `/alloy:archive` | `[name]` | 归档：sync delta spec → 合并主 spec → 移入 archive/ |
 | `/alloy:finish` | `[name]` | 收尾：代码合入 + 现场清理（merge / PR / keep） |
 | `/alloy:fix` | — | Bug 修复入口：环境感知 → 根因诊断（含 spec 拦截） → 三分支修复 |
@@ -176,7 +176,7 @@ phase → planned
 执行步骤（共 5 步，每步自带幂等检查，验证失败回到 Step 2 修复）:
   1. 隔离环境设置：
      - 使用 superpowers:using-git-worktrees 技能（用户选择"是/否"）
-     - 用户选"是" → 创建 .claude/worktrees/<name> worktree，分支名 feature/<name>--wt
+     - 用户选"是" → 创建 .claude/worktrees/<name> worktree，分支名 worktree-<name>
      - 用户选"否" → worktree 字段设为 "skipped"，在当前分支直接工作
      - 幂等检查：worktree 路径存在或值为 "skipped" → 跳过
   2. 任务实现：
@@ -207,13 +207,16 @@ phase → planned
   - 构建产物（dist/、.next/、node_modules/ 等）→ 提醒用户更新 .gitignore
   - 项目源码 → git add 后提交
 
-**完成阶段（验证 + 复盘通过后、guard 之前）：**
-  如果 apply 期间使用了 worktree，先执行合并清理：
-  ① git merge feature/<name>--wt 合并回 feature 分支
-  ② git worktree remove 删除 worktree 目录
-  ③ git branch -d 删除 worktree 分支
-  ④ alloy _state write 清除 worktree 字段
-  完成清理后，verify.md 和 retrospective.md 各自 hash-lock + 单独 git commit，再通过 guard 校验。
+**完成阶段（验证 + 复盘通过后）：**
+  verify.md 和 retrospective.md 已在各自审查窗口中 hash-lock + 单独 git commit（具体命令已内联在上方各审查窗口中）。
+  retrospective commit 可包含 phase_timings 等元数据。
+  通过 `alloy _guard ... --apply` 校验并推进 phase，guard 后补 commit：
+  ```bash
+  alloy _guard openspec/changes/<name> applied --apply
+  git add openspec/changes/<name>/.alloy.yaml
+  git commit -m "chore(<name>): phase → applied"
+  ```
+  worktree 清理已移至 `/alloy:archive` 阶段。
 ```
 
 ### alloy archive
