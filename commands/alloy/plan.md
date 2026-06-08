@@ -101,7 +101,7 @@ alloy _state merge openspec/changes/<name> phase_timings "{\"plan\":{\"started_a
 
 ## Step 2/3：制品生成 · /opsx:continue + writing-plans
 
-**[Step 2/3] 制品生成**
+[Step 2/3] 制品生成
 ──────────────────────────────────────
 
 **每个制品（proposal / design / specs / tasks）必须通过 `/opsx:continue` 生成。禁止手动编写制品文件。** `/opsx:continue` 自动读取 schema DAG，按 `proposal → design → specs → tasks` 顺序依次产出，每次调用生成一个制品。**tasks 是 `/opsx:continue` 生成的最后一个制品。**plans.md 由 `superpowers:writing-plans` 技能生成（见下文）。
