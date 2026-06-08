@@ -118,7 +118,7 @@ Change: <name>
 
 ### 各选项的后续行为
 
-**选项 1：本地 merge**
+**选项 1：本地合并（squash）**
 
 在执行 merge 之前，必须展示确认信息并等待用户确认：
 
@@ -143,26 +143,41 @@ Change: <name>
 
 **必须等待用户精确输入确认语句。** "好"、"可以"、"y" 都不算确认。
 
-用户确认后执行 merge：
+用户确认后，记录完成时间、推进 phase，再 squash 合并：
 ```bash
+# 确定归档路径（archive 阶段已将目录移至 archive/ 下）
+ARCHIVE_DIR=$(ls -d openspec/changes/archive/*-<name> 2>/dev/null | head -1)
+CHANGE_DIR="${ARCHIVE_DIR:-openspec/changes/<name>}"
+
+# 记录完成时间 + 推进 phase 到 finished（所有状态变更在 squash merge 之前完成）
+COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
+alloy _state merge "$CHANGE_DIR" phase_timings "{\"finish\":{\"completed_at\":\"${COMPLETED_AT:-$(date '+%Y-%m-%d %H:%M:%S')}\"}}"
+alloy _guard "$CHANGE_DIR" finished --apply
+git add -A openspec/changes/ openspec/config.yaml
+git commit -m "chore(<name>): 记录 finish 阶段完成时间"
+
 git checkout <main_branch>
 git pull || echo "⚠️ git pull 失败（网络问题或冲突），请手动处理后再继续"
-git merge <feature_branch>
+git merge --squash <feature_branch>
+git commit -m "chore(<name>): 合入 main"
 ```
 
-若 `git pull` 失败（网络不可达、认证失败），输出警告并暂停，让用户决定是否跳过 pull 直接 merge。若 `git merge` 冲突，输出冲突文件列表，让用户手动解决后继续。
-```bash
-alloy _guard openspec/changes/<name> finished --apply
-```
+若 `git pull` 失败（网络不可达、认证失败），输出警告并暂停，让用户决定是否跳过 pull 直接 merge。若 `git merge --squash` 冲突，输出冲突文件列表，让用户手动解决后继续。
 
 提示："代码已合入 <main_branch>。Alloy 工作流完成。"
 
 **选项 2：创建 PR**
-- PR 创建后，更新 phase：
+- 先记录完成时间并推进 phase，作为分支上最后一个提交（PR squash merge 后主分支仅 1 个 commit）：
   ```bash
-  alloy _guard openspec/changes/<name> finished --apply
+  ARCHIVE_DIR=$(ls -d openspec/changes/archive/*-<name> 2>/dev/null | head -1)
+  CHANGE_DIR="${ARCHIVE_DIR:-openspec/changes/<name>}"
+  COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
+  alloy _state merge "$CHANGE_DIR" phase_timings "{\"finish\":{\"completed_at\":\"${COMPLETED_AT:-$(date '+%Y-%m-%d %H:%M:%S')}\"}}"
+  alloy _guard "$CHANGE_DIR" finished --apply
+  git add -A openspec/changes/ openspec/config.yaml
+  git commit -m "chore(<name>): 记录 finish 阶段完成时间"
   ```
-- 提示："PR 已创建。审查通过后合并，Alloy 工作流即完成。"
+- 提示："PR 已创建。审查通过后 squash merge 即可完成。"
 - 当用户收到 PR 审查反馈并在对话中讨论时，遵循以下行为规范（来自 superpowers:receiving-code-review）：
   - **验证优先** —— 不要盲从审查意见。先验证 reviewer 指出的问题是否真实存在，再决定是否修改
   - **技术推理** —— 如果你的实现有技术理由，解释原因而不是被动接受。reviewer 可能缺少上下文
@@ -178,13 +193,7 @@ alloy _guard openspec/changes/<name> finished --apply
 
 ### [Step 3/3] 完成
 
-**记录阶段完成时间：**
-```bash
-COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
-alloy _state merge openspec/changes/<name> phase_timings "{\"finish\":{\"completed_at\":\"${COMPLETED_AT:-$(date '+%Y-%m-%d %H:%M:%S')}\"}}"
-git add openspec/changes/<name>/
-git commit -m "chore(<name>): 记录 finish 阶段完成时间"
-```
+完成时间已在 Step 2 的记录 commit 中写入。finish 阶段不产生额外 commit——合入 commit（选项 1）或 PR（选项 2）本身就是终端动作。
 
 ```
 ┌──────────────────────────────────────┐
@@ -203,8 +212,8 @@ git commit -m "chore(<name>): 记录 finish 阶段完成时间"
 
 ## 闸门规则
 
-- **git add 只用精确路径** — 永远不用 `-A`、`-a`、`.`。
-  finish 阶段不主动 add 代码文件，只由外部技能处理合入
+- **git add 只用精确路径** — 永远不用 `-a`、`.`。
+  finish 阶段只 add `openspec/changes/<name>/` 记录完成时间，代码合入由 git merge 处理
 - **phase 必须为 archived** —— spec 已归档的 change 才能 finish
 - **分支必须存在** —— 分支已 merge 或删除时无需再次 finish
 - **不涉及 spec 变更** —— spec 已归档封存，任何 spec 级修改应走新 change

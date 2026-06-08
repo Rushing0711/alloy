@@ -110,15 +110,62 @@ ARCHIVE_DIR="openspec/changes/archive/$(date +%Y-%m-%d)-<name>"
 
 > 这是 retrospective 从"死文档"变成"活反馈"的关键步骤——教训不跨 cycle 就不是教训。
 
-然后记录 phase_timings.completed_at 并执行 git commit（确保归档变更被版本追踪）：
+**Worktree 清理（如果 apply 期间使用了 worktree）：**
+
+```bash
+WORKTREE_PATH=$(alloy _state read "$ARCHIVE_DIR" worktree 2>/dev/null)
+FEATURE_BRANCH=$(alloy _state read "$ARCHIVE_DIR" feature_branch 2>/dev/null)
+WORKTREE_BRANCH=$(alloy _state read "$ARCHIVE_DIR" worktree_branch 2>/dev/null)
+
+if [ "$WORKTREE_PATH" != "null" ] && [ -n "$WORKTREE_PATH" ] && [ "$WORKTREE_PATH" != "skipped" ]; then
+  echo "  ℹ 检测到 worktree（$WORKTREE_PATH），正在合并回 feature 分支..."
+
+  # 向下兼容：遗留 change 无 feature_branch → 退回到 feature/<name>
+  if [ -z "$FEATURE_BRANCH" ] || [ "$FEATURE_BRANCH" = "null" ]; then
+    FEATURE_BRANCH="feature/<name>"
+  fi
+
+  # 向下兼容：遗留 change 无 worktree_branch → 退回到 worktree-<name>
+  if [ -z "$WORKTREE_BRANCH" ] || [ "$WORKTREE_BRANCH" = "null" ]; then
+    WORKTREE_BRANCH="worktree-<name>"
+  fi
+
+  # 切回主仓库目录
+  MAIN_ROOT=$(cd "$WORKTREE_PATH" && git rev-parse --show-toplevel 2>/dev/null)
+
+  # 从 worktree 分支合并代码到 feature 分支
+  cd "$MAIN_ROOT"
+  git merge "$WORKTREE_BRANCH" --no-edit
+
+  if [ $? -eq 0 ]; then
+    # 删除 worktree 目录和分支
+    git worktree remove "$WORKTREE_PATH"
+    git branch -d "$WORKTREE_BRANCH"
+    # 标记已清理（保留 worktree/worktree_branch 原值不删除）
+    WORKTREE_MERGED_AT=$(date '+%Y-%m-%d %H:%M:%S')
+    alloy _state write "$ARCHIVE_DIR" worktree_merged_at "$WORKTREE_MERGED_AT"
+    echo "  ✓ worktree 已合并至 $FEATURE_BRANCH 分支并清理"
+  else
+    echo "  ⚠ merge 冲突，请手动解决后再继续"
+    echo "  先: git checkout $FEATURE_BRANCH && git merge $WORKTREE_BRANCH"
+    exit 1
+  fi
+fi
+```
+
+如果 apply 期间未使用 worktree（worktree 为 null 或 skipped），则跳过此步骤。
+
+**记录完成时间并提交（所有 .alloy.yaml 变更在 commit 之前完成）：**
+
 ```bash
 # 写入完成时间（:="${...:-...}" 兜底：防 Agent 漏 capture）
 COMPLETED_AT="${COMPLETED_AT:-$(date '+%Y-%m-%d %H:%M:%S')}"
 COMPLETED_AT_JSON=$(python3 -c "import json; print(json.dumps({'archive':{'completed_at': '$COMPLETED_AT'}}))")
 alloy _state merge "$ARCHIVE_DIR" phase_timings "$COMPLETED_AT_JSON"
 
-# 一次 commit：主 spec 更新 + 归档目录 + 原 change 目录删除 + phase_timings
-git add openspec/specs/ openspec/changes/archive/ openspec/changes/<name>/
+# 一次 commit：主 spec 更新 + 归档目录新增 + 原 change 目录删除（归入 archive/）+ .alloy.yaml 变更
+# -A 限路径：只追踪 openspec/specs/ 和 openspec/changes/ 的新增/修改/删除，不扫全仓
+git add -A openspec/specs/ openspec/changes/
 git commit -m "chore(<name>): Delta Spec 已同步并归档"
 ```
 commit 失败必须阻断——归档变更未提交时，后续 finish 会清理分支，导致 spec 变更丢失。
@@ -155,8 +202,8 @@ alloy _guard "$ARCHIVE_DIR" archived --apply
 
 ## 闸门规则
 
-- **git add 只用精确路径** — 永远不用 `-A`、`-a`、`.`。
-  archive 只 add `openspec/specs/`、`openspec/changes/archive/` 和 `openspec/changes/<name>/`（原 change 目录删除），反例：`git add -A openspec/` 会把残留文件一起提交
+- **git add 只用精确路径** — 永远不用 `-a`、`.`。
+  archive 用 `git add -A openspec/specs/ openspec/changes/`（`-A` 限路径，只追踪这两个目录的新增/修改/删除），反例：`git add -A`（无路径限定，扫全仓）
 - **phase 必须为 applied** —— 只有 apply 完成的 change 才能归档
 - **verify.md 必须存在且非 FAIL** —— 阻塞问题必须先修复
 - **先归档后合入** —— spec 文档先锁定，代码后通过 `/alloy:finish` 合入，避免"代码合入了 spec 还没跟上"

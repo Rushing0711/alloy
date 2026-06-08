@@ -183,7 +183,7 @@ done
   - 需求层面变更（功能增删、行为变更、范围调整）→ 内部标记为需求变更
 
   无论 AI 如何判断，始终向用户呈现相同的 (a)/(b) 两个选项。
-  用户选 (a) → 执行回溯清理步骤，加载 `superpowers:brainstorming`。
+  用户选 (a) → 执行回溯清理步骤，加载 `superpowers:brainstorming`。brainstorming 负责重新讨论需求，用户确认后回到这里继续生成制品（不是 invoke writing-plans——那是独立使用 brainstorming 时的行为）。
   用户选 (b) → 回到当前审查窗口，重新展示 (a) 确认 / (b) 需要调整 选项。
 
 **什么算"审查不充分"（反例）：**
@@ -204,14 +204,18 @@ git add openspec/changes/<name>/
 git commit -m "docs(<name>): <artifact> 已确认"
 ```
 
-**plans 是 plan 阶段最后一个制品。** plans 审批通过时，先写入 `phase_timings.plan.completed_at`，再执行 plans 的 hash-lock + commit。phase_timings 作为元数据附着在 plans 制品提交上，不单独 commit：
+**plans 是 plan 阶段最后一个制品。** plans 审批通过后，phase_timings + hash-lock 合并为**一个 commit**——禁止拆成两次提交：
 
 ```bash
-# plans 审批通过后，先写入完成时间
+# 写入完成时间 + hash 锁定 + 提交，一气呵成
 COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
 alloy _state merge openspec/changes/<name> phase_timings "{\"plan\":{\"completed_at\":\"${COMPLETED_AT:-$(date '+%Y-%m-%d %H:%M:%S')}\"}}"
-
-# 再执行 plans 的 hash-lock + commit（复用上方通用流程）
+HASH=$(alloy _record compute openspec/changes/<name> plans)
+APPROVED_AT=$(date "+%Y-%m-%d %H:%M:%S")
+APPROVER=$(alloy _record approver openspec/changes/<name>)
+alloy _record write openspec/changes/<name> plans "$HASH" "$APPROVED_AT" "$APPROVER"
+git add openspec/changes/<name>/
+git commit -m "docs(<name>): plans 已确认"
 ```
 
 commit message 格式：`docs(<change-name>): <artifact> 已确认`（Conventional Commits `docs` type）。`<artifact>` 为 proposal / design / specs / tasks / plans。

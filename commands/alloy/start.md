@@ -90,11 +90,11 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
 项目类型：<新项目/存量项目>
 ```
 
-技能加载后，按其指引进行交互式需求设计。
-
 如果 `superpowers:brainstorming` 不可用，引导用户运行 `alloy init` 完成环境初始化。brainstorming 技能内置了审批闸门和 Q&A 深度——普通对话无法复现这些行为。
 
-**brainstorming 完成后，你必须等待用户确认方案，然后生成 `draft.md`：**
+**brainstorming 负责"想清楚要做什么"——通过交互式问答明确问题、方案和关键决策。** 用户确认方案后，这一步的产出是 `draft.md`，不是 superpowers spec 文件。
+
+用户确认方案后，生成 `draft.md`：
 
 ```markdown
 # [功能名称]
@@ -106,20 +106,18 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
 <!-- 方案概述 -->
 
 ## 关键决策
-<!-- 关键技术决策及理由 -->
-<!-- 将 brainstorming 的详细设计论述写入此章节，不单独产出 superpowers spec 文件 -->
+<!-- brainstorming 中确定的关键技术决策及理由，方案对比、架构考量都写在这里 -->
 
 ## 范围与边界
 <!-- 做什么、明确不做什么 -->
 ```
 
-**关键：** brainstorming 的所有设计论述（方案对比、技术决策、架构考量）全部写入 draft.md 的"关键决策"章节。不单独在 `docs/superpowers/specs/` 生成文件——draft.md 是 brainstorming 的唯一产出。
-
 **用户明确确认方案之前，不要生成 draft.md。** 如果用户要求调整方案，回到 brainstorming 继续讨论，不要急于产出文件。
 
-**什么算"用户确认了"（反例）：**
-- 用户说"还行"、"可以"——追问他是否满意关键决策和范围边界
-- 用户只确认了部分内容——确保所有关键决策都被明确认可
+**什么算"不够"（反例）：**
+- brainstorming 完成后生成了 `docs/superpowers/specs/` 文件——draft.md 是 brainstorming 在 alloy 流程中的唯一产出
+- brainstorming 完成后 invoke writing-plans——那是独立使用 brainstorming 时的行为，在 alloy:start 中下一步是生成 draft.md
+- 用户说"还行"、"可以"就直接生成——追问他是否满意关键决策和范围边界
 
 ---
 
@@ -231,7 +229,9 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
 
 7. **按模板生成 `draft.md`** 到 `openspec/changes/<name>/draft.md`（直接在 change 目录下生成，无需移动）
 
-8. **提交：**
+> 前面步骤写入的 `.alloy.yaml` 变更（init、started_at、feature_branch、worktree）不单独提交——它们在 draft commit 中一并提交。`git add openspec/changes/<name>/` 会覆盖目录内的所有变更。
+
+8. **提交（start 阶段唯一 commit）：**
 
    **alloy init 基础设施提交：**
    ```bash

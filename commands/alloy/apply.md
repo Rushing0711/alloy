@@ -86,6 +86,7 @@ alloy _state merge openspec/changes/<name> phase_timings "{\"apply\":{\"started_
 └──────────────────────────────────────┘
 
 **提交前置状态（worktree 创建前确保 .alloy.yaml 变更已落地）：**
+后续步骤写入 worktree 的路径和分支名也会进入此快照 commit，确保 worktree 内能看到完整状态。
 
 ```bash
 git add openspec/changes/<name>/.alloy.yaml
@@ -189,6 +190,7 @@ if [ "$GIT_DIR" != "$GIT_COMMON" ]; then
   WORKTREE_BRANCH=$(cd "$WORKTREE_PATH" && git branch --show-current)
   alloy _state write openspec/changes/<name> worktree "$WORKTREE_PATH"
   alloy _state write openspec/changes/<name> worktree_branch "$WORKTREE_BRANCH"
+  alloy _state write openspec/changes/<name> worktree_created_at "$(date '+%Y-%m-%d %H:%M:%S')"
   echo "  ✓ worktree 已记录: 分支=$WORKTREE_BRANCH  路径=$WORKTREE_PATH"
   # commit 确保断点恢复时 state 不丢失
   git add openspec/changes/<name>/.alloy.yaml
@@ -207,6 +209,7 @@ else
     WORKTREE_BRANCH=$(cd "$WT_PATH" && git branch --show-current 2>/dev/null)
     alloy _state write openspec/changes/<name> worktree "$WT_PATH"
     alloy _state write openspec/changes/<name> worktree_branch "$WORKTREE_BRANCH"
+    alloy _state write openspec/changes/<name> worktree_created_at "$(date '+%Y-%m-%d %H:%M:%S')"
     echo "  ✓ worktree fallback 已记录: 分支=$WORKTREE_BRANCH  路径=$WT_PATH"
     # 提交 source repo 的 state
     git add openspec/changes/<name>/.alloy.yaml
@@ -216,6 +219,7 @@ else
     cd "$WT_PATH" && \
       alloy _state write openspec/changes/<name> worktree "$WT_PATH" && \
       alloy _state write openspec/changes/<name> worktree_branch "$WORKTREE_BRANCH" && \
+      alloy _state write openspec/changes/<name> worktree_created_at "$(date '+%Y-%m-%d %H:%M:%S')" && \
       git add openspec/changes/<name>/.alloy.yaml && \
       git diff --cached --quiet || git commit -m "chore(<name>): record worktree state (worktree)"
   else
@@ -454,16 +458,13 @@ alloy _record check openspec/changes/<name> verify
 > → (a) 确认，锁定 retrospective 并完成 apply
 > → (b) 需要调整 — 说明修改点，修改后重新展示
 
-选 (a)：先写入 phase_timings.completed_at，再 hash 锁定 retrospective 并 commit（phase_timings 作为元数据附着在 retrospective 制品提交上，不单独 commit）：
+选 (a)：写入完成时间 + hash 锁定 + 提交，一个 commit 包含所有累积变更（retrospective + 阶段完成时间 + worktree 状态），不拆开：
 ```bash
-# 先写入完成时间
 COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
 alloy _state merge openspec/changes/<name> phase_timings "{\"apply\":{\"completed_at\":\"${COMPLETED_AT:-$(date '+%Y-%m-%d %H:%M:%S')}\"}}"
-
-# 再 hash 锁定 + commit
 HASH=$(alloy _record compute openspec/changes/<name> retrospective)
 alloy _record write openspec/changes/<name> retrospective "$HASH" "$(date "+%Y-%m-%d %H:%M:%S")" "$(alloy _record approver openspec/changes/<name>)"
-git add openspec/changes/<name>/retrospective.md
+git add openspec/changes/<name>/
 git commit -m "docs(<name>): retrospective 已确认"
 ```
 
@@ -513,51 +514,6 @@ UNTRACKED=$(git status --porcelain | grep '^??' | sed 's/^?? //')
 - **项目源码**（`.ts`、`.vue`、`.css` 等新创建的文件）→ 按精准路径 `git add`
 
 不需要穷举目录——Agent 根据项目上下文判断即可。比如项目用了 vite，看到 `.vite/` 就知道该 ignore。判断不准时，询问用户确认。
-
-**Worktree 合并清理（如果 apply 期间使用了 worktree）：**
-
-```bash
-WORKTREE_PATH=$(alloy _state read openspec/changes/<name> worktree 2>/dev/null)
-FEATURE_BRANCH=$(alloy _state read openspec/changes/<name> feature_branch 2>/dev/null)
-WORKTREE_BRANCH=$(alloy _state read openspec/changes/<name> worktree_branch 2>/dev/null)
-
-if [ "$WORKTREE_PATH" != "null" ] && [ -n "$WORKTREE_PATH" ] && [ "$WORKTREE_PATH" != "skipped" ]; then
-  echo "     ℹ 检测到 worktree（$WORKTREE_PATH），正在合并回 feature 分支..."
-
-  # 向下兼容：遗留 change 无 feature_branch → 退回到 feature/<name>
-  if [ -z "$FEATURE_BRANCH" ] || [ "$FEATURE_BRANCH" = "null" ]; then
-    FEATURE_BRANCH="feature/<name>"
-  fi
-
-  # 向下兼容：遗留 change 无 worktree_branch → 退回到 worktree-<name>
-  if [ -z "$WORKTREE_BRANCH" ] || [ "$WORKTREE_BRANCH" = "null" ]; then
-    WORKTREE_BRANCH="worktree-<name>"
-  fi
-
-  # 切回主仓库目录
-  MAIN_ROOT=$(cd "$WORKTREE_PATH" && git rev-parse --show-toplevel 2>/dev/null)
-
-  # 从 worktree 分支合并代码到 feature 分支
-  cd "$MAIN_ROOT"
-  git merge "$WORKTREE_BRANCH" --no-edit
-
-  if [ $? -eq 0 ]; then
-    # 删除 worktree 目录和分支
-    git worktree remove "$WORKTREE_PATH"
-    git branch -d "$WORKTREE_BRANCH"
-    # 清理 worktree 状态
-    alloy _state write openspec/changes/<name> worktree null
-    alloy _state write openspec/changes/<name> worktree_branch null
-    echo "     ✓ worktree 已合并至 $FEATURE_BRANCH 分支并清理"
-  else
-    echo "     ⚠ merge 冲突，请手动解决后再继续"
-    echo "     先: git checkout $FEATURE_BRANCH && git merge $WORKTREE_BRANCH"
-    exit 1
-  fi
-fi
-```
-
-如果 apply 期间未使用 worktree（worktree 为 null 或 skipped），则跳过此步骤。
 
 **通过 `alloy _guard` 校验并更新 phase：**
 ```bash
