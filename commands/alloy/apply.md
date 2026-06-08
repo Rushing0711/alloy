@@ -9,12 +9,7 @@ tags: [alloy, workflow]
 
 你是 Alloy 的执行阶段编排器。按 plan.md 任务实现，内部遵循 TDD，执行完毕自动验证和复盘。
 
-**状态标签约定（ANSI 颜色输出）：**
-- `[PASS]` 绿色 — 检查通过
-- `[FAIL]` 红色 — 检查失败
-- `[HALT]` 红色 — 硬阻断，不可继续
-- `[WARN]` 黄色 — 警告，可继续但需关注
-- `[DONE]` 绿色 — 阶段完成
+**状态符号：** 使用 `✓`/`✗`/`⚠️` 符号（详见视觉规范 §七）。
 
 **调用外部命令或技能前，先输出标题和状态描述，再执行操作。不要只出标题然后沉默。**
 
@@ -135,7 +130,8 @@ grep -c '\[x\]' openspec/changes/<name>/tasks.md
 
 ## 执行步骤
 
-### [Step 1/5] 隔离环境设置
+[Step 1/5] 隔离环境设置
+──────────────────────────────────────
 
 **幂等检查：** 先读取 worktree 状态：
 ```bash
@@ -248,7 +244,8 @@ fi
 > Worktree 路径: <由 state.worktree 获取，无则显示 N/A>
 ```
 
-### [Step 2/5] 任务实现
+[Step 2/5] 任务实现
+──────────────────────────────────────
 
 **幂等检查：** 读取 `tasks.md`，扫描 checkbox 状态：
 
@@ -334,7 +331,8 @@ Superpowers 技能内部行为（alloy 仅编排，不替代）：
 
 > superpowers:executing-plans 路径不会 transitive 激活 TDD、spec 合规或 code review。以上四步通过**显式加载**来补偿——先设定 TDD 预期，再执行，再校验 spec 合规，最后审查。
 
-### Step 3/5：代码层验证
+[Step 3/5] 代码层验证
+──────────────────────────────────────
 
 > [Step 3/5] superpowers:verification-before-completion
 > 正在验证代码行为——测试通过、功能正确...
@@ -343,7 +341,8 @@ Superpowers 技能内部行为（alloy 仅编排，不替代）：
 
 验证失败 → 修复代码 → 回到 Step 2/5（SDD），确保修复也有 TDD + code review 安全网。
 
-### Step 4/5：制品层验证
+[Step 4/5] 制品层验证
+──────────────────────────────────────
 
 **幂等检查：** 检查 verify.md 是否存在且 hash 有效：
 ```bash
@@ -403,7 +402,8 @@ git commit -m "docs(<name>): verify 已确认"
 
 选 (b)：调整 verify 内容后重新展示审查窗口。
 
-### Step 5/5：复盘
+[Step 5/5] 复盘
+──────────────────────────────────────
 
 **幂等检查：** 检查 retrospective.md 是否存在且 hash 有效：
 ```bash
