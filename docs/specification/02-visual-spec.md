@@ -471,27 +471,38 @@ Alloy · Bug 修复
 [Step 1/3] 环境感知
 ──────────────────────────────────────
 
-> 当前在 worktree `.worktrees/login-feature/`，在此修复并提交
+> 当前分支: feature/login-fix
+> Worktree: 否
+> 活跃 change: login-fix（phase: applied）
+> 主分支: main
 
 [Step 2/3] 根因诊断 · superpowers:systematic-debugging
 ──────────────────────────────────────
 
 > 正在系统化诊断问题...
 
-[Step 3/3] 分流修复
+诊断结论：
+> - 根因：空数组未返回 []
+> - 涉及文件: src/utils/parse.ts
+> - 是否偏离 spec: 否
+
+> 确认以上诊断结果？[Y/n]
+
+[Step 3/3] 分支选择 + 修复
 ──────────────────────────────────────
 
-根因：<诊断结论>
-分流：不改 spec——代码偏离了现有 spec，修复实现即可
+> 场景 2：feature 分支修复
+> 归属 change: login-fix（phase: applied）
+> Feature 分支: feature/login-fix
 
 → 修复路径：TDD → verification → commit
 
 Alloy · Bug 修复 — DONE
 ──────────────────────────────────────
 
-修复路径：<路径>
-诊断结论：<根因摘要>
-结果：<修复结果>
+修复路径：场景 2
+诊断结论：空数组未返回 []
+结果：已修复并提交
 ```
 
 ### discard 命令完整示例
