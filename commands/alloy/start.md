@@ -75,6 +75,8 @@ date "+%Y-%m-%d %H:%M:%S"
 探查结果：<Step 1 的关键发现摘要>
 主题：<topic>
 项目类型：<新项目/存量项目>
+
+**Alloy 流程覆盖：** 本调用在 Alloy start 流程内，brainstorming 完成后产出是 draft.md（openspec/changes/<name>/draft.md），**不是** docs/superpowers/specs/ 文件。请跳过 brainstorming checklist 中的"Write design doc"步骤和"Invoke writing-plans"步骤。用户确认方案后直接输出方案内容即可，由 Alloy start 流程负责生成 draft.md。
 ```
 
 如果 `superpowers:brainstorming` 不可用，引导用户运行 `alloy init` 完成环境初始化。brainstorming 技能内置了审批闸门和 Q&A 深度——普通对话无法复现这些行为。
@@ -116,6 +118,7 @@ date "+%Y-%m-%d %H:%M:%S"
 | "不用 brainstorming 了，直接写代码" | brainstorming 不是可选项。跳过需求设计 = 规格和代码分叉的起点。必须加载 superpowers:brainstorming。 |
 | "我一个人开发，不用那么正式" | 流程保护的是一致性和可追溯性，不是团队规模。一个人的项目和团队项目的闸门完全一样。 |
 | "我看过了，内容都对"（跳过审查） | 用户"看过了"不等于审查到位。必须按流程确认 change name、主分支、feature 分支。 |
+| "brainstorming 完成了，写 spec 文件吧" | Alloy start 的产出是 draft.md，不是 docs/superpowers/specs/ 文件。brainstorming 完成后直接输出方案，由 Alloy 流程负责生成 draft.md。 |
 
 ---
 
