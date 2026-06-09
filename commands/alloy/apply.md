@@ -32,42 +32,18 @@ PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
    ```bash
    alloy _guard openspec/changes/<name> applied
    ```
-   若 guard 报错说明 phase 转换不合法——检查当前 phase：
-
-   | 当前 phase | 行为 |
-   |-----------|------|
-   | started | "plan 尚未完成，自动进入 /alloy:plan" → 加载 alloy-plan 指令 |
-   | planned | precheck 通过，继续执行 |
-   | applied | precheck 通过（重入），步骤幂等处理断点 |
-   | archived | "已归档，自动进入 /alloy:finish" → 加载 alloy-finish 指令 |
-   | finished | "工作流已完成" → STOP |
-
-   **实现方式：** 输出对应命令文件的完整指令，将 change name 和当前进度信息作为上下文传入。
+   若 guard 报错说明 phase 转换不合法——读取 `commands/alloy/references/phase-routing.md` 按路由表自动跳转。当前 phase=planned 或 applied 时 precheck 通过（applied 为断点重入）。
 3. 确认当前目录在 git 仓库内：
    ```bash
    git rev-parse --git-dir
    ```
    若命令成功 → 继续。
    若命令失败 → HARD STOP："项目还不是 git 仓库。请先运行 `/alloy:start` 完成初始化（包含 git init）。"
-4. **Skill 预检：** 执行以下检测脚本，确认 6 个执行技能均可用：
+4. **Skill 预检：** 确认以下依赖可用：
+   cmd: opsx/verify
+   skill: using-git-worktrees subagent-driven-development executing-plans test-driven-development requesting-code-review verification-before-completion
 
-   ```bash
-   MISSING=0
-   for cmd in "opsx/verify"; do
-     if test -f ".claude/commands/$cmd.md"; then echo "  ✓ ${cmd//\//:}（项目级 command）"
-     elif test -f "$HOME/.claude/commands/$cmd.md"; then echo "  ✓ ${cmd//\//:}（用户级 command）"
-     else echo "  ✗ ${cmd//\//:} — 未找到"; MISSING=$((MISSING+1)); fi
-   done
-   for skill in "using-git-worktrees" "subagent-driven-development" "executing-plans" "test-driven-development" "requesting-code-review" "verification-before-completion"; do
-     if test -d ".claude/skills/$skill"; then echo "  ✓ superpowers:$skill（项目级 skill）"
-     elif test -d "$HOME/.claude/skills/$skill"; then echo "  ✓ superpowers:$skill（用户级 skill）"
-     elif for d in "$HOME/.claude/plugins/cache/superpowers-marketplace/superpowers/"*"/skills/$skill"; do test -d "$d" && break; done 2>/dev/null; then echo "  ✓ superpowers:$skill（用户级 plugin）"
-     else echo "  ✗ superpowers:$skill — 未找到"; MISSING=$((MISSING+1)); fi
-   done
-   if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。请运行: alloy init"; exit 1; fi
-   ```
-
-   检测优先级：项目级 skill → 用户级 skill → 用户级 plugin。任一缺失 → 输出缺失列表 → 引导 `alloy init` → STOP。不静默降级。
+   读取 `commands/alloy/references/skill-precheck.md` 了解检测方法。任一缺失 → 输出缺失列表 → 引导 `alloy init` → STOP。不静默降级。
 
 **写入阶段启动时间**（前置检查通过后，使用命令开头捕获的 `PHASE_START`）：
 ```bash
@@ -130,8 +106,7 @@ grep -c '\[x\]' openspec/changes/<name>/tasks.md
 
 ## 执行步骤
 
-[Step 1/5] 隔离环境设置
-──────────────────────────────────────
+### [Step 1/5] 隔离环境设置
 
 **幂等检查：** 先读取 worktree 状态：
 ```bash
@@ -244,8 +219,7 @@ fi
 > Worktree 路径: <由 state.worktree 获取，无则显示 N/A>
 ```
 
-[Step 2/5] 任务实现
-──────────────────────────────────────
+### [Step 2/5] 任务实现
 
 **幂等检查：** 读取 `tasks.md`，扫描 checkbox 状态：
 
@@ -331,8 +305,7 @@ Superpowers 技能内部行为（alloy 仅编排，不替代）：
 
 > superpowers:executing-plans 路径不会 transitive 激活 TDD、spec 合规或 code review。以上四步通过**显式加载**来补偿——先设定 TDD 预期，再执行，再校验 spec 合规，最后审查。
 
-[Step 3/5] 代码层验证
-──────────────────────────────────────
+### [Step 3/5] 代码层验证
 
 > [Step 3/5] superpowers:verification-before-completion
 > 正在验证代码行为——测试通过、功能正确...
@@ -341,8 +314,7 @@ Superpowers 技能内部行为（alloy 仅编排，不替代）：
 
 验证失败 → 修复代码 → 回到 Step 2/5（SDD），确保修复也有 TDD + code review 安全网。
 
-[Step 4/5] 制品层验证
-──────────────────────────────────────
+### [Step 4/5] 制品层验证
 
 **幂等检查：** 检查 verify.md 是否存在且 hash 有效：
 ```bash
@@ -402,8 +374,7 @@ git commit -m "docs(<name>): verify 已确认"
 
 选 (b)：调整 verify 内容后重新展示审查窗口。
 
-[Step 5/5] 复盘
-──────────────────────────────────────
+### [Step 5/5] 复盘
 
 **幂等检查：** 检查 retrospective.md 是否存在且 hash 有效：
 ```bash

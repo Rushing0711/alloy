@@ -11,6 +11,8 @@ tags: [alloy, workflow]
 
 **核心原则：只做代码合入，不碰 spec。** 如果合入过程中（如 PR 审查）发现需要修改 spec，那是另一个 change 的事——当前 change 的 spec 已归档封存。
 
+**调用外部命令或技能前，先输出标题和状态描述，再执行操作。不要只出标题然后沉默。**
+
 **捕获阶段启动时间**（命令调用后第一时间，前置检查之前）：
 ```bash
 PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
@@ -41,20 +43,10 @@ alloy _state merge openspec/changes/<name> phase_timings "{\"finish\":{\"started
 
 ### [Step 1/3] 前置检查
 
-**0. Skill 预检：** 执行以下检测脚本，确认 `superpowers:finishing-a-development-branch` 可用：
+**0. Skill 预检：** 确认以下依赖可用：
+   skill: finishing-a-development-branch
 
-```bash
-MISSING=0
-for skill in "finishing-a-development-branch"; do
-  if test -d ".claude/skills/$skill"; then echo "  ✓ superpowers:$skill（项目级 skill）"
-  elif test -d "$HOME/.claude/skills/$skill"; then echo "  ✓ superpowers:$skill（用户级 skill）"
-  elif for d in "$HOME/.claude/plugins/cache/superpowers-marketplace/superpowers/"*"/skills/$skill"; do test -d "$d" && break; done 2>/dev/null; then echo "  ✓ superpowers:$skill（用户级 plugin）"
-  else echo "  ✗ superpowers:$skill — 未找到"; MISSING=$((MISSING+1)); fi
-done
-if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。请运行: alloy init"; exit 1; fi
-```
-
-检测优先级：项目级 skill → 用户级 skill → 用户级 plugin。任一不可用 → 引导 `alloy init` → STOP。
+   读取 `commands/alloy/references/skill-precheck.md` 了解检测方法。任一不可用 → 引导 `alloy init` → STOP。
 
 > phase 是否为 archived？ <检查结果>
 
@@ -65,17 +57,7 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
 alloy _guard openspec/changes/<name> finished
 ```
 
-若 guard 报错（phase 不匹配），读取当前 phase，按以下规则自动路由：
-
-| 当前 phase | 行为 |
-|-----------|------|
-| started | "尚未 plan，自动进入 /alloy:plan" → 加载 alloy-plan 指令 |
-| planned | "尚未 apply，自动进入 /alloy:apply" → 加载 alloy-apply 指令 |
-| applied | "尚未归档，自动进入 /alloy:archive" → 加载 alloy-archive 指令 |
-| archived | precheck 通过，继续收尾 |
-| finished | "工作流已完成" → STOP |
-
-**实现方式：** 输出对应命令文件的完整指令，将 change name 和当前进度信息作为上下文传入。
+若 guard 报错（phase 不匹配），读取 `commands/alloy/references/phase-routing.md` 按路由表自动跳转。当前 phase=archived 时 precheck 通过。
 
 **HARD STOP 保留场景：** 分支不存在（可能已 merge 或删除）→ 提示无需再次 finish。
 
@@ -213,7 +195,7 @@ git commit -m "chore(<name>): 合入 main"
 ## 闸门规则
 
 - **git add 只用精确路径** — 永远不用 `-a`、`.`。
-  finish 阶段只 add `openspec/changes/<name>/` 记录完成时间，代码合入由 git merge 处理
+  finish 阶段用 `git add -A openspec/changes/ openspec/config.yaml`（`-A` 限路径，只追踪这两个目录的新增/修改/删除），代码合入由 git merge 处理
 - **phase 必须为 archived** —— spec 已归档的 change 才能 finish
 - **分支必须存在** —— 分支已 merge 或删除时无需再次 finish
 - **不涉及 spec 变更** —— spec 已归档封存，任何 spec 级修改应走新 change

@@ -31,20 +31,10 @@ tags: [alloy, workflow]
 
 在进入诊断前，先校验环境和权限：
 
-**1. Skill 预检：** 执行以下检测脚本，确认 3 个诊断技能均可用：
+**1. Skill 预检：** 确认以下依赖可用：
+   skill: systematic-debugging test-driven-development verification-before-completion
 
-```bash
-MISSING=0
-for skill in "systematic-debugging" "test-driven-development" "verification-before-completion"; do
-  if test -d ".claude/skills/$skill"; then echo "  ✓ superpowers:$skill（项目级 skill）"
-  elif test -d "$HOME/.claude/skills/$skill"; then echo "  ✓ superpowers:$skill（用户级 skill）"
-  elif for d in "$HOME/.claude/plugins/cache/superpowers-marketplace/superpowers/"*"/skills/$skill"; do test -d "$d" && break; done 2>/dev/null; then echo "  ✓ superpowers:$skill（用户级 plugin）"
-  else echo "  ✗ superpowers:$skill — 未找到"; MISSING=$((MISSING+1)); fi
-done
-if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。请运行: alloy init"; exit 1; fi
-```
-
-检测优先级：项目级 skill → 用户级 skill → 用户级 plugin。任一缺失 → 输出缺失列表 → 引导 `alloy init` → STOP。
+   读取 `commands/alloy/references/skill-precheck.md` 了解检测方法。任一缺失 → 输出缺失列表 → 引导 `alloy init` → STOP。
 
 **2. Phase 校验与场景标记：** 若检测到活跃 change 的 `.alloy.yaml`，读取 phase 并标记修复场景：
 
@@ -64,7 +54,7 @@ Alloy · Bug 修复
 ──────────────────────────────────────
 ```
 
-## Step 1/3：环境感知
+### [Step 1/3] 环境感知
 
 ```
 [Step 1/3] 环境感知
@@ -99,7 +89,7 @@ Worktree: <是/否>（<path>）
 
 ---
 
-## Step 2/3：根因诊断
+### [Step 2/3] 根因诊断
 
 ```
 [Step 2/3] 根因诊断 · superpowers:systematic-debugging
@@ -144,7 +134,7 @@ Worktree: <是/否>（<path>）
 
 ---
 
-## Step 3/3：分支选择 + 修复
+### [Step 3/3] 分支选择 + 修复
 
 确认是代码 bug 后，根据 Step 1 的环境感知结果选择修复路径。
 
@@ -209,19 +199,7 @@ Feature 分支: <branch>
 
 **确认主分支（阻塞点）：**
 
-读取 `openspec/config.yaml` 的 `main_branch` 配置。若未配置，自动检测并让用户确认：
-
-```bash
-# 优先读配置
-MAIN_BRANCH=$(alloy _config read . main_branch 2>/dev/null)
-
-# 未配置时自动检测
-if [ -z "$MAIN_BRANCH" ] || [ "$MAIN_BRANCH" = "null" ]; then
-  MAIN_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')
-  [ -z "$MAIN_BRANCH" ] && MAIN_BRANCH=$(git config --get init.defaultBranch 2>/dev/null)
-  [ -z "$MAIN_BRANCH" ] && MAIN_BRANCH=$(git branch --list 'main' --list 'master' | head -1 | sed 's/[* ]//g')
-fi
-```
+读取 `commands/alloy/references/main-branch-detection.md`，检测/确认主分支。优先读 `openspec/config.yaml` 的 `main_branch` 配置，未配置时按 3 级优先级自动检测并让用户确认。
 
 展示并确认：
 > 主分支: `<MAIN_BRANCH>`？[Y/n]

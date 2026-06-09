@@ -42,25 +42,11 @@ date "+%Y-%m-%d %H:%M:%S"
 
 ### [Step 1/2] 上下文探查
 
-**Skill 预检：** 执行以下检测脚本，确认 `opsx:explore` 和 `superpowers:brainstorming` 均可用：
+**Skill 预检：** 确认以下依赖可用：
+  cmd: opsx/explore opsx/new
+  skill: brainstorming
 
-```bash
-MISSING=0
-for cmd in "opsx/explore" "opsx/new"; do
-  if test -f ".claude/commands/$cmd.md"; then echo "  ✓ ${cmd//\//:}（项目级 command）"
-  elif test -f "$HOME/.claude/commands/$cmd.md"; then echo "  ✓ ${cmd//\//:}（用户级 command）"
-  else echo "  ✗ ${cmd//\//:} — 未找到"; MISSING=$((MISSING+1)); fi
-done
-for skill in "brainstorming"; do
-  if test -d ".claude/skills/$skill"; then echo "  ✓ superpowers:$skill（项目级 skill）"
-  elif test -d "$HOME/.claude/skills/$skill"; then echo "  ✓ superpowers:$skill（用户级 skill）"
-  elif for d in "$HOME/.claude/plugins/cache/superpowers-marketplace/superpowers/"*"/skills/$skill"; do test -d "$d" && break; done 2>/dev/null; then echo "  ✓ superpowers:$skill（用户级 plugin）"
-  else echo "  ✗ superpowers:$skill — 未找到"; MISSING=$((MISSING+1)); fi
-done
-if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。请运行: alloy init"; exit 1; fi
-```
-
-检测优先级：项目级 command → 项目级 skill → 用户级 command → 用户级 skill → 用户级 plugin。任一不可用 → 引导 `alloy init` → STOP。
+读取 `commands/alloy/references/skill-precheck.md` 了解检测方法。任一不可用 → 引导 `alloy init` → STOP。
 
 > 正在探查项目上下文和需求空间...
 
@@ -142,37 +128,11 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
 
 3. **分支选择**——在创建 change 目录之前完成分支切换，确保所有制品落在 feature 分支上：
 
-   **① 自动识别主分支：**
-
-   按以下优先级检测：
-
-   ```bash
-   # 1. remote HEAD（标准默认分支）
-   DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')
-   # 2. 本地 init.defaultBranch 配置
-   [ -z "$DEFAULT_BRANCH" ] && DEFAULT_BRANCH=$(git config --get init.defaultBranch 2>/dev/null)
-   # 3. 名称匹配
-   [ -z "$DEFAULT_BRANCH" ] && DEFAULT_BRANCH=$(git branch --list 'main' --list 'master' | head -1 | sed 's/[* ]//g')
-   ```
+   **① 自动识别主分支：** 读取 `commands/alloy/references/main-branch-detection.md`，按 3 级优先级检测主分支。
 
    若 `openspec/config.yaml` 已有 `alloy.main_branch` 记录，直接用记录值，跳过检测和确认。
 
-   **② 确认主分支：**
-
-   自动检测到主分支后，让用户确认（Y/n）：
-   ```bash
-   echo "  主分支: $DEFAULT_BRANCH"
-   ```
-
-   > 使用 `<DEFAULT_BRANCH>` 作为基础分支？[Y/n]
-
-   选 Y 或直接回车 → 使用自动检测结果；选 n → 让用户输入自定义名称。
-
-   用户确认后写入项目级配置：
-   ```bash
-   alloy _config write <project-root> main_branch <用户确认的主分支名>
-   ```
-   主分支是项目级概念，所有 change 共享，不写入 per-change 的 .alloy.yaml。
+   **② 确认主分支：** 检测到后让用户确认（Y/n）。确认后写入项目级配置（`alloy _config write`）。主分支是项目级概念，所有 change 共享，不写入 per-change 的 .alloy.yaml。
 
    **③ 检测当前分支：**
    ```bash

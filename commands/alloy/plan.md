@@ -25,29 +25,15 @@ PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
 1. 确认 change 目录 `openspec/changes/<name>/` 存在且 `.alloy.yaml` phase 为 `started`（由 `/alloy:start` 完成），否则报错
 2. 若 change 目录存在但 `draft.md` 缺失 → 异常状态，提示重新运行 `/alloy:start`
 3. 若指定 `[name]` 参数但 change 不存在 → "未找到 change '<name>'，请先运行 `/alloy:start <name>` 创建 change"
-4. **Skill / 命令预检：** 执行以下检测脚本，确认 `opsx:continue` 和 `superpowers:writing-plans` 均可用：
+4. **Skill / 命令预检：** 确认以下依赖可用：
+   cmd: opsx/continue
+   skill: writing-plans
 
-   ```bash
-   MISSING=0
-   for cmd in "opsx/continue"; do
-     if test -f ".claude/commands/$cmd.md"; then echo "  ✓ ${cmd//\//:}（项目级 command）"
-     elif test -f "$HOME/.claude/commands/$cmd.md"; then echo "  ✓ ${cmd//\//:}（用户级 command）"
-     else echo "  ✗ ${cmd//\//:} — 未找到"; MISSING=$((MISSING+1)); fi
-   done
-   for skill in "writing-plans"; do
-     if test -d ".claude/skills/$skill"; then echo "  ✓ superpowers:$skill（项目级 skill）"
-     elif test -d "$HOME/.claude/skills/$skill"; then echo "  ✓ superpowers:$skill（用户级 skill）"
-     elif for d in "$HOME/.claude/plugins/cache/superpowers-marketplace/superpowers/"*"/skills/$skill"; do test -d "$d" && break; done 2>/dev/null; then echo "  ✓ superpowers:$skill（用户级 plugin）"
-     else echo "  ✗ superpowers:$skill — 未找到"; MISSING=$((MISSING+1)); fi
-   done
-   if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。请运行: alloy init"; exit 1; fi
-   ```
-
-   检测优先级：项目级 command → 项目级 skill → 用户级 command → 用户级 skill → 用户级 plugin。任一不可用 → 引导 `alloy init` → STOP。
+   读取 `commands/alloy/references/skill-precheck.md` 了解检测方法。任一不可用 → 引导 `alloy init` → STOP。
 
 ---
 
-## Step 1/3：确认 Change
+### [Step 1/3] 确认 Change
 
 **写入阶段启动时间**（前置检查通过后，使用命令开头捕获的 `PHASE_START`）：
 ```bash
@@ -83,23 +69,14 @@ alloy _state merge openspec/changes/<name> phase_timings "{\"plan\":{\"started_a
 
 **若 phase 不匹配（phase != started）：**
 
-先读取当前 phase，按以下规则自动路由：
-
-| 当前 phase | 行为 |
-|-----------|------|
-| planned | "plan 已完成，自动进入 /alloy:apply" → 加载 alloy-apply 指令 |
-| applied | "已进入执行阶段，自动进入 /alloy:apply" → 加载 alloy-apply 指令 |
-| archived | "已归档，自动进入 /alloy:finish" → 加载 alloy-finish 指令 |
-| finished | "工作流已完成" → STOP |
-
-**实现方式：** 输出对应命令文件的完整指令，将 change name 和当前进度信息作为上下文传入。
+读取 `commands/alloy/references/phase-routing.md` 按路由表自动跳转。实现方式：输出对应命令文件的完整指令，将 change name 和当前进度信息作为上下文传入。
 
 **若 change 目录不存在或 draft.md 缺失：**
 → 引导用户先运行 `/alloy:start <name>` 创建 change。这是唯一保留 HARD STOP 的场景——前序阶段完全没做。
 
 ---
 
-## Step 2/3：制品生成 · /opsx:continue + writing-plans
+### [Step 2/3] 制品生成 · /opsx:continue + writing-plans
 
 [Step 2/3] 制品生成
 ──────────────────────────────────────
@@ -159,15 +136,61 @@ done
 
 ### 正常推进：逐个制品的审查流程
 
-每个制品生成后，展示内容并进入审查窗口。**仅两个选项——不跳过。** 审查窗口使用块引用格式（终端有底色渲染）：
+每个制品生成后，展示内容并进入审查窗口。**仅两个选项——不跳过。** 审查窗口使用块引用格式（终端有底色渲染）。
+
+**制品 [1/5] proposal：**
+
+> 制品 [1/5] proposal ✓ 完成
+>
+> [展示 proposal.md 完整内容]
+>
+> → 下一个：design（依赖 proposal + draft.md）
+>
+> → (a) 确认，锁定 proposal 并继续 design
+> → (b) 需要调整 — 说明修改点
+
+**制品 [2/5] design：**
+
+> 制品 [2/5] design ✓ 完成
+>
+> [展示 design.md 完整内容]
+>
+> → 下一个：specs（依赖 proposal）
+>
+> → (a) 确认，锁定 design 并继续 specs
+> → (b) 需要调整 — 说明修改点
+
+**制品 [3/5] specs：**
 
 > 制品 [3/5] specs ✓ 完成
 >
-> [展示制品完整内容]
+> [展示 specs/ 完整内容]
 >
 > → 下一个：tasks（依赖 specs + design）
 >
 > → (a) 确认，锁定 specs 并继续 tasks
+> → (b) 需要调整 — 说明修改点
+
+**制品 [4/5] tasks：**
+
+> 制品 [4/5] tasks ✓ 完成
+>
+> [展示 tasks.md 完整内容]
+>
+> → 下一个：plans（依赖 tasks）
+>
+> → (a) 确认，锁定 tasks 并继续生成 plans
+> → (b) 需要调整 — 说明修改点
+
+**制品 [5/5] plans：**
+
+> 制品 [5/5] plans ✓ 完成
+>
+> [展示 plans.md 完整内容]
+>
+> → plan 阶段完成
+>
+> → (a) 确认，锁定 plans 并完成 plan 阶段
 > → (b) 需要调整 — 说明修改点
 
 **审查窗口只展示制品内容，不打印 OpenSpec schema 的 instructions 模板。** instructions 是给 Agent 的内部指引，不是给用户审查的输出。
@@ -314,7 +337,7 @@ git commit -m "chore(<name>): 回溯——清理 plan 制品，回到 brainstorm
 
 ---
 
-## Step 3/3：完成
+### [Step 3/3] 完成
 
 先读取所有 record 的时间戳用于汇总展示：
 ```bash
