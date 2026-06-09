@@ -25,6 +25,7 @@ export function createInitialState(): AlloyState {
     created_at: now,
     updated_at: now,
     records: [],
+    skill_usage: [],
   };
 }
 

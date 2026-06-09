@@ -53,6 +53,16 @@ export interface ArtifactRecord {
   approver: string;
 }
 
+export interface SkillUsageEntry {
+  skill: string;
+  stage: string;
+  used: boolean;
+  count?: number;
+  via?: string;
+  reason?: string;
+  recorded_at: string;
+}
+
 export interface PhaseTiming {
   started_at: string;
   completed_at: string | null;
@@ -77,6 +87,7 @@ export interface AlloyState {
   updated_at: string;
   phase_timings?: PhaseTimings;
   records: ArtifactRecord[];
+  skill_usage: SkillUsageEntry[];
   feature_branch?: string | null;
 }
 
