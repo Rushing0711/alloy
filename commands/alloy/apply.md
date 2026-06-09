@@ -24,6 +24,9 @@ PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
 - precheck 发现技能缺失但继续执行——"先跑着，后面可能用不到"——后面会静默丢失 TDD 或 code review
 - 验证失败后直接改代码跳回验证，不经过 SDD——丢失了 TDD 安全网
 - retrospective 在没有 verify.md 的情况下生成——复盘建立在不可靠的基础上
+- 在主分支上创建 worktree——"start 已经确认过主分支了"——plan 阶段的 commit 在 feature 分支上，worktree 基于 main 会丢失这些 commit
+- feature_branch 为 null 时静默回退——"回退路径是设计的容错"——null 是状态异常，回退值可能与实际分支不一致
+- 跳过分支验证闸门直接加载 using-git-worktrees——"技能内部会处理 base ref"——技能不知道你的 feature_branch 是什么
 
 ### Red Flags——STOP，不要继续
 
@@ -37,6 +40,10 @@ PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
 | "技能缺失没关系，我可以自己搞定" | 技能是闸门，不是加速器。缺失 = HARD STOP。不存在"降级处理"。引导 `alloy init` 修复环境。 |
 | "反正是个小改动，不用那么正式" | 小改动和大改动的闸门完全一样。不存在"大小分级的保护等级"。 |
 | "用户很急，跳过 review 吧" | 跳过 review = 跳过代码质量闸门。急不是绕过流程的理由。 |
+| "start 阶段已经确认过主分支了" | 配置可能已变，确认只需 2 秒。跳过确认 = 在错误的 base 上创建 worktree。 |
+| "feature_branch 是 null，用回退值就行" | null 是状态异常，不是设计的容错。回退值可能与实际分支不一致——交叉验证后才能用。 |
+| "当前在 main 上，直接建 worktree 吧" | 主分支上创建 worktree 丢失 feature 分支的 plan commit。必须先切到 feature 分支。 |
+| "using-git-worktrees 技能内部会处理 base ref" | 技能不知道你的 feature_branch 是什么。base ref 由 apply.md 决定，不是下游技能。 |
 
 ## 前置检查
 
@@ -147,7 +154,7 @@ null 时，先展示摘要，再加载技能：
 ```
 > [Step 1/5] 隔离环境设置
 >
-> 当前在 `<由 alloy _state read ... feature_branch 获取，回退 feature/<name>>`。未在隔离 worktree 中。
+> 当前在 `<feature_branch>`。未在隔离 worktree 中。
 >
 > 分支隔离的是提交历史，但同一时间只能有一个分支在工作目录里。
 > Worktree 隔离的是工作目录——每个 worktree 有独立的文件副本，可同时 checkout 不同分支。
@@ -155,10 +162,56 @@ null 时，先展示摘要，再加载技能：
 > 如果你的 feature 开发期间要切到其他分支（如修紧急 bug、切 main 查东西），
 > worktree 让你无需 stash/commit 当前进度，直接进另一个目录操作。
 >
-> 正在加载 superpowers:using-git-worktrees 技能...
+> 正在验证分支位置...
 ```
 
-使用 Skill 工具加载 `superpowers:using-git-worktrees` 技能。传入参数 "工作目录偏好: .claude/worktrees/<name>\n分支命名: worktree-<name>"。该技能内置了完整的决策流程（Step 0 问询 → 创建或跳过）和执行步骤，Agent 按其内部指引执行即可。
+**分支验证闸门**（加载 using-git-worktrees 之前必须通过——worktree 的 base ref 取决于当前分支，错误的 base = plan 阶段 commit 丢失）：
+
+**① 主分支确认：** 读取 `commands/alloy/references/main-branch-detection.md`，按 3 级优先级检测主分支。若 `openspec/config.yaml` 已有 `alloy.main_branch` 记录，直接用记录值，跳过检测和确认。
+
+**② 当前分支位置检查：**
+```bash
+CURRENT_BRANCH=$(git branch --show-current)
+FEATURE_BRANCH=$(alloy _state read openspec/changes/<name> feature_branch)
+MAIN_BRANCH=$(alloy _config read main_branch 2>/dev/null || echo "$DEFAULT_BRANCH")
+```
+
+- **在主分支上**（`CURRENT_BRANCH === MAIN_BRANCH`）→ HARD STOP："当前在主分支 `<main_branch>`。不允许从主分支创建 worktree——plan 阶段的 commit 在 feature 分支上，worktree 会丢失这些变更。" → 必须 `git checkout <feature_branch>` 后再继续
+- **当前分支 = feature_branch** → ✓ 位置正确，继续
+- **feature_branch 为 null** → ⚠️ 状态异常，需修复：
+  ```
+  .alloy.yaml 未记录 feature_branch。这通常是 start 阶段数据写入失败。
+
+  → (a) 手动指定：输入分支名（如 feature/<name>）
+  → (b) 使用当前分支 `<current_branch>` 作为 feature_branch
+  → (c) 放弃，回退到 start 阶段修复
+  ```
+  用户选择后，`alloy _state write openspec/changes/<name> feature_branch <用户确认的分支>`，然后继续。**null 是状态异常，不是设计的容错——不允许静默回退。**
+- **当前分支 ≠ feature_branch** → 提示切换：
+  ```
+  当前在 `<current_branch>`，但 feature_branch 记录为 `<feature_branch>`。
+  → (a) 切换到 <feature_branch>（推荐）
+  → (b) 使用当前分支 <current_branch>（更新 feature_branch 记录）
+  ```
+  选 (a)：`git checkout <feature_branch>` → 继续
+  选 (b)：`alloy _state write openspec/changes/<name> feature_branch <current_branch>` → 继续
+- **feature_branch 不存在本地** → ⚠️ 分支丢失：
+  ```
+  feature_branch 记录为 `<feature_branch>`，但本地不存在此分支。
+  → (a) 从远程拉取：git fetch origin <feature_branch> && git checkout <feature_branch>
+  → (b) 手动指定其他分支
+  → (c) 放弃，回退到 start 阶段修复
+  ```
+
+**③ base ref 锁定：** 创建 worktree 时，必须基于 `feature_branch`（不是 HEAD，不是 main）。
+
+**base ref 处理策略：** EnterWorktree 的 `worktree.baseRef` 默认为 `fresh`（从 `origin/<default-branch>` 分出），**不会**使用当前 HEAD 作为 base——即使分支验证闸门已确保当前在 feature_branch 上。因此：
+1. **优先：** 先手动 `git worktree add .claude/worktrees/<name> -b worktree-<name> <feature_branch>` 创建 worktree（显式指定 base ref），再用 EnterWorktree(path=...) 或 `cd` 进入
+2. **回退：** 若 EnterWorktree 支持自定义 base ref（查看工具参数），直接使用并传入 feature_branch
+
+分支验证闸门通过后，加载技能：
+
+使用 Skill 工具加载 `superpowers:using-git-worktrees` 技能。传入参数 "工作目录偏好: .claude/worktrees/<name>\n分支命名: worktree-<name>\n基于: <feature_branch>\n注意: EnterWorktree 默认从 origin/main 分出，必须先 git worktree add 指定 base ref 再进入"。该技能内置了完整的决策流程（Step 0 问询 → 创建或跳过）和执行步骤，Agent 按其内部指引执行即可。
 
 **路径偏好说明：** 使用无条件路径 `.claude/worktrees/<name>`，因为 `.claude/` 是 alloy 初始化时的固定目录（存在 commands/skills 等子目录）。显式指定路径后，Agent 在 git worktree fallback（EnterWorktree 不可用时）会直接使用该路径，不会因条件判断错误而回退到 `.worktrees/`。
 
@@ -233,7 +286,7 @@ fi
 
 > [Step 1/5] 隔离环境 — 就绪
 >
-> 源分支:      <由 state.feature_branch 获取，回退 feature/<name>>
+> 源分支:      <由 state.feature_branch 获取>
 > Worktree 分支: <由 state.worktree_branch 获取，无则显示 N/A>
 > Worktree 路径: <由 state.worktree 获取，无则显示 N/A>
 ```
