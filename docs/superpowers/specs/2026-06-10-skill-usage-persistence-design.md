@@ -59,16 +59,16 @@ alloy _skill skip openspec/changes/<name> <stage> <skill_name> --reason "<原因
 | start | `/opsx:new` | 直接 |
 | plan | `/opsx:continue` (×4) | 直接 |
 | plan | `superpowers:writing-plans` | 直接 |
-| apply | `superpowers:using-git-worktrees` | 直接（共用） |
-| apply | `/opsx:verify` | 直接（共用） |
-| apply | `superpowers:verification-before-completion` | 直接（共用） |
-| apply | `superpowers:subagent-driven-development` | 直接（路径 A） |
-| apply | `test-driven-development` | via SDD（路径 A） |
-| apply | `spec-compliance-review` | via SDD（路径 A） |
-| apply | `code-quality-review` | via SDD（路径 A） |
-| apply | `superpowers:test-driven-development` | 直接（路径 B） |
-| apply | `superpowers:executing-plans` | 直接（路径 B） |
-| apply | `superpowers:requesting-code-review` | 直接（路径 B） |
+| apply | `superpowers:using-git-worktrees` | 直接（Step 1：隔离环境） |
+| apply | `superpowers:subagent-driven-development` | 直接（Step 2：路径 A） |
+| apply | `test-driven-development` | via SDD（Step 2：路径 A） |
+| apply | `spec-compliance-review` | via SDD（Step 2：路径 A） |
+| apply | `code-quality-review` | via SDD（Step 2：路径 A） |
+| apply | `superpowers:test-driven-development` | 直接（Step 2：路径 B） |
+| apply | `superpowers:executing-plans` | 直接（Step 2：路径 B） |
+| apply | `superpowers:requesting-code-review` | 直接（Step 2：路径 B） |
+| apply | `superpowers:verification-before-completion` | 直接（Step 3：代码层验证） |
+| apply | `/opsx:verify` | 直接（Step 4：制品层验证） |
 | archive | `/opsx:archive` | 直接 |
 | finish | `superpowers:finishing-a-development-branch` | 直接 |
 
