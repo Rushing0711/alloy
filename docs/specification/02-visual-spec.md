@@ -418,7 +418,7 @@ Start / Plan / Apply 阶段在完成框后展示。固定列宽保证对齐：
 → 验证: <PASS  或  存在 N 个 WARN>
 
 准备好后，运行 /alloy:archive 进入归档阶段。
-（worktree 已在 apply 完成阶段合并清理，此时不存在）
+（worktree 将在 archive 阶段合并清理）
 ```
 
 ### Archive [4/5]（无制品汇总表）

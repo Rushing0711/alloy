@@ -70,6 +70,8 @@ export interface AlloyState {
   phase: "started" | "planned" | "applied" | "archived" | "finished";
   worktree: string | null;
   worktree_branch?: string | null;
+  worktree_created_at?: string | null;
+  worktree_merged_at?: string | null;
   schema_version: number;
   created_at: string;
   updated_at: string;

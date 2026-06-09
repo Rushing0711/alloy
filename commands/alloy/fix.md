@@ -236,17 +236,15 @@ fix-from: <原 change 名>"
    >
    > 即将合并热修分支到主分支：
    >
-   > | | |
-   > |---|---|
-   > | 源分支 | `hotfix/<desc>` |
-   > | 目标分支 | `<MAIN_BRANCH>` |
+   > 源分支：`hotfix/<desc>`
+   > 目标分支：`<MAIN_BRANCH>`
    >
    > 提交：
    > ```
    > <git log <MAIN_BRANCH>..hotfix/<desc> --oneline 的输出>
    > ```
    >
-   > 合并到主分支后，热修分支会被删除。
+   > 合并后 hotfix 分支将被删除。
 
    展示合并摘要后，使用 [Y/n] 让用户确认。选 Y 后执行合并：
    ```bash

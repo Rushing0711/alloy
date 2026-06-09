@@ -19,6 +19,8 @@ export function createInitialState(): AlloyState {
     worktree: null,
     feature_branch: null,
     worktree_branch: null,
+    worktree_created_at: null,
+    worktree_merged_at: null,
     schema_version: 1,
     created_at: now,
     updated_at: now,

@@ -109,10 +109,8 @@ Change: <name>
 >
 > 即将执行本地合并：
 >
-> | | |
-> |---|---|
-> | 源分支 | <feature_branch> |
-> | 目标分支 | <main_branch> |
+> 源分支：<feature_branch>
+> 目标分支：<main_branch>
 >
 > 即将合入的提交：
 > ```
@@ -128,20 +126,21 @@ Change: <name>
 用户确认后，记录完成时间、推进 phase，再 squash 合并：
 ```bash
 # 确定归档路径（archive 阶段已将目录移至 archive/ 下）
-ARCHIVE_DIR=$(ls -d openspec/changes/archive/*-<name> 2>/dev/null | head -1)
+ARCHIVE_DIR=$(ls -d openspec/changes/archive/*-<name> 2>/dev/null | sort -r | head -1)
 CHANGE_DIR="${ARCHIVE_DIR:-openspec/changes/<name>}"
 
 # 记录完成时间 + 推进 phase 到 finished（所有状态变更在 squash merge 之前完成）
 COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
 alloy _state merge "$CHANGE_DIR" phase_timings "{\"finish\":{\"completed_at\":\"${COMPLETED_AT:-$(date '+%Y-%m-%d %H:%M:%S')}\"}}"
 alloy _guard "$CHANGE_DIR" finished --apply
-git add -A openspec/changes/ openspec/config.yaml
+git add -A "$CHANGE_DIR" openspec/config.yaml
 git commit -m "chore(<name>): 记录 finish 阶段完成时间"
 
 git checkout <main_branch>
 git pull || echo "⚠️ git pull 失败（网络问题或冲突），请手动处理后再继续"
 git merge --squash <feature_branch>
 git commit -m "chore(<name>): 合入 main"
+git branch -d <feature_branch>
 ```
 
 若 `git pull` 失败（网络不可达、认证失败），输出警告并暂停，让用户决定是否跳过 pull 直接 merge。若 `git merge --squash` 冲突，输出冲突文件列表，让用户手动解决后继续。
@@ -151,12 +150,12 @@ git commit -m "chore(<name>): 合入 main"
 **选项 2：创建 PR**
 - 先记录完成时间并推进 phase，作为分支上最后一个提交（PR squash merge 后主分支仅 1 个 commit）：
   ```bash
-  ARCHIVE_DIR=$(ls -d openspec/changes/archive/*-<name> 2>/dev/null | head -1)
+  ARCHIVE_DIR=$(ls -d openspec/changes/archive/*-<name> 2>/dev/null | sort -r | head -1)
   CHANGE_DIR="${ARCHIVE_DIR:-openspec/changes/<name>}"
   COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
   alloy _state merge "$CHANGE_DIR" phase_timings "{\"finish\":{\"completed_at\":\"${COMPLETED_AT:-$(date '+%Y-%m-%d %H:%M:%S')}\"}}"
   alloy _guard "$CHANGE_DIR" finished --apply
-  git add -A openspec/changes/ openspec/config.yaml
+  git add -A "$CHANGE_DIR" openspec/config.yaml
   git commit -m "chore(<name>): 记录 finish 阶段完成时间"
   ```
 - 提示："PR 已创建。审查通过后 squash merge 即可完成。"
@@ -195,7 +194,7 @@ git commit -m "chore(<name>): 合入 main"
 ## 闸门规则
 
 - **git add 只用精确路径** — 永远不用 `-a`、`.`。
-  finish 阶段用 `git add -A openspec/changes/ openspec/config.yaml`（`-A` 限路径，只追踪这两个目录的新增/修改/删除），代码合入由 git merge 处理
+  finish 阶段用 `git add -A "$CHANGE_DIR" openspec/config.yaml`（`$CHANGE_DIR` 为当前 change 的归档路径，`-A` 限路径，只追踪 change 目录和 openspec 配置的新增/修改/删除），代码合入由 git merge 处理
 - **phase 必须为 archived** —— spec 已归档的 change 才能 finish
 - **分支必须存在** —— 分支已 merge 或删除时无需再次 finish
 - **不涉及 spec 变更** —— spec 已归档封存，任何 spec 级修改应走新 change

@@ -11,6 +11,8 @@ const ARTIFACTS = [
   "specs",
   "tasks",
   "plans",
+  "verify",
+  "retrospective",
 ] as const;
 
 function checkArtifacts(changePath: string): Record<string, boolean> {
