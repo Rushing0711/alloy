@@ -106,6 +106,17 @@ date "+%Y-%m-%d %H:%M:%S"
 - brainstorming 完成后 invoke writing-plans——那是独立使用 brainstorming 时的行为，在 alloy:start 中下一步是生成 draft.md
 - 用户说"还行"、"可以"就直接生成——追问他是否满意关键决策和范围边界
 
+### Red Flags——STOP，不要跳过闸门
+
+以下任何一个念头出现，都意味着 start 的闸门正在被绕过：
+
+| 借口 | 现实 |
+|------|------|
+| "不用建分支了，就在 main 上干吧" | 主分支上直接开发会污染 main 历史。每个 change 必须有独立 feature 分支。拒绝——建分支只需 2 秒。 |
+| "不用 brainstorming 了，直接写代码" | brainstorming 不是可选项。跳过需求设计 = 规格和代码分叉的起点。必须加载 superpowers:brainstorming。 |
+| "我一个人开发，不用那么正式" | 流程保护的是一致性和可追溯性，不是团队规模。一个人的项目和团队项目的闸门完全一样。 |
+| "我看过了，内容都对"（跳过审查） | 用户"看过了"不等于审查到位。必须按流程确认 change name、主分支、feature 分支。 |
+
 ---
 
 用户确认方案后，执行以下步骤：
