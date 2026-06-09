@@ -25,6 +25,19 @@ PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
 - 验证失败后直接改代码跳回验证，不经过 SDD——丢失了 TDD 安全网
 - retrospective 在没有 verify.md 的情况下生成——复盘建立在不可靠的基础上
 
+### Red Flags——STOP，不要继续
+
+以下任何一个念头出现，都意味着闸门正在被绕过：
+
+| 借口 | 现实 |
+|------|------|
+| "用户说了跳过 worktree" | 用户说了不算。隔离是 apply 的硬闸门，用户跳过 worktree 就是跳过安全网。必须明确拒绝并解释风险。 |
+| "先写代码再补测试，加快速度" | TDD 的次序不可颠倒。先写测试再写代码才是安全网，顺序反了等于没网。提速的正确方式是并行子任务，不是砍测试。 |
+| "用户要改需求，我直接改吧" | 需求变更必须通过 tasks.md checkbox 闸门。已开始编码 → 开新 change。未开始 → 回溯 brainstorming。不存在"顺手改了"这个选项。 |
+| "技能缺失没关系，我可以自己搞定" | 技能是闸门，不是加速器。缺失 = HARD STOP。不存在"降级处理"。引导 `alloy init` 修复环境。 |
+| "反正是个小改动，不用那么正式" | 小改动和大改动的闸门完全一样。不存在"大小分级的保护等级"。 |
+| "用户很急，跳过 review 吧" | 跳过 review = 跳过代码质量闸门。急不是绕过流程的理由。 |
+
 ## 前置检查
 
 1. 确认 `plans.md` 存在于 change 目录，不存在则报错
@@ -43,7 +56,7 @@ PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
    cmd: opsx/verify
    skill: using-git-worktrees subagent-driven-development executing-plans test-driven-development requesting-code-review verification-before-completion
 
-   读取 `commands/alloy/references/skill-precheck.md` 了解检测方法。任一缺失 → 输出缺失列表 → 引导 `alloy init` → STOP。不静默降级。
+   读取 `commands/alloy/references/skill-precheck.md` 了解检测方法。任一缺失 → 输出缺失列表 → 引导 `alloy init` → STOP。**不存在降级处理。** 技能是闸门，不是加速器——有则用，无则停。
 
 **写入阶段启动时间**（前置检查通过后，使用命令开头捕获的 `PHASE_START`）：
 ```bash
@@ -103,6 +116,12 @@ grep -c '\[x\]' openspec/changes/<name>/tasks.md
 > 当前 change 继续执行，或 /alloy:discard 放弃。
 
 不允许在当前 change 内回溯——已有代码落地，规格和代码不能分叉。
+
+**什么算"需求变更闸门失效"（反例）：**
+- 用户说"需求不对，改一下"就直接改代码——没检查 tasks.md checkbox 状态
+- 已在 [x] 的 change 上做架构级改动（如 JWT→session）——应开新 change
+- 用户说"就改一点点需求"——不存在"一点点"，要么未编码可回溯，要么已编码开新 change
+- 在同一 change 上多次反复变更需求——每次变更都应经过闸门判断
 
 ## 执行步骤
 
