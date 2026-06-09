@@ -71,7 +71,10 @@ git branch --list <feature_branch>
 ```bash
 alloy _config read . main_branch
 ```
-若 `main_branch` 未记录 → 提示用户手动指定合并目标分支。
+若 `main_branch` 未记录（输出 `null`）→ 读取 `commands/alloy/references/main-branch-detection.md`，按 3 级优先级自动检测主分支。检测到后让用户确认（Y/n），确认后写入配置：
+```bash
+alloy _config write . main_branch <确认的主分支名>
+```
 
 ---
 

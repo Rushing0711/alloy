@@ -173,7 +173,7 @@ null 时，先展示摘要，再加载技能：
 ```bash
 CURRENT_BRANCH=$(git branch --show-current)
 FEATURE_BRANCH=$(alloy _state read openspec/changes/<name> feature_branch)
-MAIN_BRANCH=$(alloy _config read main_branch 2>/dev/null || echo "$DEFAULT_BRANCH")
+MAIN_BRANCH=$(alloy _config read . main_branch 2>/dev/null || echo "$DEFAULT_BRANCH")
 ```
 
 - **在主分支上**（`CURRENT_BRANCH === MAIN_BRANCH`）→ HARD STOP："当前在主分支 `<main_branch>`。不允许从主分支创建 worktree——plan 阶段的 commit 在 feature 分支上，worktree 会丢失这些变更。" → 必须 `git checkout <feature_branch>` 后再继续

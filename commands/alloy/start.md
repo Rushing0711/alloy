@@ -146,7 +146,10 @@ date "+%Y-%m-%d %H:%M:%S"
 
    若 `openspec/config.yaml` 已有 `alloy.main_branch` 记录，直接用记录值，跳过检测和确认。
 
-   **② 确认主分支：** 检测到后让用户确认（Y/n）。确认后写入项目级配置（`alloy _config write`）。主分支是项目级概念，所有 change 共享，不写入 per-change 的 .alloy.yaml。
+   **② 确认主分支：** 检测到后让用户确认（Y/n）。确认后写入项目级配置：
+	   ```bash
+	   alloy _config write . main_branch <用户确认的主分支名>
+	   ```主分支是项目级概念，所有 change 共享，不写入 per-change 的 .alloy.yaml。
 
    **③ 检测当前分支：**
    ```bash

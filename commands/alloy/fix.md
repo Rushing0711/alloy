@@ -215,7 +215,12 @@ Feature 分支: <branch>
 展示并确认：
 > 主分支: `<MAIN_BRANCH>`？[Y/n]
 
-用户确认后，创建热修分支：
+确认后写入项目级配置：
+```bash
+alloy _config write . main_branch <确认的主分支名>
+```
+
+然后创建热修分支：
 
 ```bash
 git checkout -b hotfix/<desc> <MAIN_BRANCH>
