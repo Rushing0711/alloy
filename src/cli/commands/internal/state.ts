@@ -70,10 +70,15 @@ export async function stateCommand(args: string[]): Promise<void> {
 
   switch (action) {
     case "init": {
-      // 用 createInitialState() 创建完整 state——确保 records: [] 等所有字段存在
-      const initialState = createInitialState();
-      await writeState(changeDir, initialState);
-      console.log(`✓ state 已初始化: ${changeDir}`);
+      // 非破坏性初始化：如果文件已存在（如 _skill log 已提前创建），保留已有数据
+      try {
+        await readState(changeDir);
+        console.log(`state 已存在: ${changeDir} (跳过初始化)`);
+      } catch {
+        const initialState = createInitialState();
+        await writeState(changeDir, initialState);
+        console.log(`✓ state 已初始化: ${changeDir}`);
+      }
       break;
     }
     case "read": {

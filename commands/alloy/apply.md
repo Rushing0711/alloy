@@ -46,6 +46,7 @@ PHASE_START=$(alloy _state timestamp ensure openspec/changes/<name> apply)
 | "feature_branch 是 null，用回退值就行" | null 是状态异常，不是设计的容错。回退值可能与实际分支不一致——交叉验证后才能用。 |
 | "当前在 main 上，直接建 worktree 吧" | 主分支上创建 worktree 丢失 feature 分支的 plan commit。必须先切到 feature 分支。 |
 | "using-git-worktrees 技能内部会处理 base ref" | 技能不知道你的 feature_branch 是什么。base ref 由 apply.md 决定，不是下游技能。 |
+| "先建 worktree 再问用户要不要" | 必须在 consent 前等待。consent 是 before worktree 创建，不是 after。先建后问 = 剥夺用户选择权。加载技能后立即停手，等用户明确回复。 |
 
 ## 前置检查
 
@@ -202,27 +203,40 @@ MAIN_BRANCH=$(alloy _config read . main_branch 2>/dev/null || echo "$DEFAULT_BRA
 
 **③ base ref 锁定：** 创建 worktree 时，必须基于 `feature_branch`（不是 HEAD，不是 main）。
 
-**base ref 处理策略：** EnterWorktree 的 `worktree.baseRef` 默认为 `fresh`（从 `origin/<default-branch>` 分出），**不会**使用当前 HEAD 作为 base——即使分支验证闸门已确保当前在 feature_branch 上。因此：
-1. **优先：** 先手动 `git worktree add .claude/worktrees/<name> -b worktree-<name> <feature_branch>` 创建 worktree（显式指定 base ref），再用 EnterWorktree(path=...) 或 `cd` 进入
-2. **回退：** 若 EnterWorktree 支持自定义 base ref（查看工具参数），直接使用并传入 feature_branch
+分支验证闸门通过后，**先加载技能获取用户 consent（创建/跳过），不要在 consent 前创建 worktree。**
 
-分支验证闸门通过后，加载技能：
+使用 Skill 工具加载 `superpowers:using-git-worktrees` 技能。传入参数：
 
-使用 Skill 工具加载 `superpowers:using-git-worktrees` 技能。传入参数 "工作目录偏好: .claude/worktrees/<name>\n分支命名: worktree-<name>\n基于: <feature_branch>\n注意: EnterWorktree 默认从 origin/main 分出，必须先 git worktree add 指定 base ref 再进入"。该技能内置了完整的决策流程（Step 0 问询 → 创建或跳过）和执行步骤，Agent 按其内部指引执行即可。
+> 工作目录偏好: .claude/worktrees/<name>
+> 分支命名: worktree-<name>
+> 基于: <feature_branch>
+> **重要:** 仅使用技能的 Step 0（检测+consent 问询）。用户 consent 后，不要使用技能的 Step 1a（EnterWorktree）或 Step 1b（git fallback）创建方法——EnterWorktree 默认从 origin/main 分出，base ref 错误。改用下方的 "base ref 处理策略" 手动创建并进入。
+
+技能加载后，Agent 按其内部指引执行 Step 0（检测+consent）。**必须等待用户明确选择（创建/跳过）后才能继续。**
+
+**什么算"consent 没做到"（反例）：**
+- 技能加载后直接建 worktree，没等用户回复——"用户没拒绝就等于同意"是错误的
+- 用户说"嗯"、"好吧"、"随便"就当成同意——模糊回复不等于明确同意
+- 先 `git worktree add` 再加载技能——顺序反了，consent 必须在前
 
 **技能加载后立即记录：**
 ```bash
 alloy _skill log openspec/changes/<name> apply superpowers:using-git-worktrees
 ```
 
-**路径偏好说明：** 使用无条件路径 `.claude/worktrees/<name>`，因为 `.claude/` 是 alloy 初始化时的固定目录（存在 commands/skills 等子目录）。显式指定路径后，Agent 在 git worktree fallback（EnterWorktree 不可用时）会直接使用该路径，不会因条件判断错误而回退到 `.worktrees/`。
-
-**分支命名说明：** 使用 `worktree-<name>` 命名规范，与 EnterWorktree 的内置命名一致。这确保无论 worktree 由 EnterWorktree 还是 git worktree fallback 创建，分支名格式统一，archive 阶段清理时无需猜测。
-
-**when 用户选择不创建 worktree：** 写入 `skipped`（非 null）：
+**用户选择不创建：** 写入 `skipped`（非 null），跳过后续创建步骤：
 ```bash
 alloy _state write openspec/changes/<name> worktree skipped
 ```
+
+**用户选择创建：** 使用以下方式确保正确的 base ref（不是 origin/main，而是 feature_branch）：
+
+1. **优先：** 先手动 `git worktree add .claude/worktrees/<name> -b worktree-<name> <feature_branch>` 创建 worktree（显式指定 base ref），再用 EnterWorktree(path=".claude/worktrees/<name>") 进入
+2. **回退：** 若 EnterWorktree 支持自定义 base ref（查看工具参数），直接使用并传入 feature_branch
+
+**路径偏好说明：** 使用无条件路径 `.claude/worktrees/<name>`，因为 `.claude/` 是 alloy 初始化时的固定目录（存在 commands/skills 等子目录）。显式指定路径后，Agent 在 git worktree fallback（EnterWorktree 不可用时）会直接使用该路径，不会因条件判断错误而回退到 `.worktrees/`。
+
+**分支命名说明：** 使用 `worktree-<name>` 命名规范，与 EnterWorktree 的内置命名一致。这确保无论 worktree 由 EnterWorktree 还是 git worktree fallback 创建，分支名格式统一，archive 阶段清理时无需猜测。
 
 ```bash
 echo "  正在检测 worktree 实际状态..."

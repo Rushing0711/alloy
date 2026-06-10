@@ -50,6 +50,7 @@ export async function writeState(
   const yamlPath = join(changePath, ".alloy.yaml");
   state.updated_at = formatTimestamp();
   const content = stringifyYaml(state);
+  await mkdir(dirname(yamlPath), { recursive: true });
   await writeFile(yamlPath, content, "utf-8");
 }
 

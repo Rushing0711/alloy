@@ -1,6 +1,6 @@
 // src/cli/commands/internal/skill-usage.ts
-import { readState, writeState } from "../../utils/state.js";
-import type { SkillUsageEntry } from "../../../core/types.js";
+import { readState, writeState, createInitialState } from "../../utils/state.js";
+import type { SkillUsageEntry, AlloyState } from "../../../core/types.js";
 
 function formatTimestamp(): string {
   const d = new Date();
@@ -26,7 +26,12 @@ export async function skillUsageCommand(args: string[]): Promise<void> {
     return;
   }
 
-  const state = await readState(changeDir);
+  let state: AlloyState;
+  try {
+    state = await readState(changeDir);
+  } catch {
+    state = createInitialState();
+  }
   if (!state.skill_usage) state.skill_usage = [];
 
   const now = formatTimestamp();
