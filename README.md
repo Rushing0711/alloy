@@ -110,27 +110,19 @@ alloy init
 
 ---
 
-## 核心特点
+## 核心特性
 
-**三层防线，Agent 想跳也跳不过去：**
+**流程闸门，不是建议。** TDD 跳过？脚本阻断。code review 跳过？制品 hash 对不上。5 个阶段每步都有硬校验——不是"建议你这么做"，而是"不这么做就走不下去"。
 
-| 防线 | 机制 | 作用 |
-|------|------|------|
-| 指令层 | SKILL.md 硬约束 + 反例定义 | 引导 Agent 行为 |
-| 脚本层 | `alloy _guard` + `alloy _record check` | 硬阻断非法操作：phase 校验、hash 校验、制品完整性 |
-| 审查层 | 每制品人工确认（不提供"跳过"） | 人类最终决策 |
+**OpenSpec + Superpowers，一条命令搞定。** OpenSpec 管规格（做了没有），Superpowers 管纪律（做对了没有）。两个工具各自强大，但技能繁多、组合复杂。Alloy 把它们编成一条 5 阶段流水线——你只管 `/alloy:start`，剩下的编排、调度、校验全自动。不用学两个工具的 20+ 个技能，一条命令走到交付。
 
-**每一步都有明确决策点：** start 选分支 → plan 每制品审查 → apply 选隔离方式和执行策略 → archive 确认归档 → finish 明确合入方式。每个阶段转换前有闸门脚本校验。
+**随便打哪个命令，都能接上。** 退出时在 plan 阶段，回来不小心打了 `/alloy:apply`？系统自动检测进度，跳到正确位置继续。不需要记住"上次做到哪了"。
 
-**掉线零负担：** 任何时候退出，回来随便打 `/alloy:start`、`/alloy:plan`、`/alloy:apply` 任意一个命令——自动检测进度，从断点继续。不需要记住"上次做到哪了"。
+**改需求不乱。** 做到一半用户说要改需求？系统检查编码是否已经开始——还没写就回溯修正，已经写了就开新 change。规格和代码不会分叉。
 
-**越用越聪明：** 每次 change 的 retrospective 复盘数据自动反哺后续 change——上次踩的坑、跳过的技能、未完成的改进项，都带回新一轮 start，不会每次都从零开始。
+**每次做完，下次更聪明。** 每次 change 结束自动生成复盘——踩了什么坑、什么假设被推翻、哪些改进没完成。这些教训自动写进 memory，下次开新 change 时自动提醒。
 
-**多平台支持：** `alloy init` 交互式选择安装目标——Claude Code、Cursor、OpenCode、Codex、Trae、Pi、CodeBuddy、Qoder 共 8 个平台，冒号版和横线版命令自动生成。
-
-**制品独立提交 + 时间追踪：** 每个制品审查通过后立即 hash-lock + 单独 git commit，支持独立回溯、revert、cherry-pick。每个阶段的耗时数据持久化到 `.alloy.yaml`，掉线恢复不丢失。
-
-**Shell 补全：** `alloy completion` 生成 Tab 补全脚本，`alloy init` 时自动注册到 rc 文件。支持 bash / zsh / PowerShell。
+**每一步都可追溯。** 需求、设计、规格、任务、验证、复盘——每个产出独立 hash 锁定 + 独立 commit。谁在什么时候确认了什么，一条链完整可查。
 
 > 完整设计细节见 [产品规格](docs/specification/01-product-spec.md)。
 
