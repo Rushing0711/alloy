@@ -132,6 +132,7 @@ alloy init
 
 | 我想… | 读这个 |
 |-------|------|
+| **快速了解 Alloy 是什么** | [品牌视觉介绍](docs/intro/index.html) — 幻灯片 / [信息图](docs/intro/infographic.html) — 一页看完 |
 | **快速上手使用 Alloy** | [handbook.md](docs/handbook.md) |
 | 看完整产品规格 | [specification/01-product-spec.md](docs/specification/01-product-spec.md) |
 | 看终端输出视觉规范 | [specification/02-visual-spec.md](docs/specification/02-visual-spec.md) |
