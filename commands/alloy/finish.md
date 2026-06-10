@@ -11,6 +11,8 @@ tags: [alloy, workflow]
 
 **核心原则：只做代码合入，不碰 spec。** 如果合入过程中（如 PR 审查）发现需要修改 spec，那是另一个 change 的事——当前 change 的 spec 已归档封存。
 
+**交互风格：** 主分支确认、合并策略选择使用 `AskUserQuestion` 工具。**合并确认仍用精确文本匹配**（安全机制）。详见 `commands/alloy/references/interaction-style.md`。
+
 **调用外部命令或技能前，先输出标题和状态描述，再执行操作。不要只出标题然后沉默。**
 
 **捕获阶段启动时间**（命令调用后第一时间，前置检查之前，幂等——重入时返回已有值）：

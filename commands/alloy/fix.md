@@ -11,6 +11,8 @@ tags: [alloy, workflow]
 
 **核心原则：诊断先行——先判断是代码 bug 还是 spec 变更；分支后置——确认是代码 bug 后才选择分支策略。**
 
+**交互风格：** 诊断确认、分支选择、合并确认使用 `AskUserQuestion` 工具。详见 `commands/alloy/references/interaction-style.md`。
+
 **调用外部命令或技能前，先输出标题和状态描述，再执行操作。**
 
 ---
