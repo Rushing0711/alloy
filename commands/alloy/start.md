@@ -54,6 +54,11 @@ date "+%Y-%m-%d %H:%M:%S"
 
 技能加载后，按其指引自由探索项目上下文和需求空间。
 
+**技能加载后立即记录：**
+```bash
+alloy _skill log openspec/changes/<name> start opsx:explore
+```
+
 **额外上下文——来自历史 retrospective 的教训：** 在探查阶段，扫描 `openspec/changes/archive/` 下最近 3 个已归档 change 的 `retrospective.md`，提取以下信息作为本次 brainstorming 的参考：
 
 - **§5 意外发现**：上一次有哪些假设被推翻？这次可能也有类似盲区
@@ -80,6 +85,11 @@ date "+%Y-%m-%d %H:%M:%S"
 ```
 
 如果 `superpowers:brainstorming` 不可用，引导用户运行 `alloy init` 完成环境初始化。brainstorming 技能内置了审批闸门和 Q&A 深度——普通对话无法复现这些行为。
+
+**技能加载后立即记录：**
+```bash
+alloy _skill log openspec/changes/<name> start superpowers:brainstorming
+```
 
 **brainstorming 负责"想清楚要做什么"——通过交互式问答明确问题、方案和关键决策。** 用户确认方案后，这一步的产出是 `draft.md`，不是 superpowers spec 文件。
 
@@ -188,6 +198,11 @@ date "+%Y-%m-%d %H:%M:%S"
      - `git checkout -b <branch-name>`
 
 4. **调用 `/opsx:new <name>`** 创建 change 目录（已在 feature 分支上，目录直接落在正确分支）
+
+**命令执行后立即记录：**
+```bash
+alloy _skill log openspec/changes/<name> start opsx:new
+```
 
 5. **写入 state**——使用 `_state init` 一步创建完整初始状态（包含 `records: []`、正确类型），避免逐字段写入遗漏 records 数组：
    ```bash
