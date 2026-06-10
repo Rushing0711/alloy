@@ -17,6 +17,13 @@ export async function skillUsageCommand(args: string[]): Promise<void> {
   if (!action || !changeDir || !stage || !skill) {
     console.error("用法: alloy _skill <log|skip> <change-dir> <stage> <skill> [--via <source>] [--reason <reason>]");
     process.exit(1);
+    return;
+  }
+
+  if (action !== "log" && action !== "skip") {
+    console.error(`未知操作: ${action} (支持: log, skip)`);
+    process.exit(1);
+    return;
   }
 
   const state = await readState(changeDir);
@@ -52,7 +59,7 @@ export async function skillUsageCommand(args: string[]): Promise<void> {
     // count: 如果已存在则 +1，否则 = 1
     if (existing >= 0) {
       const prev = state.skill_usage[existing];
-      entry.count = (prev.count || 1) + 1;
+      entry.count = prev.count ? prev.count + 1 : 1;
     } else {
       entry.count = 1;
     }
