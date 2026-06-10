@@ -90,43 +90,23 @@ git diff --stat <base>..HEAD | tail -1
 
 #### §4 全周期技能审计
 
-Agent 自报全周期技能和命令使用情况（同一 session 亲历）：
+从 `.alloy.yaml` 的 `skill_usage[]` 字段读取全周期技能使用记录（各阶段 `alloy _skill log` 写入）：
 
-**start 阶段：**
-| 技能/命令 | 使用 |
-|----------|:---:|
-| `/opsx:new` | |
-| `opsx:explore` | |
-| `superpowers:brainstorming` | |
+```bash
+alloy _state read openspec/changes/<name> skill_usage
+```
 
-**plan 阶段：**
-| 技能/命令 | 使用 |
-|----------|:---:|
-| `/opsx:continue` | |
-| `superpowers:writing-plans` | |
+按 `templates/retrospective.md` 的 §4 格式生成审计表：
 
-**apply 阶段：**
-| 技能/命令 | 使用 |
-|----------|:---:|
-| `superpowers:using-git-worktrees` | |
-| `superpowers:subagent-driven-development` | |
-| `superpowers:executing-plans` | |
-| `superpowers:test-driven-development` | |
-| `superpowers:requesting-code-review` | |
-| `superpowers:verification-before-completion` | |
-| `/opsx:verify` | |
+- `used=true` → 填 `✓`，有 `count` 时追加 `(×N)`，有 `via` 时原因列填 `via <source>`
+- `used=false` → 填 `✗`，原因列填 `reason` 字段的值
+- 不在 `skill_usage[]` 中（旧 change 无记录）→ 填 `—`
+- `skill_usage[]` 为空数组 → 所有行填 `—`，在表前加一行提示："> ⚠️ 当前 change 无 skill_usage 记录（旧 change），以下数据不可用。"
 
-默认期望所有行都是 ✓。
-
-**Deliberately Skipped Skills：** 对于每个标记 ✗ 的技能，必须回答三个问题：
+**Deliberately Skipped Skills：** 对于每个 `used=false` 的条目，展开三问：
 1. **What was skipped** — 具体跳过了哪个技能或子步骤
-2. **Why this cycle** — 具体触发原因（必须有具体的 commit hash、日志行或观察到的行为）
-3. **How to prevent recurrence** — 从以下选项中选择：
-   - schema graph fix（schema 图修正）
-   - skill description tightening（技能描述收紧）
-   - CLAUDE.md trigger（CLAUDE.md 触发规则）
-   - scope-judgment rule（范围判断规则）
-   - one-off（一次性，需说明为什么是边界情况）
+2. **Why this cycle** — 具体触发原因（优先用 `reason` 字段的值）
+3. **How to prevent recurrence** — schema graph fix / skill description tightening / CLAUDE.md trigger / scope-judgment rule / one-off
 
 如果多个 cycle 因相似原因跳过同一技能，该模式应成为 §6 的 Promote candidate。
 

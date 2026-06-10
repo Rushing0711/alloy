@@ -108,38 +108,54 @@
 
 ## §4 全周期技能审计
 
+数据来源：`.alloy.yaml` 的 `skill_usage[]` 字段。`skill_usage[]` 为空（旧 change 无记录）→ 对应行填 `—`。
+
 ### start 阶段
 
-| 技能/命令 | 使用 |
-|----------|:---:|
-| `/opsx:new` | |
-| `opsx:explore` | |
-| `superpowers:brainstorming` | |
+| 技能/命令 | 使用 | 原因 |
+|----------|:---:|------|
+| `opsx:explore` | | |
+| `superpowers:brainstorming` | | |
+| `/opsx:new` | | |
 
 ### plan 阶段
 
-| 技能/命令 | 使用 |
-|----------|:---:|
-| `/opsx:continue` | |
-| `superpowers:writing-plans` | |
+| 技能/命令 | 使用 | 原因 |
+|----------|:---:|------|
+| `/opsx:continue` | | |
+| `superpowers:writing-plans` | | |
 
 ### apply 阶段
 
-| 技能/命令 | 使用 |
-|----------|:---:|
-| `superpowers:using-git-worktrees` | |
-| `superpowers:subagent-driven-development` | |
-| `superpowers:executing-plans` | |
-| `superpowers:test-driven-development` | |
-| `superpowers:requesting-code-review` | |
-| `superpowers:verification-before-completion` | |
-| `/opsx:verify` | |
+| 技能/命令 | 使用 | 原因 |
+|----------|:---:|------|
+| `superpowers:using-git-worktrees` | | |
+| `superpowers:subagent-driven-development` | | |
+| `test-driven-development` | | |
+| `spec-compliance-review` | | |
+| `code-quality-review` | | |
+| `superpowers:executing-plans` | | |
+| `superpowers:requesting-code-review` | | |
+| `superpowers:verification-before-completion` | | |
+| `/opsx:verify` | | |
+
+### archive 阶段
+
+| 技能/命令 | 使用 | 原因 |
+|----------|:---:|------|
+| `/opsx:archive` | | |
+
+### finish 阶段
+
+| 技能/命令 | 使用 | 原因 |
+|----------|:---:|------|
+| `superpowers:finishing-a-development-branch` | | |
 
 ### Deliberately Skipped Skills
 
 <!-- 对于每个标记 ✗ 的技能，填写以下三项：
 1. **What was skipped** — 具体跳过了哪个技能或子步骤
-2. **Why this cycle** — 具体触发原因（必须有具体的 commit hash、日志行或观察到的行为）
+2. **Why this cycle** — 具体触发原因
 3. **How to prevent recurrence** — schema graph fix / skill description tightening / CLAUDE.md trigger / scope-judgment rule / one-off
 -->
 
