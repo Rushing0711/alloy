@@ -114,23 +114,45 @@ Worktree: <是/否>（<path>）
 
 如果 `superpowers:systematic-debugging` 不可用，引导用户运行 `alloy init` 完成环境初始化。
 
+**技能加载后立即记录：**
+```bash
+alloy _skill log openspec/changes/<name> fix superpowers:systematic-debugging
+```
+
 诊断必须产出一个明确的结论：**根因是什么、涉及哪些文件、是否偏离了现有 spec。**
 
 **诊断确认与分流（阻塞点）：**
 
-展示诊断结论，等待用户确认：
+展示诊断结论，使用 `AskUserQuestion` 让用户确认（非 Claude Code 平台降级为文本选项）：
 
 > 诊断结论：
 > - 根因：<根因描述>
 > - 涉及文件：<文件列表>
 > - 是否偏离 spec：<是 / 否>
->
-> 确认以上诊断结果？[Y/n]
 
-**分流逻辑：**
+**Claude Code：**
+```
+AskUserQuestion: {
+  questions: [{
+    question: "确认以上诊断结论？",
+    header: "诊断确认",
+    options: [
+      { label: "(a) 确认，进入修复", description: "根因确认无误，根据分流逻辑进入对应修复路径" },
+      { label: "(b) 重新诊断", description: "诊断结论有误，回到 Step 2 重新分析" }
+    ],
+    multiSelect: false
+  }]
+}
+```
 
-- **需改 spec** → 展示结论 + 建议 change 名称 → 引导 `/alloy:start <建议名称>` → **结束 fix 流程**
-- **代码 bug** → 用户确认后进入 Step 3
+**其他平台（降级为文本选项）：**
+```
+> → (a) 确认，进入修复 — 根因确认无误，进入修复路径
+> → (b) 重新诊断 — 回到 Step 2 重新分析
+> 请输入 a 或 b：
+```
+
+选 (a) → 根据分流逻辑进入 Step 3 或引导 `/alloy:start`。选 (b) → 回到 Step 2 重新诊断。
 
 **什么算"需改 spec"（正例）：**
 - spec 没有描述这个边界情况，代码行为合理但 spec 需要补充
@@ -141,8 +163,6 @@ Worktree: <是/否>（<path>）
 - 函数返回值与 spec 描述的行为不一致
 - spec 说"空数组返回 []"但代码对空数组抛了异常
 - 性能不达标，但 spec 没有性能要求
-
-选 Y 或直接回车 → 进入 Step 3。选 n → 回到 Step 2 重新诊断。
 
 ---
 
@@ -172,7 +192,19 @@ Worktree: <path>
 
 修复流程：
 1. 使用 Skill 工具加载 `superpowers:test-driven-development` 技能 —— 先写失败测试，再修代码
+
+   **技能加载后立即记录：**
+   ```bash
+   alloy _skill log openspec/changes/<name> fix superpowers:test-driven-development
+   ```
+
 2. 使用 Skill 工具加载 `superpowers:verification-before-completion` 技能 —— 验证修复
+
+   **技能加载后立即记录：**
+   ```bash
+   alloy _skill log openspec/changes/<name> fix superpowers:verification-before-completion
+   ```
+
 3. 精确提交到 worktree 分支：
    ```bash
    git add <精确路径>
@@ -193,7 +225,19 @@ Feature 分支: <branch>
 
 修复流程：
 1. 使用 Skill 工具加载 `superpowers:test-driven-development` 技能
+
+   **技能加载后立即记录：**
+   ```bash
+   alloy _skill log openspec/changes/<name> fix superpowers:test-driven-development
+   ```
+
 2. 使用 Skill 工具加载 `superpowers:verification-before-completion` 技能
+
+   **技能加载后立即记录：**
+   ```bash
+   alloy _skill log openspec/changes/<name> fix superpowers:verification-before-completion
+   ```
+
 3. 精确提交到 feature 分支：
    ```bash
    git add <精确路径>
@@ -214,8 +258,29 @@ Feature 分支: <branch>
 
 读取 `commands/alloy/references/main-branch-detection.md`，检测/确认主分支。优先读 `openspec/config.yaml` 的 `main_branch` 配置，未配置时按 3 级优先级自动检测并让用户确认。
 
-展示并确认：
-> 主分支: `<MAIN_BRANCH>`？[Y/n]
+使用 `AskUserQuestion` 展示并确认（非 Claude Code 平台降级为文本选项）：
+
+**Claude Code：**
+```
+AskUserQuestion: {
+  questions: [{
+    question: "确认主分支？",
+    header: "主分支",
+    options: [
+      { label: "(a) 确认", description: "<MAIN_BRANCH> 是主分支，写入配置并继续" },
+      { label: "(b) 手动指定", description: "输入正确的主分支名" }
+    ],
+    multiSelect: false
+  }]
+}
+```
+
+**其他平台（降级为文本选项）：**
+```
+> → (a) 确认 — <MAIN_BRANCH> 是主分支，写入配置并继续
+> → (b) 手动指定 — 输入正确的主分支名
+> 请输入 a 或 b：
+```
 
 确认后写入项目级配置：
 ```bash
@@ -232,7 +297,19 @@ git checkout -b hotfix/<desc> <MAIN_BRANCH>
 
 修复流程：
 1. 使用 Skill 工具加载 `superpowers:test-driven-development` 技能
+
+   **技能加载后立即记录：**
+   ```bash
+   alloy _skill log openspec/changes/<name> fix superpowers:test-driven-development
+   ```
+
 2. 使用 Skill 工具加载 `superpowers:verification-before-completion` 技能
+
+   **技能加载后立即记录：**
+   ```bash
+   alloy _skill log openspec/changes/<name> fix superpowers:verification-before-completion
+   ```
+
 3. 精确提交。如果能追溯到原 change，在 commit message 中注明：
    ```bash
    git add <精确路径>
@@ -263,14 +340,18 @@ fix-from: <原 change 名>"
    > ```
    >
    > 合并后 hotfix 分支将被删除。
+   >
+   > 输入 merge hotfix/<desc> into <MAIN_BRANCH> 确认，或输入其他内容取消。
 
-   展示合并摘要后，使用 [Y/n] 让用户确认。选 Y 后执行合并：
+   **必须等待用户精确输入确认语句。** "好"、"可以"、"y" 都不算确认。
+
+   用户确认后执行合并：
    ```bash
    git checkout <MAIN_BRANCH>
    git merge hotfix/<desc> --no-ff
    git branch -d hotfix/<desc>
    ```
-   选 n 则提示："取消合并。热修分支 hotfix/<desc> 保留，可后续手动合并。"
+   用户取消则提示："取消合并。热修分支 hotfix/<desc> 保留，可后续手动合并。"
 
 ---
 

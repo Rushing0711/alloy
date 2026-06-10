@@ -51,6 +51,8 @@ AskUserQuestion: {
 > 请输入 a 或 b：
 ```
 
+**硬规则：凡是技能文件中出现 `AskUserQuestion` JSON 块的，同一位置必须附带降级文本格式。** Agent 执行时先检测当前平台是否支持 `AskUserQuestion` 工具——支持则用原生交互组件，不支持则自动降级为文本选项。两个格式给出相同选项、相同数量，确保不同平台上用户看到的选项一致。
+
 **反例：** 审查窗口只用文本 "(a) 确认 (b) 调整" 而不给明确的输入提示——用户不知道是要打字、复制粘贴还是直接说"确认"。
 
 ## 不能使用 AskUserQuestion 的场景
@@ -74,7 +76,7 @@ AskUserQuestion: {
 | plan | 5 个制品审查窗口（radio）、回溯确认（radio） |
 | apply | 分支异常处理（radio）、执行策略选择（radio）、verify/retrospective 审查（radio） |
 | finish | 主分支确认（radio） |
-| fix | 诊断确认（radio）、主分支确认（radio）、hotfix 合并确认（radio） |
+| fix | 诊断确认（radio）、主分支确认（radio）、hotfix 合并确认（精确文本） |
 | archive | 无用户交互（全自动） |
 | status | 无用户交互（只读） |
 | discard | **不使用**——保持精确文本确认 |

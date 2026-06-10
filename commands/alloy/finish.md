@@ -27,6 +27,18 @@ PHASE_START=$(alloy _state timestamp ensure openspec/changes/<name> finish)
 - 分支已 merge 或删除后重复调 finish——浪费操作，应该直接告知用户无需再次 finish
 - finish 过程中试图修改 spec——spec 已归档，任何 spec 级变更应走新 change
 
+### Red Flags——STOP，不要继续
+
+以下任何一个念头出现，都意味着闸门正在被绕过：
+
+| 借口 | 现实 |
+|------|------|
+| "phase 不是 archived，但代码都已经写好了，直接合吧" | archive 不可跳过——spec 归档和代码合入是两件事。先归档再合入，顺序不可颠倒。 |
+| "分支已经删了，finish 白跑了" | finish 前置检查的第一步就是确认分支存在。分支不存在 = 无需再次 finish，直接告知用户。 |
+| "PR 审查说要改 spec，我在 finish 里顺手改了吧" | spec 已归档封存。任何 spec 级变更 = 新 change。当前 change 的 finish 不涉及 spec 修改。 |
+| "选'保持分支'就等于没做完，太麻烦了，直接 merge 吧" | 保持分支是合法选项——用户可能有后续计划。替用户选 merge 是越权。 |
+| "merge 确认太啰嗦了，用户说'好'就是同意了" | merge 确认必须精确文本匹配。`merge <branch> into <branch>` 是安全机制——防止手滑合入。 |
+
 ---
 
 ## 前置检查

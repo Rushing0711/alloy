@@ -1,6 +1,6 @@
 ---
 name: "Alloy: Status"
-description: 查看 change 进度和状态——总览所有活跃 change 或指定 change 详情
+description: 需要查看 change 进度或状态时调用
 category: Workflow
 tags: [alloy, workflow]
 ---

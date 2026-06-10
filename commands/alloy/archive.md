@@ -25,6 +25,18 @@ PHASE_START=$(alloy _state timestamp ensure openspec/changes/<name> archive)
 - 跳过 archive 直接手动 merge——Delta Spec 没有被同步，主 spec 落后于代码
 - openspec archive 返回错误但忽视警告继续——"反正代码对的，spec 后面再说"
 
+### Red Flags——STOP，不要继续
+
+以下任何一个念头出现，都意味着闸门正在被绕过：
+
+| 借口 | 现实 |
+|------|------|
+| "verify.md FAIL 是小问题，先归档再说" | FAIL = 阻塞问题。归档不可逆——带着 FAIL 归档意味着 spec 与代码的偏差被永久封存。 |
+| "跳过 archive 直接 merge，spec 后面补" | Delta Spec 不同步 = 主 spec 落后于代码。"后面补"的 spec 永远不会补。 |
+| "openspec archive 报错了，但代码是对的，忽略吧" | 归档报错意味着 Delta Spec 合并失败。忽略 = 主 spec 停留在旧版本，下次 change 基于过期 spec 做设计。 |
+| "worktree 合并冲突了，跳过清理吧" | 冲突不解决 = 代码丢失。worktree 中的变更没有合入 feature 分支就删除，等于白做。 |
+| "反正是个小 change，不用归档了吧" | 小 change 也需要 spec 同步。不归档 = 主 spec 和代码永久分叉。大小 change 的归档流程完全一样。 |
+
 ---
 
 ## 前置检查（HARD STOP）
