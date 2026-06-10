@@ -520,8 +520,31 @@ Alloy · Bug 修复
 > - 涉及文件: src/utils/parse.ts
 > - 是否偏离 spec: 否
 
-> 确认以上诊断结果？[Y/n]
+```
 
+**Claude Code：**
+```
+AskUserQuestion: {
+  questions: [{
+    question: "确认以上诊断结论？",
+    header: "诊断确认",
+    options: [
+      { label: "(a) 确认，进入修复", description: "根因确认无误，进入修复路径" },
+      { label: "(b) 重新诊断", description: "回到 Step 2 重新分析" }
+    ],
+    multiSelect: false
+  }]
+}
+```
+
+**其他平台（降级为文本选项）：**
+```
+> → (a) 确认，进入修复 — 根因确认无误，进入修复路径
+> → (b) 重新诊断 — 回到 Step 2 重新分析
+> 请输入 a 或 b：
+```
+
+```
 [Step 3/3] 分支选择 + 修复
 ──────────────────────────────────────
 
