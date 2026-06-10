@@ -27,11 +27,9 @@ tags: [alloy, workflow]
 | "我看过 draft 了，后面的不用看了" | draft 是方案设计，proposal 是提案范围，design 是技术方案，specs 是行为契约——四个层面不可互相替代。 |
 | "这个项目很小，不需要那么正式" | 小项目和大项目的闸门完全一样。不存在"规模分级的保护等级"。 |
 
-**捕获阶段启动时间**（命令调用后第一时间，前置检查之前）：
-
-**捕获阶段启动时间**（命令调用后第一时间，前置检查之前）：
+**捕获阶段启动时间**（命令调用后第一时间，前置检查之前，幂等——重入时返回已有值）：
 ```bash
-PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
+PHASE_START=$(alloy _state timestamp ensure openspec/changes/<name> plan)
 ```
 
 ---
@@ -50,11 +48,6 @@ PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
 ---
 
 ### [Step 1/3] 确认 Change
-
-**写入阶段启动时间**（前置检查通过后，使用命令开头捕获的 `PHASE_START`）：
-```bash
-alloy _state merge openspec/changes/<name> phase_timings "{\"plan\":{\"started_at\":\"${PHASE_START:-$(date '+%Y-%m-%d %H:%M:%S')}\"}}"
-```
 
 ```
 ┌──────────────────────────────────────┐

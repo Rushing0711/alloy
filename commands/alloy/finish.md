@@ -13,9 +13,9 @@ tags: [alloy, workflow]
 
 **调用外部命令或技能前，先输出标题和状态描述，再执行操作。不要只出标题然后沉默。**
 
-**捕获阶段启动时间**（命令调用后第一时间，前置检查之前）：
+**捕获阶段启动时间**（命令调用后第一时间，前置检查之前，幂等——重入时返回已有值）：
 ```bash
-PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
+PHASE_START=$(alloy _state timestamp ensure openspec/changes/<name> finish)
 ```
 
 ---
@@ -28,11 +28,6 @@ PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
 ---
 
 ## 前置检查
-
-**写入阶段启动时间**（前置检查通过后，使用命令开头捕获的 `PHASE_START`）：
-```bash
-alloy _state merge openspec/changes/<name> phase_timings "{\"finish\":{\"started_at\":\"${PHASE_START:-$(date '+%Y-%m-%d %H:%M:%S')}\"}}"
-```
 
 ```
 ┌──────────────────────────────────────┐
@@ -147,8 +142,16 @@ git commit -m "chore(<name>): 记录 finish 阶段完成时间"
 git checkout <main_branch>
 git pull || echo "⚠️ git pull 失败（网络问题或冲突），请手动处理后再继续"
 git merge --squash <feature_branch>
-git commit -m "chore(<name>): 合入 main"
-git branch -d <feature_branch>
+# 抓取被合入分支的完整 commit 列表，生成类似 GitHub squash merge 的 commit message
+COMMIT_LOG=$(git log <main_branch>..<feature_branch> --format="* %s")
+git commit -m "$(cat <<EOF
+chore(<name>): 合入 main（squash merge）
+
+${COMMIT_LOG}
+EOF
+)"
+# squash merge 不产生 merge commit，git 无法识别分支已合入，使用 -D 强删
+git branch -D <feature_branch>
 ```
 
 若 `git pull` 失败（网络不可达、认证失败），输出警告并暂停，让用户决定是否跳过 pull 直接 merge。若 `git merge --squash` 冲突，输出冲突文件列表，让用户手动解决后继续。

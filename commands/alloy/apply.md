@@ -13,9 +13,9 @@ tags: [alloy, workflow]
 
 **调用外部命令或技能前，先输出标题和状态描述，再执行操作。不要只出标题然后沉默。**
 
-**捕获阶段启动时间**（命令调用后第一时间，前置检查之前）：
+**捕获阶段启动时间**（命令调用后第一时间，前置检查之前，幂等——重入时返回已有值）：
 ```bash
-PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
+PHASE_START=$(alloy _state timestamp ensure openspec/changes/<name> apply)
 ```
 
 ---
@@ -64,11 +64,6 @@ PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
    skill: using-git-worktrees subagent-driven-development executing-plans test-driven-development requesting-code-review verification-before-completion
 
    读取 `commands/alloy/references/skill-precheck.md` 了解检测方法。任一缺失 → 输出缺失列表 → 引导 `alloy init` → STOP。**不存在降级处理。** 技能是闸门，不是加速器——有则用，无则停。
-
-**写入阶段启动时间**（前置检查通过后，使用命令开头捕获的 `PHASE_START`）：
-```bash
-alloy _state merge openspec/changes/<name> phase_timings "{\"apply\":{\"started_at\":\"${PHASE_START:-$(date '+%Y-%m-%d %H:%M:%S')}\"}}"
-```
 
 ```
 ┌──────────────────────────────────────┐

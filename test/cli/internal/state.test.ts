@@ -143,6 +143,57 @@ describe("alloy _state", () => {
       expect(exitSpy).toHaveBeenCalledWith(1);
       exitSpy.mockRestore();
     });
+
+    describe("timestamp ensure", () => {
+      it("首次调用写入并返回当前时间", async () => {
+        const out = await captureOutput(() =>
+          stateCommand(["timestamp", "ensure", changeDir, "finish"])
+        );
+        expect(out).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+        const state = await readState(changeDir);
+        expect(state.phase_timings?.finish?.started_at).toBe(out);
+      });
+
+      it("二次调用幂等返回已有值，不覆盖", async () => {
+        // 先写入一个已知时间
+        await stateCommand([
+          "merge", changeDir, "phase_timings",
+          '{"finish":{"started_at":"2025-06-10 14:30:00"}}',
+        ]);
+        const out = await captureOutput(() =>
+          stateCommand(["timestamp", "ensure", changeDir, "finish"])
+        );
+        expect(out).toBe("2025-06-10 14:30:00");
+      });
+
+      it("保留已有的 completed_at", async () => {
+        // 先写入含 completed_at 的 timing（模拟已完成但重入的情况）
+        await stateCommand([
+          "merge", changeDir, "phase_timings",
+          '{"finish":{"started_at":"2025-06-10 14:30:00","completed_at":"2025-06-10 14:35:00"}}',
+        ]);
+        const out = await captureOutput(() =>
+          stateCommand(["timestamp", "ensure", changeDir, "finish"])
+        );
+        expect(out).toBe("2025-06-10 14:30:00");
+        const state = await readState(changeDir);
+        expect(state.phase_timings?.finish?.completed_at).toBe("2025-06-10 14:35:00");
+      });
+
+      it("无效 phase 名 exit 1", async () => {
+        const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+        await stateCommand(["timestamp", "ensure", changeDir, "bogus"]);
+        expect(exitSpy).toHaveBeenCalledWith(1);
+        exitSpy.mockRestore();
+      });
+
+      it("缺少参数 exit 1", async () => {
+        const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+        await stateCommand(["timestamp", "ensure", changeDir]);
+        expect(exitSpy).toHaveBeenCalledWith(1);
+        exitSpy.mockRestore();
+      });
+    });
   });
 
   describe("init——文件不存在时创建完整初始状态", () => {

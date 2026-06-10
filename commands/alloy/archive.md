@@ -13,9 +13,9 @@ tags: [alloy, workflow]
 
 **调用外部命令或技能前，先输出标题和状态描述，再执行操作。不要只出标题然后沉默。**
 
-**捕获阶段启动时间**（命令调用后第一时间，前置检查之前）：
+**捕获阶段启动时间**（命令调用后第一时间，前置检查之前，幂等——重入时返回已有值）：
 ```bash
-PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
+PHASE_START=$(alloy _state timestamp ensure openspec/changes/<name> archive)
 ```
 
 ---
@@ -30,11 +30,6 @@ PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
 ## 前置检查（HARD STOP）
 
 ### [Step 1/3] 前置检查
-
-**写入阶段启动时间**（前置检查通过后，使用命令开头捕获的 `PHASE_START`）：
-```bash
-alloy _state merge openspec/changes/<name> phase_timings "{\"archive\":{\"started_at\":\"${PHASE_START:-$(date '+%Y-%m-%d %H:%M:%S')}\"}}"
-```
 
 ```
 ┌──────────────────────────────────────┐
