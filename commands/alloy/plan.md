@@ -236,6 +236,11 @@ done
 
 每个制品审批通过（用户选 a）后，立即 hash 锁定并 commit：
 
+**hash 锁定前，记录技能使用：**
+```bash
+alloy _skill log openspec/changes/<name> plan opsx:continue
+```
+
 ```bash
 HASH=$(alloy _record compute openspec/changes/<name> <artifact>)
 APPROVED_AT=$(date "+%Y-%m-%d %H:%M:%S")
@@ -283,6 +288,11 @@ tasks 审批通过并 commit 后，**加载 `superpowers:writing-plans` 技能**
 > **注意：** writing-plans 默认保存路径为 `docs/superpowers/plans/`，Alloy 要求将 plans.md 保存到 `openspec/changes/<name>/plans.md`。加载 writing-plans 时需显式指定此路径。
 >
 > alloy 不在 plan 阶段额外询问策略选择——writing-plans 的决策直接保留在 frontmatter 中，apply 阶段再读取并给用户确认。
+
+**技能加载后立即记录：**
+```bash
+alloy _skill log openspec/changes/<name> plan superpowers:writing-plans
+```
 
 writing-plans 完成并保存 plans.md（含 strategy frontmatter）后，直接进入 plans 审查窗口。frontmatter 格式：
 
