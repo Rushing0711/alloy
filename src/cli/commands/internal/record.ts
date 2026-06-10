@@ -1,57 +1,14 @@
-// src/cli/commands/internal/record.ts
-import { createHash } from "node:crypto";
-import { readFile, stat, readdir } from "node:fs/promises";
-import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { readState, writeState } from "../../utils/state.js";
 import type { ArtifactRecord } from "../../../core/types.js";
-
-function computeHash(content: Buffer | string): string {
-  return createHash("sha256").update(content).digest("hex").substring(0, 12);
-}
-
-const ARTIFACT_FILES: Record<string, string> = {
-  draft: "draft.md",
-  proposal: "proposal.md",
-  design: "design.md",
-  specs: "specs",
-  tasks: "tasks.md",
-  plans: "plans.md",
-  verify: "verify.md",
-  retrospective: "retrospective.md",
-};
-
-async function computeArtifactHash(changeDir: string, artifactId: string): Promise<string | null> {
-  const fileName = ARTIFACT_FILES[artifactId];
-  if (!fileName) return null;
-
-  const fullPath = join(changeDir, fileName);
-  try {
-    const st = await stat(fullPath);
-    if (st.isDirectory()) {
-      // specs/: 收集所有文件, 排序, 拼接, hash
-      const entries = await readdir(fullPath, { withFileTypes: true });
-      const files = entries.filter(e => e.isFile()).map(e => e.name).sort();
-      const contents: Buffer[] = [];
-      for (const f of files) {
-        contents.push(await readFile(join(fullPath, f)));
-      }
-      return computeHash(Buffer.concat(contents));
-    } else {
-      const content = await readFile(fullPath);
-      return computeHash(content);
-    }
-  } catch {
-    return null;
-  }
-}
+import { ARTIFACT_FILES, computeArtifactHash } from "../../../core/artifacts.js";
 
 export async function recordCommand(args: string[]): Promise<void> {
   const action = args[0]; // write | check | compute
   const changeDir = args[1];
 
   if (!action || !changeDir) {
-    console.error("用法: alloy _record <write|check|compute> <change-dir> [artifact] [hash] [committed_at] [approver]");
+    console.error("用法: alloy _record <write|check|compute|approver> <change-dir> [artifact] [hash] [committed_at] [approver]");
     process.exit(1);
   }
 
@@ -64,6 +21,11 @@ export async function recordCommand(args: string[]): Promise<void> {
 
       if (!artifact || !hash || !approvedAt || !approver) {
         console.error("用法: alloy _record write <change-dir> <artifact> <hash> <committed_at> <approver>");
+        process.exit(1);
+      }
+
+      if (!ARTIFACT_FILES[artifact]) {
+        console.error(`未知制品: ${artifact} (支持: ${Object.keys(ARTIFACT_FILES).join(", ")})`);
         process.exit(1);
       }
 

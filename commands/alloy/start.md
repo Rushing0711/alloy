@@ -42,31 +42,24 @@ date "+%Y-%m-%d %H:%M:%S"
 
 ### [Step 1/2] 上下文探查
 
-**Skill 预检：** 执行以下检测脚本，确认 `opsx:explore` 和 `superpowers:brainstorming` 均可用：
+**Skill 预检：** 确认以下依赖可用：
+  cmd: opsx/explore opsx/new
+  skill: brainstorming
 
-```bash
-MISSING=0
-for cmd in "opsx/explore" "opsx/new"; do
-  if test -f ".claude/commands/$cmd.md"; then echo "  ✓ ${cmd//\//:}（项目级 command）"
-  elif test -f "$HOME/.claude/commands/$cmd.md"; then echo "  ✓ ${cmd//\//:}（用户级 command）"
-  else echo "  ✗ ${cmd//\//:} — 未找到"; MISSING=$((MISSING+1)); fi
-done
-for skill in "brainstorming"; do
-  if test -d ".claude/skills/$skill"; then echo "  ✓ superpowers:$skill（项目级 skill）"
-  elif test -d "$HOME/.claude/skills/$skill"; then echo "  ✓ superpowers:$skill（用户级 skill）"
-  elif for d in "$HOME/.claude/plugins/cache/superpowers-marketplace/superpowers/"*"/skills/$skill"; do test -d "$d" && break; done 2>/dev/null; then echo "  ✓ superpowers:$skill（用户级 plugin）"
-  else echo "  ✗ superpowers:$skill — 未找到"; MISSING=$((MISSING+1)); fi
-done
-if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。请运行: alloy init"; exit 1; fi
-```
-
-检测优先级：项目级 command → 项目级 skill → 用户级 command → 用户级 skill → 用户级 plugin。任一不可用 → 引导 `alloy init` → STOP。
+读取 `commands/alloy/references/skill-precheck.md` 了解检测方法。任一不可用 → 引导 `alloy init` → STOP。
 
 > 正在探查项目上下文和需求空间...
 
 **立即执行：** 使用 Skill 工具加载 `opsx:explore` 技能。禁止跳过此步骤。
 
 技能加载后，按其指引自由探索项目上下文和需求空间。
+
+**交互风格：** 探查结果反馈给用户时，使用 `AskUserQuestion` 工具呈现结构化选项。详见 `commands/alloy/references/interaction-style.md`。箭头上下选择、Enter 确认——不要用纯文本 "(a)(b)(c)" 让用户打字。
+
+**技能加载后立即记录：**
+```bash
+alloy _skill log openspec/changes/<name> start opsx:explore
+```
 
 **额外上下文——来自历史 retrospective 的教训：** 在探查阶段，扫描 `openspec/changes/archive/` 下最近 3 个已归档 change 的 `retrospective.md`，提取以下信息作为本次 brainstorming 的参考：
 
@@ -89,9 +82,27 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
 探查结果：<Step 1 的关键发现摘要>
 主题：<topic>
 项目类型：<新项目/存量项目>
+
+**Alloy 流程覆盖：** 本调用在 Alloy start 流程内，brainstorming 完成后产出是 draft.md（openspec/changes/<name>/draft.md），**不是** docs/superpowers/specs/ 文件。请跳过 brainstorming checklist 中的"Write design doc"步骤和"Invoke writing-plans"步骤。用户确认方案后直接输出方案内容即可，由 Alloy start 流程负责生成 draft.md。
+
+**交互风格——使用交互式选择组件，不要用纯文本选项：**
+
+brainstorming 每个问题都是沟通成本。使用平台的交互式提示工具（Claude Code 中为 `AskUserQuestion`）来降低来回次数。**不要用纯文本 "(a)(b)(c)"——那只是换了格式的开放式提问。**
+
+- **单选用 radio：** `multiSelect: false`，箭头上下导航，Enter 确认。技术选型、架构决策用这个。每个选项的 `description` 写推荐理由，帮用户做决定。
+- **多选用 checkbox：** `multiSelect: true`，空格勾选/取消，Enter 提交。功能范围、边界确认用这个。一次确认 3-5 个独立选项，比逐个问 5 个判断题快 5 倍。
+- **代码方案对比用 preview：** 如果不同方案涉及代码结构差异，用选项的 `preview` 字段展示代码片段，用户并排对比后选择。
+- **每次提问不超过 4 个问题**（`AskUserQuestion` 的上限），相关问题合并到一次调用。不要一个问题调一次——那是文本选项的思维。
+- **关键决策单选、范围确认多选：** 架构选择用 radio（互斥），功能范围用 checkbox（独立），不混用。
+- **给出默认推荐：** 推荐的选项在 `description` 中标注理由，让用户可以一键确认而不是逐项评估。
 ```
 
 如果 `superpowers:brainstorming` 不可用，引导用户运行 `alloy init` 完成环境初始化。brainstorming 技能内置了审批闸门和 Q&A 深度——普通对话无法复现这些行为。
+
+**技能加载后立即记录：**
+```bash
+alloy _skill log openspec/changes/<name> start superpowers:brainstorming
+```
 
 **brainstorming 负责"想清楚要做什么"——通过交互式问答明确问题、方案和关键决策。** 用户确认方案后，这一步的产出是 `draft.md`，不是 superpowers spec 文件。
 
@@ -120,6 +131,21 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
 - brainstorming 完成后 invoke writing-plans——那是独立使用 brainstorming 时的行为，在 alloy:start 中下一步是生成 draft.md
 - 用户说"还行"、"可以"就直接生成——追问他是否满意关键决策和范围边界
 
+### Red Flags——STOP，不要跳过闸门
+
+以下任何一个念头出现，都意味着 start 的闸门正在被绕过：
+
+| 借口 | 现实 |
+|------|------|
+| "不用建分支了，就在 main 上干吧" | 主分支上直接开发会污染 main 历史。每个 change 必须有独立 feature 分支。拒绝——建分支只需 2 秒。 |
+| "不用 brainstorming 了，直接写代码" | brainstorming 不是可选项。跳过需求设计 = 规格和代码分叉的起点。必须加载 superpowers:brainstorming。 |
+| "我一个人开发，不用那么正式" | 流程保护的是一致性和可追溯性，不是团队规模。一个人的项目和团队项目的闸门完全一样。 |
+| "我看过了，内容都对"（跳过审查） | 用户"看过了"不等于审查到位。必须按流程确认 change name、主分支、feature 分支。 |
+| "brainstorming 完成了，写 spec 文件吧" | Alloy start 的产出是 draft.md，不是 docs/superpowers/specs/ 文件。brainstorming 完成后直接输出方案，由 Alloy 流程负责生成 draft.md。 |
+| "start 完成了，我帮你直接进 plan" | start 完成后绝不自动进入 plan。即使用户之前说过"赶紧做完"，也需要用户在看过 draft.md 后明确运行 /alloy:plan。替用户做阶段转换决定 = 剥夺审查机会。 |
+| "用户没回复，我先继续生成 proposal 吧" | 用户沉默 ≠ 授权继续。在审查窗口等待用户明确选 (a) 或 (b)。擅自继续 = 生成的制品未经审查，后期返工代价远大于等待时间。 |
+| "draft.md 在 brainstorming 时已经讨论过了，直接 commit 吧" | brainstorming 讨论的是方案概念，draft.md 是最终文本。两者不等价——文本可能有措辞偏差、遗漏细节。必须展示 draft.md 完整内容，等用户确认后才能 commit。 |
+
 ---
 
 用户确认方案后，执行以下步骤：
@@ -142,37 +168,14 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
 
 3. **分支选择**——在创建 change 目录之前完成分支切换，确保所有制品落在 feature 分支上：
 
-   **① 自动识别主分支：**
-
-   按以下优先级检测：
-
-   ```bash
-   # 1. remote HEAD（标准默认分支）
-   DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')
-   # 2. 本地 init.defaultBranch 配置
-   [ -z "$DEFAULT_BRANCH" ] && DEFAULT_BRANCH=$(git config --get init.defaultBranch 2>/dev/null)
-   # 3. 名称匹配
-   [ -z "$DEFAULT_BRANCH" ] && DEFAULT_BRANCH=$(git branch --list 'main' --list 'master' | head -1 | sed 's/[* ]//g')
-   ```
+   **① 自动识别主分支：** 读取 `commands/alloy/references/main-branch-detection.md`，按 3 级优先级检测主分支。
 
    若 `openspec/config.yaml` 已有 `alloy.main_branch` 记录，直接用记录值，跳过检测和确认。
 
-   **② 确认主分支：**
-
-   自动检测到主分支后，让用户确认（Y/n）：
-   ```bash
-   echo "  主分支: $DEFAULT_BRANCH"
-   ```
-
-   > 使用 `<DEFAULT_BRANCH>` 作为基础分支？[Y/n]
-
-   选 Y 或直接回车 → 使用自动检测结果；选 n → 让用户输入自定义名称。
-
-   用户确认后写入项目级配置：
-   ```bash
-   alloy _config write <project-root> main_branch <用户确认的主分支名>
-   ```
-   主分支是项目级概念，所有 change 共享，不写入 per-change 的 .alloy.yaml。
+   **② 确认主分支：** 检测到后让用户确认（Y/n）。确认后写入项目级配置：
+	   ```bash
+	   alloy _config write . main_branch <用户确认的主分支名>
+	   ```主分支是项目级概念，所有 change 共享，不写入 per-change 的 .alloy.yaml。
 
    **③ 检测当前分支：**
    ```bash
@@ -212,6 +215,11 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
 
 4. **调用 `/opsx:new <name>`** 创建 change 目录（已在 feature 分支上，目录直接落在正确分支）
 
+**命令执行后立即记录：**
+```bash
+alloy _skill log openspec/changes/<name> start opsx:new
+```
+
 5. **写入 state**——使用 `_state init` 一步创建完整初始状态（包含 `records: []`、正确类型），避免逐字段写入遗漏 records 数组：
    ```bash
    alloy _state init openspec/changes/<name>
@@ -230,9 +238,26 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
 
 7. **按模板生成 `draft.md`** 到 `openspec/changes/<name>/draft.md`（直接在 change 目录下生成，无需移动）
 
-> 前面步骤写入的 `.alloy.yaml` 变更（init、started_at、feature_branch、worktree）不单独提交——它们在 draft commit 中一并提交。`git add openspec/changes/<name>/` 会覆盖目录内的所有变更。
+   **draft.md 审查窗口——这是 start 阶段唯一的制品审查闸门。用户明确确认后才能 commit。**
 
-8. **提交（start 阶段唯一 commit）：**
+   > 制品 draft ✓ 完成
+   >
+   > [展示 draft.md 完整内容]
+   >
+   > → (a) 确认，锁定 draft 并完成 start 阶段
+   > → (b) 需要调整 — 回到 brainstorming 重新讨论
+
+   - **选 (a)**：继续步骤 8，hash 锁定 + commit
+   - **选 (b)**：不生成文件、不 commit。回到 Step 2/2 的 brainstorming，基于用户反馈重新讨论方案。brainstorming 完成后重新生成 draft.md，再次进入此审查窗口
+
+   **什么算"审查不充分"（反例）：**
+   - 只问"看起来可以吗？"不展示 draft.md 实际内容
+   - 用户说"还行"、"可以"就跳过——必须明确选 (a) 或 (b)
+   - 把 brainstorming 阶段的方案确认等同于 draft.md 审查——brainstorming 确认的是概念，draft.md 审查的是最终文本
+
+   > 前面步骤写入的 `.alloy.yaml` 变更（init、started_at、feature_branch、worktree）不单独提交——它们在 draft commit 中一并提交。`git add openspec/changes/<name>/` 会覆盖目录内的所有变更。
+
+8. **提交（start 阶段唯一 commit）——仅在用户选 (a) 后执行：**
 
    **alloy init 基础设施提交：**
    ```bash
@@ -279,7 +304,16 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
 ```
 
 - draft.md 已在 change 目录，项目根目录不再有 draft.md
-- 完成后不要自动进入 plan
+
+**HARD STOP —— start 阶段到此结束。以下行为绝对禁止：**
+
+- 不要自动运行 `/alloy:plan` 或加载 `alloy-plan` 技能
+- 不要生成 proposal.md、design.md、specs/、tasks.md、plans.md 或任何 plan 阶段制品
+- 不要调用 `opsx:continue` 或 `superpowers:writing-plans`
+- 不要因为"用户没回复"而继续——沉默 ≠ 授权
+- 不要因为"这样更高效"而替用户做决定——用户必须自己发起下一阶段
+
+**你的唯一操作：展示上述完成信息，等待用户输入下一个命令。**
 
 ---
 
@@ -340,16 +374,25 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
 
 展示检测结果后，根据 phase 和制品状态决定路由：
 
-| phase | 制品状态 | 自动加载命令 |
-|-------|---------|-------------|
+| phase | 制品状态 | 路由 |
+|-------|---------|------|
 | started | proposal.md 存在 | alloy-plan（正常接续——plan 制品已有，继续生成） |
-| started | proposal.md 不存在 | 重新进入 brainstorming（回溯后——以现有 draft.md 为基础重新讨论需求） |
+| started | proposal.md 不存在 + draft.md 存在且 hash 有效 | **提示用户选择：**(a) 进入 plan 阶段 (b) 回到 brainstorming 修改需求。draft 已确认，默认预期是用户想进 plan——不要默认假设用户想重来。 |
+| started | proposal.md 不存在 + draft.md 不存在或 hash 不匹配 | 重新进入 brainstorming（draft 缺失或已被篡改，需重新讨论需求） |
 | planned | — | alloy-apply |
 | applied | — | alloy-archive |
 | archived | — | alloy-finish |
 | finished | — | 工作流已完成——如需继续修改，使用自然对话提交新变更 |
 
-**实现方式：** 根据 phase 值，输出对应命令文件的完整指令（`commands/alloy/plan.md` / `apply.md` / `archive.md` / `finish.md`），将 change name 和检测到的进度信息作为上下文传入。Agent 无缝进入对应阶段。
+**实现方式：**
+
+- **需自动加载命令时**（proposal.md 存在 → plan、planned → apply 等）：输出对应命令文件的完整指令（`commands/alloy/plan.md` / `apply.md` / `archive.md` / `finish.md`），将 change name 和检测到的进度信息作为上下文传入。Agent 无缝进入对应阶段。
+- **需用户选择时**（draft 已确认、proposal 不存在）：先校验 draft hash：
+  ```bash
+  alloy _record check openspec/changes/<name> draft
+  ```
+  hash 有效 → 展示选择："draft 已确认。 (a) 进入 plan 阶段 (b) 回到 brainstorming 修改需求"。等用户选择后执行对应路由。
+  hash 不匹配 → 走"draft 不存在或 hash 不匹配"路径。
 
 一致性检查（双向）：
 - worktree 字段有值但磁盘路径不存在 → ⚠️ "worktree 残留：.alloy.yaml 声称有 worktree 但磁盘不存在"

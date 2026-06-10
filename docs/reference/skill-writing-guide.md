@@ -1,43 +1,71 @@
-# Alloy 开发必读：Skill 编写经验
+# Alloy Skill 编写指南
 
-> **目标读者：** 写/改 Alloy Skill 的人（人类开发者 + AI Agent）
-> **职责：** Skill 编写规范和踩坑教训——修改任何 `SKILL.md` 之前必读本文全文（这不是建议，是前置条件）。
-> **不放入：** Claude Code 官方 Skill 规范（见本文末尾"参考来源"中的官方文档链接）。
-
-本文档总结来自 skill-creator、superpowers:writing-skills、Comet、Superpowers、OpenSpec 的技能编写最佳实践和教训，供 Alloy 项目开发和迭代技能时参考。
+> **定位：** Alloy 项目的 Skill 编写权威参考。与 `superpowers:writing-skills` 互补——本指南定义"什么是好的 skill"（静态规则），writing-skills 定义"如何创建和修改 skill"（动态流程）。
+>
+> **目标读者：** 写/改 `commands/alloy/*.md` 的人（人类开发者 + AI Agent）
 
 ---
 
-## 一、Skill 的核心结构
+## 一、Skill 结构规范
 
-### 1. Description 只写"何时用"，不写"做什么"
+### Frontmatter
 
-这是测试验证出的最关键原则。当 description 里写了流程概要时，Claude 会直接按概要执行，**跳过 SKILL.md 正文**。
+两个必填字段：`name` 和 `description`。
 
 ```yaml
-# ❌ BAD — 写了流程，Claude 不读正文
+---
+name: "Alloy: Apply"
+description: Alloy 执行阶段 - plan 完成后进入
+category: Workflow
+tags: [alloy, workflow]
+---
+```
+
+**name 规则：** 字母、数字、冒号、连字符。Alloy 技能用 `Alloy: <阶段>` 命名。
+
+**description 规则：** 只写触发条件（"何时用"），不写流程概要（"做什么"）。这是测试验证出的最关键原则——description 里写了流程时，Claude 会直接按概要执行，跳过正文。
+
+```yaml
+# ❌ 写了流程——Claude 不读正文
 description: 智能入口，先检测状态，再执行 explore，然后 brainstorming 交互式需求设计
 
-# ✅ GOOD — 只写触发条件
+# ✅ 只写触发条件
 description: Alloy 智能入口 - 自动检测状态，接续或新建 change
 ```
 
-### 2. 解释 WHY，少用 MUST 大写
+### 目录结构
 
-Superpowers 和 skill-creator 的共同经验：大写禁令只在少数关键闸门处用，大量使用时 Agent 会产生"指令疲劳"。
-
-```markdown
-# ❌ BAD
-MUST 至少 3 轮追问。DO NOT 在 1-2 轮后进入方案阶段。
-MUST 覆盖使用场景、功能边界、技术约束、验收标准。
-
-# ✅ GOOD
-每次只问一个问题，基于回答逐步深入。你的目标不是"问够 3 个问题"交差——
-而是真正理解用户要什么、不要什么、怎么算成功。
-用户回答得越简略，越说明他可能还没想清楚——这正是你追问的机会。
+```
+commands/alloy/          # Alloy 技能文件
+  start.md
+  plan.md
+  apply.md
+  ...
+  references/            # 共享引用（主分支检测、技能预检等）
+  instructions/          # 制品生成指令模板
+  templates/             # 制品输出模板
 ```
 
-### 3. 用反例定义"什么算不够"
+Alloy 技能是单文件（`.md`），不拆分子文件。共享逻辑提取到 `references/` 目录。
+
+---
+
+## 二、编写原则
+
+### 1. 解释 WHY，少用大写禁令
+
+大写禁令（MUST/DO NOT）只在少数关键闸门处用，大量使用时 Agent 产生"指令疲劳"——选择性跳过看似严厉实则无区别的规则。
+
+```markdown
+# ❌ 大写堆砌
+MUST 至少 3 轮追问。DO NOT 在 1-2 轮后进入方案阶段。
+
+# ✅ 解释原因
+每次只问一个问题，基于回答逐步深入。你的目标不是"问够 3 个问题"交差——
+而是真正理解用户要什么、不要什么、怎么算成功。
+```
+
+### 2. 用反例定义边界
 
 光说"做得好"没用——Agent 不知道边界在哪。给出具体反例，Agent 就知道怎么避免了。
 
@@ -47,184 +75,152 @@ MUST 覆盖使用场景、功能边界、技术约束、验收标准。
 - 用户说"Web 应用"后没有追问"单页还是多页？需要后端吗？"
 ```
 
----
+### 3. Red Flags 表拦截绕过
 
-## 二、调用外部技能的正确方式
-
-### 核心原则：用 Skill 工具，不要内联重写
-
-Comet 的做法说明了一切：**直接使用 Skill 工具加载目标技能**，而不是把它的行为写进自己的 SKILL.md。
+纪律型技能（闸门、TDD、验证）必须包含 Red Flags 表——列举 Agent 常见的绕过借口和对应现实。这是 Superpowers 验证过的核心说理机制。
 
 ```markdown
-# ✅ GOOD — Comet 的做法
-使用 Skill 工具加载 superpowers:brainstorming 技能，ARGUMENTS 包含：
-  Change: <name>
-  Context: openspec/changes/<name>/.comet/handoff/design-context.md
-
-禁止跳过此步骤。如技能不可用，停止流程并提示安装，不要用普通对话替代。
+| 借口 | 现实 |
+|------|------|
+| "反正是个小改动，不用那么正式" | 小改动和大改动的闸门完全一样。不存在"大小分级的保护等级"。 |
+| "用户很急，跳过 review 吧" | 跳过 review = 跳过代码质量闸门。急不是绕过流程的理由。 |
 ```
 
-### 为什么不应该内联
+### 4. 拦截器而非辅助器
 
-内联其他技能的行为有两个问题：
-1. **丢失审批闸门** — brainstorming 的 "用户审批后才产出文档" 是它的内置行为，内联后会丢失
-2. **丢失交互质量** — 技能的 Q&A 深度是经过测试和迭代的，几行指令无法复现
-
-### 接受非致命的工具警告
-
-Skill 作为子 skill 调用时，可能出现 `Invalid tool parameters`（TaskCreate 等工具参数兼容性问题）。这些是非致命的——核心功能不受影响。**不要因为非致命警告而放弃 Skill 调用。**
-
-### 传入上下文
-
-调用 Skill 时通过 ARGUMENTS 传入当前上下文，让子 skill 知道它在哪里、有什么可用的信息：
-
-```markdown
-使用 Skill 工具加载 superpowers:brainstorming，ARGUMENTS：
-  Change: <change-name>
-  探查结果：<explore 阶段的发现摘要>
-  项目上下文：<项目类型、技术栈等>
-```
+好的技能是**拦截器**——在你即将犯错的时刻强制介入，不是告诉你"怎么做更好"。设计时问自己：这个规则要阻止什么错误行为？如果答案不明确，这条规则可能不需要。
 
 ---
 
-## 三、审批闸门（Blocking Points）
-
-### 模式：Skill 执行 → 用户确认 → 产出文件
-
-这是 Superpowers 和 Comet 的共同模式。每一步有产出的地方，都要有一个明确的**阻塞点**：
-
-```markdown
-### Step X：用户确认（阻塞点）
-
-brainstorming 产出方案后，必须暂停并等待用户明确确认。
-不得在用户确认前创建最终文档。
-
-暂停时展示必要摘要：
-- 采用的方案
-- 关键取舍与风险
-- 下一步行动
-
-用户明确确认后，才继续。若用户要求调整，回到上一步迭代。
-```
-
-### Shell 脚本做硬校验
-
-Comet 的经验：脚本输出是确定性的，Agent 行为不是。关键闸门用 shell 脚本做 HARD STOP：
-
-```bash
-bash "$COMET_GUARD" <change-name> design --apply
-# 全部 PASS → 自动流转
-# 任何 FAIL → 硬停止，输出原因
-```
-
----
-
-## 四、可靠性策略
+## 三、闸门与可靠性
 
 ### 三层防线
 
 | 层 | 方式 | 可靠性 |
 |----|------|:--:|
 | SKILL.md 指令 | 原因驱动的行为引导 | 中（Agent 可能跳过） |
-| 脚本硬校验 | HARD STOP 阻断非法状态转换 | 高（确定性） |
+| 脚本硬校验 | `alloy _guard` 阻断非法状态转换 | 高（确定性） |
 | 人类审查窗口 | 阻塞点等待用户确认 | 最高（人类决策） |
 
 不要只用第一层——三条防线都要有。
 
-### 状态文件 + 脚本管理
+### 审查窗口
 
-参考 Comet 的 `.comet.yaml` + `comet-state.sh`：
+制品生成后的标准审查流程：
 
-- SKILL.md 告诉 Agent **什么情况下**需要更新状态
-- 但 Agent **不直接写 YAML**——通过脚本操作（避免手动编辑错误）
-- guard 脚本在阶段转换时校验前置条件和退出条件
+```
+> 制品 [N/M] <name> ✓ 完成
+>
+> [展示制品完整内容]
+>
+> → 下一个：<下一制品名>
+> → (a) 确认，锁定并继续
+> → (b) 需要调整 — 说明修改点
+```
 
-### 上下文交接包
+- `[N/M]` 是**阶段内局部编号**，不反映全局进度
+- 用户选 (a) 后才 hash 锁定 + commit
+- 选 (b) 调整后重新展示，不存在"跳过审查"
 
-参考 Comet 的 `comet-handoff.sh`：跨阶段时，用脚本生成包含 SHA256 的确定性上下文包，而不是让 Agent 临时写 summary。这确保了下游 skill 拿到的是可追溯的、完整的信息。
+### 脚本硬校验
 
----
+关键闸门用 `alloy _guard` 做 HARD STOP，不依赖 Agent 自觉遵守：
 
-## 五、Skill 创建流程（TDD for Skills）
+```bash
+alloy _guard openspec/changes/<name> applied --apply
+# 全部 PASS → 自动流转
+# 任何 FAIL → 硬停止，输出原因
+```
 
-superpowers:writing-skills 采用 RED-GREEN-REFACTOR 开发 skill：
+### 状态管理
 
-| TDD | Skill 创建 |
-|-----|-----------|
-| 写测试 | 创建压力场景（不用 skill，观察 Agent 的失败行为） |
-| 测试失败（RED） | 记录 Agent 违反规则的具体方式和原话 |
-| 写代码（GREEN） | 针对那些具体违反行为写 skill |
-| 测试通过 | 验证 Agent 现在遵守规则 |
-| 重构（REFACTOR） | 发现新的规避方式 → 堵漏洞 → 重新验证 |
-
-**铁律：没有失败的测试，不要写 skill。** 这意味着：
-1. 先跑 baseline——不用 skill，看 Agent 怎么做
-2. 记录 Agent 的具体违规行为和原话
-3. 针对性地写 skill
-4. 再跑一次，验证修复
-
----
-
-## 六、常见错误清单
-
-| 错误 | 后果 | 正确做法 |
-|------|------|----------|
-| 内联其他 skill 的行为 | 丢失审批闸门和交互深度 | 用 Skill 工具调用 |
-| 只有 MUST 没有 WHY | Agent 疲劳，选择性执行 | 解释原因，用反例定义边界 |
-| 没有反例 | Agent 不知道"够了"是什么 | 给出具体的失败示例 |
-| description 写流程概要 | Claude 看概要而不读正文 | 只写触发条件 |
-| Skill 未测试就部署 | 不可靠的行为 | RED-GREEN-REFACTOR |
-| 只靠指令，不靠脚本 | Agent 可能跳过 | 关键闸门用 shell 脚本 |
-| SKILL.md 夹杂技术栈偏向 | 误导 Agent 的技术选型 | 保持通用，从项目 CLAUDE.md 读取偏好 |
-| 让 Agent 手动写状态文件 | 格式错误、拼写错误 | 用脚本来做确定性的状态操作 |
+- Agent **不直接写 YAML**——通过 `alloy _state` 命令操作 `.alloy.yaml`
+- 阶段转换必须通过 `alloy _guard` 校验
+- hash 锁定确保制品不可篡改
 
 ---
 
-## 七、SKILL.md 编写检查清单
+## 四、Alloy 技能规范
 
-**结构性检查：**
+### 阶段标题格式
+
+```
+┌──────────────────────────────────────┐
+│ Alloy [N/5] · Phase: <阶段名>        │
+│ 启动时间: <timestamp>                 │
+└──────────────────────────────────────┘
+```
+
+步骤标题：`### [Step N/M] <描述>`
+
+### 制品编号
+
+`[N/M]` 是阶段内局部编号（plan 阶段 M=5，apply 阶段 M=2）。**不输出全局制品进度**（如"0/8 artifacts 完成"）——全局进度由 `alloy status` 命令管理。
+
+### 调用外部技能
+
+**用 Skill 工具加载，不要内联重写。** 内联有两个问题：
+1. 丢失审批闸门——被内联技能的内置审查流程被跳过
+2. 丢失交互质量——技能的 Q&A 深度是经过测试和迭代的，几行指令无法复现
+
+```markdown
+# ✅ 正确——用 Skill 工具
+使用 Skill 工具加载 superpowers:brainstorming 技能，ARGUMENTS 包含：
+  Change: <name>
+  探查结果：<摘要>
+
+禁止跳过此步骤。如技能不可用，停止流程并提示安装。
+```
+
+调用时通过 ARGUMENTS 传入当前上下文（change name、探查结果、项目上下文等），让子技能知道它在哪里。
+
+### 分支规则
+
+每个 change 必须在独立的 feature 分支上工作。分支相关操作必须包含验证闸门：
+- **主分支确认** — 读取 `references/main-branch-detection.md`，config 已有时跳过
+- **当前分支位置检查** — 在主分支上 = HARD STOP
+- **base ref 锁定** — 创建 worktree 时基于 feature_branch，不是 HEAD
+
+### 幂等检查
+
+每个步骤开头检查该步骤是否已完成，已完成的跳过。这是断点恢复的关键——agent 重入时从第一个未完成的步骤继续。
+
+---
+
+## 五、编写检查清单
+
+### 结构
+
 - [ ] description 只写触发条件，不写流程
 - [ ] 核心原则在开头就讲清楚
-- [ ] 每一步解释了 WHY（为什么这步不可跳过）
+- [ ] 每步解释 WHY（为什么这步不可跳过）
 - [ ] 关键步骤有反例（什么算做得不够）
-- [ ] 有产出的步骤前面有阻塞点（用户确认）
+- [ ] 有产出的步骤前面有审查窗口（用户确认）
 
-**内容检查：**
-- [ ] 没有技术栈偏向（Node.js、Python 等具体技术名）
-- [ ] 没有多余的 MUST/DO NOT 堆砌
-- [ ] 外部 skill 调用使用 Skill 工具，不内联重写
-- [ ] 阶段标题统一格式（`## Alloy · <阶段> · <描述>` + `### Step N/M：<描述>`）
+### 内容
 
-**可靠性检查：**
-- [ ] 关键闸门有脚本校验作为兜底
-- [ ] 状态变更通过脚本操作，不手写 YAML
-- [ ] 有阻塞点让用户确认后才能继续
+- [ ] 外部技能调用使用 Skill 工具，不内联重写
+- [ ] 纪律型技能有 Red Flags 表
+- [ ] 没有 MUST/DO NOT 堆砌（关键闸门处可用，其他地方解释 WHY）
+- [ ] 阶段标题格式统一（`Alloy [N/5] · Phase: <名>` + `Step N/M`）
+- [ ] 制品编号用阶段内局部编号，不输出全局进度
 
----
+### 可靠性
 
-## 八、Claude Code 官方技能规范
-
-官方文档是最新最权威的，这里不维护副本。Skill 结构、frontmatter 字段、发现机制等详见：
-
-- [Claude Code Skills 文档](https://code.claude.com/docs/en/skills.md)
-- [Claude Code .claude 目录规范](https://code.claude.com/docs/en/claude-directory.md)
+- [ ] 关键闸门有脚本校验兜底（`alloy _guard`）
+- [ ] 状态变更通过 `alloy _state` 命令操作，不手写 YAML
+- [ ] 每个步骤有幂等检查，支持断点恢复
+- [ ] git add 只用精确路径，不用 `-A`/`-a`/`.`
 
 ---
 
-## 九、参考来源
+## 六、参考
 
-| 来源 | 链接 | 学什么 |
-|------|------|--------|
-| **Claude Code 官方 Skill 文档** | https://code.claude.com/docs/en/skills.md | Skill 结构、frontmatter、发现机制 |
-| **Claude Code 功能概览** | https://code.claude.com/docs/en/features-overview.md | 何时用 skill vs CLAUDE.md vs hook |
-| **Claude Code .claude 目录** | https://code.claude.com/docs/en/claude-directory.md | skills/ 目录规范 |
-| **Claude Code 命令参考** | https://code.claude.com/docs/en/commands.md | 内置命令和 bundled skills |
-| **Agent Skills 开放标准** | https://agentskills.io | 跨工具兼容的 skill 规范 |
-| **skill-creator**（bundled skill） | 内置 | Skill 结构、description 优化、测试迭代 |
-| **superpowers:writing-skills**（obra） | 内置 | TDD for skills、压力测试、堵漏洞 |
-| **Comet**（rpamis） | https://github.com/rpamis/comet | Shell 脚本闸门、上下文交接包、多阶段编排 |
-| **Superpowers**（obra） | https://github.com/obra/superpowers | 原因驱动的指令风格、审批闸门模式 |
-| **superpowers-bridge** | https://github.com/JiangWay/openspec-schemas | OpenSpec + Superpowers schema 整合 |
-| **OpenSpec**（Fission-AI） | https://github.com/Fission-AI/OpenSpec | 制品 DAG、Delta Spec、归档审计 |
-| **Claude Code 快速开始** | https://code.claude.com/docs/en/quickstart | 基础使用 |
-| **Claude Code 最佳实践** | https://code.claude.com/docs/en/best-practices | CLAUDE.md 编写、上下文管理 |
+| 文档 | 看什么 |
+|------|--------|
+| [Claude Code Skills](https://code.claude.com/docs/en/skills.md) | frontmatter 规范、发现机制 |
+| [Claude Code .claude 目录](https://code.claude.com/docs/en/claude-directory.md) | skills/ 目录规范 |
+| [Agent Skills 开放标准](https://agentskills.io) | 跨工具兼容的 skill 规范 |
+| `superpowers:writing-skills` | Skill 创建/修改流程（TDD for Skills） |
+| `superpowers:test-driven-development` | 纪律型技能的范例结构 |
+| Alloy 视觉规范 `docs/specification/02-visual-spec.md` | 审查窗口、编号、状态符号 |

@@ -31,7 +31,8 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 
 | 命令 | 说明 |
 |------|------|
-| `alloy _state` | 读写 `.alloy.yaml` 状态文件（`read\|write\|init\|check`） |
+| `alloy _state` | 读写 `.alloy.yaml` 状态文件（`read\|write\|init\|merge\|check\|timestamp`） |
+| `alloy _skill` | 技能使用记录管理（`log\|skip`），持久化到 `skill_usage[]` |
 | `alloy _guard` | 阶段转换校验 + phase 推进（校验 hash 一致性后 `--apply` 推进） |
 | `alloy _record` | 制品 hash 记录管理（`compute\|write\|check\|approver`） |
 | `alloy _config` | 读写 `openspec/config.yaml` 项目级配置（`read\|write`） |
@@ -437,6 +438,16 @@ records:
     hash: "def456"
     committed_at: "2026-05-28 09:30:00"
     approver: "human"
+skill_usage:
+  - skill: superpowers:brainstorming
+    stage: start
+    used: true
+    recorded_at: "2026-05-28 09:05:00"
+  - skill: opsx:continue
+    stage: plan
+    used: true
+    count: 5
+    recorded_at: "2026-05-28 09:15:00"
 ```
 
 | 字段 | 读写 | 含义 |
@@ -452,6 +463,7 @@ records:
 | `updated_at` | phase 变更时写入 | 最后状态变更时间，调试和排序用 |
 | `phase_timings` | 各阶段写入 | 每个阶段的 `started_at` / `completed_at`，接续时不丢失耗时数据 |
 | `records` | plan/apply 阶段写入 | 每个制品提交后的 hash 记录，格式 `ArtifactRecord[]`，含 artifact/hash/committed_at/approver |
+| `skill_usage` | 各阶段写入 | 技能使用记录数组，格式 `SkillUsageEntry[]`，含 skill/stage/used/count/via/reason/recorded_at。retrospective §4 全周期技能审计的数据源 |
 
 断点恢复：`/alloy:start` 检测到活跃 change → 读 phase + worktree + 文件系统 → 自动加载对应阶段命令。不设子步骤状态——Agent 通过文件存在性自判断。
 
@@ -772,6 +784,8 @@ alloy update [path]
 | 28 | 策略选择场景化对比 | 不只在 plans.md 写 strategy frontmatter——apply Step 2 以场景对比表格展示 SDD（多任务并行）和 executing-plans（少任务串行）的适用场景，用户根据实际任务特征选择 |
 | 29 | `_guard --apply` 后补 commit | guard 校验 hash 一致性后自动推进 phase，但 phase 变更必须 commit（否则 worktree 清理或 squash merge 时未提交的变更会丢失）。每个阶段末尾 guard + commit 是固定模式 |
 | 30 | 归档 commit 在 worktree 清理之前 | `/opsx:archive` 执行 `mv` 移动目录但不 git commit。如果在 worktree 中，变更必须先 commit 到 worktree 分支，否则 worktree merge 时会丢失归档操作。顺序：归档 commit → worktree 清理 → 完成时间 commit → guard commit |
+| 31 | 技能使用审计持久化 | `alloy _skill log` 在每个技能加载后立即记录到 `skill_usage[]`，retrospective §4 自动读取生成全周期技能审计表。解决之前 retrospective 靠 Agent 自报（不准、会漏）的问题 |
+| 32 | 交互降级策略 | 技能文件中 `AskUserQuestion` JSON 块必须附带降级文本格式。Agent 执行时检测平台能力——支持则用原生交互组件，不支持则自动降级为结构化文本选项。确保同一流程在 8 个平台体验一致 |
 
 ---
 

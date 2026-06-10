@@ -19,10 +19,13 @@ export function createInitialState(): AlloyState {
     worktree: null,
     feature_branch: null,
     worktree_branch: null,
+    worktree_created_at: null,
+    worktree_merged_at: null,
     schema_version: 1,
     created_at: now,
     updated_at: now,
     records: [],
+    skill_usage: [],
   };
 }
 
@@ -47,6 +50,7 @@ export async function writeState(
   const yamlPath = join(changePath, ".alloy.yaml");
   state.updated_at = formatTimestamp();
   const content = stringifyYaml(state);
+  await mkdir(dirname(yamlPath), { recursive: true });
   await writeFile(yamlPath, content, "utf-8");
 }
 

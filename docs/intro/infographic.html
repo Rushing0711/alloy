@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Alloy · 合金锻造工作流</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;padding:0}html{width:100%;height:100%;background:#060504}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#1A1815;--cyan:#00E0B4;--purple:#9070FF;--fusion:#F0DDA8;--fusion-bright:#FFF0C8;--text:#F8F6F2;--text2:#B0ACA6;--text3:#807A74}
+body{background:var(--bg);font-family:'Inter',-apple-system,'PingFang SC',sans-serif;color:var(--text);-webkit-font-smoothing:antialiased}
+
+.bg-base{position:fixed;inset:0;background:var(--bg);z-index:-1}
+.bg-metal{position:fixed;inset:0;pointer-events:none;z-index:-1;background:radial-gradient(ellipse 800px 600px at 20% 30%,rgba(60,58,52,0.22) 0%,transparent 100%),radial-gradient(ellipse 600px 500px at 80% 70%,rgba(50,48,42,0.14) 0%,transparent 100%),radial-gradient(ellipse 1000px 400px at 50% 40%,rgba(232,213,160,0.04) 0%,transparent 55%)}
+.bg-grid{position:fixed;inset:0;pointer-events:none;z-index:-1;opacity:0.022;background-image:linear-gradient(rgba(207,207,216,0.4) 1px,transparent 1px),linear-gradient(90deg,rgba(207,207,216,0.4) 1px,transparent 1px);background-size:48px 48px}
+.bg-vignette{position:fixed;inset:0;pointer-events:none;z-index:-1;background:radial-gradient(ellipse at 50% 50%,transparent 35%,rgba(10,9,7,0.4) 70%,rgba(8,7,5,0.7) 100%)}
+
+.container{max-width:1100px;margin:0 auto;padding:0 40px}
+section{padding:80px 0}
+
+/* Hero */
+.hero{text-align:center;padding:100px 0 80px}
+.hero-logo svg{filter:drop-shadow(0 2px 12px rgba(0,0,0,0.4))}
+.hero-title{font-weight:800;font-size:120px;letter-spacing:-0.02em;line-height:1;background:linear-gradient(180deg,#FFFFFF 0%,#E8E4E0 18%,#C0B8B0 35%,#F0ECE8 48%,#A8A098 52%,#D0C8C0 68%,#8A8278 85%,#5A544C 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 2px 8px rgba(0,0,0,0.5));margin:40px 0 16px}
+.hero-sub{font-weight:300;font-size:28px;color:var(--text2);letter-spacing:0.06em;margin-bottom:32px}
+.hero-tag{display:flex;align-items:center;justify-content:center;gap:16px;font-family:'JetBrains Mono',monospace;font-size:15px;color:var(--text3);letter-spacing:0.06em}
+.hero-dot{width:6px;height:6px;border-radius:50%}
+.hero-dot-c{background:var(--cyan);box-shadow:0 0 8px rgba(0,224,180,0.4)}
+.hero-dot-p{background:var(--purple);box-shadow:0 0 8px rgba(144,112,255,0.4)}
+.hero-sep{width:1px;height:14px;background:rgba(207,207,216,0.1)}
+
+/* 小节标题 */
+.section-title{font-weight:700;font-size:42px;letter-spacing:-0.01em;background:linear-gradient(180deg,#D8D8E4 0%,#C0C0CE 30%,#E0E0EC 48%,#B0B0BE 70%,#A0A0B0 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.3));margin-bottom:8px}
+.section-sub{font-size:18px;color:var(--text2);margin-bottom:48px}
+.section-divider{height:1px;background:rgba(207,207,216,0.06);margin-bottom:48px}
+
+/* 对比表 */
+.compare-table{width:100%;border-collapse:collapse;margin-bottom:32px}
+.compare-table th,.compare-table td{padding:16px 20px;text-align:left;border-bottom:1px solid rgba(207,207,216,0.04)}
+.compare-table th{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;letter-spacing:0.04em}
+.compare-table th:first-child{color:var(--text);width:140px}
+.compare-table th:nth-child(2){color:var(--cyan)}
+.compare-table th:nth-child(3){color:var(--text3)}
+.compare-table td{font-size:15px;line-height:1.5}
+.compare-table td:nth-child(1){font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text)}
+.compare-table td:nth-child(2){color:#C8E8DC}
+.compare-table td:nth-child(3){color:var(--text2)}
+.compare-table .hl{color:var(--cyan);font-weight:600}
+
+/* 命令流 */
+.cmd-row{display:flex;align-items:center;justify-content:center;gap:0;margin:24px 0 48px}
+.cmd-step{padding:10px 18px;font-family:'JetBrains Mono',monospace;font-size:14px;letter-spacing:0.03em;border-radius:3px;border:1px solid rgba(207,207,216,0.08);background:rgba(22,20,17,0.7)}
+.cmd-step.s1{color:var(--cyan);border-color:rgba(0,224,180,0.12)}
+.cmd-step.s3{color:var(--fusion);border-color:rgba(240,221,168,0.15);background:rgba(240,221,168,0.04)}
+.cmd-step.s5{color:var(--purple);border-color:rgba(144,112,255,0.12)}
+.cmd-step.s2,.cmd-step.s4{color:var(--text2)}
+.cmd-arrow{width:30px;text-align:center;color:var(--text3);font-size:14px}
+
+/* 熔合配料 */
+.fusion-row{display:flex;gap:24px;align-items:center;justify-content:center;margin-bottom:32px}
+.fusion-card{flex:1;max-width:320px;padding:28px 24px;background:rgba(22,20,17,0.7);border-radius:6px;text-align:center}
+.fusion-card.fc-l{border:1px solid rgba(0,224,180,0.08)}
+.fusion-card.fc-r{border:1px solid rgba(144,112,255,0.08)}
+.fusion-label{font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:0.06em;margin-bottom:10px}
+.fc-l .fusion-label{color:var(--cyan)}.fc-r .fusion-label{color:var(--purple)}
+.fusion-name{font-weight:700;font-size:24px;margin-bottom:8px}
+.fusion-desc{font-size:13px;color:var(--text2);line-height:1.6}
+.fusion-center{text-align:center;min-width:120px}
+.fusion-ring{width:64px;height:64px;border-radius:50%;border:1.5px solid rgba(240,221,168,0.2);margin:0 auto 10px;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle,rgba(240,221,168,0.08) 0%,transparent 70%)}
+.fusion-core{width:18px;height:18px;border-radius:50%;background:radial-gradient(circle at 40% 40%,var(--fusion),transparent 70%)}
+.fusion-alloy{font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--fusion);letter-spacing:0.06em}
+
+/* Pipeline SVG */
+.pipeline-svg-wrap{text-align:center;margin:24px 0}
+.pipeline-svg-wrap svg{max-width:100%}
+
+/* 5 阶段卡片行 */
+.stages-row{display:flex;gap:16px;justify-content:center;margin-bottom:16px}
+.stage-card{flex:1;max-width:190px;padding:24px 16px;background:rgba(22,20,17,0.7);border-radius:6px;text-align:center;position:relative}
+.stage-card.s1{border:1px solid rgba(212,136,60,0.12)}
+.stage-card.s2{border:1px solid rgba(232,149,64,0.15)}
+.stage-card.s3{border:1px solid rgba(232,213,160,0.18)}
+.stage-card.s4{border:1px solid rgba(160,200,232,0.10)}
+.stage-card.s5{border:1px solid rgba(200,176,144,0.10)}
+.stage-card-num{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text3);margin-bottom:8px}
+.stage-card-name{font-weight:700;font-size:20px;color:var(--text);margin-bottom:4px}
+.stage-card-cmd{font-family:'JetBrains Mono',monospace;font-size:12px;margin-bottom:8px}
+.s1 .stage-card-cmd{color:rgba(212,136,60,0.7)}
+.s2 .stage-card-cmd{color:rgba(232,149,64,0.7)}
+.s3 .stage-card-cmd{color:rgba(232,213,160,0.7)}
+.s4 .stage-card-cmd{color:rgba(160,200,232,0.5)}
+.s5 .stage-card-cmd{color:rgba(200,176,144,0.5)}
+.stage-card-desc{font-size:13px;color:var(--text2);line-height:1.5}
+
+/* 修复场景 */
+.fix-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-bottom:32px}
+.fix-card{padding:28px 24px;background:rgba(22,20,17,0.7);border:1px solid rgba(207,207,216,0.04);border-radius:6px;position:relative}
+.fix-card::after{content:'';position:absolute;top:0;left:24px;right:24px;height:2px;border-radius:0 0 2px 2px}
+.fix-card:nth-child(1)::after{background:linear-gradient(90deg,#D4883C,var(--cyan))}
+.fix-card:nth-child(2)::after{background:linear-gradient(90deg,var(--cyan),var(--purple))}
+.fix-card:nth-child(3)::after{background:linear-gradient(90deg,var(--fusion),var(--purple))}
+.fix-label{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.08em;margin-bottom:8px;display:block}
+.fix-card:nth-child(1) .fix-label{color:rgba(212,136,60,0.6)}
+.fix-card:nth-child(2) .fix-label{color:rgba(0,224,180,0.6)}
+.fix-card:nth-child(3) .fix-label{color:rgba(240,221,168,0.6)}
+.fix-title{font-weight:700;font-size:20px;color:var(--text);margin-bottom:4px}
+.fix-cond{font-size:13px;color:var(--text3);margin-bottom:14px}
+.fix-steps{display:flex;flex-direction:column;gap:6px}
+.fix-step{font-size:14px;color:var(--text2);line-height:1.5}
+.fix-step-num{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3);margin-right:6px}
+.fix-step .hl{color:var(--fusion);font-family:'JetBrains Mono',monospace;font-size:11px;background:rgba(232,213,160,0.06);padding:1px 5px;border-radius:2px}
+
+.hard-stop{text-align:center;font-size:13px;color:#D4883C;font-family:'JetBrains Mono',monospace;padding:10px;border:1px solid rgba(212,136,60,0.12);border-radius:4px;background:rgba(212,136,60,0.03);margin-top:16px}
+
+/* Worktree 双面板 */
+.wt-panels{display:flex;gap:40px;margin-bottom:32px}
+.wt-panel{flex:1;border-radius:6px;padding:36px 28px}
+.wt-panel-left{border:1px solid rgba(0,0,0,0.06);background:rgba(20,19,17,0.5)}
+.wt-panel-right{border:1px solid rgba(0,224,180,0.08);background:linear-gradient(180deg,rgba(0,224,180,0.02) 0%,rgba(20,19,17,0.5) 30%)}
+.wt-badge{display:inline-block;padding:4px 12px;border-radius:3px;font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:0.06em;margin-bottom:16px}
+.wt-panel-left .wt-badge{background:rgba(138,136,130,0.1);color:var(--text3)}
+.wt-panel-right .wt-badge{background:rgba(0,224,180,0.1);color:var(--cyan)}
+.wt-panel-title{font-weight:700;font-size:24px;color:var(--text);margin-bottom:8px}
+.wt-panel-sub{font-size:14px;color:var(--text2);margin-bottom:24px;line-height:1.5}
+.wt-chaos-box{display:flex;flex-direction:column;gap:10px;padding:16px;background:rgba(0,0,0,0.03);border-radius:4px}
+.wt-chaos-item{padding:10px 14px;border-radius:3px;font-family:'JetBrains Mono',monospace;font-size:12px;border:1px solid rgba(0,0,0,0.06)}
+.wt-chaos-item.ca{color:rgba(0,224,180,0.45);border-color:rgba(0,224,180,0.08);background:rgba(0,224,180,0.02)}
+.wt-chaos-item.cb{color:rgba(144,112,255,0.45);border-color:rgba(144,112,255,0.08);background:rgba(144,112,255,0.02)}
+.wt-chaos-item.cc{color:rgba(240,221,168,0.4);border-color:rgba(240,221,168,0.08);background:rgba(240,221,168,0.02)}
+.wt-chaos-cmd{font-size:11px;color:rgba(255,255,255,0.12);margin-top:4px}
+.wt-dir-row{display:flex;gap:10px;margin-bottom:24px}
+.wt-dir{flex:1;border-radius:4px;border:1px solid rgba(0,0,0,0.06);background:rgba(20,19,17,0.4);padding:18px 12px;text-align:center}
+.wt-dir.d1{border-color:rgba(0,224,180,0.12)}.wt-dir.d1 .wt-dir-name{color:var(--cyan)}
+.wt-dir.d2{border-color:rgba(144,112,255,0.12)}.wt-dir.d2 .wt-dir-name{color:var(--purple)}
+.wt-dir.d3{border-color:rgba(240,221,168,0.12)}.wt-dir.d3 .wt-dir-name{color:var(--fusion-bright)}
+.wt-dir-name{font-family:'JetBrains Mono',monospace;font-size:12px;margin-bottom:4px}
+.wt-dir-feat{font-size:13px;color:var(--text2)}
+.wt-protect{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:4px;border:1px solid rgba(0,0,0,0.06);background:rgba(20,19,17,0.4)}
+.wt-protect-icon{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--cyan)}
+.wt-protect-title{font-weight:600;font-size:14px;color:var(--cyan);margin-bottom:2px}
+.wt-protect-desc{font-size:12px;color:var(--text3)}
+
+/* SDD vs EP 表 */
+.sdd-table{width:100%;border-collapse:collapse;margin-bottom:16px}
+.sdd-table th,.sdd-table td{padding:16px 18px;text-align:left;border-bottom:1px solid rgba(207,207,216,0.04)}
+.sdd-table th{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;letter-spacing:0.04em}
+.sdd-table th:first-child{color:var(--text);width:100px}
+.sdd-table th:nth-child(2){color:var(--cyan)}
+.sdd-table th:nth-child(3){color:var(--purple)}
+.sdd-table td{font-size:14px;line-height:1.5}
+.sdd-table td:nth-child(1){font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text3)}
+.sdd-table td:nth-child(2){color:#C8E8DC}
+.sdd-table td:nth-child(3){color:#C8C0E8}
+.sdd-table .hl-c{color:var(--cyan);font-weight:600}
+.sdd-table .hl-p{color:var(--purple);font-weight:600}
+.sdd-note{text-align:center;font-size:15px;color:var(--text2);line-height:1.7;padding:0 40px}
+
+/* Footer */
+.footer-bar{display:flex;align-items:center;gap:20px;padding:40px 0 60px}
+.footer-line{flex:1;height:1px;background:rgba(207,207,216,0.06)}
+.footer-text{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text3);letter-spacing:0.06em;white-space:nowrap}
+
+/* 步骤芯片行 */
+.steps-chip-row{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:16px;flex-wrap:wrap}
+.step-chip{font-family:'JetBrains Mono',monospace;font-size:13px;padding:6px 16px;border:1px solid rgba(0,0,0,0.08);border-radius:4px;background:rgba(255,255,255,0.02);color:var(--text2)}
+.step-chip b{color:var(--fusion)}
+.chip-arrow{color:var(--text3)}
+
+@media(max-width:900px){
+  .hero-title{font-size:64px}
+  .stages-row{flex-direction:column;align-items:center}
+  .stage-card{max-width:100%}
+  .fix-grid{grid-template-columns:1fr}
+  .wt-panels{flex-direction:column}
+  .compare-table th,.compare-table td{padding:10px 12px;font-size:13px}
+}
+</style>
+</head>
+<body>
+<div class="bg-base"></div><div class="bg-metal"></div><div class="bg-grid"></div><div class="bg-vignette"></div>
+
+<div class="container">
+
+<!-- 1. 封面 -->
+<section class="hero">
+  <div class="hero-logo">
+    <svg width="100" height="63" viewBox="0 0 200 100"><defs><linearGradient id="lC1" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#00E0B4"/><stop offset="100%" stop-color="#00B894" stop-opacity="0.6"/></linearGradient><linearGradient id="lP1" x1="100%" y1="0%" x2="0%" y2="0%"><stop offset="0%" stop-color="#9070FF"/><stop offset="100%" stop-color="#6A48E0" stop-opacity="0.6"/></linearGradient><radialGradient id="lF1" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#FFF8E0" stop-opacity="1"/><stop offset="30%" stop-color="#F0DDA8" stop-opacity="0.85"/><stop offset="100%" stop-color="#F0DDA8" stop-opacity="0"/></radialGradient></defs><path d="M44,29 C56,29 64,34 74,42 C78,44 80,44 80,45 C80,46 78,46 74,48 C64,56 56,61 44,61 C28,61 24,53 24,45 C24,37 28,29 44,29Z" fill="url(#lC1)" opacity="0.9"/><path d="M156,29 C144,29 136,34 126,42 C122,44 120,44 120,45 C120,46 122,46 126,48 C136,56 144,61 156,61 C172,61 176,53 176,45 C176,37 172,29 156,29Z" fill="url(#lP1)" opacity="0.9"/><ellipse cx="100" cy="45" rx="18" ry="14" fill="url(#lF1)" opacity="0.5"/><ellipse cx="100" cy="45" rx="5" ry="4" fill="#FFF8E0" opacity="0.8"/></svg>
+  </div>
+  <h1 class="hero-title">Alloy</h1>
+  <p class="hero-sub">AI 编码 Agent 的驾驶舱</p>
+  <div class="hero-tag"><div class="hero-dot hero-dot-c"></div><span>OpenSpec</span><div class="hero-sep"></div><span>合金锻造</span><div class="hero-sep"></div><span>Superpowers</span><div class="hero-dot hero-dot-p"></div></div>
+</section>
+
+<!-- 2. 对比 -->
+<section>
+  <h2 class="section-title">Alloy vs 裸用 AI Agent</h2>
+  <p class="section-sub">结构化工作流 vs 自由发挥</p>
+  <div class="section-divider"></div>
+  <table class="compare-table">
+    <thead><tr><th>维度</th><th>Alloy</th><th>裸用 Agent</th></tr></thead>
+    <tbody>
+      <tr><td>需求管理</td><td><span class="hl">draft</span> → <span class="hl">specs</span>，完整审计链</td><td>"帮我加个功能"——需求在聊天里</td></tr>
+      <tr><td>流程闸门</td><td><span class="hl">5 阶段 hard gate</span>，脚本校验</td><td>无闸门，自由发挥</td></tr>
+      <tr><td>质量保证</td><td><span class="hl">TDD</span> + <span class="hl">code review</span> + 双层验证</td><td>靠 Agent 自觉</td></tr>
+      <tr><td>掉线恢复</td><td>任意阶段退出，回来随便打哪个命令都能<span class="hl">接上</span></td><td>掉线从头开始</td></tr>
+      <tr><td>改需求</td><td>编码未开始就<span class="hl">回溯修正</span>，已开始开新 change</td><td>规格和代码分叉</td></tr>
+      <tr><td>复盘</td><td>每次 change 结束<span class="hl">自动复盘</span>，教训反哺下次</td><td>每次都从零开始</td></tr>
+      <tr><td>可追溯</td><td>每个制品 <span class="hl">hash 锁定</span> + 独立 commit</td><td>改了什么都记不住</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 3. 锻造流水线 -->
+<section>
+  <h2 class="section-title">锻造流水线</h2>
+  <p class="section-sub">OpenSpec + Superpowers 合金锻造，5 阶段一条命令走到交付</p>
+  <div class="section-divider"></div>
+  <div class="fusion-row">
+    <div class="fusion-card fc-l">
+      <div class="fusion-label">配料 01</div>
+      <div class="fusion-name">OpenSpec</div>
+      <div class="fusion-desc">需求管理引擎。Delta Spec 追踪变化，8 制品 DAG 锁定产出，完整审计链。</div>
+    </div>
+    <div class="fusion-center">
+      <div class="fusion-ring"><div class="fusion-core"></div></div>
+      <div class="fusion-alloy">Alloy 合金</div>
+    </div>
+    <div class="fusion-card fc-r">
+      <div class="fusion-label">配料 02</div>
+      <div class="fusion-name">Superpowers</div>
+      <div class="fusion-desc">流程闸门引擎。TDD 强制、code review 门禁、20+ 技能武装。</div>
+    </div>
+  </div>
+  <div class="pipeline-svg-wrap">
+    <svg viewBox="0 0 1050 240" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="pipeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#00E0B4" stop-opacity="0.7"/>
+          <stop offset="30%" stop-color="#00E0B4" stop-opacity="0.85"/>
+          <stop offset="48%" stop-color="#F0DDA8" stop-opacity="0.9"/>
+          <stop offset="52%" stop-color="#F0DDA8" stop-opacity="0.9"/>
+          <stop offset="70%" stop-color="#9070FF" stop-opacity="0.85"/>
+          <stop offset="100%" stop-color="#9070FF" stop-opacity="0.7"/>
+        </linearGradient>
+        <filter id="glow"><feGaussianBlur stdDeviation="3"/></filter>
+        <filter id="glowBig"><feGaussianBlur stdDeviation="6"/></filter>
+        <radialGradient id="nodeCyan" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#00E0B4" stop-opacity="0.4"/><stop offset="100%" stop-color="#00E0B4" stop-opacity="0"/></radialGradient>
+        <radialGradient id="nodeFusion" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#F0DDA8" stop-opacity="0.4"/><stop offset="100%" stop-color="#F0DDA8" stop-opacity="0"/></radialGradient>
+        <radialGradient id="nodePurple" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#9070FF" stop-opacity="0.4"/><stop offset="100%" stop-color="#9070FF" stop-opacity="0"/></radialGradient>
+      </defs>
+      <!-- 主曲线 -->
+      <path d="M 25,120 C 200,30 320,210 525,120 C 730,30 850,210 1025,120" stroke="url(#pipeGrad)" stroke-width="2" fill="none" filter="url(#glow)" opacity="0.5"/>
+      <path d="M 25,120 C 200,30 320,210 525,120 C 730,30 850,210 1025,120" stroke="url(#pipeGrad)" stroke-width="1" fill="none" opacity="0.7"/>
+      <!-- 节点 -->
+      <circle cx="110" cy="120" r="24" fill="url(#nodeCyan)"/><circle cx="110" cy="120" r="8" fill="#00E0B4" opacity="0.8"/>
+      <circle cx="360" cy="60" r="20" fill="url(#nodeFusion)"/><circle cx="360" cy="60" r="6" fill="#F0DDA8" opacity="0.8"/>
+      <circle cx="525" cy="120" r="28" fill="url(#nodeFusion)"/><circle cx="525" cy="120" r="9" fill="#F0DDA8" opacity="0.9"/>
+      <circle cx="690" cy="180" r="20" fill="url(#nodePurple)"/><circle cx="690" cy="180" r="6" fill="#9070FF" opacity="0.8"/>
+      <circle cx="940" cy="120" r="24" fill="url(#nodePurple)"/><circle cx="940" cy="120" r="8" fill="#9070FF" opacity="0.8"/>
+      <!-- 融合框 -->
+      <rect x="40" y="50" width="120" height="22" rx="3" fill="none" stroke="rgba(0,224,180,0.10)" stroke-dasharray="4,3"/>
+      <text x="100" y="66" fill="rgba(0,224,180,0.35)" font-family="JetBrains Mono,monospace" font-size="10" text-anchor="middle">配料</text>
+      <rect x="180" y="50" width="150" height="22" rx="3" fill="none" stroke="rgba(240,221,168,0.25)" stroke-dasharray="4,3"/>
+      <rect x="440" y="50" width="170" height="22" rx="3" fill="none" stroke="rgba(240,221,168,0.3)" stroke-dasharray="4,3"/>
+      <rect x="600" y="150" width="180" height="22" rx="3" fill="none" stroke="rgba(144,112,255,0.15)" stroke-dasharray="4,3"/>
+      <rect x="820" y="50" width="150" height="22" rx="3" fill="none" stroke="rgba(144,112,255,0.12)" stroke-dasharray="4,3"/>
+      <!-- 标签 -->
+      <text x="255" y="66" fill="rgba(240,221,168,0.55)" font-family="JetBrains Mono,monospace" font-size="10" text-anchor="middle">熔合</text>
+      <text x="525" y="66" fill="rgba(240,221,168,0.5)" font-family="JetBrains Mono,monospace" font-size="10" text-anchor="middle">锻造</text>
+      <text x="690" y="166" fill="rgba(144,112,255,0.4)" font-family="JetBrains Mono,monospace" font-size="10" text-anchor="middle">淬火</text>
+      <text x="895" y="66" fill="rgba(144,112,255,0.35)" font-family="JetBrains Mono,monospace" font-size="10" text-anchor="middle">成钢</text>
+    </svg>
+  </div>
+  <div class="cmd-row">
+    <div class="cmd-step s1">/alloy:start</div><div class="cmd-arrow">&rarr;</div>
+    <div class="cmd-step s2">/alloy:plan</div><div class="cmd-arrow">&rarr;</div>
+    <div class="cmd-step s3">/alloy:apply</div><div class="cmd-arrow">&rarr;</div>
+    <div class="cmd-step s4">/alloy:archive</div><div class="cmd-arrow">&rarr;</div>
+    <div class="cmd-step s5">/alloy:finish</div>
+  </div>
+  <p style="text-align:center;font-size:16px;color:var(--text2)">任意阶段退出，回来随便打哪个命令都能自动接上</p>
+</section>
+
+<!-- 4. 正常开发流程 -->
+<section>
+  <h2 class="section-title">正常开发流程</h2>
+  <p class="section-sub">5 阶段 · 一条命令走到交付</p>
+  <div class="section-divider"></div>
+  <div class="stages-row">
+    <div class="stage-card s1">
+      <div class="stage-card-num">01</div>
+      <div class="stage-card-name">Start</div>
+      <div class="stage-card-cmd">alloy start</div>
+      <div class="stage-card-desc">需求探索、brainstorming、产出 draft.md</div>
+    </div>
+    <div class="stage-card s2">
+      <div class="stage-card-num">02</div>
+      <div class="stage-card-name">Plan</div>
+      <div class="stage-card-cmd">alloy plan</div>
+      <div class="stage-card-desc">proposal → design → specs → tasks → plan，每步审查锁定</div>
+    </div>
+    <div class="stage-card s3">
+      <div class="stage-card-num">03</div>
+      <div class="stage-card-name">Apply</div>
+      <div class="stage-card-cmd">alloy apply</div>
+      <div class="stage-card-desc">worktree 隔离 + TDD + 双层验证 + 复盘</div>
+    </div>
+    <div class="stage-card s4">
+      <div class="stage-card-num">04</div>
+      <div class="stage-card-name">Archive</div>
+      <div class="stage-card-cmd">alloy archive</div>
+      <div class="stage-card-desc">Delta Spec 合并 + hash 锁定 + 归档</div>
+    </div>
+    <div class="stage-card s5">
+      <div class="stage-card-num">05</div>
+      <div class="stage-card-name">Finish</div>
+      <div class="stage-card-cmd">alloy finish</div>
+      <div class="stage-card-desc">merge / PR / keep，交付成品</div>
+    </div>
+  </div>
+  <p style="text-align:center;font-size:14px;color:var(--text3)">每个阶段都有 <span style="color:var(--fusion);font-family:'JetBrains Mono',monospace;font-size:12px">hard gate</span> 脚本校验，不可跳过</p>
+</section>
+
+<!-- 5. Bug 修复 -->
+<section>
+  <h2 class="section-title">Bug 修复：诊断先行，分支后置</h2>
+  <p class="section-sub">3 条修复路径，根据 change 状态自动分流</p>
+  <div class="section-divider"></div>
+  <div class="steps-chip-row">
+    <div class="step-chip"><b>Step 1</b> 环境感知</div>
+    <span class="chip-arrow">→</span>
+    <div class="step-chip"><b>Step 2</b> 根因诊断</div>
+    <span class="chip-arrow">→</span>
+    <div class="step-chip"><b>Step 3</b> 分支选择 + 修复</div>
+  </div>
+  <div class="hard-stop">[HARD STOP] 禁止在主分支上直接修改代码 — 一行和千行的保护等级一样</div>
+  <div style="margin-top:24px" class="fix-grid">
+    <div class="fix-card">
+      <span class="fix-label">SCENE 1</span>
+      <div class="fix-title">Worktree 内修复</div>
+      <div class="fix-cond">phase=applied 且 worktree 存在</div>
+      <div class="fix-steps">
+        <div class="fix-step"><span class="fix-step-num">1.</span>加载 <span class="hl">systematic-debugging</span></div>
+        <div class="fix-step"><span class="fix-step-num">2.</span>加载 <span class="hl">test-driven-development</span></div>
+        <div class="fix-step"><span class="fix-step-num">3.</span>加载 <span class="hl">verification-before-completion</span></div>
+        <div class="fix-step"><span class="fix-step-num">4.</span>精确提交到 worktree 分支</div>
+      </div>
+    </div>
+    <div class="fix-card">
+      <span class="fix-label">SCENE 2</span>
+      <div class="fix-title">Feature 分支修复</div>
+      <div class="fix-cond">applied(无 worktree) 或 planned</div>
+      <div class="fix-steps">
+        <div class="fix-step"><span class="fix-step-num">1.</span>加载 <span class="hl">systematic-debugging</span></div>
+        <div class="fix-step"><span class="fix-step-num">2.</span>加载 <span class="hl">test-driven-development</span></div>
+        <div class="fix-step"><span class="fix-step-num">3.</span>在 feature 分支上修复</div>
+        <div class="fix-step"><span class="fix-step-num">4.</span>精确提交，注明归属 change</div>
+      </div>
+    </div>
+    <div class="fix-card">
+      <span class="fix-label">SCENE 3</span>
+      <div class="fix-title">Hotfix 热修分支</div>
+      <div class="fix-cond">无活跃 change 或 archived/finished</div>
+      <div class="fix-steps">
+        <div class="fix-step"><span class="fix-step-num">1.</span>确认主分支 → 写 <span class="hl">config.yaml</span></div>
+        <div class="fix-step"><span class="fix-step-num">2.</span>创建 <span class="hl">hotfix/&lt;desc&gt;</span> 分支</div>
+        <div class="fix-step"><span class="fix-step-num">3.</span>TDD + 验证 + 精确提交</div>
+        <div class="fix-step"><span class="fix-step-num">4.</span>精确文本确认 → merge 回主分支</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 6. Worktree -->
+<section>
+  <h2 class="section-title">Worktree — 物理隔离，并行开发</h2>
+  <p class="section-sub">每个 Change 独立目录，互不干扰，main 分支始终保持干净</p>
+  <div class="section-divider"></div>
+  <div class="wt-panels">
+    <div class="wt-panel wt-panel-left">
+      <div class="wt-badge">无 Worktree</div>
+      <div class="wt-panel-title">Stash / Checkout 来回切</div>
+      <div class="wt-panel-sub">多个任务混在同一个工作区，随时可能污染 main 分支</div>
+      <div class="wt-chaos-box">
+        <div class="wt-chaos-item ca">feat/a <span style="color:rgba(255,255,255,0.1);margin-left:8px">← git stash</span></div>
+        <div class="wt-chaos-item cb">feat/b <span style="color:rgba(255,255,255,0.1);margin-left:8px">← git checkout</span></div>
+        <div class="wt-chaos-item cc">feat/c <span style="color:rgba(255,255,255,0.1);margin-left:8px">← git stash pop</span></div>
+      </div>
+      <div style="font-size:12px;color:rgba(255,255,255,0.08);margin-top:12px;text-align:center">⚠ 可能污染 main</div>
+    </div>
+    <div class="wt-panel wt-panel-right">
+      <div class="wt-badge">With Worktree</div>
+      <div class="wt-panel-title">每个 Change 独立目录</div>
+      <div class="wt-panel-sub">物理隔离、互不干扰，main 分支始终保持干净</div>
+      <div class="wt-dir-row">
+        <div class="wt-dir d1"><div class="wt-dir-name">change-01/</div><div class="wt-dir-feat">feat/a</div></div>
+        <div class="wt-dir d2"><div class="wt-dir-name">change-02/</div><div class="wt-dir-feat">feat/b</div></div>
+        <div class="wt-dir d3"><div class="wt-dir-name">change-03/</div><div class="wt-dir-feat">feat/c</div></div>
+      </div>
+      <div class="wt-protect">
+        <div class="wt-protect-icon">&#128274;</div>
+        <div><div class="wt-protect-title">main 分支受保护</div><div class="wt-protect-desc">每个 change 在独立 worktree 开发，互不干扰</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 7. SDD vs EP -->
+<section>
+  <h2 class="section-title">SDD vs Executing-Plans</h2>
+  <p class="section-sub">两种执行模式，根据 task 耦合度自动选择</p>
+  <div class="section-divider"></div>
+  <table class="sdd-table">
+    <thead><tr><th>维度</th><th>Subagent-Driven Development</th><th>Executing-Plans</th></tr></thead>
+    <tbody>
+      <tr><td>执行</td><td>每 <span class="hl-c">task</span> 启动一个<span class="hl-c">全新 subagent</span>，独立执行</td><td>当前 <span class="hl-p">session</span> 内逐 task 执行，保持<span class="hl-p">连续上下文</span></td></tr>
+      <tr><td>审查</td><td><span class="hl-c">两阶段 review</span>：spec 审查 + 质量审查，双重点检</td><td><span class="hl-p">checkpoint 审查</span>：每个关键节点停下来验证，逐 task 推进</td></tr>
+      <tr><td>上下文</td><td>每个 subagent <span class="hl-c">独立隔离</span>，互不干扰，无状态泄露</td><td><span class="hl-p">共享 session</span>，前后 task 可传递中间产物和上下文</td></tr>
+      <tr><td>适用</td><td>task 之间<span class="hl-c">互相独立</span>，对<span class="hl-c">严格质量</span>有要求</td><td>task 之间<span class="hl-p">强耦合</span>，依赖<span class="hl-p">连续上下文</span>传递</td></tr>
+    </tbody>
+  </table>
+  <p class="sdd-note">Alloy 根据 task 的耦合度自动选择执行模式：互不依赖的任务走 SDD（并行+隔离+双审查），强耦合链路走 Executing-Plans（连续上下文+checkpoint 验证）</p>
+</section>
+
+<!-- Footer -->
+<div class="footer-bar"><div class="footer-line"></div><span class="footer-text">Alloy · OpenSpec + Superpowers = 合金工作流</span><div class="footer-line"></div></div>
+
+</div>
+</body>
+</html>

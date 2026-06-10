@@ -11,9 +11,13 @@ tags: [alloy, workflow]
 
 **核心原则：只做代码合入，不碰 spec。** 如果合入过程中（如 PR 审查）发现需要修改 spec，那是另一个 change 的事——当前 change 的 spec 已归档封存。
 
-**捕获阶段启动时间**（命令调用后第一时间，前置检查之前）：
+**交互风格：** 主分支确认、合并策略选择使用 `AskUserQuestion` 工具。**合并确认仍用精确文本匹配**（安全机制）。详见 `commands/alloy/references/interaction-style.md`。
+
+**调用外部命令或技能前，先输出标题和状态描述，再执行操作。不要只出标题然后沉默。**
+
+**捕获阶段启动时间**（命令调用后第一时间，前置检查之前，幂等——重入时返回已有值）：
 ```bash
-PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
+PHASE_START=$(alloy _state timestamp ensure openspec/changes/<name> finish)
 ```
 
 ---
@@ -23,14 +27,21 @@ PHASE_START=$(date "+%Y-%m-%d %H:%M:%S")
 - 分支已 merge 或删除后重复调 finish——浪费操作，应该直接告知用户无需再次 finish
 - finish 过程中试图修改 spec——spec 已归档，任何 spec 级变更应走新 change
 
+### Red Flags——STOP，不要继续
+
+以下任何一个念头出现，都意味着闸门正在被绕过：
+
+| 借口 | 现实 |
+|------|------|
+| "phase 不是 archived，但代码都已经写好了，直接合吧" | archive 不可跳过——spec 归档和代码合入是两件事。先归档再合入，顺序不可颠倒。 |
+| "分支已经删了，finish 白跑了" | finish 前置检查的第一步就是确认分支存在。分支不存在 = 无需再次 finish，直接告知用户。 |
+| "PR 审查说要改 spec，我在 finish 里顺手改了吧" | spec 已归档封存。任何 spec 级变更 = 新 change。当前 change 的 finish 不涉及 spec 修改。 |
+| "选'保持分支'就等于没做完，太麻烦了，直接 merge 吧" | 保持分支是合法选项——用户可能有后续计划。替用户选 merge 是越权。 |
+| "merge 确认太啰嗦了，用户说'好'就是同意了" | merge 确认必须精确文本匹配。`merge <branch> into <branch>` 是安全机制——防止手滑合入。 |
+
 ---
 
 ## 前置检查
-
-**写入阶段启动时间**（前置检查通过后，使用命令开头捕获的 `PHASE_START`）：
-```bash
-alloy _state merge openspec/changes/<name> phase_timings "{\"finish\":{\"started_at\":\"${PHASE_START:-$(date '+%Y-%m-%d %H:%M:%S')}\"}}"
-```
 
 ```
 ┌──────────────────────────────────────┐
@@ -41,20 +52,10 @@ alloy _state merge openspec/changes/<name> phase_timings "{\"finish\":{\"started
 
 ### [Step 1/3] 前置检查
 
-**0. Skill 预检：** 执行以下检测脚本，确认 `superpowers:finishing-a-development-branch` 可用：
+**0. Skill 预检：** 确认以下依赖可用：
+   skill: finishing-a-development-branch
 
-```bash
-MISSING=0
-for skill in "finishing-a-development-branch"; do
-  if test -d ".claude/skills/$skill"; then echo "  ✓ superpowers:$skill（项目级 skill）"
-  elif test -d "$HOME/.claude/skills/$skill"; then echo "  ✓ superpowers:$skill（用户级 skill）"
-  elif for d in "$HOME/.claude/plugins/cache/superpowers-marketplace/superpowers/"*"/skills/$skill"; do test -d "$d" && break; done 2>/dev/null; then echo "  ✓ superpowers:$skill（用户级 plugin）"
-  else echo "  ✗ superpowers:$skill — 未找到"; MISSING=$((MISSING+1)); fi
-done
-if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。请运行: alloy init"; exit 1; fi
-```
-
-检测优先级：项目级 skill → 用户级 skill → 用户级 plugin。任一不可用 → 引导 `alloy init` → STOP。
+   读取 `commands/alloy/references/skill-precheck.md` 了解检测方法。任一不可用 → 引导 `alloy init` → STOP。
 
 > phase 是否为 archived？ <检查结果>
 
@@ -65,17 +66,7 @@ if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。
 alloy _guard openspec/changes/<name> finished
 ```
 
-若 guard 报错（phase 不匹配），读取当前 phase，按以下规则自动路由：
-
-| 当前 phase | 行为 |
-|-----------|------|
-| started | "尚未 plan，自动进入 /alloy:plan" → 加载 alloy-plan 指令 |
-| planned | "尚未 apply，自动进入 /alloy:apply" → 加载 alloy-apply 指令 |
-| applied | "尚未归档，自动进入 /alloy:archive" → 加载 alloy-archive 指令 |
-| archived | precheck 通过，继续收尾 |
-| finished | "工作流已完成" → STOP |
-
-**实现方式：** 输出对应命令文件的完整指令，将 change name 和当前进度信息作为上下文传入。
+若 guard 报错（phase 不匹配），读取 `commands/alloy/references/phase-routing.md` 按路由表自动跳转。当前 phase=archived 时 precheck 通过。
 
 **HARD STOP 保留场景：** 分支不存在（可能已 merge 或删除）→ 提示无需再次 finish。
 
@@ -89,7 +80,10 @@ git branch --list <feature_branch>
 ```bash
 alloy _config read . main_branch
 ```
-若 `main_branch` 未记录 → 提示用户手动指定合并目标分支。
+若 `main_branch` 未记录（输出 `null`）→ 读取 `commands/alloy/references/main-branch-detection.md`，按 3 级优先级自动检测主分支。检测到后让用户确认（Y/n），确认后写入配置：
+```bash
+alloy _config write . main_branch <确认的主分支名>
+```
 
 ---
 
@@ -114,6 +108,11 @@ Change: <name>
 基础分支：<main_branch>（从 openspec/config.yaml 读取）
 ```
 
+**技能加载后立即记录：**
+```bash
+alloy _skill log openspec/changes/<name> finish superpowers:finishing-a-development-branch
+```
+
 技能加载后，按其指引提供 3 个选项。
 
 ### 各选项的后续行为
@@ -127,10 +126,8 @@ Change: <name>
 >
 > 即将执行本地合并：
 >
-> | | |
-> |---|---|
-> | 源分支 | <feature_branch> |
-> | 目标分支 | <main_branch> |
+> 源分支：<feature_branch>
+> 目标分支：<main_branch>
 >
 > 即将合入的提交：
 > ```
@@ -146,20 +143,29 @@ Change: <name>
 用户确认后，记录完成时间、推进 phase，再 squash 合并：
 ```bash
 # 确定归档路径（archive 阶段已将目录移至 archive/ 下）
-ARCHIVE_DIR=$(ls -d openspec/changes/archive/*-<name> 2>/dev/null | head -1)
+ARCHIVE_DIR=$(ls -d openspec/changes/archive/*-<name> 2>/dev/null | sort -r | head -1)
 CHANGE_DIR="${ARCHIVE_DIR:-openspec/changes/<name>}"
 
 # 记录完成时间 + 推进 phase 到 finished（所有状态变更在 squash merge 之前完成）
 COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
 alloy _state merge "$CHANGE_DIR" phase_timings "{\"finish\":{\"completed_at\":\"${COMPLETED_AT:-$(date '+%Y-%m-%d %H:%M:%S')}\"}}"
 alloy _guard "$CHANGE_DIR" finished --apply
-git add -A openspec/changes/ openspec/config.yaml
+git add -A "$CHANGE_DIR" openspec/config.yaml
 git commit -m "chore(<name>): 记录 finish 阶段完成时间"
 
 git checkout <main_branch>
 git pull || echo "⚠️ git pull 失败（网络问题或冲突），请手动处理后再继续"
 git merge --squash <feature_branch>
-git commit -m "chore(<name>): 合入 main"
+# 抓取被合入分支的完整 commit 列表，生成类似 GitHub squash merge 的 commit message
+COMMIT_LOG=$(git log <main_branch>..<feature_branch> --format="* %s")
+git commit -m "$(cat <<EOF
+chore(<name>): 合入 main（squash merge）
+
+${COMMIT_LOG}
+EOF
+)"
+# squash merge 不产生 merge commit，git 无法识别分支已合入，使用 -D 强删
+git branch -D <feature_branch>
 ```
 
 若 `git pull` 失败（网络不可达、认证失败），输出警告并暂停，让用户决定是否跳过 pull 直接 merge。若 `git merge --squash` 冲突，输出冲突文件列表，让用户手动解决后继续。
@@ -169,12 +175,12 @@ git commit -m "chore(<name>): 合入 main"
 **选项 2：创建 PR**
 - 先记录完成时间并推进 phase，作为分支上最后一个提交（PR squash merge 后主分支仅 1 个 commit）：
   ```bash
-  ARCHIVE_DIR=$(ls -d openspec/changes/archive/*-<name> 2>/dev/null | head -1)
+  ARCHIVE_DIR=$(ls -d openspec/changes/archive/*-<name> 2>/dev/null | sort -r | head -1)
   CHANGE_DIR="${ARCHIVE_DIR:-openspec/changes/<name>}"
   COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
   alloy _state merge "$CHANGE_DIR" phase_timings "{\"finish\":{\"completed_at\":\"${COMPLETED_AT:-$(date '+%Y-%m-%d %H:%M:%S')}\"}}"
   alloy _guard "$CHANGE_DIR" finished --apply
-  git add -A openspec/changes/ openspec/config.yaml
+  git add -A "$CHANGE_DIR" openspec/config.yaml
   git commit -m "chore(<name>): 记录 finish 阶段完成时间"
   ```
 - 提示："PR 已创建。审查通过后 squash merge 即可完成。"
@@ -213,7 +219,7 @@ git commit -m "chore(<name>): 合入 main"
 ## 闸门规则
 
 - **git add 只用精确路径** — 永远不用 `-a`、`.`。
-  finish 阶段只 add `openspec/changes/<name>/` 记录完成时间，代码合入由 git merge 处理
+  finish 阶段用 `git add -A "$CHANGE_DIR" openspec/config.yaml`（`$CHANGE_DIR` 为当前 change 的归档路径，`-A` 限路径，只追踪 change 目录和 openspec 配置的新增/修改/删除），代码合入由 git merge 处理
 - **phase 必须为 archived** —— spec 已归档的 change 才能 finish
 - **分支必须存在** —— 分支已 merge 或删除时无需再次 finish
 - **不涉及 spec 变更** —— spec 已归档封存，任何 spec 级修改应走新 change

@@ -70,10 +70,15 @@ export async function stateCommand(args: string[]): Promise<void> {
 
   switch (action) {
     case "init": {
-      // 用 createInitialState() 创建完整 state——确保 records: [] 等所有字段存在
-      const initialState = createInitialState();
-      await writeState(changeDir, initialState);
-      console.log(`✓ state 已初始化: ${changeDir}`);
+      // 非破坏性初始化：如果文件已存在（如 _skill log 已提前创建），保留已有数据
+      try {
+        await readState(changeDir);
+        console.log(`state 已存在: ${changeDir} (跳过初始化)`);
+      } catch {
+        const initialState = createInitialState();
+        await writeState(changeDir, initialState);
+        console.log(`✓ state 已初始化: ${changeDir}`);
+      }
       break;
     }
     case "read": {
@@ -126,6 +131,56 @@ export async function stateCommand(args: string[]): Promise<void> {
       console.log(`✓ ${field} 已 merge: ${changeDir}`);
       break;
     }
+    case "timestamp": {
+      // alloy _state timestamp ensure <change-dir> <phase-name>
+      // args: [0]="timestamp", [1]="ensure"→changeDir, [2]=changeDir→field, [3]=phaseName→value
+      const subAction = changeDir;
+      const targetDir = field;
+      const phaseName = value;
+
+      if (subAction !== "ensure" || !targetDir || !phaseName) {
+        console.error("用法: alloy _state timestamp ensure <change-dir> <phase-name>");
+        process.exit(1);
+      }
+
+      const validPhases = ["start", "plan", "apply", "archive", "finish"];
+      if (!validPhases.includes(phaseName)) {
+        console.error(`无效的 phase 名称: ${phaseName} (支持: ${validPhases.join(", ")})`);
+        process.exit(1);
+      }
+
+      let state: AlloyState;
+      try {
+        state = await readState(targetDir);
+      } catch {
+        state = createInitialState();
+      }
+
+      const timings = state.phase_timings ?? {};
+      const phaseTiming = timings[phaseName as keyof typeof timings];
+
+      if (phaseTiming?.started_at) {
+        // 已存在：幂等输出已有值，不覆盖
+        console.log(phaseTiming.started_at);
+      } else {
+        // 不存在：写入当前时间并输出
+        const d = new Date();
+        const pad = (n: number) => n.toString().padStart(2, "0");
+        const now = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+
+        state.phase_timings = {
+          ...(state.phase_timings ?? {}),
+          [phaseName]: {
+            started_at: now,
+            completed_at: phaseTiming?.completed_at ?? null,
+          },
+        };
+
+        await writeState(targetDir, state);
+        console.log(now);
+      }
+      break;
+    }
     case "check": {
       if (!field) {
         console.error("用法: alloy _state check <change-dir> <phase>");
@@ -139,7 +194,7 @@ export async function stateCommand(args: string[]): Promise<void> {
       break;
     }
     default:
-      console.error(`未知操作: ${action} (支持: init, read, write, merge, check)`);
+      console.error(`未知操作: ${action} (支持: init, read, write, merge, timestamp, check)`);
       process.exit(1);
   }
 }

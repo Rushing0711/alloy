@@ -1,41 +1,30 @@
 # Alloy
 
-**Alloy 是 AI 编码 Agent 的驾驶舱。** 它不写代码，而是告诉 Agent **何时写、怎么写、写完谁来把关**。
+**Alloy 是 AI 编码 Agent 的驾驶舱。** 把需求管理（OpenSpec）和流程纪律（Superpowers）编成一条 5 阶段流水线——你只管 `/alloy:start`，剩下的编排、校验、归档全自动。
+
+| 有 Alloy | 裸用 AI Agent |
+|----------|-------------|
+| 需求 → draft → specs，完整审计链 | "帮我加个功能"——需求在聊天里 |
+| 5 阶段 hard gate，脚本校验 | 无闸门，Agent 自由发挥 |
+| TDD + code review + 双层验证 | 靠 Agent 自觉 |
+| 任意阶段退出，回来随便打哪个命令都能接上 | 掉线从头开始 |
+| 做到一半改需求？编码未开始就回溯修正，已开始开新 change | 规格和代码分叉 |
+| 每次 change 结束自动复盘，教训反哺下次 | 每次都从零开始 |
+| 每个制品 hash 锁定 + 独立 commit，完整可追溯 | 改了什么都记不住 |
 
 ---
 
-## 为什么不直接用 AI Agent 裸写？
+## 工作流
 
-1. **需求漂移** — Agent 理解的"要做的东西"和你想要的不一样，聊着聊着范围就跑了
-2. **质量靠自觉** — TDD、代码审查、分支隔离全看 Agent 当天心情，前脚记得后脚忘
-3. **改完不留痕** — 代码改了，但"为什么这么改"、"变了哪些 spec"没记录，换人就断片
+```
+/alloy:start    [1/5]  智能入口 → 需求探索 → draft.md
+/alloy:plan     [2/5]  proposal → design → specs → tasks → plan（每步审查）
+/alloy:apply    [3/5]  worktree 隔离 → TDD 实现 → 双层验证 → 复盘
+/alloy:archive  [4/5]  Delta Spec 合并 → 移入 archive/
+/alloy:finish   [5/5]  merge / PR / keep（人工闸门）
+```
 
-| | Alloy | 裸用 AI Agent |
-|------|------|------|
-| 需求管理 | brainstorming → draft → proposal → specs，完整审计链 | "帮我加个功能"——需求在聊天里 |
-| 流程闸门 | 5 阶段 hard gate，每阶段脚本校验 | 无闸门，Agent 自由发挥 |
-| 制品追踪 | 8 制品 DAG + hash 锁定 + 每制品独立 commit，精准回溯 | 改了什么都记不住 |
-| 隔离环境 | 可选 worktree，自动管理 | 直接在主分支上改 |
-| 质量保证 | TDD + code review + 双层验证 | 靠 Agent 自觉 |
-| 掉线恢复 | 任意阶段退出，回来随便打哪个命令，自动接续 | 掉线从头开始 |
-| 事后复盘 | evidence-driven retrospective，教训跨周期传递 | 无 |
-| 自我优化 | 复盘数据自动反哺下一个 change | 每次都从零开始 |
-
----
-
-## Alloy 是什么？
-
-Alloy 把两个工具缝合到一起：
-
-| 工具 | 管什么 | 各自缺的 |
-|------|--------|---------|
-| [OpenSpec](https://github.com/Fission-AI/OpenSpec) | "做成什么样" — 需求追踪、Delta Spec、归档审计 | 有文档没纪律：不强 TDD、不强审查、不强隔离 |
-| [Superpowers](https://github.com/obra/superpowers) | "怎么做" — 流程闸门、TDD、系统化调试、验证 | 有纪律没档案：改了代码但没记录"变了什么 spec" |
-| **Alloy** | **编排两者** — 规格管理 + 流程纪律 = 完整且不可跳步的工作流 | — |
-
-不是什么新框架（不引入新 DSL），也不以"快"为卖点——审查窗口和闸门让流程比一把梭更慢。慢是故意的：省下的时间是拿质量换的。
-
-适合：用 Claude Code 等 AI Agent 做日常开发、对代码质量有要求、需要需求追踪和审计归档的团队。
+任意阶段退出，回来随便打哪个命令都能自动接上。
 
 ---
 
@@ -47,44 +36,13 @@ cd your-project
 alloy init
 ```
 
-`alloy init` 交互式完成：
-
-1. 检测环境（Node.js ≥ 18 + git）
-2. 选择安装范围（project / global）
-3. 选择目标 AI Agent（Claude Code、Cursor、OpenCode 等 8 个平台可多选）
-4. 安装 OpenSpec CLI + Superpowers（检测已有安装并提示用户决策）
-5. 部署命令和 schema 到各平台目录（检测已有部署并提示用户决策）
-6. 注册 shell 补全（bash/zsh/PowerShell）
-7. 兼容性检查
-
----
-
-## 工作流
-
-```
-/alloy:start    [1/5]  智能入口 — 状态检测 → 上下文探查 → 需求设计 → draft.md
-/alloy:plan     [2/5]  制品生成 — proposal → design → specs → tasks → plan（每步审查）
-/alloy:apply    [3/5]  隔离执行 — worktree(可选) + SDD/串行(可选) + 双层验证 + 复盘
-/alloy:archive  [4/5]  归档 — Delta Spec 合并主 spec → 移入 archive/ → 提交
-/alloy:finish   [5/5]  收尾 — merge / PR / keep（人工闸门）
-```
-
-| 制品 | 阶段 | 说明 |
-|------|------|------|
-| `draft.md` | start | 需求探索 + 设计决策 |
-| `proposal.md` | plan | 变更提案，创建 specs 的合约 |
-| `design.md` | plan | 技术决策、架构、数据流 |
-| `specs/*.md` | plan | 行为契约（Delta Spec） |
-| `tasks.md` | plan | 实现任务清单 |
-| `plan.md` | plan | 执行剧本（含代码片段） |
-| `verify.md` | apply | 7 项结构化检查结果 |
-| `retrospective.md` | apply | 证据驱动复盘（§0-§6） |
+`alloy init` 交互式完成环境检测、选择 AI Agent、部署命令和 schema。支持 Claude Code、Cursor、OpenCode 等 8 个平台。
 
 ---
 
 ## 命令速查
 
-### Slash Command（AI Agent 内使用）
+### Slash Command（Agent 内使用）
 
 | 命令 | 用途 |
 |------|------|
@@ -97,8 +55,6 @@ alloy init
 | `/alloy:discard [name]` | 放弃 change，清理现场 |
 | `/alloy:status [name]` | 查看阶段、制品、下一步 |
 
-> **命名约定：** 命令以冒号为主格式（`alloy:start`）——冒号在 Claude Code 等平台提供命名空间分组，输入 `/alloy:` 即可看到全部子命令。冒号改横线是单向派生（→ `alloy-start`），因此选冒号做主格式。不支持冒号的 Agent（Cursor、OpenCode、Codex 等）自动获得横线版。
-
 ### CLI 命令（终端使用）
 
 | 命令 | 用途 |
@@ -110,53 +66,21 @@ alloy init
 
 ---
 
-## 核心特点
-
-**三层防线，Agent 想跳也跳不过去：**
-
-| 防线 | 机制 | 作用 |
-|------|------|------|
-| 指令层 | SKILL.md 硬约束 + 反例定义 | 引导 Agent 行为 |
-| 脚本层 | `alloy _guard` + `alloy _record check` | 硬阻断非法操作：phase 校验、hash 校验、制品完整性 |
-| 审查层 | 每制品人工确认（不提供"跳过"） | 人类最终决策 |
-
-**每一步都有明确决策点：** start 选分支 → plan 每制品审查 → apply 选隔离方式和执行策略 → archive 确认归档 → finish 明确合入方式。每个阶段转换前有闸门脚本校验。
-
-**掉线零负担：** 任何时候退出，回来随便打 `/alloy:start`、`/alloy:plan`、`/alloy:apply` 任意一个命令——自动检测进度，从断点继续。不需要记住"上次做到哪了"。
-
-**越用越聪明：** 每次 change 的 retrospective 复盘数据自动反哺后续 change——上次踩的坑、跳过的技能、未完成的改进项，都带回新一轮 start，不会每次都从零开始。
-
-**多平台支持：** `alloy init` 交互式选择安装目标——Claude Code、Cursor、OpenCode、Codex、Trae、Pi、CodeBuddy、Qoder 共 8 个平台，冒号版和横线版命令自动生成。
-
-**制品独立提交 + 时间追踪：** 每个制品审查通过后立即 hash-lock + 单独 git commit，支持独立回溯、revert、cherry-pick。每个阶段的耗时数据持久化到 `.alloy.yaml`，掉线恢复不丢失。
-
-**Shell 补全：** `alloy completion` 生成 Tab 补全脚本，`alloy init` 时自动注册到 rc 文件。支持 bash / zsh / PowerShell。
-
-> 完整设计细节见 [产品规格](docs/specification/01-product-spec.md)。
-
----
-
 ## 文档导航
 
 | 我想… | 读这个 |
 |-------|------|
-| **快速上手使用 Alloy** | [handbook.md](docs/handbook.md) |
+| 快速了解 Alloy | [可视化介绍](docs/intro/index.html) — 幻灯片 |
+| 快速上手使用 | [handbook.md](docs/handbook.md) |
 | 看完整产品规格 | [specification/01-product-spec.md](docs/specification/01-product-spec.md) |
-| 看终端输出视觉规范 | [specification/02-visual-spec.md](docs/specification/02-visual-spec.md) |
 | 写或改 Alloy Skill | [reference/skill-writing-guide.md](docs/reference/skill-writing-guide.md) |
-| 理解设计背景与推导 | [background/](docs/background/) — 项目起源 / 工具对比 / 流程推导 |
-| 构建、测试、调试 Alloy | [handbook.md](docs/handbook.md#五构建与测试) |
+| 理解设计背景 | [background/](docs/background/) — 起源 / 工具对比 / 流程推导 |
 
 ---
 
 ## 依赖
 
-| 依赖 | 版本 | 说明 |
-|------|------|------|
-| [OpenSpec CLI](https://github.com/Fission-AI/OpenSpec) | `>=1.3.0 <2.0.0` | 需求管理和 Delta Spec 追踪 |
-| [Superpowers](https://github.com/obra/superpowers) | `>=5.0.0 <6.0.0` | 流程闸门技能 |
-| Node.js | ≥ 18 | 运行时 |
-| git | — | 版本控制 |
+[OpenSpec](https://github.com/Fission-AI/OpenSpec) · [Superpowers](https://github.com/obra/superpowers) · Node.js ≥ 18 · git
 
 ---
 

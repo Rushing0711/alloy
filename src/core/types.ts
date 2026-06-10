@@ -53,6 +53,16 @@ export interface ArtifactRecord {
   approver: string;
 }
 
+export interface SkillUsageEntry {
+  skill: string;
+  stage: string;
+  used: boolean;
+  count?: number;
+  via?: string;
+  reason?: string;
+  recorded_at: string;
+}
+
 export interface PhaseTiming {
   started_at: string;
   completed_at: string | null;
@@ -70,11 +80,14 @@ export interface AlloyState {
   phase: "started" | "planned" | "applied" | "archived" | "finished";
   worktree: string | null;
   worktree_branch?: string | null;
+  worktree_created_at?: string | null;
+  worktree_merged_at?: string | null;
   schema_version: number;
   created_at: string;
   updated_at: string;
   phase_timings?: PhaseTimings;
   records: ArtifactRecord[];
+  skill_usage: SkillUsageEntry[];
   feature_branch?: string | null;
 }
 

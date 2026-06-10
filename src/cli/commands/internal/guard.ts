@@ -1,10 +1,8 @@
-// src/cli/commands/internal/guard.ts
 import { existsSync } from "node:fs";
-import { createHash } from "node:crypto";
-import { readFile, stat, readdir } from "node:fs/promises";
 import { join, basename } from "node:path";
 import { execSync } from "node:child_process";
 import { readState, writeState } from "../../utils/state.js";
+import { computeArtifactHash } from "../../../core/artifacts.js";
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
   started: ["planned"],
@@ -19,45 +17,6 @@ const ARTIFACT_CHECKS: Record<string, string[]> = {
   "applied->archived": ["verify.md"],
   "archived->finished": ["retrospective.md"],
 };
-
-const ARTIFACT_FILES: Record<string, string> = {
-  draft: "draft.md",
-  proposal: "proposal.md",
-  design: "design.md",
-  specs: "specs",
-  tasks: "tasks.md",
-  plans: "plans.md",
-  verify: "verify.md",
-  retrospective: "retrospective.md",
-};
-
-function computeHash(content: Buffer | string): string {
-  return createHash("sha256").update(content).digest("hex").substring(0, 12);
-}
-
-async function computeArtifactHash(changeDir: string, artifactId: string): Promise<string | null> {
-  const fileName = ARTIFACT_FILES[artifactId];
-  if (!fileName) return null;
-
-  const fullPath = join(changeDir, fileName);
-  try {
-    const st = await stat(fullPath);
-    if (st.isDirectory()) {
-      const entries = await readdir(fullPath, { withFileTypes: true });
-      const files = entries.filter(e => e.isFile()).map(e => e.name).sort();
-      const contents: Buffer[] = [];
-      for (const f of files) {
-        contents.push(await readFile(join(fullPath, f)));
-      }
-      return computeHash(Buffer.concat(contents));
-    } else {
-      const content = await readFile(fullPath);
-      return computeHash(content);
-    }
-  } catch {
-    return null;
-  }
-}
 
 export async function guardCommand(args: string[]): Promise<void> {
   const changeDir = args[0];

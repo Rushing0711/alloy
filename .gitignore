@@ -39,6 +39,9 @@ test/coverage/
 .worktrees/
 worktrees/
 
+### Playwright ###
+.playwright-mcp/
+
 ### OS ###
 Thumbs.db
 ehthumbs.db

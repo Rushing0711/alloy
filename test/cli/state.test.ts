@@ -107,14 +107,24 @@ describe("state utils", () => {
         approver: "human",
       },
     ];
+    original.skill_usage = [
+      { skill: "brainstorming", phase: "start", used_at: "2025-01-15T10:30:00" },
+      { skill: "writing-plans", phase: "plan", used_at: "2025-01-15T11:00:00" },
+    ];
     await writeState(changeDir, original);
     const loaded = await readState(changeDir);
     expect(loaded.records).toEqual(original.records);
+    expect(loaded.skill_usage).toEqual(original.skill_usage);
   });
 
   it("createInitialState 默认 records 为空数组", () => {
     const state = createInitialState();
     expect(state.records).toEqual([]);
+  });
+
+  it("createInitialState 默认 skill_usage 为空数组", () => {
+    const state = createInitialState();
+    expect(state.skill_usage).toEqual([]);
   });
 
   it("findActiveChanges 忽略非目录条目", async () => {

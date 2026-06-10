@@ -1,6 +1,6 @@
 ---
 name: "Alloy: Status"
-description: 想了解 change 当前进度时查看
+description: 需要查看 change 进度或状态时调用
 category: Workflow
 tags: [alloy, workflow]
 ---

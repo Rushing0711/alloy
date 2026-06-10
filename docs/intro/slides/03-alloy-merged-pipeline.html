@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Alloy — 合金锻造流水线</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; } html { width: 100%; height: 100%; background: #060504; }
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #1A1815;
+    --cyan: #00E0B4;
+    --purple: #9070FF;
+    --fusion: #F0DDA8;
+    --fusion-bright: #FFF0C8;
+    --text: #F8F6F2;
+    --text2: #B0ACA6;
+    --text3: #807A74;
+  }
+
+  body {
+    width: 1920px; height: 1080px; overflow: hidden;
+    background: var(--bg);
+    font-family: 'Inter', -apple-system, 'PingFang SC', sans-serif;
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* === 背景 (alloy2 的多层金属表面) === */
+  .bg-base { position: absolute; inset: 0; background: var(--bg); }
+  .bg-metal {
+    position: absolute; inset: 0; pointer-events: none;
+    background:
+      radial-gradient(ellipse 800px 600px at 20% 30%, rgba(60,58,52,0.22) 0%, transparent 100%),
+      radial-gradient(ellipse 600px 500px at 80% 70%, rgba(50,48,42,0.14) 0%, transparent 100%),
+      radial-gradient(ellipse 1000px 400px at 50% 40%, rgba(232,213,160,0.04) 0%, transparent 55%),
+      radial-gradient(ellipse 500px 500px at 25% 55%, rgba(0,212,170,0.02) 0%, transparent 55%),
+      radial-gradient(ellipse 500px 500px at 75% 55%, rgba(124,92,252,0.02) 0%, transparent 55%);
+  }
+  .bg-brushed {
+    position: absolute; inset: 0; pointer-events: none; opacity: 0.45;
+    background: repeating-linear-gradient(90deg, transparent, transparent 1px, rgba(255,255,255,0.006) 1px, rgba(255,255,255,0.006) 2px);
+  }
+  .bg-vignette {
+    position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse at 50% 50%, transparent 35%, rgba(10,9,7,0.4) 70%, rgba(8,7,5,0.7) 100%);
+  }
+  .bg-grid {
+    position: absolute; inset: 0; pointer-events: none; opacity: 0.022;
+    background-image: linear-gradient(rgba(207,207,216,0.4) 1px, transparent 1px), linear-gradient(90deg, rgba(207,207,216,0.4) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+
+  /* === 页眉 (alloy2) === */
+  .header {
+    position: absolute; top: 56px; left: 50%; transform: translateX(-50%); z-index: 5;
+    display: flex; align-items: center; gap: 24px;
+  }
+  .header-logo { width: 90px; height: 45px; filter: drop-shadow(0 1px 6px rgba(0,0,0,0.3)); }
+  .header-title {
+    font-weight: 700; font-size: 48px; letter-spacing: 0.03em;
+    background: linear-gradient(180deg, #D8D8E4 0%, #C0C0CE 30%, #E0E0EC 48%, #B0B0BE 52%, #C8C8D6 70%, #A0A0B0 100%);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 1px 3px rgba(0,0,0,0.4));
+  }
+  .header-sep { width: 1px; height: 24px; background: rgba(207,207,216,0.12); }
+  .header-sub { font-weight: 300; font-size: 24px; letter-spacing: 0.06em; color: var(--text2); }
+
+  /* === 管道层 SVG：管线+节点 z-index:3, 连接柱层 z-index:6(卡片上方) === */
+  .pipeline-svg { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+  .pillar-svg { position: absolute; inset: 0; pointer-events: none; z-index: 6; }
+  /* 用 CSS 实线画连接柱，确定可见 */
+  .connector {
+    position: absolute; z-index: 6; pointer-events: none;
+    transform-origin: top center;
+  }
+  .connector::after {
+    content: '';
+    position: absolute; top: 0; left: 50%; height: 100%;
+    transform: translateX(-50%);
+  }
+  .conn-1 { left: 200px; top: 456px; height: 110px; }
+  .conn-1::after { width: 4px; background: linear-gradient(180deg, #00D4AA 0%, #00D4AA 30%, #00D4AA80 55%, transparent 100%); }
+  .conn-2 { left: 600px; top: 376px; height: 160px; }
+  .conn-2::after { width: 4px; background: linear-gradient(180deg, #4EC8B0 0%, #4EC8B0 30%, #4EC8B080 55%, transparent 100%); }
+  .conn-3 { left: 960px; top: 259px; height: 250px; }
+  .conn-3::after { width: 5px; background: linear-gradient(180deg, #F5E6C0 0%, #F5E6C0 30%, #F5E6C080 55%, transparent 100%); }
+  .conn-4 { left: 1340px; top: 376px; height: 160px; }
+  .conn-4::after { width: 4px; background: linear-gradient(180deg, #9E8CC8 0%, #9E8CC8 30%, #9E8CC880 55%, transparent 100%); }
+  .conn-5 { left: 1720px; top: 456px; height: 110px; }
+  .conn-5::after { width: 4px; background: linear-gradient(180deg, #7C5CFC 0%, #7C5CFC 30%, #7C5CFC80 55%, transparent 100%); }
+  .flange {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    border-radius: 50%; border-style: solid; background: transparent;
+  }
+  .conn-1 .flange { width: 24px; height: 24px; border-color: #00D4AA; border-width: 2px; top: -12px; }
+  .conn-2 .flange { width: 24px; height: 24px; border-color: #4EC8B0; border-width: 2px; top: -12px; }
+  .conn-3 .flange { width: 30px; height: 30px; border-color: #F5E6C0; border-width: 2.5px; top: -15px; }
+  .conn-4 .flange { width: 24px; height: 24px; border-color: #9E8CC8; border-width: 2px; top: -12px; }
+  .conn-5 .flange { width: 24px; height: 24px; border-color: #7C5CFC; border-width: 2px; top: -12px; }
+
+  /* === 卡片 (alloy1 立体感 + alloy2 定位) === */
+  .stage-card {
+    position: absolute; width: 310px; z-index: 4;
+    transform: translate(-50%, -50%);
+    display: flex; flex-direction: column; align-items: center;
+    padding: 0 14px;
+  }
+
+  .card-icon-wrap {
+    position: relative; width: 140px; height: 140px; z-index: 2; margin-bottom: 24px;
+  }
+  .card-icon-bg {
+    position: absolute; inset: 0; border-radius: 4px;
+    border: 1px solid var(--s-border);
+    background: var(--s-bg);
+  }
+  .card-icon-glow {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 100px; height: 100px; border-radius: 50%;
+    background: var(--s-glow); filter: blur(20px); opacity: 0.3; pointer-events: none;
+  }
+  .card-icon-svg { position: absolute; inset: 18px; z-index: 1; }
+
+  .card-temp {
+    width: 100px; height: 2px; margin-bottom: 10px; border-radius: 1px;
+    background: var(--s-temp);
+  }
+  .card-num {
+    font-family: 'JetBrains Mono', monospace; font-weight: 500; font-size: 13px;
+    letter-spacing: 0.08em; color: var(--s-accent); margin-bottom: 6px;
+  }
+  .card-name { font-weight: 700; font-size: 30px; letter-spacing: 0.04em; color: var(--text); margin-bottom: 3px; }
+  .card-cmd {
+    font-family: 'JetBrains Mono', monospace; font-weight: 500; font-size: 15px;
+    letter-spacing: 0.04em; color: var(--s-accent); margin-bottom: 4px;
+  }
+  .card-sub { font-weight: 400; font-size: 14px; color: var(--text2); letter-spacing: 0.03em; margin-bottom: 12px; }
+  .card-desc { font-weight: 400; font-size: 14px; line-height: 1.65; color: var(--text3); text-align: center; max-width: 250px; }
+
+  /* 每个阶段的独立配色 */
+  .c1 { --s-accent: #D4883C; --s-bg: rgba(212,136,60,0.04); --s-border: rgba(212,136,60,0.12); --s-glow: rgba(212,136,60,0.08); --s-temp: linear-gradient(90deg,transparent,rgba(212,136,60,0.5),transparent); }
+  .c2 { --s-accent: #E89540; --s-bg: rgba(232,149,64,0.05); --s-border: rgba(232,149,64,0.15); --s-glow: rgba(232,149,64,0.12); --s-temp: linear-gradient(90deg,transparent,rgba(232,149,64,0.6),transparent); }
+  .c3 { --s-accent: #E8D5A0; --s-bg: rgba(232,213,160,0.06); --s-border: rgba(232,213,160,0.18); --s-glow: rgba(232,213,160,0.16); --s-temp: linear-gradient(90deg,transparent,rgba(232,213,160,0.7),transparent); }
+  .c4 { --s-accent: #A0C8E8; --s-bg: rgba(160,200,232,0.03); --s-border: rgba(160,200,232,0.10); --s-glow: rgba(160,200,232,0.06); --s-temp: linear-gradient(90deg,transparent,rgba(160,200,232,0.4),transparent); }
+  .c5 { --s-accent: #C8B090; --s-bg: rgba(200,176,144,0.04); --s-border: rgba(200,176,144,0.10); --s-glow: rgba(200,176,144,0.05); --s-temp: linear-gradient(90deg,transparent,rgba(200,176,144,0.35),transparent); }
+
+  /* === 温度谱带 (alloy1) === */
+  .temp-spectrum {
+    position: absolute; bottom: 90px; left: 220px; right: 220px; height: 3px; border-radius: 2px; z-index: 3; pointer-events: none;
+    background: linear-gradient(90deg, #3A2010 0%, #D4883C 20%, #E89540 35%, #E8D5A0 50%, #A0C8E8 70%, #C8B090 85%, #3A3028 100%);
+    opacity: 0.4;
+  }
+  .temp-labels {
+    position: absolute; bottom: 78px; left: 220px; right: 220px; z-index: 3; pointer-events: none;
+    display: flex; justify-content: space-between;
+  }
+  .temp-labels span {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text3); letter-spacing: 0.06em;
+  }
+
+  /* === 底部 (alloy2) === */
+  .footer-bar {
+    position: absolute; bottom: 42px; left: 80px; right: 80px; z-index: 4;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .footer-line { flex: 1; height: 1px; background: rgba(207,207,216,0.06); }
+  .footer-text { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.06em; color: var(--text3); padding: 0 32px; white-space: nowrap; }
+
+  /* === 液滴装饰 (alloy2) === */
+  .droplet { position: absolute; border-radius: 50%; pointer-events: none; z-index: 2; }
+  @keyframes floatDrop { 0%, 100% { transform: translateY(0); opacity: 0.12; } 50% { transform: translateY(-6px); opacity: 0.22; } }
+</style>
+</head>
+<body>
+
+<!-- 背景 -->
+<div class="bg-base"></div>
+<div class="bg-metal"></div>
+<div class="bg-brushed"></div>
+<div class="bg-vignette"></div>
+<div class="bg-grid"></div>
+
+<!-- 液滴 -->
+<div class="droplet" style="width:3px;height:3px;top:12%;left:18%;background:radial-gradient(circle at 40% 40%,rgba(0,212,170,0.7) 0%,rgba(0,180,140,0.15) 60%,transparent 100%);animation:floatDrop 8s ease-in-out infinite;"></div>
+<div class="droplet" style="width:3px;height:3px;top:14%;right:22%;background:radial-gradient(circle at 40% 40%,rgba(124,92,252,0.65) 0%,rgba(106,72,224,0.15) 60%,transparent 100%);animation:floatDrop 9s ease-in-out 2s infinite;"></div>
+<div class="droplet" style="width:4px;height:4px;top:10%;left:49%;background:radial-gradient(circle at 40% 40%,rgba(245,230,192,0.7) 0%,rgba(232,213,160,0.15) 60%,transparent 100%);animation:floatDrop 7s ease-in-out 1s infinite;"></div>
+
+<!-- 页眉 -->
+<div class="header">
+  <svg class="header-logo" viewBox="0 0 200 100">
+    <defs>
+      <linearGradient id="hCyan" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#00D4AA"/><stop offset="100%" stop-color="#00B894" stop-opacity="0.6"/></linearGradient>
+      <linearGradient id="hPurple" x1="100%" y1="0%" x2="0%" y2="0%"><stop offset="0%" stop-color="#7C5CFC"/><stop offset="100%" stop-color="#6A48E0" stop-opacity="0.6"/></linearGradient>
+      <radialGradient id="hFusion" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#FFF8E0" stop-opacity="1"/><stop offset="30%" stop-color="#E8D5A0" stop-opacity="0.9"/><stop offset="100%" stop-color="#E8D5A0" stop-opacity="0"/></radialGradient>
+    </defs>
+    <path d="M 44,29 C 56,29 64,34 74,42 C 78,44 80,44 80,45 C 80,46 78,46 74,48 C 64,56 56,61 44,61 C 28,61 24,53 24,45 C 24,37 28,29 44,29 Z" fill="url(#hCyan)" opacity="0.85"/>
+    <path d="M 156,29 C 144,29 136,34 126,42 C 122,44 120,44 120,45 C 120,46 122,46 126,48 C 136,56 144,61 156,61 C 172,61 176,53 176,45 C 176,37 172,29 156,29 Z" fill="url(#hPurple)" opacity="0.85"/>
+    <ellipse cx="100" cy="45" rx="18" ry="14" fill="url(#hFusion)" opacity="0.55"/>
+    <ellipse cx="100" cy="45" rx="5" ry="4" fill="#FFF8E0" opacity="0.8"/>
+    <path d="M 80,45 Q 90,45 100,45" stroke="#00D4AA" stroke-width="0.5" fill="none" opacity="0.2"/>
+    <path d="M 120,45 Q 110,45 100,45" stroke="#7C5CFC" stroke-width="0.5" fill="none" opacity="0.2"/>
+  </svg>
+  <h1 class="header-title">Alloy</h1>
+  <div class="header-sep"></div>
+  <span class="header-sub">合金锻造流水线</span>
+</div>
+
+<!-- 管线层 SVG -->
+<svg class="pipeline-svg" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="pipeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00D4AA"/>
+      <stop offset="18%" stop-color="#4EC8B0"/>
+      <stop offset="35%" stop-color="#B8DDB0"/>
+      <stop offset="48%" stop-color="#F5E6C0"/>
+      <stop offset="52%" stop-color="#F5E6C0"/>
+      <stop offset="65%" stop-color="#C0B4D8"/>
+      <stop offset="82%" stop-color="#9E8CC8"/>
+      <stop offset="100%" stop-color="#7C5CFC"/>
+    </linearGradient>
+    <filter id="pipeGlow" x="-5%" y="-20%" width="110%" height="180%"><feGaussianBlur in="SourceGraphic" stdDeviation="4"/></filter>
+    <filter id="nodeGlow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur in="SourceGraphic" stdDeviation="6"/></filter>
+    <filter id="nodeGlowS" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur in="SourceGraphic" stdDeviation="3"/></filter>
+    <radialGradient id="n1G" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#80F0D8"/><stop offset="40%" stop-color="#00D4AA"/><stop offset="100%" stop-color="#008A6E"/></radialGradient>
+    <radialGradient id="n2G" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#A0E8D0"/><stop offset="40%" stop-color="#4EC8B0"/><stop offset="100%" stop-color="#2A9880"/></radialGradient>
+    <radialGradient id="n3G" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#FFFFFF"/><stop offset="30%" stop-color="#F5E6C0"/><stop offset="100%" stop-color="#B89830"/></radialGradient>
+    <radialGradient id="n4G" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#D0C8F0"/><stop offset="40%" stop-color="#9E8CC8"/><stop offset="100%" stop-color="#5E3FC0"/></radialGradient>
+    <radialGradient id="n5G" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#B8A4F8"/><stop offset="40%" stop-color="#7C5CFC"/><stop offset="100%" stop-color="#4A28B0"/></radialGradient>
+  </defs>
+
+  <!-- 曲线路径: 水平起点 → 波峰(核心阶段) → 回落 -->
+  <path d="M 40,460 C 100,450 160,440 200,440 S 400,360 600,360 S 860,240 960,240 S 1240,360 1340,360 S 1560,440 1720,440 S 1800,450 1880,460"
+        stroke="url(#pipeGrad)" stroke-width="5" fill="none" opacity="0.13" filter="url(#pipeGlow)"/>
+
+  <path d="M 40,460 C 100,450 160,440 200,440 S 400,360 600,360 S 860,240 960,240 S 1240,360 1340,360 S 1560,440 1720,440 S 1800,450 1880,460"
+        stroke="url(#pipeGrad)" stroke-width="2.2" fill="none" opacity="0.82"/>
+
+  <path d="M 60,454 C 110,444 165,434 200,434 S 395,354 600,354 S 865,234 960,234 S 1245,354 1340,354 S 1555,434 1720,434 S 1805,444 1860,454"
+        stroke="url(#pipeGrad)" stroke-width="0.7" fill="none" opacity="0.32"/>
+
+  <path d="M 20,466 C 90,456 155,446 200,446 S 405,366 600,366 S 855,246 960,246 S 1235,366 1340,366 S 1565,446 1720,446 S 1795,456 1900,466"
+        stroke="url(#pipeGrad)" stroke-width="0.7" fill="none" opacity="0.27"/>
+
+  <!-- 节点光晕 -->
+  <circle cx="200" cy="440" r="14" fill="#00D4AA" opacity="0.10" filter="url(#nodeGlow)"/>
+  <circle cx="600" cy="360" r="14" fill="#4EC8B0" opacity="0.10" filter="url(#nodeGlow)"/>
+  <circle cx="960" cy="240" r="22" fill="#F5E6C0" opacity="0.15" filter="url(#nodeGlow)"/>
+  <circle cx="1340" cy="360" r="14" fill="#9E8CC8" opacity="0.10" filter="url(#nodeGlow)"/>
+  <circle cx="1720" cy="440" r="14" fill="#7C5CFC" opacity="0.10" filter="url(#nodeGlow)"/>
+
+  <!-- 节点 -->
+  <circle cx="200" cy="440" r="6" fill="url(#n1G)" filter="url(#nodeGlowS)"/>
+  <circle cx="200" cy="440" r="3" fill="#80F0D8" opacity="0.6"/>
+  <circle cx="600" cy="360" r="6" fill="url(#n2G)" filter="url(#nodeGlowS)"/>
+  <circle cx="600" cy="360" r="3" fill="#A0E8D0" opacity="0.6"/>
+  <circle cx="960" cy="240" r="8" fill="url(#n3G)" filter="url(#nodeGlowS)"/>
+  <circle cx="960" cy="240" r="3.5" fill="#FFFFFF" opacity="0.8"/>
+  <circle cx="1340" cy="360" r="6" fill="url(#n4G)" filter="url(#nodeGlowS)"/>
+  <circle cx="1340" cy="360" r="3" fill="#D0C8F0" opacity="0.6"/>
+  <circle cx="1720" cy="440" r="6" fill="url(#n5G)" filter="url(#nodeGlowS)"/>
+  <circle cx="1720" cy="440" r="3" fill="#B8A4F8" opacity="0.6"/>
+
+  <!-- 融合框 -->
+  <rect x="300" y="310" width="200" height="260" rx="10" fill="none" stroke="rgba(207,207,216,0.06)" stroke-width="1" stroke-dasharray="6,4"/>
+  <rect x="700" y="190" width="200" height="260" rx="10" fill="none" stroke="rgba(207,207,216,0.06)" stroke-width="1" stroke-dasharray="6,4"/>
+  <rect x="1060" y="310" width="200" height="260" rx="10" fill="none" stroke="rgba(207,207,216,0.06)" stroke-width="1" stroke-dasharray="6,4"/>
+  <rect x="1460" y="310" width="200" height="260" rx="10" fill="none" stroke="rgba(207,207,216,0.06)" stroke-width="1" stroke-dasharray="6,4"/>
+</svg>
+
+<!-- 节点标签 -->
+<div style="position:absolute;z-index:4;pointer-events:none;top:402px;left:106px;font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:0.06em;color:rgba(0,212,170,0.45);">start</div>
+<div style="position:absolute;z-index:4;pointer-events:none;top:322px;left:512px;font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:0.06em;color:rgba(78,200,176,0.45);">plan</div>
+<div style="position:absolute;z-index:4;pointer-events:none;top:200px;left:876px;font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:0.06em;color:rgba(245,230,192,0.5);">apply</div>
+<div style="position:absolute;z-index:4;pointer-events:none;top:322px;left:1256px;font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:0.06em;color:rgba(158,140,200,0.45);">archive</div>
+<div style="position:absolute;z-index:4;pointer-events:none;top:402px;left:1640px;font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:0.06em;color:rgba(124,92,252,0.45);">finish</div>
+
+<!-- 卡片 (alloy1 带 icon + 立体感) -->
+<div class="stage-card c1" style="left:200px; top:660px;">
+  <div class="card-temp"></div>
+  <div class="card-num">01</div>
+  <div class="card-icon-wrap">
+    <div class="card-icon-bg"></div>
+    <div class="card-icon-glow"></div>
+    <svg class="card-icon-svg" viewBox="0 0 94 94">
+      <rect x="16" y="34" width="24" height="28" rx="2" fill="rgba(0,212,170,0.35)" stroke="rgba(0,212,170,0.5)" stroke-width="1.5"/>
+      <rect x="54" y="34" width="24" height="28" rx="2" fill="rgba(124,92,252,0.35)" stroke="rgba(124,92,252,0.5)" stroke-width="1.5"/>
+      <line x1="28" y1="28" x2="28" y2="22" stroke="rgba(180,160,120,0.4)" stroke-width="1"/>
+      <line x1="66" y1="28" x2="66" y2="22" stroke="rgba(180,160,120,0.4)" stroke-width="1"/>
+      <rect x="10" y="66" width="74" height="6" rx="1" fill="rgba(180,160,120,0.2)"/>
+    </svg>
+  </div>
+  <div class="card-name">配料</div>
+  <div class="card-cmd">alloy start</div>
+  <div class="card-sub">准备两种金属原料</div>
+  <div class="card-desc">选取 OpenSpec 与 Superpowers 两股原料，确定配比与目标合金牌号</div>
+</div>
+
+<div class="stage-card c2" style="left:600px; top:630px;">
+  <div class="card-temp"></div>
+  <div class="card-num">02</div>
+  <div class="card-icon-wrap">
+    <div class="card-icon-bg"></div>
+    <div class="card-icon-glow"></div>
+    <svg class="card-icon-svg" viewBox="0 0 94 94">
+      <path d="M 30,28 L 64,28 Q 70,28 72,34 L 68,72 Q 66,78 60,80 L 34,80 Q 28,78 26,72 L 22,34 Q 24,28 30,28 Z" fill="rgba(232,149,64,0.06)" stroke="rgba(232,149,64,0.35)" stroke-width="1.5"/>
+      <ellipse cx="47" cy="52" rx="18" ry="8" fill="rgba(232,180,80,0.2)" stroke="rgba(232,180,80,0.4)" stroke-width="1"/>
+      <path d="M 40,80 Q 44,88 42,92" stroke="rgba(232,149,64,0.5)" stroke-width="1.5" fill="none"/>
+      <path d="M 47,80 Q 49,90 47,94" stroke="rgba(232,180,80,0.6)" stroke-width="1.5" fill="none"/>
+      <path d="M 54,80 Q 52,88 53,92" stroke="rgba(232,149,64,0.5)" stroke-width="1.5" fill="none"/>
+    </svg>
+  </div>
+  <div class="card-name">熔炼</div>
+  <div class="card-cmd">alloy plan</div>
+  <div class="card-sub">设计配方和规格</div>
+  <div class="card-desc">将需求投入高温熔炉，编写 Delta Spec 定义合金成分，规划锻造步骤</div>
+</div>
+
+<div class="stage-card c3" style="left:960px; top:600px;">
+  <div class="card-temp"></div>
+  <div class="card-num">03</div>
+  <div class="card-icon-wrap">
+    <div class="card-icon-bg"></div>
+    <div class="card-icon-glow"></div>
+    <svg class="card-icon-svg" viewBox="0 0 94 94">
+      <path d="M 30,48 L 64,48 L 70,56 L 74,72 L 20,72 L 24,56 Z" fill="rgba(232,213,160,0.06)" stroke="rgba(232,213,160,0.45)" stroke-width="1.5"/>
+      <rect x="22" y="72" width="50" height="8" rx="1" fill="rgba(232,213,160,0.08)" stroke="rgba(232,213,160,0.3)" stroke-width="1"/>
+      <rect x="38" y="20" width="18" height="12" rx="2" fill="rgba(232,213,160,0.15)" stroke="rgba(232,213,160,0.5)" stroke-width="1.5"/>
+      <line x1="47" y1="32" x2="47" y2="44" stroke="rgba(232,213,160,0.6)" stroke-width="2.5" stroke-linecap="round"/>
+      <rect x="38" y="78" width="18" height="6" rx="1" fill="rgba(255,233,200,0.3)" stroke="rgba(255,233,200,0.5)" stroke-width="1"/>
+      <circle cx="25" cy="46" r="1.2" fill="#FFE9C8" opacity="0.7"><animate attributeName="opacity" values="0.2;0.8;0.2" dur="1.8s" repeatCount="indefinite"/></circle>
+      <circle cx="70" cy="44" r="1" fill="#FFE9C8" opacity="0.6"><animate attributeName="opacity" values="0.6;0.1;0.6" dur="1.5s" repeatCount="indefinite"/></circle>
+    </svg>
+  </div>
+  <div class="card-name">锻造</div>
+  <div class="card-cmd">alloy apply</div>
+  <div class="card-sub">加热锻打成形</div>
+  <div class="card-desc">最高温反复锻打：TDD 测试驱动、系统化调试，合金在此阶段成形</div>
+</div>
+
+<div class="stage-card c4" style="left:1340px; top:630px;">
+  <div class="card-temp"></div>
+  <div class="card-num">04</div>
+  <div class="card-icon-wrap">
+    <div class="card-icon-bg"></div>
+    <div class="card-icon-glow"></div>
+    <svg class="card-icon-svg" viewBox="0 0 94 94">
+      <path d="M 22,40 L 72,40 L 68,78 Q 64,84 56,84 L 38,84 Q 30,84 26,78 Z" fill="rgba(160,200,232,0.04)" stroke="rgba(160,200,232,0.35)" stroke-width="1.5"/>
+      <ellipse cx="47" cy="56" rx="20" ry="6" fill="rgba(160,200,232,0.08)" stroke="rgba(160,200,232,0.3)" stroke-width="1"/>
+      <rect x="42" y="30" width="10" height="26" rx="1" fill="rgba(255,233,200,0.5)" stroke="rgba(232,180,80,0.6)" stroke-width="1"/>
+      <path d="M 30,36 Q 24,24 28,16" stroke="rgba(160,200,232,0.3)" stroke-width="1" fill="none"/>
+      <path d="M 47,34 Q 48,20 46,12" stroke="rgba(160,200,232,0.35)" stroke-width="1" fill="none"/>
+    </svg>
+  </div>
+  <div class="card-name">淬火</div>
+  <div class="card-cmd">alloy archive</div>
+  <div class="card-sub">急速冷却、锁定结构</div>
+  <div class="card-desc">高温合金急速冷却：归档 Delta Spec，hash 锁定晶体结构，固化成果</div>
+</div>
+
+<div class="stage-card c5" style="left:1720px; top:660px;">
+  <div class="card-temp"></div>
+  <div class="card-num">05</div>
+  <div class="card-icon-wrap">
+    <div class="card-icon-bg"></div>
+    <div class="card-icon-glow"></div>
+    <svg class="card-icon-svg" viewBox="0 0 94 94">
+      <rect x="28" y="38" width="38" height="24" rx="3" fill="rgba(0,212,170,0.15)" stroke="rgba(200,176,144,0.5)" stroke-width="1.5"/>
+      <rect x="28" y="38" width="38" height="24" rx="3" fill="url(#ingotGrad5)" stroke="none" opacity="0.5"/>
+      <line x1="32" y1="46" x2="62" y2="46" stroke="rgba(200,176,144,0.25)" stroke-width="0.8"/>
+      <line x1="32" y1="52" x2="62" y2="52" stroke="rgba(200,176,144,0.15)" stroke-width="0.8"/>
+      <path d="M 38,68 L 42,72 L 56,60" stroke="rgba(0,212,170,0.6)" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <defs>
+        <linearGradient id="ingotGrad5" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="rgba(0,212,170,0.2)"/><stop offset="50%" stop-color="rgba(232,213,160,0.4)"/><stop offset="100%" stop-color="rgba(124,92,252,0.2)"/>
+        </linearGradient>
+      </defs>
+    </svg>
+  </div>
+  <div class="card-name">成品</div>
+  <div class="card-cmd">alloy finish</div>
+  <div class="card-sub">检验、交付</div>
+  <div class="card-desc">冷却后的合金锭通过质量检验，标记牌号，形成可复现的锻造工艺标准</div>
+</div>
+
+<!-- 温度谱带 -->
+<div class="temp-spectrum"></div>
+<div class="temp-labels">
+  <span>预热</span><span>升温</span><span>共晶点</span><span>急冷</span><span>固化</span>
+</div>
+
+<!-- 底部 -->
+<div class="footer-bar">
+  <div class="footer-line"></div>
+  <span class="footer-text">Alloy Pipeline · OpenSpec + Superpowers</span>
+  <div class="footer-line"></div>
+</div>
+
+<!-- 连接柱 (CSS div 实现，确保可见) -->
+<div class="connector conn-1"><div class="flange"></div></div>
+<div class="connector conn-2"><div class="flange"></div></div>
+<div class="connector conn-3"><div class="flange"></div></div>
+<div class="connector conn-4"><div class="flange"></div></div>
+<div class="connector conn-5"><div class="flange"></div></div>
+
+<script>
+(function(){
+  const W = 1920, H = 1080;
+  function fit() {
+    const s = Math.min(innerWidth / W, innerHeight / H);
+    document.body.style.transform = 'scale(' + s + ')';
+    document.body.style.transformOrigin = 'top left';
+    document.body.style.width = W + 'px';
+    document.body.style.height = H + 'px';
+    document.body.style.position = 'absolute';
+    document.body.style.top = ((innerHeight - H * s) / 2) + 'px';
+    document.body.style.left = ((innerWidth - W * s) / 2) + 'px';
+  }
+  fit();
+  window.addEventListener('resize', fit);
+})();
+</script>
+
+</body>
+</html>
