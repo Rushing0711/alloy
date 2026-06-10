@@ -13,6 +13,7 @@ import { configCommand } from "./commands/internal/config.js";
 import { guardCommand } from "./commands/internal/guard.js";
 
 import { recordCommand } from "./commands/internal/record.js";
+import { skillUsageCommand } from "./commands/internal/skill-usage.js";
 
 const USAGE = `
 alloy <command> [options]
@@ -337,6 +338,10 @@ async function main() {
       break;
     }
 
+    case "_skill": {
+      await skillUsageCommand(restArgs);
+      break;
+    }
     case "_record": {
       await recordCommand(restArgs);
       break;
