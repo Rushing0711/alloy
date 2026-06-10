@@ -82,6 +82,11 @@ test -f openspec/changes/<name>/verify.md && ! grep -q '^- \[x\] ❌ FAIL' opens
 - `/opsx:archive` 返回错误（权限、冲突等）→ [HARD STOP]，不推进 phase
 - `/opsx:archive` 不可用（OpenSpec 未安装）→ 引导用户运行 `alloy init` 安装 OpenSpec
 
+**命令执行后立即记录：**
+```bash
+alloy _skill log openspec/changes/<name> archive opsx:archive
+```
+
 **归档变更提交（必须在 worktree 清理之前）：**
 
 `/opsx:archive` 执行 `mv` 移动目录，但不负责 git commit。如果当前在 worktree 中，变更必须先 commit 到 worktree 分支，否则 worktree 清理时 merge 会丢失归档操作。

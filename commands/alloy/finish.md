@@ -99,6 +99,11 @@ Change: <name>
 基础分支：<main_branch>（从 openspec/config.yaml 读取）
 ```
 
+**技能加载后立即记录：**
+```bash
+alloy _skill log openspec/changes/<name> finish superpowers:finishing-a-development-branch
+```
+
 技能加载后，按其指引提供 3 个选项。
 
 ### 各选项的后续行为
