@@ -134,6 +134,7 @@
 | `test-driven-development` | | |
 | `spec-compliance-review` | | |
 | `code-quality-review` | | |
+| `superpowers:test-driven-development` | | |
 | `superpowers:executing-plans` | | |
 | `superpowers:requesting-code-review` | | |
 | `superpowers:verification-before-completion` | | |
