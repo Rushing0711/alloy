@@ -213,6 +213,11 @@ MAIN_BRANCH=$(alloy _config read . main_branch 2>/dev/null || echo "$DEFAULT_BRA
 
 使用 Skill 工具加载 `superpowers:using-git-worktrees` 技能。传入参数 "工作目录偏好: .claude/worktrees/<name>\n分支命名: worktree-<name>\n基于: <feature_branch>\n注意: EnterWorktree 默认从 origin/main 分出，必须先 git worktree add 指定 base ref 再进入"。该技能内置了完整的决策流程（Step 0 问询 → 创建或跳过）和执行步骤，Agent 按其内部指引执行即可。
 
+**技能加载后立即记录：**
+```bash
+alloy _skill log openspec/changes/<name> apply superpowers:using-git-worktrees
+```
+
 **路径偏好说明：** 使用无条件路径 `.claude/worktrees/<name>`，因为 `.claude/` 是 alloy 初始化时的固定目录（存在 commands/skills 等子目录）。显式指定路径后，Agent 在 git worktree fallback（EnterWorktree 不可用时）会直接使用该路径，不会因条件判断错误而回退到 `.worktrees/`。
 
 **分支命名说明：** 使用 `worktree-<name>` 命名规范，与 EnterWorktree 的内置命名一致。这确保无论 worktree 由 EnterWorktree 还是 git worktree fallback 创建，分支名格式统一，archive 阶段清理时无需猜测。
@@ -356,15 +361,33 @@ Superpowers 技能内部行为（alloy 仅编排，不替代）：
 - 读取 plan → 分派子 agent → 每个子 agent 独立执行 TDD + code review（transitive 激活）
 - 子 agent 各自勾选 tasks.md 中对应任务的 checkbox
 
+**技能加载后立即记录：**
+```bash
+alloy _skill log openspec/changes/<name> apply superpowers:subagent-driven-development
+alloy _skill log openspec/changes/<name> apply test-driven-development --via subagent-driven-development
+alloy _skill log openspec/changes/<name> apply spec-compliance-review --via subagent-driven-development
+alloy _skill log openspec/changes/<name> apply code-quality-review --via subagent-driven-development
+```
+
 **superpowers:executing-plans 路径：** 分四步执行，确保不丢 TDD、spec 合规和 code review 闸门：
 
 **1. 先加载 `superpowers:test-driven-development` 技能设定 TDD 预期：**
 - 加载后，TDD 纪律（RED→GREEN→REFACTOR）成为本次执行的硬约束
 - 不在 executing-plans 内部"顺便做"——先设定预期，再执行
 
+**技能加载后立即记录：**
+```bash
+alloy _skill log openspec/changes/<name> apply superpowers:test-driven-development
+```
+
 **2. 加载 `superpowers:executing-plans` 技能执行 plans.md 微步骤：**
 - executing-plans 按 plans.md 逐步执行，每步完成后暂停审查
 - 执行过程中遵循 TDD 流程（先写测试→确认失败→实现→确认通过）
+
+**技能加载后立即记录：**
+```bash
+alloy _skill log openspec/changes/<name> apply superpowers:executing-plans
+```
 
 **3. executing-plans 完成后，进行 Spec 合规审查（Agent 自行检查，不加载额外技能）：**
 - tasks.md 的每个 checkbox → 代码中是否有对应实现？
@@ -375,6 +398,11 @@ Superpowers 技能内部行为（alloy 仅编排，不替代）：
 **4. 加载 `superpowers:requesting-code-review` 技能进行代码审查：**
 - 代码审查闸门——所有代码变更必须经过审查才能进入 Step 3 验证
 
+**技能加载后立即记录：**
+```bash
+alloy _skill log openspec/changes/<name> apply superpowers:requesting-code-review
+```
+
 > superpowers:executing-plans 路径不会 transitive 激活 TDD、spec 合规或 code review。以上四步通过**显式加载**来补偿——先设定 TDD 预期，再执行，再校验 spec 合规，最后审查。
 
 ### [Step 3/5] 代码层验证
@@ -383,6 +411,11 @@ Superpowers 技能内部行为（alloy 仅编排，不替代）：
 > 正在验证代码行为——测试通过、功能正确...
 
 使用 Skill 工具加载 `superpowers:verification-before-completion` 技能 —— 代码行为验证。
+
+**技能加载后立即记录：**
+```bash
+alloy _skill log openspec/changes/<name> apply superpowers:verification-before-completion
+```
 
 验证失败 → 修复代码 → 回到 Step 2/5（SDD），确保修复也有 TDD + code review 安全网。
 
@@ -411,6 +444,11 @@ alloy _record check openspec/changes/<name> plans
 若 check 失败 → HARD STOP，plans 可能被未审批修改。
 
 1. 调用 `/opsx:verify` 执行结构化的 7 项检查
+
+**命令执行后立即记录：**
+```bash
+alloy _skill log openspec/changes/<name> apply opsx:verify
+```
 2. `/opsx:verify` 的输出由 OpenSpec CLI 生成，其语言不由 Agent 控制。Agent 拿到输出后，**必须将 verify.md 重写为与 `instructions/verify.md` 和 `templates/verify.md` 一致的语言**，不得直接透传 CLI 输出
 3. 检查结果（PASS/FAIL/WARNING）保留作为事实依据
 
@@ -484,7 +522,7 @@ alloy _record check openspec/changes/<name> verify
 
 **§3 Plan Deviations：** 计划 vs 实际变更表格，含 strategy 偏差说明。
 
-**§4 全周期技能审计：** Agent 自报 start/plan/apply 三阶段 11 项技能/命令使用情况（✓/✗）。同一 session 亲历，无需推断。跳过的技能填三问（跳过什么/为什么/如何防复发）。
+**§4 全周期技能审计：** 从 `.alloy.yaml` 的 `skill_usage[]` 字段读取 start/plan/apply/archive/finish 五阶段技能使用记录。`skill_usage[]` 为空（旧 change）→ 对应行填 `—`，不推断。跳过的技能展开三问（跳过什么/为什么/如何防复发）。
 
 **§5 Surprises：** 被推翻的假设。
 
