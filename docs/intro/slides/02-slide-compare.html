@@ -208,43 +208,44 @@
   <!-- 行1: 需求管理 -->
   <div class="table-row">
     <div class="col-dim"><span>需求管理</span></div>
-    <div class="col-alloy"><span><span class="hl">brainstorming</span> → draft → <span class="hl">proposal</span> → specs，完整审计链</span></div>
-    <div class="col-raw"><span>需求在聊天里</span></div>
+    <div class="col-alloy"><span><span class="hl">draft</span> → <span class="hl">specs</span>，完整审计链</span></div>
+    <div class="col-raw"><span>"帮我加个功能"——需求在聊天里</span></div>
   </div>
 
-  <!-- 行2: 流程闸门 -->
   <div class="table-row">
     <div class="col-dim"><span>流程闸门</span></div>
     <div class="col-alloy"><span><span class="hl">5 阶段 hard gate</span>，脚本校验</span></div>
     <div class="col-raw"><span>无闸门，自由发挥</span></div>
   </div>
 
-  <!-- 行3: 制品追踪 -->
-  <div class="table-row">
-    <div class="col-dim"><span>制品追踪</span></div>
-    <div class="col-alloy"><span><span class="hl">8 制品 DAG</span> + hash 锁定 + 独立 commit</span></div>
-    <div class="col-raw"><span>改了什么都记不住</span></div>
-  </div>
-
-  <!-- 行4: 隔离环境 -->
-  <div class="table-row">
-    <div class="col-dim"><span>隔离环境</span></div>
-    <div class="col-alloy"><span>可选 <span class="hl">worktree</span>，自动管理</span></div>
-    <div class="col-raw"><span>直接在主分支改</span></div>
-  </div>
-
-  <!-- 行5: 质量保证 -->
   <div class="table-row">
     <div class="col-dim"><span>质量保证</span></div>
     <div class="col-alloy"><span><span class="hl">TDD</span> + <span class="hl">code review</span> + 双层验证</span></div>
     <div class="col-raw"><span>靠 Agent 自觉</span></div>
   </div>
 
-  <!-- 行6: 掉线恢复 -->
   <div class="table-row">
     <div class="col-dim"><span>掉线恢复</span></div>
-    <div class="col-alloy"><span>任意阶段退出，随便打哪个命令都能<span class="hl">接上</span></span></div>
+    <div class="col-alloy"><span>任意阶段退出，回来随便打哪个命令都能<span class="hl">接上</span></span></div>
     <div class="col-raw"><span>掉线从头开始</span></div>
+  </div>
+
+  <div class="table-row">
+    <div class="col-dim"><span>改需求</span></div>
+    <div class="col-alloy"><span>编码未开始就<span class="hl">回溯修正</span>，已开始开新 change</span></div>
+    <div class="col-raw"><span>规格和代码分叉</span></div>
+  </div>
+
+  <div class="table-row">
+    <div class="col-dim"><span>复盘</span></div>
+    <div class="col-alloy"><span>每次 change 结束<span class="hl">自动复盘</span>，教训反哺下次</span></div>
+    <div class="col-raw"><span>每次都从零开始</span></div>
+  </div>
+
+  <div class="table-row">
+    <div class="col-dim"><span>可追溯</span></div>
+    <div class="col-alloy"><span>每个制品 <span class="hl">hash 锁定</span> + 独立 commit</span></div>
+    <div class="col-raw"><span>改了什么都记不住</span></div>
   </div>
 
 </div>
