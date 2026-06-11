@@ -114,9 +114,9 @@ Worktree: <是/否>（<path>）
 
 如果 `superpowers:systematic-debugging` 不可用，引导用户运行 `alloy init` 完成环境初始化。
 
-**技能加载后立即记录：**
+**技能加载后记录（仅在场景 1/2 有归属 change 时）：**
 ```bash
-alloy _skill log openspec/changes/<name> fix superpowers:systematic-debugging
+[ -n "<name>" ] && alloy _skill log openspec/changes/<name> fix superpowers:systematic-debugging
 ```
 
 诊断必须产出一个明确的结论：**根因是什么、涉及哪些文件、是否偏离了现有 spec。**
@@ -298,17 +298,7 @@ git checkout -b hotfix/<desc> <MAIN_BRANCH>
 修复流程：
 1. 使用 Skill 工具加载 `superpowers:test-driven-development` 技能
 
-   **技能加载后立即记录：**
-   ```bash
-   alloy _skill log openspec/changes/<name> fix superpowers:test-driven-development
-   ```
-
 2. 使用 Skill 工具加载 `superpowers:verification-before-completion` 技能
-
-   **技能加载后立即记录：**
-   ```bash
-   alloy _skill log openspec/changes/<name> fix superpowers:verification-before-completion
-   ```
 
 3. 精确提交。如果能追溯到原 change，在 commit message 中注明：
    ```bash

@@ -56,11 +56,6 @@ date "+%Y-%m-%d %H:%M:%S"
 
 **交互风格：** 探查结果反馈给用户时，使用 `AskUserQuestion` 工具呈现结构化选项。详见 `commands/alloy/references/interaction-style.md`。箭头上下选择、Enter 确认——不要用纯文本 "(a)(b)(c)" 让用户打字。
 
-**技能加载后立即记录：**
-```bash
-alloy _skill log openspec/changes/<name> start opsx:explore
-```
-
 **额外上下文——来自历史 retrospective 的教训：** 在探查阶段，扫描 `openspec/changes/archive/` 下最近 3 个已归档 change 的 `retrospective.md`，提取以下信息作为本次 brainstorming 的参考：
 
 - **§5 意外发现**：上一次有哪些假设被推翻？这次可能也有类似盲区
@@ -99,11 +94,6 @@ brainstorming 每个问题都是沟通成本。使用平台的交互式提示工
 
 如果 `superpowers:brainstorming` 不可用，引导用户运行 `alloy init` 完成环境初始化。brainstorming 技能内置了审批闸门和 Q&A 深度——普通对话无法复现这些行为。
 
-**技能加载后立即记录：**
-```bash
-alloy _skill log openspec/changes/<name> start superpowers:brainstorming
-```
-
 **brainstorming 负责"想清楚要做什么"——通过交互式问答明确问题、方案和关键决策。** 用户确认方案后，这一步的产出是 `draft.md`，不是 superpowers spec 文件。
 
 用户确认方案后，生成 `draft.md`：
@@ -138,6 +128,10 @@ alloy _skill log openspec/changes/<name> start superpowers:brainstorming
 | 借口 | 现实 |
 |------|------|
 | "不用建分支了，就在 main 上干吧" | 主分支上直接开发会污染 main 历史。每个 change 必须有独立 feature 分支。拒绝——建分支只需 2 秒。 |
+| "已经在某个分支上了，跳过分支步骤" | 在某个分支上 ≠ 在正确的分支上。仍需验证当前分支 ≠ 主分支，并让用户确认。 |
+| "分支创建是可选步骤" | 分支创建不是可选的——它是步骤 3 的硬性闸门。没有通过 ⑥ 验证，步骤 4-9 全部禁止执行。 |
+| "用户没提分支，继续吧" | 用户没提 ≠ 用户同意跳过。闸门不需要用户主动请求才生效——它默认生效，除非用户明确选择分支。 |
+| "项目简单/一个人开发，不需要分支" | 分支隔离保护的是 discard 安全性，不是团队协作。简单项目一样需要独立分支，否则 discard 会丢失主分支上的无关变更。 |
 | "不用 brainstorming 了，直接写代码" | brainstorming 不是可选项。跳过需求设计 = 规格和代码分叉的起点。必须加载 superpowers:brainstorming。 |
 | "我一个人开发，不用那么正式" | 流程保护的是一致性和可追溯性，不是团队规模。一个人的项目和团队项目的闸门完全一样。 |
 | "我看过了，内容都对"（跳过审查） | 用户"看过了"不等于审查到位。必须按流程确认 change name、主分支、feature 分支。 |
@@ -213,14 +207,42 @@ alloy _skill log openspec/changes/<name> start superpowers:brainstorming
      - 校验：不允许与主分支同名
      - `git checkout -b <branch-name>`
 
-4. **调用 `/opsx:new <name>`** 创建 change 目录（已在 feature 分支上，目录直接落在正确分支）
+   **⑥ 分支验证——HARD STOP：** 分支创建/切换后，必须验证才能继续。这是防止在主分支上开发的关键闸门——没有这个检查，步骤 3 的所有逻辑都是空谈。
 
-**命令执行后立即记录：**
-```bash
-alloy _skill log openspec/changes/<name> start opsx:new
-```
+   ```bash
+   CURRENT=$(git branch --show-current)
+   echo "当前分支: $CURRENT | 主分支: $MAIN_BRANCH"
+   ```
 
-5. **写入 state**——使用 `_state init` 一步创建完整初始状态（包含 `records: []`、正确类型），避免逐字段写入遗漏 records 数组：
+   - `$CURRENT` = `$MAIN_BRANCH` → **HARD STOP**——"仍在主分支上，不允许继续。"返回⑤重新选择分支
+   - `$CURRENT` ≠ `$MAIN_BRANCH` → 验证通过，展示分支状态供用户确认
+
+   > 分支状态
+   > ──────────────────────────────────────
+   > 当前分支: `<$CURRENT>`（主分支: `<$MAIN_BRANCH>`）
+   >
+   > → 确认，继续创建 change 目录
+   > → 需要换分支 — 返回分支选择
+
+   用户确认后才能继续步骤 4。**未通过验证或用户未确认时，禁止执行步骤 4-9。**
+
+   **什么算"跳过闸门"（反例）：**
+   - 分支选择后直接进入步骤 4，不验证当前分支——验证只需 1 条 git 命令
+   - 已在 feature 分支上就跳过整个步骤 3——仍需确认当前分支名并记录
+   - 用户没回复就继续——分支状态必须用户确认
+
+4. **调用 `/opsx:new <name>`** 创建 change 目录
+
+   **前置条件：步骤 3 ⑥ 的分支验证已通过且用户已确认。** 如果当前仍在主分支上，STOP——回到步骤 3 选择分支。
+
+5. **批量记录技能使用——** change 目录已创建，将在 Step 1/2 中使用的技能一次性写入 `.alloy.yaml`：
+   ```bash
+   alloy _skill log openspec/changes/<name> start opsx:explore && \
+   alloy _skill log openspec/changes/<name> start superpowers:brainstorming && \
+   alloy _skill log openspec/changes/<name> start opsx:new
+   ```
+
+6. **写入 state**——使用 `_state init` 一步创建完整初始状态（包含 `records: []`、正确类型），避免逐字段写入遗漏 records 数组：
    ```bash
    alloy _state init openspec/changes/<name>
    ```
@@ -230,13 +252,13 @@ alloy _skill log openspec/changes/<name> start opsx:new
    alloy _state merge openspec/changes/<name> phase_timings "{\"start\":{\"started_at\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}}"
    ```
 
-6. **记录分支信息**——将 feature_branch 和 worktree null 写入 state：
+7. **记录分支信息**——将 feature_branch 和 worktree null 写入 state：
    ```bash
    alloy _state write openspec/changes/<name> feature_branch <branch-name>
    alloy _state write openspec/changes/<name> worktree null
    ```
 
-7. **按模板生成 `draft.md`** 到 `openspec/changes/<name>/draft.md`（直接在 change 目录下生成，无需移动）
+8. **按模板生成 `draft.md`** 到 `openspec/changes/<name>/draft.md`（直接在 change 目录下生成，无需移动）
 
    **draft.md 审查窗口——这是 start 阶段唯一的制品审查闸门。用户明确确认后才能 commit。**
 
@@ -247,7 +269,7 @@ alloy _skill log openspec/changes/<name> start opsx:new
    > → (a) 确认，锁定 draft 并完成 start 阶段
    > → (b) 需要调整 — 回到 brainstorming 重新讨论
 
-   - **选 (a)**：继续步骤 8，hash 锁定 + commit
+   - **选 (a)**：继续步骤 9，hash 锁定 + commit
    - **选 (b)**：不生成文件、不 commit。回到 Step 2/2 的 brainstorming，基于用户反馈重新讨论方案。brainstorming 完成后重新生成 draft.md，再次进入此审查窗口
 
    **什么算"审查不充分"（反例）：**
@@ -257,7 +279,7 @@ alloy _skill log openspec/changes/<name> start opsx:new
 
    > 前面步骤写入的 `.alloy.yaml` 变更（init、started_at、feature_branch、worktree）不单独提交——它们在 draft commit 中一并提交。`git add openspec/changes/<name>/` 会覆盖目录内的所有变更。
 
-8. **提交（start 阶段唯一 commit）——仅在用户选 (a) 后执行：**
+9. **提交（start 阶段唯一 commit）——仅在用户选 (a) 后执行：**
 
    **alloy init 基础设施提交：**
    ```bash
