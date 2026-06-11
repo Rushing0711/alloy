@@ -11,7 +11,20 @@ tags: [alloy, workflow]
 
 **核心原则：只做代码合入，不碰 spec。** 如果合入过程中（如 PR 审查）发现需要修改 spec，那是另一个 change 的事——当前 change 的 spec 已归档封存。
 
-**交互风格：** 主分支确认、合并策略选择使用 `AskUserQuestion` 工具。**合并确认仍用精确文本匹配**（安全机制）。详见 `commands/alloy/references/interaction-style.md`。
+## AskUserQuestion 交互规范
+
+本文件主分支确认、合并策略选择使用 `AskUserQuestion` 工具（箭头选、Enter 确认），不用纯文本 "(a)(b)"。**合并确认仍用精确文本匹配**（安全机制）——这是破坏性操作，不能一键确认。具体场景参照 `commands/alloy/references/interaction-style.md`。凡标记 `[AQ]` 的位置都必须给出降级文本。
+
+**选择（radio 3-4 选项）：**
+```
+AskUserQuestion: { questions: [{ question: "...", header: "...",
+  options: [
+    { label: "(a) ...", description: "..." },
+    { label: "(b) ...", description: "..." }
+  ], multiSelect: false }] }
+```
+
+**降级（非 Claude Code 平台）：** 每选项一行带编号 + "请输入 a 或 b："。
 
 **调用外部命令或技能前，先输出标题和状态描述，再执行操作。不要只出标题然后沉默。**
 
@@ -80,7 +93,7 @@ git branch --list <feature_branch>
 ```bash
 alloy _config read . main_branch
 ```
-若 `main_branch` 未记录（输出 `null`）→ 读取 `commands/alloy/references/main-branch-detection.md`，按 3 级优先级自动检测主分支。检测到后让用户确认（Y/n），确认后写入配置：
+若 `main_branch` 未记录（输出 `null`）→ 读取 `commands/alloy/references/main-branch-detection.md`，按 3 级优先级自动检测主分支。检测到后让用户确认：[AQ] radio: (a) 确认 / (b) 手动指定。降级：`> 请输入 a 或 b：`
 ```bash
 alloy _config write . main_branch <确认的主分支名>
 ```
@@ -96,9 +109,7 @@ alloy _config write . main_branch <确认的主分支名>
 >
 > phase=archived 已确认 ✓
 >
-> 1. 本地 merge —— 合入基础分支
-> 2. 创建 PR    —— 提交代码审查
-> 3. 保持分支   —— 暂不处理
+> [AQ] radio: (1) 本地 merge / (2) 创建 PR / (3) 保持分支。降级：`> 请输入 1、2 或 3：`
 
 使用 Skill 工具加载 `superpowers:finishing-a-development-branch` 技能，传入上下文：
 ```

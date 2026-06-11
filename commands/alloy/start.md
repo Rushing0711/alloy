@@ -11,6 +11,25 @@ tags: [alloy, workflow]
 
 **核心原则：把实际工作委托给专门的技能，不要自己做。Alloy 是编排器，不是执行者。**
 
+## AskUserQuestion 交互规范
+
+本文件所有用户交互必须使用 `AskUserQuestion` 工具（箭头选、Enter 确认），不用纯文本 "(a)(b)(c)"。具体场景参照 `commands/alloy/references/interaction-style.md`。通用格式：
+
+**审查确认（radio 2 选项）：**
+```
+AskUserQuestion: { questions: [{ question: "确认并锁定 <制品名>？", header: "<制品名>",
+  options: [
+    { label: "(a) 确认，锁定并继续", description: "hash 锁定 + commit，进入下一步" },
+    { label: "(b) 需要调整", description: "说明修改点" }
+  ], multiSelect: false }] }
+```
+
+**选择（radio 3-4 选项）：** 同上，options 3-4 个，`description` 写推荐理由。
+
+**范围确认（checkbox）：** `multiSelect: true`，空格勾选，一次确认 3-5 个独立选项。
+
+**降级（非 Claude Code 平台）：** 每选项一行带编号 + "请输入 a 或 b："。凡标记 `[AQ]` 的位置都必须给出降级文本。
+
 > **`<TIMESTAMP>` 的含义：** 每次渲染阶段头部框时，执行 `date "+%Y-%m-%d %H:%M:%S"` 获取本地时间，替换 `<TIMESTAMP>`。不要输出字面字符串 `<TIMESTAMP>`。`<START_TIME>` 是"全新开始"路径中捕获的当前时间——agent 捕获 date 命令的输出后，在 header 渲染和 phase_timings 写入时复用该值。`<created_at>` 从 `.alloy.yaml` 的 `created_at` 字段读取。
 
 ---
@@ -54,7 +73,7 @@ date "+%Y-%m-%d %H:%M:%S"
 
 技能加载后，按其指引自由探索项目上下文和需求空间。
 
-**交互风格：** 探查结果反馈给用户时，使用 `AskUserQuestion` 工具呈现结构化选项。详见 `commands/alloy/references/interaction-style.md`。箭头上下选择、Enter 确认——不要用纯文本 "(a)(b)(c)" 让用户打字。
+**交互风格：** 探查结果反馈给用户时，使用 `AskUserQuestion` 工具呈现结构化选项（箭头上下选择、Enter 确认），不要用纯文本 "(a)(b)(c)" 让用户打字。具体格式见步骤 2 中的 AskUserQuestion 示例。
 
 **额外上下文——来自历史 retrospective 的教训：** 在探查阶段，扫描 `openspec/changes/archive/` 下最近 3 个已归档 change 的 `retrospective.md`，提取以下信息作为本次 brainstorming 的参考：
 
@@ -152,7 +171,7 @@ brainstorming 每个问题都是沟通成本。使用平台的交互式提示工
    if ! git rev-parse --git-dir 2>/dev/null; then
      git init
      # 空项目：先提交基础设施作为锚点，确保 HEAD 存在以便后续创建分支
-     git add .claude/ .gitignore openspec/config.yaml openspec/schemas/ 2>/dev/null
+     git add .claude/ 2>/dev/null; git add .gitignore 2>/dev/null; git add openspec/config.yaml 2>/dev/null; git add openspec/schemas/ 2>/dev/null
      [ -f CLAUDE.md ] && git add CLAUDE.md 2>/dev/null
      git commit -m "chore: alloy init 项目初始化"
    fi
@@ -166,10 +185,12 @@ brainstorming 每个问题都是沟通成本。使用平台的交互式提示工
 
    若 `openspec/config.yaml` 已有 `alloy.main_branch` 记录，直接用记录值，跳过检测和确认。
 
-   **② 确认主分支：** 检测到后让用户确认（Y/n）。确认后写入项目级配置：
-	   ```bash
-	   alloy _config write . main_branch <用户确认的主分支名>
-	   ```主分支是项目级概念，所有 change 共享，不写入 per-change 的 .alloy.yaml。
+   **② 确认主分支：** 检测到后让用户确认。[AQ] radio: (a) 确认 / (b) 手动指定。降级：`> 请输入 a 或 b：`
+
+   确认后写入项目级配置：
+   ```bash
+   alloy _config write . main_branch <用户确认的主分支名>
+   ```主分支是项目级概念，所有 change 共享，不写入 per-change 的 .alloy.yaml。
 
    **③ 检测当前分支：**
    ```bash
@@ -180,23 +201,14 @@ brainstorming 每个问题都是沟通成本。使用平台的交互式提示工
    **④ 按当前分支位置决策：**
 
    - **在主分支上** → HARD STOP："当前在主分支 `<main_branch>`，不允许在主分支开发。commit 会污染主分支历史。" → 只展示"新建分支"选项
-   - **在 feature 分支上且名称包含 change 名**（如 `feature/<name>` 或 `fix/<name>`）→ 提示"当前已在 `<$CURRENT_BRANCH>`，直接在该分支上继续工作？[Y/n]"
-     - 选 Y → 使用当前分支，继续步骤 4
-     - 选 n → 展示选项（见⑤）
+   - **在 feature 分支上且名称包含 change 名**（如 `feature/<name>` 或 `fix/<name>`）→ [AQ] radio: "当前已在 <$CURRENT_BRANCH>，继续工作？" (a) 确认 / (b) 换分支。降级：`> 请输入 a 或 b：`
+     选 (a) → 使用当前分支，继续步骤 4
+     选 (b) → 展示选项（见⑤）
    - **在非主分支的已有分支上** → 展示选项（见⑤）
 
-   **⑤ 展示选项：**
+   **⑤ 展示选项：** [AQ] radio: "选择工作分支" — (1) 切换到已有分支 / (2) 新建分支。降级：`> 请输入 1 或 2：`
 
-   本地非主分支（排除刚确认的主分支）存在时：
-   > 选择工作分支
-   > ──────────────────────────────────────
-   >
-   > 当前在 `<$CURRENT_BRANCH>`，主分支：`<main_branch>`
-   >
-   > 1. 切换到已有分支 —— 选择非主分支的已有分支
-   > 2. 新建分支       —— 创建新 feature 分支并切换
-
-   无可用本地非主分支时 → 直接进入新建分支流程（跳过选项 1）。
+   本地非主分支（排除刚确认的主分支）存在时展示两个选项；无可用本地非主分支时 → 直接进入新建分支流程（跳过选项 1）。
 
    每个 change 必须有独立的 feature 分支，确保 discard 时可安全清理。
 
@@ -215,14 +227,7 @@ brainstorming 每个问题都是沟通成本。使用平台的交互式提示工
    ```
 
    - `$CURRENT` = `$MAIN_BRANCH` → **HARD STOP**——"仍在主分支上，不允许继续。"返回⑤重新选择分支
-   - `$CURRENT` ≠ `$MAIN_BRANCH` → 验证通过，展示分支状态供用户确认
-
-   > 分支状态
-   > ──────────────────────────────────────
-   > 当前分支: `<$CURRENT>`（主分支: `<$MAIN_BRANCH>`）
-   >
-   > → 确认，继续创建 change 目录
-   > → 需要换分支 — 返回分支选择
+   - `$CURRENT` ≠ `$MAIN_BRANCH` → 验证通过，[AQ] radio: "分支验证通过（当前: <$CURRENT>，主分支: <$MAIN_BRANCH>）" (a) 确认继续 / (b) 换分支。降级：`> 请输入 a 或 b：`
 
    用户确认后才能继续步骤 4。**未通过验证或用户未确认时，禁止执行步骤 4-9。**
 
@@ -262,12 +267,7 @@ brainstorming 每个问题都是沟通成本。使用平台的交互式提示工
 
    **draft.md 审查窗口——这是 start 阶段唯一的制品审查闸门。用户明确确认后才能 commit。**
 
-   > 制品 draft ✓ 完成
-   >
-   > [展示 draft.md 完整内容]
-   >
-   > → (a) 确认，锁定 draft 并完成 start 阶段
-   > → (b) 需要调整 — 回到 brainstorming 重新讨论
+   先展示 draft.md 完整内容，再让用户确认：[AQ] 审查确认: (a) 确认，锁定 draft 并完成 start 阶段 / (b) 需要调整 — 回到 brainstorming 重新讨论。降级：`> 请输入 a 或 b：`
 
    - **选 (a)**：继续步骤 9，hash 锁定 + commit
    - **选 (b)**：不生成文件、不 commit。回到 Step 2/2 的 brainstorming，基于用户反馈重新讨论方案。brainstorming 完成后重新生成 draft.md，再次进入此审查窗口
@@ -399,7 +399,7 @@ brainstorming 每个问题都是沟通成本。使用平台的交互式提示工
 | phase | 制品状态 | 路由 |
 |-------|---------|------|
 | started | proposal.md 存在 | alloy-plan（正常接续——plan 制品已有，继续生成） |
-| started | proposal.md 不存在 + draft.md 存在且 hash 有效 | **提示用户选择：**(a) 进入 plan 阶段 (b) 回到 brainstorming 修改需求。draft 已确认，默认预期是用户想进 plan——不要默认假设用户想重来。 |
+| started | proposal.md 不存在 + draft.md 存在且 hash 有效 | **提示用户选择**（见下方 AskUserQuestion） |
 | started | proposal.md 不存在 + draft.md 不存在或 hash 不匹配 | 重新进入 brainstorming（draft 缺失或已被篡改，需重新讨论需求） |
 | planned | — | alloy-apply |
 | applied | — | alloy-archive |
@@ -413,7 +413,9 @@ brainstorming 每个问题都是沟通成本。使用平台的交互式提示工
   ```bash
   alloy _record check openspec/changes/<name> draft
   ```
-  hash 有效 → 展示选择："draft 已确认。 (a) 进入 plan 阶段 (b) 回到 brainstorming 修改需求"。等用户选择后执行对应路由。
+  hash 有效 → [AQ] radio: "draft 已确认，如何继续？" (a) 进入 plan 阶段 / (b) 回到 brainstorming 修改需求。draft 已确认，默认预期是用户想进 plan——不要默认假设用户想重来。降级：`> 请输入 a 或 b：`
+
+  等用户选择后执行对应路由。
   hash 不匹配 → 走"draft 不存在或 hash 不匹配"路径。
 
 一致性检查（双向）：

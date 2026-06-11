@@ -11,7 +11,22 @@ tags: [alloy, workflow]
 
 **核心原则：按 schema DAG 依赖顺序逐一产出制品，每步有审查闸门，不跳过上游直接产下游。**
 
-**交互风格：** 所有审查窗口和用户选择使用 `AskUserQuestion` 工具（箭头选、Enter 确认），不用纯文本 "(a)(b)"。详见 `commands/alloy/references/interaction-style.md`。
+## AskUserQuestion 交互规范
+
+本文件所有用户交互必须使用 `AskUserQuestion` 工具（箭头选、Enter 确认），不用纯文本 "(a)(b)"。具体场景参照 `commands/alloy/references/interaction-style.md`。通用格式：
+
+**审查确认（radio 2 选项）：**
+```
+AskUserQuestion: { questions: [{ question: "确认并锁定 <制品名>？", header: "<制品名>",
+  options: [
+    { label: "(a) 确认，锁定并继续", description: "hash 锁定 + commit，进入下一步" },
+    { label: "(b) 需要调整", description: "说明修改点" }
+  ], multiSelect: false }] }
+```
+
+**选择（radio 3-4 选项）：** 同上，options 3-4 个，`description` 写推荐理由。
+
+**降级（非 Claude Code 平台）：** 每选项一行带编号 + "请输入 a 或 b："。凡标记 `[AQ]` 的位置都必须给出降级文本。
 
 **调用外部命令或技能前，先输出标题和状态描述，再执行操作。不要只出标题然后沉默。**
 
@@ -151,7 +166,7 @@ done
 
 每个制品生成后，展示内容并进入审查窗口。**仅两个选项——不跳过。**
 
-审查窗口分两步：**先**用 markdown 文本展示制品完整内容（审查窗口块引用），**后**用 `AskUserQuestion` 工具让用户确认（radio，2 个 option）。不要用纯文本 "(a)(b)" 等用户打字。
+审查窗口分两步：**先**用 markdown 文本展示制品完整内容，**后**用 `[AQ] 审查确认` 让用户确认（radio，2 option）。不要用纯文本 "(a)(b)" 等用户打字。
 
 **制品 [1/5] proposal：**
 
@@ -161,8 +176,7 @@ done
 >
 > → 下一个：design（依赖 proposal + draft.md）
 >
-> → (a) 确认，锁定 proposal 并继续 design
-> → (b) 需要调整 — 说明修改点
+> [AQ] 审查确认: (a) 确认，锁定 proposal 并继续 design / (b) 需要调整 — 说明修改点。降级：`> 请输入 a 或 b：`
 
 **制品 [2/5] design：**
 
@@ -172,8 +186,7 @@ done
 >
 > → 下一个：specs（依赖 proposal）
 >
-> → (a) 确认，锁定 design 并继续 specs
-> → (b) 需要调整 — 说明修改点
+> [AQ] 审查确认: (a) 确认，锁定 design 并继续 specs / (b) 需要调整 — 说明修改点。降级：`> 请输入 a 或 b：`
 
 **制品 [3/5] specs：**
 
@@ -183,8 +196,7 @@ done
 >
 > → 下一个：tasks（依赖 specs + design）
 >
-> → (a) 确认，锁定 specs 并继续 tasks
-> → (b) 需要调整 — 说明修改点
+> [AQ] 审查确认: (a) 确认，锁定 specs 并继续 tasks / (b) 需要调整 — 说明修改点。降级：`> 请输入 a 或 b：`
 
 **制品 [4/5] tasks：**
 
@@ -194,8 +206,7 @@ done
 >
 > → 下一个：plans（依赖 tasks）
 >
-> → (a) 确认，锁定 tasks 并继续生成 plans
-> → (b) 需要调整 — 说明修改点
+> [AQ] 审查确认: (a) 确认，锁定 tasks 并继续生成 plans / (b) 需要调整 — 说明修改点。降级：`> 请输入 a 或 b：`
 
 **制品 [5/5] plans：**
 
@@ -205,16 +216,12 @@ done
 >
 > → plan 阶段完成
 >
-> → (a) 确认，锁定 plans 并完成 plan 阶段
-> → (b) 需要调整 — 说明修改点
+> [AQ] 审查确认: (a) 确认，锁定 plans 并完成 plan 阶段 / (b) 需要调整 — 说明修改点。降级：`> 请输入 a 或 b：`
 
 **审查窗口只展示制品内容，不打印 OpenSpec schema 的 instructions 模板。** instructions 是给 Agent 的内部指引，不是给用户审查的输出。
 
 - **选 (a)**：当前制品锁定，进入下一个制品或阶段
-- **选 (b)**：用户说明修改点后，AI 内部评估修改性质，然后呈现确认选项：
-
-  > → (a) 确认变更，回溯到 brainstorming
-  > → (b) 取消变更，继续当前审查
+- **选 (b)**：用户说明修改点后，AI 内部评估修改性质，然后呈现确认选项：[AQ] radio: (a) 确认变更，回溯到 brainstorming / (b) 取消变更，继续当前审查。降级：`> 请输入 a 或 b：`
 
   **AI 判断指南（内部推理，不对外展示标签）：**
   - typo/措辞修正（错别字、格式调整、表达优化，不改变功能边界）→ 内部标记为轻量变更
