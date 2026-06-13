@@ -3,77 +3,66 @@ name: "Alloy: Fix"
 description: Alloy Bug 修复入口 - 发现 bug 时调用
 category: Workflow
 tags: [alloy, workflow]
+spec: 01-product-spec/06-fix-spec.md
+behaviors:
+  stops: 6
+  hard_stops: 1
+  artifacts: []
+  transitions_to: ""
+  external_calls: [superpowers:systematic-debugging, superpowers:test-driven-development, superpowers:verification-before-completion]
 ---
 
 # alloy-fix
 
-你是 Alloy 的 Bug 修复入口。你的职责是：感知当前环境、系统化诊断问题根因、根据是否需要变更 spec 进行分流，确认是代码 bug 后按 change 状态选择修复分支。
+你是 Alloy 的 Bug 修复入口。系统化诊断问题根因、根据是否需要变更 spec 进行分流，确认是代码 bug 后按 change 状态选择修复分支。
 
 **核心原则：诊断先行——先判断是代码 bug 还是 spec 变更；分支后置——确认是代码 bug 后才选择分支策略。**
 
-**交互风格：** 诊断确认、分支选择、合并确认使用 `AskUserQuestion` 工具。详见 `commands/alloy/references/interaction-style.md`。
+```
+NO FIX WITHOUT DIAGNOSIS
+先跑 systematic-debugging，再谈修复。跳诊的坏账率极高
+```
+
+**交互规则：** `🔴 STOP` = 硬交互确认点，必须用 `AskUserQuestion`（`commands/alloy/references/interaction-style.md`）。跳过任何 🔴 STOP = 违反 Iron Law。
 
 **调用外部命令或技能前，先输出标题和状态描述，再执行操作。**
 
 ---
 
-**什么算"fix 诊断不到位"（反例）：**
-- 没跑 systematic-debugging 就凭直觉修——"一看就知道是哪的问题"——根因可能完全错误
-- 诊断出需改 spec 但直接修代码不改 spec——spec 和代码从此分叉，下次换人（换 session）就断片
-- spec 变更直接硬改代码——需求问题伪装成 bug 修复，后续 audit 无法追溯
-
-**什么算"分支策略选错"（反例）：**
-- 在已 finish 的 change 上继续修——change 已交付，混入新修复破坏审计链
-- 无归属 change 时直接在 main 上修——热修没有隔离分支，出问题无法回滚
-- hotfix 分支不合并就丢弃——修复丢失，线上问题依然存在
-
-### Red Flags——STOP，不要继续
-
-以下任何一个念头出现，都意味着流程正在被绕过：
+### Red Flags——STOP
 
 | 借口 | 现实 |
 |------|------|
-| "就在 main 上修吧，反正就改一行" | 一行还是千行，保护等级完全一样。main 被污染 = 所有人受影响。建分支只需 2 秒。 |
-| "我知道 bug 在哪，不用诊断" | "一看就知道"是 bug 修复中最危险的错觉。跳诊的坏账率极高——修错地方 → 引入新 bug → 回滚 → 重新排查。必须跑 systematic-debugging。 |
-| "用户很确定跟我说是 X 的问题" | 没有堆栈和复现步骤的"诊断"只是猜测。证据驱动，不信任任何人的判断（包括自己和用户）。 |
-| "继续在 login-feature 上修就行，代码就在那" | 代码在 main 上，不在 feature 分支上。finished 是终态——已交付的 change 混入新修复破坏审计链。 |
-| "需求不对，我顺便改下 spec" | spec 问题 = 新 change。修复过程中发现 spec 问题 → 不阻断当前修复，完成后提示开新 change。 |
+| "就在 main 上修吧，反正就改一行" | 一行和千行保护等级一样。main 污染 = 所有人受影响。建分支只需 2 秒。 |
+| "我知道 bug 在哪，不用诊断" | "一看就知道"是修复中最危险的错觉。跳诊 → 修错地方 → 引入新 bug → 回滚 → 重新排查。 |
+| "用户很确定说是 X 的问题" | 没有堆栈和复现步骤的"诊断"只是猜测。证据驱动，不信任任何人（包括自己）。 |
+| "继续在 login-feature 上修就行" | finished 是终态——已交付 change 混入新修复破坏审计链。代码在 main 上，不在 feature 分支。 |
+| "需求不对，我顺便改下 spec" | spec 问题 = 新 change。修复中发现 spec 问题 → 不阻断修复，完成后提示开新 change。 |
+
+---
 
 ## 前置检查
 
-在进入诊断前，先校验环境和权限：
+**1. Skill 预检：** skill: systematic-debugging test-driven-development verification-before-completion
 
-**1. Skill 预检：** 确认以下依赖可用：
-   skill: systematic-debugging test-driven-development verification-before-completion
+读取 `commands/alloy/references/skill-precheck.md` 检测。任一缺失 → 引导 `alloy init` → STOP。
 
-   读取 `commands/alloy/references/skill-precheck.md` 了解检测方法。任一缺失 → 输出缺失列表 → 引导 `alloy init` → STOP。
+**2. Phase 校验与场景标记：** 检测活跃 change 的 phase：
 
-**2. Phase 校验与场景标记：** 若检测到活跃 change 的 `.alloy.yaml`，读取 phase 并标记修复场景：
+- phase = `applied` 且 worktree 存在 → **场景 1：worktree 内修复**
+- phase = `applied`（worktree 已清理）或 `planned` → **场景 2：feature 分支修复**
+- phase = `archived` / `finished` / 无活跃 change → **场景 3：热修候选**
 
-- phase = `applied` 且 worktree 存在 → 标记"场景 1：worktree 内修复"
-- phase = `applied` 且 worktree 已清理 → 标记"场景 2：feature 分支修复"
-- phase = `planned` → 标记"场景 2：feature 分支修复"
-- phase = `archived` 且 worktree 已清理 → 标记"场景 3：热修候选"
-- phase = `finished` → 标记"场景 3：热修候选"
-- 无活跃 change → 标记"场景 3：热修候选"
-
-不阻断——fix 命令的用户可能不在任何 change 上下文中，仅做知情提示。
-
----
+不阻断——fix 的用户可能不在任何 change 上下文中。
 
 ```
 Alloy · Bug 修复
 ──────────────────────────────────────
 ```
 
+---
+
 ### [Step 1/3] 环境感知
-
-```
-[Step 1/3] 环境感知
-──────────────────────────────────────
-```
-
-检测当前工作环境，供后续步骤使用：
 
 ```bash
 # 检测是否在 worktree 中
@@ -84,20 +73,11 @@ IN_WORKTREE=$([ "$GIT_DIR" != "$GIT_COMMON" ] && echo "true" || echo "false")
 # 检测活跃 change
 alloy status --json 2>/dev/null
 
-# 读取主分支配置（供场景 3 使用）
+# 读取主分支配置
 alloy _config read . main_branch 2>/dev/null
 ```
 
-输出环境摘要：
-
-```
-当前分支: <branch>
-Worktree: <是/否>（<path>）
-活跃 change: <name>（phase: <phase>）/ 无
-主分支: <main_branch> / 待确认
-```
-
-如果检测到活跃 change，结合 Phase 校验的场景标记，在输出中标注场景编号，供 Step 3 使用。
+输出：当前分支 / Worktree(是/否+路径) / 活跃 change(phase) / 主分支。结合场景标记标注场景编号。
 
 ---
 
@@ -106,253 +86,102 @@ Worktree: <是/否>（<path>）
 ```
 [Step 2/3] 根因诊断 · superpowers:systematic-debugging
 ──────────────────────────────────────
-
-正在系统化诊断问题...
 ```
 
-使用 Skill 工具加载 `superpowers:systematic-debugging` 技能。禁止跳过此步骤——普通对话无法替代系统化调试方法论（复现 → 假设 → 验证 → 定位）。
+加载 `superpowers:systematic-debugging` 技能。禁止跳过——普通对话无法替代系统化调试（复现 → 假设 → 验证 → 定位）。
 
-如果 `superpowers:systematic-debugging` 不可用，引导用户运行 `alloy init` 完成环境初始化。
-
-**技能加载后记录（仅在场景 1/2 有归属 change 时）：**
 ```bash
 [ -n "<name>" ] && alloy _skill log openspec/changes/<name> fix superpowers:systematic-debugging
 ```
 
-诊断必须产出一个明确的结论：**根因是什么、涉及哪些文件、是否偏离了现有 spec。**
+诊断必须产出明确结论：**根因、涉及文件、是否偏离 spec。**
 
-**诊断确认与分流（阻塞点）：**
+**诊断确认（阻塞点）：** 🔴 STOP: 确认诊断结论（根因+涉及文件+是否偏离 spec）。确认后进入 Step 3 或回到 Step 2 重新诊断。
 
-展示诊断结论，使用 `AskUserQuestion` 让用户确认（非 Claude Code 平台降级为文本选项）：
+**"需改 spec"的判断：** spec 未描述此边界 / spec 行为本身有错 / 修复需新增 spec 中没有的 capability。
 
-> 诊断结论：
-> - 根因：<根因描述>
-> - 涉及文件：<文件列表>
-> - 是否偏离 spec：<是 / 否>
-
-**Claude Code：**
-```
-AskUserQuestion: {
-  questions: [{
-    question: "确认以上诊断结论？",
-    header: "诊断确认",
-    options: [
-      { label: "(a) 确认，进入修复", description: "根因确认无误，根据分流逻辑进入对应修复路径" },
-      { label: "(b) 重新诊断", description: "诊断结论有误，回到 Step 2 重新分析" }
-    ],
-    multiSelect: false
-  }]
-}
-```
-
-**其他平台（降级为文本选项）：**
-```
-> → (a) 确认，进入修复 — 根因确认无误，进入修复路径
-> → (b) 重新诊断 — 回到 Step 2 重新分析
-> 请输入 a 或 b：
-```
-
-选 (a) → 根据分流逻辑进入 Step 3 或引导 `/alloy:start`。选 (b) → 回到 Step 2 重新诊断。
-
-**什么算"需改 spec"（正例）：**
-- spec 没有描述这个边界情况，代码行为合理但 spec 需要补充
-- spec 描述的行为本身就是错的（比如业务逻辑变更后 spec 没更新）
-- 修复需要新增一个 spec 中没有的 capability
-
-**什么算"代码 bug"（正例）：**
-- 函数返回值与 spec 描述的行为不一致
-- spec 说"空数组返回 []"但代码对空数组抛了异常
-- 性能不达标，但 spec 没有性能要求
+**"代码 bug"的判断：** 函数返回值与 spec 不一致 / spec 说 A 但代码做了 B / 性能不达标但 spec 没有性能要求。
 
 ---
 
 ### [Step 3/3] 分支选择 + 修复
 
-确认是代码 bug 后，根据 Step 1 的环境感知结果**显式标记场景编号**再走对应路径。场景标记不可跳过——不标记直接修会走错分支策略，可能导致在主分支上直接 commit 或错误复用已完成 change。
+确认是代码 bug 后，根据场景编号走对应路径。**场景标记不可跳过。**
 
-**[HARD STOP] 主分支保护：** 如果 Step 1 检测到当前在主分支（`main`/`master` 或用户配置的 `main_branch`）且无活跃 change，**禁止以任何理由直接修改代码**。任何在主分支上的直接 commit 都会污染主分支历史。必须先创建 hotfix 分支再修复。这是硬阻断，不存在例外。
+**[HARD STOP] 主分支保护：** 当前在主分支且无活跃 change → **禁止直接修改代码**。任何主分支上的 commit 都污染历史。必须先创建分支。一行和千行保护等级完全一样。
 
-> 什么算"在主分支上直接修"（反例）：
-> - 诊断完直接改代码，不创建分支——"反正就改一行"
-> - 说"先改了再挪到分支"——commit 已经污染了 main
-> - 用户说"就在 main 上修吧"——仍应明确拒绝并解释风险。一行和千行的保护等级完全一样
-> - "项目没有 alloy init 过的，不用管吧"——主分支保护是工程常识，与是否初始化 alloy 无关
-
-### 场景 1：有归属 change + worktree 存在
-
-**适用条件：** phase = `applied` 且 worktree 存在
+#### 场景 1：有归属 change + worktree 存在
 
 ```
 [Step 3/3] 修复 · worktree 内修复
-──────────────────────────────────────
-归属 change: <name>（phase: applied）
-Worktree: <path>
-在 worktree 内修复并提交
+归属 change: <name>（phase: applied）Worktree: <path>
 ```
 
-修复流程：
-1. 使用 Skill 工具加载 `superpowers:test-driven-development` 技能 —— 先写失败测试，再修代码
+1. 加载 `test-driven-development` → 写失败测试 → 修代码
+2. 加载 `verification-before-completion` → 验证修复
+3. 🔴 STOP: 确认修复内容（展示 `git diff --stat` 和关键变更摘要。确认提交 / 需要调整）
+4. 精确提交：`git add <路径> && git commit -m "fix: <描述>"`
 
-   **技能加载后立即记录：**
-   ```bash
-   alloy _skill log openspec/changes/<name> fix superpowers:test-driven-development
-   ```
+```bash
+alloy _skill log openspec/changes/<name> fix superpowers:test-driven-development
+alloy _skill log openspec/changes/<name> fix superpowers:verification-before-completion
+```
 
-2. 使用 Skill 工具加载 `superpowers:verification-before-completion` 技能 —— 验证修复
-
-   **技能加载后立即记录：**
-   ```bash
-   alloy _skill log openspec/changes/<name> fix superpowers:verification-before-completion
-   ```
-
-3. 精确提交到 worktree 分支：
-   ```bash
-   git add <精确路径>
-   git commit -m "fix: <描述>"
-   ```
-
-### 场景 2：有归属 change + worktree 已清理
-
-**适用条件：** phase = `applied`（worktree 已清理）或 phase = `planned`
+#### 场景 2：有归属 change + worktree 已清理
 
 ```
 [Step 3/3] 修复 · feature 分支修复
-──────────────────────────────────────
-归属 change: <name>（phase: <phase>）
-Feature 分支: <branch>
-在 feature 分支修复并提交
+归属 change: <name>（phase: <phase>）Feature 分支: <branch>
 ```
 
-修复流程：
-1. 使用 Skill 工具加载 `superpowers:test-driven-development` 技能
+1. 加载 `test-driven-development`
+2. 加载 `verification-before-completion`
+3. 🔴 STOP: 确认修复内容（展示 `git diff --stat` 和关键变更摘要。确认提交 / 需要调整）
+4. 精确提交到 feature 分支
 
-   **技能加载后立即记录：**
-   ```bash
-   alloy _skill log openspec/changes/<name> fix superpowers:test-driven-development
-   ```
+```bash
+alloy _skill log openspec/changes/<name> fix superpowers:test-driven-development
+alloy _skill log openspec/changes/<name> fix superpowers:verification-before-completion
+```
 
-2. 使用 Skill 工具加载 `superpowers:verification-before-completion` 技能
-
-   **技能加载后立即记录：**
-   ```bash
-   alloy _skill log openspec/changes/<name> fix superpowers:verification-before-completion
-   ```
-
-3. 精确提交到 feature 分支：
-   ```bash
-   git add <精确路径>
-   git commit -m "fix: <描述>"
-   ```
-
-### 场景 3：无归属 change / change 已 finish
-
-**适用条件：** 无活跃 change，或 phase = `archived` / `finished`
+#### 场景 3：无归属 change / change 已 finish
 
 ```
 [Step 3/3] 修复 · 热修分支
-──────────────────────────────────────
 无活跃归属 change，创建热修分支
 ```
 
-**确认主分支（阻塞点）：**
+**确认主分支（阻塞点）：** 🔴 STOP: 确认主分支。读取 `commands/alloy/references/main-branch-detection.md`，优先读 config，未配置时按 3 级优先级检测。确认后：`alloy _config write . main_branch <值>`
 
-读取 `commands/alloy/references/main-branch-detection.md`，检测/确认主分支。优先读 `openspec/config.yaml` 的 `main_branch` 配置，未配置时按 3 级优先级自动检测并让用户确认。
+创建热修分支：`git checkout -b hotfix/<desc> <MAIN_BRANCH>`
 
-使用 `AskUserQuestion` 展示并确认（非 Claude Code 平台降级为文本选项）：
+1. 加载 `test-driven-development`
+2. 加载 `verification-before-completion`
+3. 精确提交（可追溯原 change 时注明 `fix-from: <change名>`）
+4. 合并确认（阻塞点）：
 
-**Claude Code：**
-```
-AskUserQuestion: {
-  questions: [{
-    question: "确认主分支？",
-    header: "主分支",
-    options: [
-      { label: "(a) 确认", description: "<MAIN_BRANCH> 是主分支，写入配置并继续" },
-      { label: "(b) 手动指定", description: "输入正确的主分支名" }
-    ],
-    multiSelect: false
-  }]
-}
-```
+   > 确认合并：源 `hotfix/<desc>` → 目标 `<MAIN_BRANCH>`
+   > 输入 `merge hotfix/<desc> into <MAIN_BRANCH>` 确认，其他输入取消。
 
-**其他平台（降级为文本选项）：**
-```
-> → (a) 确认 — <MAIN_BRANCH> 是主分支，写入配置并继续
-> → (b) 手动指定 — 输入正确的主分支名
-> 请输入 a 或 b：
-```
+   **必须等待精确输入。** "好"、"可以"、"y"不算确认。
 
-确认后写入项目级配置：
-```bash
-alloy _config write . main_branch <确认的主分支名>
-```
-
-然后创建热修分支：
-
-```bash
-git checkout -b hotfix/<desc> <MAIN_BRANCH>
-```
-
-分支命名：`hotfix/` 前缀 + 简短描述（kebab-case），用户可修改。
-
-修复流程：
-1. 使用 Skill 工具加载 `superpowers:test-driven-development` 技能
-
-2. 使用 Skill 工具加载 `superpowers:verification-before-completion` 技能
-
-3. 精确提交。如果能追溯到原 change，在 commit message 中注明：
-   ```bash
-   git add <精确路径>
-   git commit -m "fix: <描述>
-
-fix-from: <原 change 名>"
-   ```
-   无法追溯时，普通提交即可：
-   ```bash
-   git add <精确路径>
-   git commit -m "fix: <描述>"
-   ```
-4. 确认合并并合并回主分支：
-
-   在执行 merge 之前，先展示合并信息并等待用户确认：
-
-   > 确认合并
-   > ──────────────────────────────────────
-   >
-   > 即将合并热修分支到主分支：
-   >
-   > 源分支：`hotfix/<desc>`
-   > 目标分支：`<MAIN_BRANCH>`
-   >
-   > 提交：
-   > ```
-   > <git log <MAIN_BRANCH>..hotfix/<desc> --oneline 的输出>
-   > ```
-   >
-   > 合并后 hotfix 分支将被删除。
-   >
-   > 输入 merge hotfix/<desc> into <MAIN_BRANCH> 确认，或输入其他内容取消。
-
-   **必须等待用户精确输入确认语句。** "好"、"可以"、"y" 都不算确认。
-
-   用户确认后执行合并：
+   确认后：
    ```bash
    git checkout <MAIN_BRANCH>
    git merge hotfix/<desc> --no-ff
    git branch -d hotfix/<desc>
    ```
-   用户取消则提示："取消合并。热修分支 hotfix/<desc> 保留，可后续手动合并。"
+   取消则保留分支，提示手动合并。
 
 ---
 
 ### spec 变更兜底
 
-修复过程中若发现 spec 问题（非根因但影响修复），不阻断当前修复。修复完成后提示：
+修复中发现 spec 问题 → 不阻断修复。完成后提示：
 
-> 修复过程中发现 spec 可能需要变更：<问题描述>
-> 是否需要运行 /alloy:start 开新 change 修正 spec？[Y/n]
+> 修复中发现 spec 可能需要变更：<问题描述>。🔴 STOP: 是否开新 change？
 
-正常修复完成（未发现 spec 问题）→ 不提示。
+正常修复完成 → 不提示。
 
 ---
 
@@ -360,9 +189,5 @@ fix-from: <原 change 名>"
 
 ```
 Alloy · Bug 修复 — DONE
-──────────────────────────────────────
-
-修复路径：<场景 1 / 场景 2 / 场景 3>
-诊断结论：<根因摘要>
-结果：<修复结果>
+修复路径：<场景 1/2/3>  诊断：<根因摘要>  结果：<修复结果>
 ```

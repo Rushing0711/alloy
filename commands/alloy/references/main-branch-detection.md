@@ -2,6 +2,8 @@
 
 start 和 fix 命令共享的主分支自动检测逻辑。
 
+**交互规则：** 确认点为 🔴 STOP——必须用 AskUserQuestion 等用户选择，不可自行决定。
+
 ## 检测优先级（3 级）
 
 ```bash
@@ -19,12 +21,7 @@ DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|
 
 ## 确认步骤
 
-检测到主分支后，必须让用户确认（Y/n）：
-```
-主分支: $DEFAULT_BRANCH。使用此分支作为基础分支？[Y/n]
-```
-
-选 Y 或直接回车 → 使用检测结果。选 n → 让用户输入自定义名称。
+检测到主分支后，🔴 STOP: 确认主分支（检测值 / 自定义名称）。
 
 确认后写入项目级配置：
 ```bash

@@ -1,8 +1,8 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, basename } from "node:path";
 import { execSync } from "node:child_process";
-import { readState, writeState } from "../../utils/state.js";
-import { computeArtifactHash } from "../../../core/artifacts.js";
+import { readState, writeState, readProjectConfig } from "../../utils/state.js";
+import { computeArtifactHash, ARTIFACT_FILES } from "../../../core/artifacts.js";
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
   started: ["planned"],
@@ -19,6 +19,22 @@ const ARTIFACT_CHECKS: Record<string, string[]> = {
 };
 
 export async function guardCommand(args: string[]): Promise<void> {
+  // 子命令路由
+  const subCommand = args[0];
+  if (subCommand === "branch-position") {
+    return branchPositionGuard(args.slice(1));
+  }
+  if (subCommand === "verify-passed") {
+    return verifyPassedGuard(args.slice(1));
+  }
+  if (subCommand === "precheck") {
+    return precheckGuard(args.slice(1));
+  }
+  if (subCommand === "worktree-status") {
+    return worktreeStatusGuard(args.slice(1));
+  }
+
+  // 原有 phase 转换校验逻辑
   const changeDir = args[0];
   const targetPhase = args[1];
   const apply = args.includes("--apply");
@@ -99,4 +115,213 @@ export async function guardCommand(args: string[]): Promise<void> {
     await writeState(changeDir, state);
     console.log(`✓ phase: ${currentPhase} → ${targetPhase}`);
   }
+}
+
+// --- 子命令实现 ---
+
+/** 获取当前 git 分支名 */
+function getCurrentBranch(): string | null {
+  try {
+    return execSync("git branch --show-current", { stdio: "pipe" }).toString().trim();
+  } catch {
+    return null;
+  }
+}
+
+/** 获取本地分支列表 */
+function getLocalBranches(): string[] {
+  try {
+    return execSync("git branch --list --format=%(refname:short)", { stdio: "pipe" })
+      .toString()
+      .trim()
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+/** 获取 main 分支名 */
+async function getMainBranch(): Promise<string | null> {
+  try {
+    const config = await readProjectConfig(process.cwd());
+    return config.alloy?.main_branch ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** 猜测主分支名（config 无记录时从本地分支推断） */
+async function guessMainBranch(): Promise<string | null> {
+  const candidates = ["main", "master"];
+  const localBranches = getLocalBranches();
+  for (const c of candidates) {
+    if (localBranches.includes(c)) return c;
+  }
+  return null;
+}
+
+/**
+ * alloy _guard branch-position <change-dir>
+ * 输出: on-feature|on-main|feature-missing|on-other:<current>|feature-lost:<feature>
+ * 退出码: 0=位置正确(on-feature), 1=位置不正确
+ */
+async function branchPositionGuard(args: string[]): Promise<void> {
+  const changeDir = args[0];
+  if (!changeDir) {
+    console.error("用法: alloy _guard branch-position <change-dir>");
+    return process.exit(1);
+  }
+
+  let state;
+  try {
+    state = await readState(changeDir);
+  } catch {
+    console.error(`无法读取状态: ${changeDir}`);
+    return process.exit(1);
+  }
+  const featureBranch = state.feature_branch ?? null;
+  const currentBranch = getCurrentBranch();
+  const mainBranch = await getMainBranch();
+
+  console.log(`current=${currentBranch}  main=${mainBranch}  feature=${featureBranch}`);
+
+  // mainBranch 未配置时，尝试常见默认值
+  const effectiveMain = mainBranch ?? (await guessMainBranch());
+
+  if (effectiveMain && currentBranch === effectiveMain) {
+    console.log("on-main");
+    return process.exit(1);
+  }
+
+  if (featureBranch === null) {
+    console.log("feature-missing");
+    return process.exit(1);
+  }
+
+  if (currentBranch === featureBranch) {
+    console.log("on-feature");
+    return; // exit(0)
+  }
+
+  const localBranches = getLocalBranches();
+  if (!localBranches.includes(featureBranch)) {
+    console.log(`feature-lost:${featureBranch}`);
+    return process.exit(1);
+  }
+
+  console.log(`on-other:${currentBranch}`);
+  return process.exit(1);
+}
+
+/**
+ * alloy _guard verify-passed <change-dir>
+ * 输出: PASS|FAIL|WARNING
+ * 退出码: 0=通过(PASS/WARNING), 1=不通过(FAIL)
+ */
+async function verifyPassedGuard(args: string[]): Promise<void> {
+  const changeDir = args[0];
+  if (!changeDir) {
+    console.error("用法: alloy _guard verify-passed <change-dir>");
+    return process.exit(1);
+  }
+
+  const verifyPath = join(changeDir, "verify.md");
+  if (!existsSync(verifyPath)) {
+    console.log("FAIL");
+    return process.exit(1);
+  }
+
+  try {
+    const content = readFileSync(verifyPath, "utf-8");
+    const failMatch = content.match(/^- \[x\].*(?:❌\s*)?FAIL/mi);
+    if (failMatch) {
+      console.log("FAIL");
+      return process.exit(1);
+    }
+
+    const warnMatch = content.match(/^- \[x\].*(?:⚠️\s*)?WARNING/mi);
+    if (warnMatch) {
+      console.log("WARNING");
+      return; // exit(0)
+    }
+
+    console.log("PASS");
+    return; // exit(0)
+  } catch {
+    console.log("FAIL");
+    return process.exit(1);
+  }
+}
+
+/**
+ * alloy _guard precheck <change-dir> <expected-phase>
+ * 输出: PASS:<phase>|FAIL:<reason>
+ * 退出码: 0=通过, 1=不通过
+ */
+async function precheckGuard(args: string[]): Promise<void> {
+  const changeDir = args[0];
+  const expectedPhase = args[1];
+
+  if (!changeDir || !expectedPhase) {
+    console.error("用法: alloy _guard precheck <change-dir> <expected-phase>");
+    return process.exit(1);
+  }
+
+  if (!existsSync(changeDir)) {
+    console.log(`FAIL:directory not found`);
+    return process.exit(1);
+  }
+
+  try {
+    const state = await readState(changeDir);
+    // 支持多阶段值（逗号分隔），如 "planned,applied"
+    const allowedPhases = expectedPhase.split(",").map((p) => p.trim());
+    if (allowedPhases.includes(state.phase)) {
+      console.log(`PASS:${state.phase}`);
+      return; // exit(0)
+    }
+    console.log(`FAIL:phase=${state.phase} expected=${expectedPhase}`);
+    return process.exit(1);
+  } catch {
+    console.log("FAIL:state read error");
+    return process.exit(1);
+  }
+}
+
+/**
+ * alloy _guard worktree-status <change-dir>
+ * 输出: done:<path>:<branch>|stale:<path>|skipped|pending
+ * 退出码: 始终 0（查询命令）
+ */
+async function worktreeStatusGuard(args: string[]): Promise<void> {
+  const changeDir = args[0];
+  if (!changeDir) {
+    console.error("用法: alloy _guard worktree-status <change-dir>");
+    return process.exit(1);
+  }
+
+  const state = await readState(changeDir);
+  const worktree = state.worktree;
+
+  if (worktree === null || worktree === "null") {
+    console.log("pending");
+    return; // exit(0)
+  }
+
+  if (worktree === "skipped") {
+    console.log("skipped");
+    return; // exit(0)
+  }
+
+  // 有效路径
+  if (existsSync(worktree)) {
+    const branch = state.worktree_branch ?? "unknown";
+    console.log(`done:${worktree}:${branch}`);
+    return; // exit(0)
+  }
+
+  console.log(`stale:${worktree}`);
+  return; // exit(0)
 }

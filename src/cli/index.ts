@@ -14,6 +14,9 @@ import { guardCommand } from "./commands/internal/guard.js";
 
 import { recordCommand } from "./commands/internal/record.js";
 import { skillUsageCommand } from "./commands/internal/skill-usage.js";
+import { progressCommand } from "./commands/internal/progress.js";
+import { artifactCommand } from "./commands/internal/artifact.js";
+import { specAuditCommand } from "./commands/internal/spec-audit.js";
 
 const USAGE = `
 alloy <command> [options]
@@ -98,6 +101,21 @@ alloy completion [shell] [options]
   alloy completion --install              # 自动安装（推荐）
   source <(alloy completion zsh)          # 临时启用 zsh 补全
   source <(alloy completion bash)         # 临时启用 bash 补全
+`;
+    case "_spec-audit":
+      return `
+alloy _spec-audit [选项]
+
+检测 skill 文件与 spec 文件的 behaviors frontmatter 差异。
+对账方向：skill → spec（skill 是真相源）
+
+选项:
+  --fix       交互式修复：逐条确认后用 skill 的值更新 spec frontmatter
+  --help, -h  显示本帮助
+
+退出码:
+  0  全部一致（或 --fix 修复后全部对齐）
+  1  存在不一致
 `;
     default:
       return `未知命令: ${cmd}\n使用 alloy --help 查看可用命令。`;
@@ -344,6 +362,18 @@ async function main() {
     }
     case "_record": {
       await recordCommand(restArgs);
+      break;
+    }
+    case "_progress": {
+      await progressCommand(restArgs);
+      break;
+    }
+    case "_artifact": {
+      await artifactCommand(restArgs);
+      break;
+    }
+    case "_spec-audit": {
+      await specAuditCommand(restArgs);
       break;
     }
     default:

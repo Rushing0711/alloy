@@ -13,13 +13,13 @@
 
 按文件类型执行对应的前置检查，**读完即执行，不可跳过**：
 
-| 要修改的文件 | 先读 | 分支规则 |
-|-------------|------|---------|
-| `commands/alloy/*.md`（Skill 文件） | `docs/reference/skill-writing-guide.md` | 默认问分支。用户说"直接改"、纯读取、测试验证时不触发 |
-| `openspec/schemas/`（Schema） | — | 同上 |
-| `src/`（TypeScript 源码） | — | 同上 |
-| `docs/specification/`（产品规格） | — | 同上 |
-| `docs/handbook.md`（开发手册） | — | 同上 |
+| 要修改的文件 | 先读 | 分支规则 | 对账 |
+|-------------|------|---------|------|
+| `commands/alloy/*.md`（Skill 文件） | `docs/reference/skill-writing-guide.md` | 默认问分支。用户说"直接改"、纯读取、测试验证时不触发 | 提醒同步 spec |
+| `openspec/schemas/`（Schema） | — | 同上 | — |
+| `src/`（TypeScript 源码） | — | 同上 | 提醒同步 08-cli-spec.md |
+| `docs/specification/`（产品规格） | — | 同上 | — |
+| `docs/handbook.md`（开发手册） | — | 同上 | — |
 
 > **ignore目录：** `docs/superpowers/` 是开发过程产物（53 个 design spec + plan 的历史快照），已不维护。不要读取、不要参考、不要在"文档对齐代码"时检查。真相源是 `docs/specification/`。
 
