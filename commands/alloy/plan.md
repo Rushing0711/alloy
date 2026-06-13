@@ -6,8 +6,8 @@ tags: [alloy, workflow]
 spec: 01-product-spec/02-plan-spec.md
 behaviors:
   preconditions: 7
-  hard_stops:    8
-  user_gates:    5
+  hard_stops:    10
+  user_gates:    7
   warns:         1
   artifacts: [proposal, design, specs, tasks, plans]
   transitions_to: planned
@@ -21,12 +21,12 @@ behaviors:
 ```
 [HARD_STOP] NO DIRECT EDITING OF GENERATED ARTIFACTS + NO SKIP REVIEW WINDOW
 5 个制品 = 5 个审查窗口；已生成制品禁止直接编辑，必须重新生成
-违反字面 = 违反精神：哪怕"只改一个错别字直接编辑"或"已经看过 draft 后面跳过审查"，也算违反 Iron Law
+违反字面 = 违反精神：哪怕"只改一个错别字直接编辑"、"已经看过 draft 后面跳过审查"、或用户主动说"后面不用看了一次性过"，也算违反 Iron Law。审查窗口不可跳过——用户要求跳过不算授权。
 ```
 
 **核心原则：按 schema DAG 依赖顺序逐一产出制品，每步有审查闸门，不跳过上游直接产下游。** 5 制品（proposal/design/specs/tasks/plans）以 hash-lock + 单独 commit 入 records，禁直接编辑，禁互相替代。
 
-**交互规则：** `🔴 STOP` 等价 `USER_GATE`，必须用 `AskUserQuestion`（`commands/alloy/references/interaction-style.md`）。跳过任何 USER_GATE = 违反 Iron Law。
+**交互规则：** `🔴 STOP` 等价 `USER_GATE`，必须用 `AskUserQuestion`（`commands/alloy/references/interaction-style.md`，含"沉默 ≠ 授权"通用禁令——禁批量打包、禁基于内容跳过、禁 agent 回填精确字符串）。跳过任何 USER_GATE = 违反 Iron Law。
 
 **状态符号：** `⛔` = HARD_STOP / PRECONDITION_FAIL，`🔴` = USER_GATE，`⚠️` = WARN（视觉规范 §七）。
 
@@ -45,7 +45,7 @@ PHASE_START=$(alloy _state timestamp ensure openspec/changes/<name> plan)
 |------|------|
 | "一次性生成全部制品，提高效率" | ⛔ HARD_STOP：5 个制品 = 5 个审查窗口，禁 agent 一次性生成。跳过审查 = 跳过需求验证，后期返工代价远大于审查时间（Iron Law 第一层）。 |
 | "太慢了，直接出全部吧" | 审查时间远小于后期返工。未审查的 specs 缺陷到 apply 才发现 = 重做全部代码。 |
-| "我看过 draft 了，后面的不用看了" | draft 是方案设计，proposal 是提案范围，design 是技术方案，specs 是行为契约——四个层面不可互相替代（⛔ HARD_STOP）。 |
+| "我看过 draft 了，后面的不用看了" | draft 是方案设计，proposal 是提案范围，design 是技术方案，specs 是行为契约——四个层面不可互相替代（⛔ HARD_STOP）。即使用户主动说"后面不用看了"，审查窗口也不可跳过。 |
 | "只是改个错别字，直接编辑文件吧" | 已生成制品禁止直接编辑——哪怕错别字也必须重新生成（违反字面 = 违反精神）。 |
 | "用户要加功能，我重置 proposal 重新生成就行" | 功能变更必须回溯清理所有下游制品——重置单个制品 = 上下游需求不一致。`alloy _artifact reset` 仅限措辞/格式修正。 |
 | "需求变更了，直接回溯清理吧" | 回溯是不可逆删除——必须让用户看到两条路径后主动选择 + 已自动打 snapshot tag（task #15）。 |
@@ -148,6 +148,8 @@ alloy _progress artifacts openspec/changes/<name>
 
 ### 逐个制品审查流程
 
+**[HARD_STOP] 即使用户主动说"后面不用看了"、"一次性过完"、"效率太低了"，审查窗口也不可跳过。** 5 个制品 = 5 个审查窗口——用户要求跳过不算授权。
+
 每个制品生成后，展示完整内容 + 🔴 USER_GATE 审查窗口：
 
 > 制品 [N/5] \<artifact\> ✓ 完成
@@ -184,11 +186,32 @@ alloy _progress artifacts openspec/changes/<name>
     选 (a)：执行回溯清理（详见 `commands/alloy/references/plan-rollback.md`），然后加载 `superpowers:brainstorming` 重新讨论。**此类场景禁止使用 `alloy _artifact reset`。**
     选 (b)：回到审查窗口，重新展示制品内容。
 
-  - **轻量修正**（措辞/格式，不改变功能边界）→ 🔴 USER_GATE：确认走轻量修正路径（仅限用户明确说"措辞/格式调整"）。确认后：`alloy _artifact reset openspec/changes/<name> <artifact>` → `/opsx:continue` 重新生成 → 重新审查。下游已锁定制品保持不变。
+  - **轻量修正**（措辞/格式，不改变功能边界）→ 🔴 USER_GATE：确认走轻量修正路径（仅限用户明确说"措辞/格式调整"）。确认后：`alloy _artifact reset openspec/changes/<name> <artifact>` → `/opsx:continue` 重新生成 → **diff 审查窗口（见下方"轻量修正 diff USER_GATE"）** → 重新审查。下游已锁定制品保持不变。
 
   **判断规则：** 用户主动提出"加入/删除/修改功能"= 需求变更，直接回溯，不问路径。只有用户明确说"措辞/格式调整"才走轻量修正（且需 🔴 USER_GATE 确认）。不确定时默认需求变更。
 
   **无论哪条路径，都不直接编辑已生成的制品文件**（违反字面 = 违反精神：制品禁直接编辑）。
+
+**轻量修正 diff USER_GATE（HARD_STOP，task L3）：** reset + 重新生成后、重新审查前，必须采集 diff 并让用户物理确认——agent 不得基于 `/opsx:continue` 返回成功直接进入审查窗口。
+
+```bash
+# 重新生成后，先 diff 再审查
+DIFF_OLD=$(git show HEAD:"openspec/changes/<name>/<artifact>.md" 2>/dev/null)
+DIFF_NEW=$(cat "openspec/changes/<name>/<artifact>.md" 2>/dev/null)
+```
+
+🔴 USER_GATE（必须 AskUserQuestion）：
+
+> 轻量修正 diff：
+> ```
+> [git diff HEAD -- openspec/changes/<name>/<artifact>.md | head -100]
+> ```
+> 确认变更仅涉及措辞/格式（不改变功能边界）：
+> (a) 确认——仅措辞/格式，继续锁 hash
+> (b) 发现功能变更——放弃轻量修正，回到需求变更路径重新分类
+> (c) 放弃调整——回退到 reset 前状态（`git checkout HEAD -- openspec/changes/<name>/<artifact>.md`）
+
+**[HARD_STOP]** agent 不得基于 "diff 看起来没改功能" 自动选 (a)——必须用户物理选择（interaction-style.md "沉默 ≠ 授权"）。diff 必须截前 100 行防爆量，但禁 agent 基于 "diff 短" 跳过调用。（违反字面 = 违反精神：制品禁直接编辑）。
 
 **审查窗口只展示制品内容，不打印 schema instructions 模板。**
 
@@ -235,12 +258,49 @@ alloy _state read openspec/changes/<name> records
 → 制品: draft ✓ proposal ✓ design ✓ specs ✓ tasks ✓ plans ✓
 ```
 
+**hash 链尾扫（⛔ HARD_STOP，task L2）：** 在 phase 推进前对全部 6 个制品（draft + proposal + design + specs + tasks + plans）逐条执行 `alloy _record check`——这是 phase 锁定前最后一次完整性校验，任何 hash 不匹配都必须暴露给用户。
+
+```bash
+ALL_PASS=true
+for ARTIFACT in draft proposal design specs tasks plans; do
+  if [ ! -f "openspec/changes/<name>/${ARTIFACT}.md" ]; then
+    echo "  ✗ $ARTIFACT: 文件缺失"
+    ALL_PASS=false
+  elif alloy _record check "openspec/changes/<name>" "$ARTIFACT" 2>/dev/null; then
+    echo "  ✓ $ARTIFACT: hash 一致"
+  else
+    echo "  ✗ $ARTIFACT: hash 不匹配"
+    ALL_PASS=false
+  fi
+done
+
+echo "---"
+if [ "$ALL_PASS" = "true" ]; then
+  echo "✓ 全部 6 个制品 hash 链完整"
+else
+  echo "⛔ HARD_STOP: hash 链断裂，禁止推进 phase"
+  echo "  制品文件被编辑后 hash 重算可能在单制品审查中漏过，"
+  echo "  尾扫是最后一道防线——必须逐条检查全部制品。"
+  echo ""
+  echo "  禁止：agent 自动补 _record write 修复 hash——"
+  echo "  必须 🔴 USER_GATE 让用户选择处理路径。"
+  exit 1
+fi
+```
+
+`$ALL_PASS` = false → ⛔ HARD_STOP，🔴 USER_GATE：
+- (a) 回溯到对应制品重新审查（显示哪个制品 hash 不匹配，让用户决定回退到哪个制品重新生成）
+- (b) 显示 git log 让用户排查（`git log --oneline openspec/changes/<name>/`）
+- (c) 中止 plan 阶段退出 skill
+
+**[HARD_STOP]** agent 不得基于 "_guard 也会校验" 跳过尾扫——_guard 校验与尾扫是独立防线，尾扫逐条命名文件确保"全量 6/6"，_guard 内部实现可能只校验 records 中存在的条目（文件存但 records 不存的 tainted artifact 会漏掉）。
+
 **通过 `alloy _guard` 校验并更新 phase：**
 ```bash
 alloy _guard openspec/changes/<name> planned --apply
 ```
 
-guard 校验 hash 一致性后推进 phase。返回非零时检查缺哪个制品或 hash 不匹配。
+`_guard` 校验 hash 一致性后推进 phase。返回非零时检查缺哪个制品或 hash 不匹配。
 
 **§5.2.3 路径 B 降级（HARD_STOP）：** 如果 guard --apply 推进 phase 成功，但后续命令意外失败（不可恢复状态），**禁 agent 运行 `git reset --hard` / `git checkout .` 清场**。降级路径：
 
@@ -259,98 +319,3 @@ alloy _state set openspec/changes/<name> phase started
 准备好后，运行 /alloy:apply 进入执行阶段。
 ```
 
----
-
-## 流程图（dot）
-
-```dot
-digraph plan {
-  rankdir=TB;
-  node [fontname="Helvetica"];
-
-  start [label="/alloy:plan <name>", shape=doublecircle];
-
-  // Step 0 前置检查（5 PRECONDITION_FAIL + 1 USER_GATE + 1 WARN）
-  pre_change [label="change + draft.md 存在?", shape=diamond];
-  pre_change_fail [label="⛔ PRECONDITION_FAIL\n→ /alloy:start", shape=octagon, color=red];
-  pre_phase [label="phase == started?", shape=diamond];
-  pre_phase_fail [label="⛔ PRECONDITION_FAIL\n→ phase-routing", shape=octagon, color=red];
-  pre_git [label="git repo?", shape=diamond];
-  pre_git_fail [label="⛔ PRECONDITION_FAIL", shape=octagon, color=red];
-  pre_skill [label="opsx:continue + writing-plans?", shape=diamond];
-  pre_skill_fail [label="⛔ PRECONDITION_FAIL\n→ alloy init", shape=octagon, color=red];
-  pre_drafthash [label="draft hash 一致?\n(_record check, task #16)", shape=diamond];
-  pre_drafthash_gate [label="🔴 USER_GATE\n回溯/强制继续", shape=invhouse, color=blue];
-  pre_parallel [label="多 change 并行?", shape=diamond];
-  pre_warn [label="⚠️ WARN 串行", shape=parallelogram];
-
-  // Step 1 确认 change（路由）
-  s1 [label="phase 路由确认", shape=box];
-
-  // Step 2 制品生成循环
-  s2_scan [label="alloy _progress artifacts\n找第一个缺失", shape=box];
-  s2_done [label="全 5 制品 done?", shape=diamond];
-  s2_continue [label="/opsx:continue\n生成下一制品", shape=box];
-  s2_review [label="🔴 USER_GATE\n制品审查窗口\n(运行时 5 次)", shape=invhouse, color=blue];
-  s2_branch [label="用户决策", shape=diamond];
-  s2_classify [label="🔴 USER_GATE\n分类: 需求变更 vs 轻量修正\n⛔ HARD_STOP: 分类不清前禁 reset", shape=invhouse, color=blue];
-  s2_demand [label="🔴 USER_GATE\n需求变更路径选择\n(snapshot tag 已打, task #15)", shape=invhouse, color=blue];
-  s2_rollback [label="plan-rollback.md\n打 tag + rm 制品 + 清 records", shape=box];
-  s2_brainstorm [label="brainstorming 重讨论", shape=box];
-  s2_light [label="alloy _artifact reset\n+ /opsx:continue 重生成", shape=box];
-  s2_lock [label="hash-lock + commit\n§5.2.1 git add 限路径", shape=box];
-  s2_upstream [label="上游 hash 校验", shape=diamond];
-  s2_upstream_fail [label="⛔ PRECONDITION_FAIL\n上游被破坏", shape=octagon, color=red];
-
-  // tasks 后 → writing-plans
-  s2_writing [label="superpowers:writing-plans\nplans.md (strategy + reason)", shape=box];
-  s2_advance_gate [label="🔴 USER_GATE\n推进 phase 确认", shape=invhouse, color=blue];
-
-  // Step 3 完成
-  phase [label="alloy _guard planned --apply\n(§5.2.3 路径 B 降级)", shape=box];
-  done [label="Phase: planned\n→ /alloy:apply", shape=doublecircle];
-  exit_rollback [label="退出 skill\n→ /alloy:start <name>\n或 brainstorming 重讨论", shape=doublecircle];
-
-  // 边
-  start -> pre_change;
-  pre_change -> pre_change_fail [label="否"];
-  pre_change -> pre_phase [label="是"];
-  pre_phase -> pre_phase_fail [label="否"];
-  pre_phase -> pre_git [label="是"];
-  pre_git -> pre_git_fail [label="否"];
-  pre_git -> pre_skill [label="是"];
-  pre_skill -> pre_skill_fail [label="否"];
-  pre_skill -> pre_drafthash [label="是"];
-  pre_drafthash -> pre_drafthash_gate [label="否"];
-  pre_drafthash -> pre_parallel [label="是"];
-  pre_drafthash_gate -> pre_parallel [label="(b) 强制继续"];
-  pre_drafthash_gate -> exit_rollback [label="(a) 回溯"];
-  pre_parallel -> pre_warn [label="是"];
-  pre_parallel -> s1 [label="否"];
-  pre_warn -> s1;
-
-  s1 -> s2_scan;
-  s2_scan -> s2_done;
-  s2_done -> s2_advance_gate [label="是"];
-  s2_done -> s2_continue [label="否"];
-  s2_continue -> s2_upstream;
-  s2_upstream -> s2_upstream_fail [label="失败"];
-  s2_upstream -> s2_review [label="通过"];
-  s2_review -> s2_branch;
-  s2_branch -> s2_lock [label="(a) 确认"];
-  s2_branch -> s2_classify [label="(b) 修改"];
-  s2_classify -> s2_demand [label="需求变更"];
-  s2_classify -> s2_light [label="轻量修正"];
-  s2_demand -> s2_rollback [label="(a) 回溯"];
-  s2_demand -> s2_review [label="(b) 取消"];
-  s2_rollback -> s2_brainstorm;
-  s2_brainstorm -> exit_rollback [label="重新讨论"];
-  s2_light -> s2_review;
-  s2_lock -> s2_done;
-
-  s2_advance_gate -> s2_writing [label="确认 (tasks done)"];
-  s2_advance_gate -> s2_review [label="重审某制品"];
-  s2_writing -> phase;
-  phase -> done;
-}
-```

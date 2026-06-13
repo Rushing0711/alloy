@@ -26,7 +26,7 @@ behaviors:
 
 **核心原则：先 TDD 再代码，先验证再复盘。** 所有阶段制品（verify / retrospective）以 hash-lock + 单独 commit 入 records，禁直接编辑。
 
-**交互规则：** `🔴 STOP` 等价 `USER_GATE`，必须用 `AskUserQuestion`（`commands/alloy/references/interaction-style.md`）。跳过任何 USER_GATE = 违反 Iron Law。
+**交互规则：** `🔴 STOP` 等价 `USER_GATE`，必须用 `AskUserQuestion`（`commands/alloy/references/interaction-style.md`，含"沉默 ≠ 授权"通用禁令——禁批量打包、禁基于 diff 短/无 conflict 跳过、禁 agent 回填精确字符串）。跳过任何 USER_GATE = 违反 Iron Law。
 
 **状态符号：** `⛔` = HARD_STOP / PRECONDITION_FAIL，`🔴` = USER_GATE，`⚠️` = WARN（视觉规范 §七）。
 
@@ -41,20 +41,15 @@ PHASE_START=$(alloy _state timestamp ensure openspec/changes/<name> apply)
 
 ### Red Flags（第三层防御——任一借口出现即 STOP）
 
+主文件保留 5 条核心借口，完整 12 条见 `commands/alloy/references/apply-rationalizations.md`。
+
 | 借口 | 现实 |
 |------|------|
-| "用户说了跳过 worktree" | 隔离是软闸门——`/alloy:apply` 允许 worktree=skipped；但模糊回复（"嗯"/"好"）不算同意，必须 USER_GATE 明确选择。 |
 | "先写代码再补测试" | TDD 次序不可颠倒。提速靠并行子任务，不靠砍测试（Iron Law 第一层）。 |
 | "用户要改需求，直接改" | 需求变更必须走 tasks.md checkbox 闸门。已编码→开新 change，未编码→回溯，禁直接改 plans.md。 |
-| "技能缺失没关系" | 技能是闸门不是加速器。缺失 = ⛔ PRECONDITION_FAIL。引导 `alloy init`，不存在降级。 |
-| "用户很急，跳过 review" | 跳过 review = 跳过质量闸门。急不是绕过流程的理由（Iron Law 第二层）。 |
-| "先建 worktree 再问用户" | consent 必须在创建前。加载 using-git-worktrees Step 0 后停手，等用户明确回复。 |
 | "verify.md 措辞不太顺，直接编辑改一下" | 制品禁直接编辑——任何变更必须重新生成 + 重新 hash-lock。违反字面 = 违反精神。 |
 | "verify FAIL 是小问题，retro 写'已知 FAIL'继续" | FAIL 必须修复回到 Step 2。带 FAIL 进 archive 阶段 = spec 与代码偏差永久封存。 |
 | "single-commit 修复不需要 retrospective，自动跳过" | retrospective 跳过判定必须 USER_GATE，agent 不得自动选"跳过"（task #17）。 |
-| "worktree 内分支看起来对，应该没问题吧" | worktree-<name> 是硬约束。子 agent 在错误分支编辑 = 用户主分支被污染（task #18）。 |
-| "git stash list 有内容，但这是之前的不影响 commit" | stash 残留 = 未完成工作。commit 前必须 ⚠️ WARN 让用户确认（task #19）。 |
-| "另一个 change 也在 apply，并行做完更快" | apply 单 change 串行（subagent 内部并行 OK）。多 change 同时 apply = git 操作竞争。 |
 
 ## 前置检查
 
@@ -91,21 +86,7 @@ git rev-parse --git-dir
 
 **5. 多 change 并行 apply 检测（WARN，task #14）：** apply 单 change 串行（subagent 内部并行 OK）——同期多个 change 同时 apply 会导致 git 操作竞争（branch 切换、worktree 创建、commit 写入相互干扰）。
 
-```bash
-PARALLEL=$(find openspec/changes -maxdepth 2 -name .alloy.yaml \
-  -exec grep -l "phase: apply\|phase: applied" {} \; 2>/dev/null \
-  | grep -v "/<name>/" | wc -l)
-if [ "$PARALLEL" -gt 0 ]; then
-  echo "⚠️ [WARN] 检测到 $PARALLEL 个其他 change 处于 apply/applied 状态："
-  find openspec/changes -maxdepth 2 -name .alloy.yaml \
-    -exec grep -l "phase: apply\|phase: applied" {} \; 2>/dev/null | grep -v "/<name>/"
-  echo ""
-  echo "  apply 串行更安全——多 change 并行 apply = worktree/branch/commit 竞争。"
-  echo "  继续当前 apply 前请确认其他 change 已暂停。"
-fi
-```
-
-不阻断——仅提示。
+读取 `commands/alloy/references/apply-precheck.md` 执行检测。WARN 不阻断——仅提示。
 
 提交前置状态（worktree 创建前确保 .alloy.yaml 变更已落地）：
 ```bash
@@ -190,68 +171,12 @@ alloy _skill log openspec/changes/<name> apply superpowers:using-git-worktrees
 
 **用户选择创建：** 手动创建确保正确 base ref。
 
-**路径占用检查（⛔ PRECONDITION_FAIL，task #10）：** `git worktree add` 在目标路径已存在时会失败；agent 不得用 `git worktree remove --force` 或 `rm -rf` 自动清理——目标路径可能是用户之前未归档的工作（被 alloy 早期版本遗留 / 用户手动创建 / 同名 change 重启）。
+**路径占用检查 + 创建后状态记录 + worktree 内分支锁定**：读取 `commands/alloy/references/apply-worktree.md`：
 
-```bash
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-TARGET_PATH="$REPO_ROOT/.claude/worktrees/<name>"
-TARGET_BRANCH="worktree-<name>"
-
-if [ -e "$TARGET_PATH" ] || git worktree list --porcelain | grep -qF "worktree $TARGET_PATH"; then
-  echo "⛔ [PRECONDITION_FAIL] worktree 目标路径已被占用："
-  echo "  路径: $TARGET_PATH"
-  echo "  目录存在: $([ -e "$TARGET_PATH" ] && echo 是 || echo 否)"
-  echo "  已注册为 git worktree: $(git worktree list --porcelain | grep -qF "worktree $TARGET_PATH" && echo 是 || echo 否)"
-  echo ""
-  echo "  禁止：agent 自动运行 git worktree remove --force / rm -rf $TARGET_PATH /"
-  echo "        git worktree prune 强行清理。这些路径可能是用户之前未归档的工作。"
-  echo "  违反字面 = 违反精神：哪怕看似\"覆盖一下让 apply 继续\"，也算违反禁令——"
-  echo "  必须 USER_GATE 让用户决策。"
-fi
-```
-
-路径已占用 → **🔴 USER_GATE（必须 AskUserQuestion）：**
-
-> 目标路径 `.claude/worktrees/<name>` 已被占用。
-> 选项：
-> (a) 复用现有 worktree——直接 `EnterWorktree(path=...)` 进入，跳过创建（要求该路径已是有效 git worktree 且分支为 `worktree-<name>`，否则降级到 (b)）
-> (b) 重命名当前 change——退出 skill，让用户用 `/alloy:start <new-name>` 重新发起，或手动重命名 change 目录
-> (c) 中止 apply——`alloy _state write openspec/changes/<name> worktree blocked` 后退出，待用户清理后重新运行
-
-- 选 (a)：检测分支匹配后 `EnterWorktree(path=".claude/worktrees/<name>")`，跳到"创建后状态记录"
-- 选 (b)：退出 skill 并提示用户重命名后重跑
-- 选 (c)：写入 worktree=blocked 后退出 skill
-
-路径未占用 → 执行创建：
-
-```bash
-git worktree add .claude/worktrees/<name> -b worktree-<name> <feature_branch>
-```
-
-再用 `EnterWorktree(path=".claude/worktrees/<name>")` 进入。路径偏好 `.claude/worktrees/<name>`（`.claude/` 是 alloy 固定目录），分支命名 `worktree-<name>`（与 EnterWorktree 内置一致，archive 清理时无需猜测）。
-
-创建后状态记录（详见 `commands/alloy/references/apply-worktree.md`）：
-快速版：检测 worktree 实际位置 → 写入 worktree/worktree_branch/worktree_created_at → commit 确保断点恢复
-
-**Worktree 内分支锁定（⛔ PRECONDITION_FAIL，task #18）：**
-
-进入 worktree 后必须验证当前分支与状态记录一致——子 agent 后续在错误分支编辑 = 用户主分支被污染。
-
-```bash
-WORKTREE_PATH=$(alloy _state read openspec/changes/<name> worktree)
-EXPECTED_BRANCH="worktree-<name>"
-
-if [ "$WORKTREE_PATH" != "skipped" ] && [ "$WORKTREE_PATH" != "blocked" ] && [ -d "$WORKTREE_PATH" ]; then
-  ACTUAL_BRANCH=$(git -C "$WORKTREE_PATH" rev-parse --abbrev-ref HEAD 2>/dev/null)
-  if [ "$ACTUAL_BRANCH" != "$EXPECTED_BRANCH" ]; then
-    echo "⛔ [PRECONDITION_FAIL] worktree 内分支 ($ACTUAL_BRANCH) 与预期 ($EXPECTED_BRANCH) 不一致"
-    echo "  可能原因：用户在 worktree 内手动切换了分支 / 旧 worktree 残留 / 复用 (a) 进入了错误 worktree"
-    echo "  禁止：agent 自动 git checkout 切换分支——可能丢弃用户未提交的工作（§3.5.1）。"
-    echo "  必须：USER_GATE 让用户决策修复方式（手动切回 / 退出 skill 重建 worktree / 复用前确认分支）。"
-    exit 1
-  fi
-fi
-```
+- 路径占用 → ⛔ PRECONDITION_FAIL + 🔴 USER_GATE（复用 / 重命名 / 中止）。**禁 agent 自动 `rm -rf` 或 `git worktree remove --force` 清场（§3.5.1）。**
+- 路径未占用 → `git worktree add` 创建并 `EnterWorktree` 进入
+- 创建后写入 worktree / worktree_branch / worktree_created_at 三字段并 commit（断点恢复）
+- 进入后校验 HEAD == `worktree-<name>`（task #18）；不一致 ⛔ PRECONDITION_FAIL，**禁 agent 自动 git checkout 切换。**
 
 **Step 1/5 完成：**
 ```
@@ -306,47 +231,11 @@ alloy _skill log openspec/changes/<name> apply superpowers:requesting-code-revie
 
 #### Step 2/5 子 agent commit 通用规则（SDD/EP 共享）
 
-每个子 agent 任务的 commit 必须满足以下三条硬规则——任一违反即拒绝合入：
+每个子 agent 任务的 commit 必须满足以下三条硬规则——任一违反即拒绝合入。读取 `commands/alloy/references/apply-subagent-commit.md` 获取完整 bash 与措辞，要点：
 
-**1. 分支再校验（⛔ PRECONDITION_FAIL，task #18）：** 子 agent 任务开始时再次校验当前分支 = `worktree-<name>`，防 subagent 中途被 `git checkout` 切换：
-
-```bash
-EXPECTED_BRANCH="worktree-<name>"
-ACTUAL_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-if [ "$ACTUAL_BRANCH" != "$EXPECTED_BRANCH" ] && [ "$(alloy _state read openspec/changes/<name> worktree)" != "skipped" ]; then
-  echo "⛔ [PRECONDITION_FAIL] 子 agent 当前分支 ($ACTUAL_BRANCH) ≠ 预期 ($EXPECTED_BRANCH)"
-  echo "  禁止：agent 自动 git checkout 切回 worktree-<name>。"
-  echo "  必须：退出子 agent 让用户检查，可能上一个子 agent 切换了分支或 worktree 失效。"
-  exit 1
-fi
-```
-
-**2. git add 规则（⛔ HARD_STOP，§5.2.1）：** 只用精确路径，不用 `-A`/`-a`/`.`。违反字面 = 违反精神：哪怕"反正只有这一个文件"，也禁止 `-A`——agent 看不到的副作用文件可能被一并提交。commit 前检查 untracked 文件：
-
-- 构建产物（`.vite/`、`dist/`、`node_modules/` 等）追加 `.gitignore`
-- 项目源码按精准路径 add（如 `git add src/foo.ts tests/foo.test.ts`）
-- 判断不准时 🔴 USER_GATE 询问用户
-
-```bash
-# 反例（禁用）：git add -A / git add . / git add -a
-# 正例：git add <精确路径列表>
-git add src/<具体文件>.ts tests/<具体测试>.test.ts
-```
-
-**3. stash 残留检查（⚠️ WARN，task #19）：** commit 前必须运行：
-
-```bash
-if [ -n "$(git stash list)" ]; then
-  echo "⚠️ [WARN] 检测到 stash 残留："
-  git stash list
-  echo ""
-  echo "  stash 残留可能是用户之前未完成的工作。继续 commit 不会丢失 stash，"
-  echo "  但用户可能需要先 git stash pop 或 drop。"
-  echo "  禁止：agent 自动 git stash drop / git stash clear（§3.5.1）。"
-fi
-```
-
-WARN 不阻断 commit，但提醒 agent 在 commit 完成后向用户播报 stash 列表，让用户决定后续处理。
+1. **分支再校验**（⛔ PRECONDITION_FAIL，task #18）—— `git rev-parse --abbrev-ref HEAD` ≠ `worktree-<name>` 时退出，禁 agent 自动 `git checkout` 切回。
+2. **git add 限路径**（⛔ HARD_STOP §5.2.1）—— 精确路径，禁 `-A`/`-a`/`.`。违反字面 = 违反精神：哪怕"反正只有这一个文件"也禁 `-A`，副作用文件会被一并 commit。判断不准 🔴 USER_GATE。
+3. **stash 残留检查**（⚠️ WARN，task #19）—— commit 前 `git stash list`，非空播报让用户决策，禁 agent 自动 `git stash drop`（§3.5.1）。
 
 ### [Step 3/5] 代码层验证
 
@@ -516,14 +405,9 @@ git commit -m "docs(<name>): retrospective 已确认"
 
 **通过 `alloy _guard` 校验并推进 phase（⛔ HARD_STOP §5.2.3 路径 B 降级）：**
 
+降级路径详见 `commands/alloy/references/phase-downgrade-path.md`（apply 阶段降级 → `planned`）。**禁止 agent 自动 `git reset --hard` / `git checkout .` 清场（§3.5.1）。** 违反字面 = 违反精神：哪怕"清理一下让流程重启"也算违反——退出 skill 让用户决策是唯一合法路径。
+
 ```bash
-# §5.2.3 路径 B：phase 推进保持在前，但记录降级路径——
-# 若推进后续 archive/finish 阶段失败 → 用户须手动按以下 3 步回退：
-#   alloy _state set openspec/changes/<name> phase planned
-#   git checkout HEAD~1 -- openspec/changes/<name>/.alloy.yaml  # 撤销 phase commit 中的状态变更
-#   git reset HEAD~1                                            # 退回 phase commit
-# 禁止 agent 自动 git reset --hard / git checkout . 清场（详见 §3.5.1）。
-# 违反字面 = 违反精神：哪怕"清理一下让流程重启"，也算违反禁令——退出 skill 让用户决策是唯一合法路径。
 alloy _guard openspec/changes/<name> applied --apply
 # §5.2.1 git add 限路径，禁 -A
 git add openspec/changes/<name>/.alloy.yaml
@@ -535,136 +419,4 @@ git commit -m "chore(<name>): phase → applied"
 ```
 💡 建议执行 QA 测试或浏览器测试，确认后再进入 archive。
 准备好后，运行 /alloy:archive 进入归档阶段。
-```
-
----
-
-## 流程图（dot）
-
-```dot
-digraph apply {
-  rankdir=TB;
-  node [fontname="Helvetica"];
-
-  start [label="/alloy:apply <name>", shape=doublecircle];
-
-  // 前置检查（4 PRECONDITION_FAIL + 1 WARN）
-  pre_plans [label="plans.md 存在?", shape=diamond];
-  pre_plans_fail [label="⛔ PRECONDITION_FAIL", shape=octagon, color=red];
-  pre_phase [label="phase ∈ {planned,applied}?", shape=diamond];
-  pre_phase_fail [label="⛔ PRECONDITION_FAIL\n→ phase-routing", shape=octagon, color=red];
-  pre_git [label="git repo?", shape=diamond];
-  pre_git_fail [label="⛔ PRECONDITION_FAIL\n→ /alloy:start", shape=octagon, color=red];
-  pre_skill [label="skill 6+1 可用?", shape=diamond];
-  pre_skill_fail [label="⛔ PRECONDITION_FAIL\n→ alloy init", shape=octagon, color=red];
-  pre_parallel [label="多 change 并行?\n(task #14)", shape=diamond];
-  pre_warn [label="⚠️ WARN 串行", shape=parallelogram];
-
-  // 需求变更闸门
-  change_gate [label="🔴 USER_GATE × 2\n需求变更（未编码/已编码）", shape=invhouse, color=blue];
-
-  // Step 1 worktree 子图
-  s1_branch [label="分支位置?", shape=diamond];
-  s1_branch_fail [label="⛔ PRECONDITION_FAIL\non-main / lost / other", shape=octagon, color=red];
-  s1_consent [label="🔴 USER_GATE\nworktree consent\n(模糊回复不算)", shape=invhouse, color=blue];
-  s1_path [label="路径占用?\n(task #10)", shape=diamond];
-  s1_path_gate [label="🔴 USER_GATE\n复用/重命名/中止", shape=invhouse, color=blue];
-  s1_create [label="git worktree add\n+ EnterWorktree", shape=box];
-  s1_lock [label="分支锁: HEAD == worktree-<name>?\n(task #18)", shape=diamond];
-  s1_lock_fail [label="⛔ PRECONDITION_FAIL\n禁 agent 自动 checkout", shape=octagon, color=red];
-
-  // Step 2 双路径
-  s2_strategy [label="🔴 USER_GATE\nSDD vs EP", shape=invhouse, color=blue];
-  s2_sdd [label="SDD\n+ TDD + spec/quality review", shape=box];
-  s2_ep [label="EP\n+ TDD + spec 自检 + code review", shape=box];
-  s2_branch [label="子 agent 分支再校验\n(task #18)", shape=diamond];
-  s2_stash [label="commit 前 stash list?\n(task #19)", shape=diamond];
-  s2_stash_warn [label="⚠️ WARN", shape=parallelogram];
-  s2_addrule [label="⛔ HARD_STOP\ngit add 限路径 (§5.2.1)\nTDD 次序", shape=octagon, color=red];
-
-  // Step 3 / 4 verify
-  s3 [label="verify-before-completion", shape=box];
-  s3_fail [label="⛔ HARD_STOP\nverify FAIL → 修复回 Step 2", shape=octagon, color=red];
-  s4_planhash [label="plans hash 校验", shape=diamond];
-  s4_planhash_fail [label="⛔ PRECONDITION_FAIL", shape=octagon, color=red];
-  s4_opsx [label="/opsx:verify (7 项)", shape=box];
-  s4_opsx_fail [label="⛔ HARD_STOP\nFAIL 禁带继续", shape=octagon, color=red];
-  s4_review [label="🔴 USER_GATE\nverify.md 审查", shape=invhouse, color=blue];
-  s4_lock [label="hash-lock + commit\n(§5.2.1)", shape=box];
-
-  // Step 5 retrospective
-  s5_pre [label="verify-passed?", shape=diamond];
-  s5_pre_fail [label="⛔ PRECONDITION_FAIL", shape=octagon, color=red];
-  s5_vhash [label="verify hash?", shape=diamond];
-  s5_vhash_fail [label="⛔ PRECONDITION_FAIL", shape=octagon, color=red];
-  s5_skip [label="commit 数 == 1?\n(task #17)", shape=diamond];
-  s5_skip_gate [label="🔴 USER_GATE\n跳过/不跳过\n⛔ HARD_STOP\n禁 agent 自动选 (b)", shape=invhouse, color=blue];
-  s5_review [label="🔴 USER_GATE\nretrospective 审查", shape=invhouse, color=blue];
-  s5_lock [label="hash-lock + commit\n(§5.2.1)", shape=box];
-
-  phase [label="alloy _guard applied --apply\n(§5.2.3 路径 B 降级)", shape=box];
-  done [label="Phase: applied\n→ /alloy:archive", shape=doublecircle];
-
-  // 边
-  start -> pre_plans;
-  pre_plans -> pre_plans_fail [label="否"];
-  pre_plans -> pre_phase [label="是"];
-  pre_phase -> pre_phase_fail [label="否"];
-  pre_phase -> pre_git [label="是"];
-  pre_git -> pre_git_fail [label="否"];
-  pre_git -> pre_skill [label="是"];
-  pre_skill -> pre_skill_fail [label="否"];
-  pre_skill -> pre_parallel [label="是"];
-  pre_parallel -> pre_warn [label="是"];
-  pre_parallel -> change_gate [label="否"];
-  pre_warn -> change_gate;
-
-  change_gate -> s1_branch [label="(b) 继续"];
-  change_gate -> done [label="(a) 回溯/开新"];
-
-  s1_branch -> s1_branch_fail [label="异常"];
-  s1_branch -> s1_consent [label="正确"];
-  s1_consent -> s1_path [label="创建"];
-  s1_consent -> s2_strategy [label="跳过"];
-  s1_path -> s1_path_gate [label="占用"];
-  s1_path -> s1_create [label="未占用"];
-  s1_path_gate -> s1_lock [label="(a) 复用"];
-  s1_path_gate -> done [label="(b)(c) 退出"];
-  s1_create -> s1_lock;
-  s1_lock -> s1_lock_fail [label="不一致"];
-  s1_lock -> s2_strategy [label="一致"];
-
-  s2_strategy -> s2_sdd [label="SDD"];
-  s2_strategy -> s2_ep [label="EP"];
-  s2_sdd -> s2_branch;
-  s2_ep -> s2_branch;
-  s2_branch -> s1_lock_fail [label="不一致"];
-  s2_branch -> s2_stash [label="一致"];
-  s2_stash -> s2_stash_warn [label="非空"];
-  s2_stash -> s2_addrule [label="空"];
-  s2_stash_warn -> s2_addrule;
-  s2_addrule -> s3;
-
-  s3 -> s3_fail [label="FAIL"];
-  s3 -> s4_planhash [label="PASS"];
-  s4_planhash -> s4_planhash_fail [label="失效"];
-  s4_planhash -> s4_opsx [label="有效"];
-  s4_opsx -> s4_opsx_fail [label="FAIL"];
-  s4_opsx -> s4_review [label="PASS"];
-  s4_review -> s4_lock [label="(a) 确认"];
-  s4_review -> s4_opsx [label="(b) 调整"];
-  s4_lock -> s5_pre;
-
-  s5_pre -> s5_pre_fail [label="FAIL"];
-  s5_pre -> s5_vhash [label="PASS"];
-  s5_vhash -> s5_vhash_fail [label="失效"];
-  s5_vhash -> s5_skip [label="有效"];
-  s5_skip -> s5_skip_gate [label="是"];
-  s5_skip -> s5_review [label="否"];
-  s5_skip_gate -> s5_review [label="(a) 不跳"];
-  s5_skip_gate -> s5_lock [label="(b) 跳过"];
-  s5_review -> s5_lock [label="(a) 确认"];
-  s5_review -> s5_lock [label="(b) 调整"];
-  s5_lock -> phase -> done;
-}
 ```

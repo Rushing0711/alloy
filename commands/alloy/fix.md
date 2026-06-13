@@ -5,8 +5,8 @@ category: Workflow
 tags: [alloy, workflow]
 spec: 01-product-spec/06-fix-spec.md
 behaviors:
-  stops: 6
-  hard_stops: 1
+  stops: 8
+  hard_stops: 5
   artifacts: []
   transitions_to: ""
   external_calls: [superpowers:systematic-debugging, superpowers:test-driven-development, superpowers:verification-before-completion]
@@ -23,7 +23,7 @@ NO FIX WITHOUT DIAGNOSIS
 先跑 systematic-debugging，再谈修复。跳诊的坏账率极高
 ```
 
-**交互规则：** `🔴 STOP` = 硬交互确认点，必须用 `AskUserQuestion`（`commands/alloy/references/interaction-style.md`）。跳过任何 🔴 STOP = 违反 Iron Law。
+**交互规则：** `🔴 STOP` = 硬交互确认点，必须用 `AskUserQuestion`（`commands/alloy/references/interaction-style.md`，含"沉默 ≠ 授权"通用禁令——禁批量打包、禁基于内容跳过、禁 agent 回填精确字符串）。跳过任何 🔴 STOP = 违反 Iron Law。
 
 **调用外部命令或技能前，先输出标题和状态描述，再执行操作。**
 
@@ -38,6 +38,7 @@ NO FIX WITHOUT DIAGNOSIS
 | "用户很确定说是 X 的问题" | 没有堆栈和复现步骤的"诊断"只是猜测。证据驱动，不信任任何人（包括自己）。 |
 | "继续在 login-feature 上修就行" | finished 是终态——已交付 change 混入新修复破坏审计链。代码在 main 上，不在 feature 分支。 |
 | "需求不对，我顺便改下 spec" | spec 问题 = 新 change。修复中发现 spec 问题 → 不阻断修复，完成后提示开新 change。 |
+| "性能/重构/优化也算 fix，不用开新 change" | 命中关键词必须经过 USER_GATE。fix 跳新 change = spec 与代码分叉的隐蔽路径。 |
 
 ---
 
@@ -98,6 +99,30 @@ alloy _config read . main_branch 2>/dev/null
 
 **诊断确认（阻塞点）：** 🔴 STOP: 确认诊断结论（根因+涉及文件+是否偏离 spec）。确认后进入 Step 3 或回到 Step 2 重新诊断。
 
+**关键词二次 USER_GATE（⛔ HARD_STOP，task L6）：** 用户原始描述或诊断结论命中下列关键词时，必须追加 🔴 USER_GATE 让用户物理确认"这是 bug 修复，不是新需求/重构"。命中关键词检测：
+
+```bash
+# 输入：$USER_DESC（用户原始描述）+ $DIAGNOSIS（诊断结论）
+KEYWORDS="优化|性能|performance|refactor|重构|改造|增强|enhancement|提升|更好|更快"
+HIT=$(echo "$USER_DESC $DIAGNOSIS" | grep -Eo "$KEYWORDS" | sort -u | tr '\n' ' ')
+```
+
+`$HIT` 非空 → 🔴 USER_GATE（必须 AskUserQuestion）：
+
+> 检测到关键词：`$HIT`
+> 这类工作通常不是 bug 修复——
+> - **性能优化 / 重构 / 增强**：应走 `/alloy:start` 开新 change（spec 需描述新行为或性能契约）
+> - **真正的 bug 修复**：spec 已定义的行为坏了 / 测试期望已存在
+>
+> 选项：
+> (a) 这是真正的 bug 修复——spec 行为坏了（继续 fix）
+> (b) 这是新需求 / 重构 / 优化——退出 fix，运行 `/alloy:start` 开新 change
+> (c) 两者混合——退出 fix，先开 change 处理新需求，剩余 bug 再回 fix
+
+**[HARD_STOP]** agent 不得基于"用户用了 fix 命令所以一定是 bug"自动选 (a)——必须用户物理选择。命中关键词且未经 USER_GATE 直接进 Step 3 = 违反 Iron Law。
+
+**违反字面 = 违反精神：** 哪怕"用户描述里说了 bug 字样"或"诊断结论看着像 bug"，只要命中关键词就必须 USER_GATE。fix 流程跳过新 change 闸门 = spec 与代码分叉的隐蔽路径。
+
 **"需改 spec"的判断：** spec 未描述此边界 / spec 行为本身有错 / 修复需新增 spec 中没有的 capability。
 
 **"代码 bug"的判断：** 函数返回值与 spec 不一致 / spec 说 A 但代码做了 B / 性能不达标但 spec 没有性能要求。
@@ -119,8 +144,9 @@ alloy _config read . main_branch 2>/dev/null
 
 1. 加载 `test-driven-development` → 写失败测试 → 修代码
 2. 加载 `verification-before-completion` → 验证修复
-3. 🔴 STOP: 确认修复内容（展示 `git diff --stat` 和关键变更摘要。确认提交 / 需要调整）
-4. 精确提交：`git add <路径> && git commit -m "fix: <描述>"`
+3. **⛔ HARD_STOP pre-commit 校验**（读取 `commands/alloy/references/fix-precommit-check.md`）：commit 前必须确认 skill_usage[] 包含 `fix/test-driven-development` + `fix/verification-before-completion` 两条 `action=log` 记录。缺失 → 返回步骤 1-2 重做，**禁 agent 自动补 `_skill log` 后继续**。
+4. 🔴 STOP: 确认修复内容（展示 `git diff --stat` 和关键变更摘要。确认提交 / 需要调整）
+5. 精确提交：`git add <路径> && git commit -m "fix: <描述>"`
 
 ```bash
 alloy _skill log openspec/changes/<name> fix superpowers:test-driven-development
@@ -136,8 +162,9 @@ alloy _skill log openspec/changes/<name> fix superpowers:verification-before-com
 
 1. 加载 `test-driven-development`
 2. 加载 `verification-before-completion`
-3. 🔴 STOP: 确认修复内容（展示 `git diff --stat` 和关键变更摘要。确认提交 / 需要调整）
-4. 精确提交到 feature 分支
+3. **⛔ HARD_STOP pre-commit 校验**（读取 `commands/alloy/references/fix-precommit-check.md`）：与场景 1 相同——skill_usage[] 校验通过才能进入步骤 4。
+4. 🔴 STOP: 确认修复内容（展示 `git diff --stat` 和关键变更摘要。确认提交 / 需要调整）
+5. 精确提交到 feature 分支
 
 ```bash
 alloy _skill log openspec/changes/<name> fix superpowers:test-driven-development
@@ -153,23 +180,26 @@ alloy _skill log openspec/changes/<name> fix superpowers:verification-before-com
 
 **确认主分支（阻塞点）：** 🔴 STOP: 确认主分支。读取 `commands/alloy/references/main-branch-detection.md`，优先读 config，未配置时按 3 级优先级检测。确认后：`alloy _config write . main_branch <值>`
 
-创建热修分支：`git checkout -b hotfix/<desc> <MAIN_BRANCH>`
+**⛔ PRECONDITION_FAIL 分支命名白名单**（读取 `commands/alloy/references/branch-naming.md`）：默认热修分支名 `fix/<desc>`（**禁用历史 `hotfix/` prefix**——不在 CLAUDE.md 白名单内）。用户自定义时必须以 `feature/` `fix/` `docs/` `refactor/` `test/` `chore/` 之一开头，后缀 kebab-case，且不与主分支同名。校验失败 → USER_GATE 让用户重新输入。
+
+创建热修分支：`git checkout -b fix/<desc> <MAIN_BRANCH>`
 
 1. 加载 `test-driven-development`
 2. 加载 `verification-before-completion`
 3. 精确提交（可追溯原 change 时注明 `fix-from: <change名>`）
-4. 合并确认（阻塞点）：
+4. **⛔ HARD_STOP merge 前 USER_GATE 校验**（读取 `commands/alloy/references/fix-precommit-check.md` 场景 3 章节）：merge 精确字符串确认前必须追加 🔴 USER_GATE 让用户物理确认已加载 TDD + verification 两个 skill，禁 agent 基于 "diff 含测试代码" 自动跳过。
+5. 合并确认（阻塞点）：
 
-   > 确认合并：源 `hotfix/<desc>` → 目标 `<MAIN_BRANCH>`
-   > 输入 `merge hotfix/<desc> into <MAIN_BRANCH>` 确认，其他输入取消。
+   > 确认合并：源 `fix/<desc>` → 目标 `<MAIN_BRANCH>`
+   > 输入 `merge fix/<desc> into <MAIN_BRANCH>` 确认，其他输入取消。
 
-   **必须等待精确输入。** "好"、"可以"、"y"不算确认。
+   **必须等待精确输入。** "好"、"可以"、"y"不算确认。**[HARD_STOP] agent 不得在工具调用中预填或模拟此精确字符串**（见 interaction-style.md "沉默 ≠ 授权"通用禁令）。
 
    确认后：
    ```bash
    git checkout <MAIN_BRANCH>
-   git merge hotfix/<desc> --no-ff
-   git branch -d hotfix/<desc>
+   git merge fix/<desc> --no-ff
+   git branch -d fix/<desc>
    ```
    取消则保留分支，提示手动合并。
 

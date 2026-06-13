@@ -28,7 +28,7 @@ behaviors:
 
 > **`<TIMESTAMP>`：** 每次渲染阶段头部时执行 `date "+%Y-%m-%d %H:%M:%S"` 获取本地时间。`<START_TIME>` 是"全新开始"路径中捕获的时间——agent 捕获后复用于 header 和 phase_timings。`<created_at>` 从 `.alloy.yaml` 读取。
 
-**交互规则：** `🔴 STOP` 等价 `USER_GATE`，必须用 `AskUserQuestion`（`commands/alloy/references/interaction-style.md`）。跳过任何 USER_GATE = 违反 Iron Law。
+**交互规则：** `🔴 STOP` 等价 `USER_GATE`，必须用 `AskUserQuestion`（`commands/alloy/references/interaction-style.md`，含"沉默 ≠ 授权"通用禁令）。跳过任何 USER_GATE / 批量打包 / 基于内容跳过 = 违反 Iron Law。
 
 **状态符号：** `⛔` = HARD_STOP / PRECONDITION_FAIL，`🔴` = USER_GATE，`⚠️` = WARN（视觉规范 §七）。
 
@@ -36,20 +36,15 @@ behaviors:
 
 ### Red Flags（第三层防御——任一借口出现即 STOP）
 
+主文件保留 5 条核心借口，完整 12 条见 `commands/alloy/references/start-rationalizations.md`。
+
 | 借口 | 现实 |
 |------|------|
 | "不用建分支了，就在 main 上干吧" | ⛔ HARD_STOP：主分支污染不可逆。建分支只需 2 秒。违反字面 = 违反精神：哪怕"只是先建个目录后面再切"也算（Iron Law 第一层）。 |
-| "分支创建是可选步骤" / "用户没提分支" | 分支创建是硬性闸门——没有验证，后续步骤全部禁止。闸门默认生效，不需要用户主动请求。 |
-| "项目简单/一个人开发，不需要分支" | 分支保护的是 discard 安全性，不是团队协作。简单项目一样需要——否则 discard 丢失主分支无关变更。 |
 | "不用 brainstorming，直接写代码" | brainstorming 不可跳过。跳过需求设计 = 规格和代码分叉的起点。 |
-| "brainstorming 完成了，写 spec 文件吧" | Alloy start 的产出是 draft.md，不是 docs/superpowers/specs/。brainstorming 完成后直接输出方案，由 Alloy 流程生成 draft.md。 |
 | "start 完成了，直接进 plan" / "用户没回复，我先继续" | ⛔ HARD_STOP：start 完成后绝不自动进入 plan。沉默 ≠ 授权（Iron Law 第二层）。替用户做阶段转换 = 剥夺审查机会。 |
-| "draft.md 讨论过了，直接 commit" | brainstorming 讨论的是概念，draft.md 是最终文本。必须展示完整内容，等用户 USER_GATE 确认。 |
 | "openspec/changes/<name>/ 已经有了，直接复用" | ⛔ PRECONDITION_FAIL：目录已存在 = #12 冲突。USER_GATE 让用户决策（改名 / 接续 / 中止），禁 agent 自动复用——可能覆盖用户既有工作。 |
-| "/opsx:new 失败了，git mkdir 凑合一下" | ⛔ PRECONDITION_FAIL：opsx:new 是 schema 闸门，手工 mkdir 绕过制品 DAG 验证——退出 skill 引导用户排查。 |
-| "change name 还没确认，先把分支建了" | ⛔ HARD_STOP：change name 未确认前禁继续步骤 2-9。违反字面 = 违反精神：哪怕"反正 name 大概就这个"。 |
 | "git init 后 reset --hard 一下，把环境清干净" | ⛔ HARD_STOP：git 初始化失败禁 reset --hard / clean -fd / checkout .（§3.5.1 git 自救禁令）。退出 skill 让用户处理。 |
-| "用户没明确选 (a) 但意思就是进 plan，加载吧" | 沉默 ≠ 授权。USER_GATE 必须明确选择 (a)，不接受推断（Iron Law 第二层）。 |
 
 ---
 
@@ -179,7 +174,11 @@ date "+%Y-%m-%d %H:%M:%S"
 
    无可用本地非主分支时 → 直接新建。
 
-   新建分支命名：默认 `feature/<change-name>`，用户可自定义。校验不允许与主分支同名。`git checkout -b <branch-name>`
+   新建分支命名：默认 `feature/<change-name>`，用户可自定义。
+
+   **⛔ PRECONDITION_FAIL 白名单校验**（读取 `commands/alloy/references/branch-naming.md`）：自定义分支名必须以 `feature/` `fix/` `docs/` `refactor/` `test/` `chore/` 之一开头，后缀 kebab-case，且不与主分支同名。校验失败 → USER_GATE 让用户重新输入合法名称，**禁 agent 自动改写后继续**。
+
+   通过校验后：`git checkout -b <branch-name>`
 
    **③ 分支验证（⛔ HARD_STOP）：** 创建/切换后必须验证才能继续：
    ```bash
@@ -376,110 +375,3 @@ date "+%Y-%m-%d %H:%M:%S"
 
 列出所有活跃 change（名称 + phase + 制品状态），让用户选择接续哪个，或 `--new <topic>` 开新 change。
 
----
-
-## 流程图（dot）
-
-```dot
-digraph start {
-  rankdir=TB;
-  node [fontname="Helvetica"];
-
-  start [label="/alloy:start [topic]", shape=doublecircle];
-
-  // 状态检测（PRECONDITION_FAIL）
-  s_config [label="config.yaml 存在?", shape=diamond];
-  s_config_fail [label="⛔ PRECONDITION_FAIL\n→ alloy init", shape=octagon, color=red];
-  s_active [label="活跃 change 数?", shape=diamond];
-  s_skill [label="skill 预检 (3 skill)?", shape=diamond];
-  s_skill_fail [label="⛔ PRECONDITION_FAIL\n→ alloy init", shape=octagon, color=red];
-  s_git [label="git repo 就绪?", shape=diamond];
-  s_git_fail [label="⛔ PRECONDITION_FAIL\n→ git init 兜底", shape=octagon, color=red];
-
-  // 路由分流
-  path_new [label="全新开始", shape=box];
-  path_explore [label="自由探索", shape=box];
-  path_resume [label="接续", shape=box];
-  path_multi [label="多选", shape=box];
-
-  // 全新开始 9 步骤
-  s1_name [label="🔴 USER_GATE\n确认 change name\n⛔ HARD_STOP: 未确认禁继续", shape=invhouse, color=blue];
-  s2_git [label="git init 兜底\n§3.5.1 自救禁令", shape=box];
-  s3_main [label="🔴 USER_GATE\n确认 main_branch", shape=invhouse, color=blue];
-  s3_branch [label="🔴 USER_GATE\n当前分支决策\n(主/feature/其他)", shape=invhouse, color=blue];
-  s3_verify [label="分支验证: HEAD ≠ main?", shape=diamond];
-  s3_verify_fail [label="⛔ HARD_STOP\n返回重选", shape=octagon, color=red];
-  s3_verify_gate [label="🔴 USER_GATE\n确认分支正确", shape=invhouse, color=blue];
-  s35_dir [label="openspec/changes/<name> 存在?\n(task #12)", shape=diamond];
-  s35_gate [label="🔴 USER_GATE\n改名/接续/中止", shape=invhouse, color=blue];
-  s4_opsx [label="/opsx:new <name>", shape=box];
-  s4_fail [label="⛔ PRECONDITION_FAIL\n.alloy.yaml 缺失", shape=octagon, color=red];
-  s5_skill [label="alloy _skill log × 3", shape=box];
-  s6_state [label="alloy _state init + merge", shape=box];
-  s7_branch [label="alloy _state write\nfeature_branch + worktree", shape=box];
-  s8_draft [label="生成 draft.md", shape=box];
-  s8_review [label="🔴 USER_GATE\ndraft 审查窗口", shape=invhouse, color=blue];
-  s9_commit [label="commit 1/2 基础设施\n+ commit 2/2 draft hash-lock\n§5.2.1 git add 限路径", shape=box];
-
-  done [label="Phase: started\n→ /alloy:plan (用户主动)", shape=doublecircle];
-  exit_skill [label="退出 skill\n→ 等待用户输入", shape=doublecircle];
-
-  // 自由探索
-  e_topic [label="检测到 topic?", shape=diamond];
-  e_gate [label="🔴 USER_GATE\n(a) 全新开始\n(b) 继续探索", shape=invhouse, color=blue];
-
-  // 接续 6 phase
-  r_route [label="phase 路由\n(started/planned/applied/archived/finished)", shape=diamond];
-  r_gate [label="🔴 USER_GATE\n(a) 进目标阶段\n(b) /alloy:status\n(c) /alloy:discard", shape=invhouse, color=blue];
-  r_warn [label="⚠️ WARN\nworktree 残留/孤儿", shape=parallelogram];
-
-  // 边
-  start -> s_config;
-  s_config -> s_config_fail [label="否"];
-  s_config -> s_active [label="是"];
-  s_active -> path_new [label="0 + topic"];
-  s_active -> path_explore [label="0 + 无 topic"];
-  s_active -> path_resume [label="1"];
-  s_active -> path_multi [label="≥2"];
-
-  path_new -> s_skill;
-  s_skill -> s_skill_fail [label="否"];
-  s_skill -> s_git [label="是"];
-  s_git -> s_git_fail [label="兜底失败"];
-  s_git -> s1_name [label="OK"];
-  s1_name -> s2_git;
-  s2_git -> s3_main;
-  s3_main -> s3_branch;
-  s3_branch -> s3_verify;
-  s3_verify -> s3_verify_fail [label="HEAD == main"];
-  s3_verify -> s3_verify_gate [label="HEAD != main"];
-  s3_verify_fail -> s3_branch;
-  s3_verify_gate -> s35_dir;
-  s35_dir -> s35_gate [label="存在"];
-  s35_dir -> s4_opsx [label="不存在"];
-  s35_gate -> s1_name [label="(a) 改名"];
-  s35_gate -> exit_skill [label="(b) 接续"];
-  s35_gate -> exit_skill [label="(c) 中止"];
-  s4_opsx -> s4_fail [label="失败"];
-  s4_opsx -> s5_skill [label="成功"];
-  s5_skill -> s6_state;
-  s6_state -> s7_branch;
-  s7_branch -> s8_draft;
-  s8_draft -> s8_review;
-  s8_review -> s9_commit [label="(a) 锁定"];
-  s8_review -> s8_draft [label="(b) 调整"];
-  s9_commit -> done;
-
-  path_explore -> e_topic;
-  e_topic -> e_gate [label="是"];
-  e_gate -> exit_skill [label="(a) /alloy:start <topic>"];
-  e_gate -> path_explore [label="(b) 继续"];
-
-  path_resume -> r_route;
-  r_route -> r_gate;
-  r_gate -> done [label="(a)"];
-  r_gate -> exit_skill [label="(b)/(c)"];
-  r_route -> r_warn [label="worktree 异常"];
-  r_warn -> r_gate;
-}
-```

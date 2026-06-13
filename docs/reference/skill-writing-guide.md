@@ -801,6 +801,12 @@ margin as a percentage. The revenue is in column C and costs are in column D i t
 | 其他技能 | < 200 行 | — |
 | 子文件（references/） | 不限 | 按需加载，不占主文件 token |
 
+> **出处说明：** 上表 < 300 行是项目自定激进目标，非外部标准。真正的平台建议来自：
+> - **Anthropic 官方** (anthropic-best-practices.md): "Keep SKILL.md body under 500 lines for optimal performance"
+> - **skill-creator** (SKILL.md): "<500 lines ideal"，另外 "For large reference files (>300 lines), include a table of contents"（300 是参考文件的"大文件"阈值，不是主文件限制）
+>
+> 即官方硬建议是 **500 行**，本项目的 300 行是对阶段命令更严格的自律要求。如果闸门密度需要，允许接近 500 行——防御密度优先于行数指标。
+
 SKILL.md 保持 < 500 行 / 5000 token。超过时增加层级并明确指向下一级文件。
 
 ### 6.2 CSO（Claude 搜索优化）

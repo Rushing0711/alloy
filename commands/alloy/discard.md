@@ -7,6 +7,7 @@ spec: 01-product-spec/07-discard-spec.md
 behaviors:
   stops: 0
   hard_stops: 1
+  artifacts: [discard-archive]
   artifacts: []
   transitions_to: ""
   external_calls: []
@@ -16,7 +17,7 @@ behaviors:
 
 你是 Alloy 的放弃清理器。你的职责是：根据 change 的当前 phase 执行分级清理，确保用户明确确认后再删除。
 
-**核心原则：精确确认才能删除，残留必须清理。**
+**核心原则：软删除（移到 archive/）而非物理删除，保留完整审计链，允许误删后恢复。**
 
 每个 change 必须有独立的 feature 分支（start step 6 保证），discard 时可安全删除整个分支。
 
@@ -43,8 +44,8 @@ alloy _config read . main_branch
 
 | phase | 清理动作 |
 |-------|---------|
-| started / planned | `git checkout <main_branch>` + `git branch -D <feature_branch>` + `rm change 目录` |
-| applied / archived | `git worktree remove` + `git checkout <main_branch>` + `git branch -D <feature_branch>` + `rm change 目录` |
+| started / planned | `git checkout <main_branch>` + `git branch -D <feature_branch>` + 软删除 → `archive/` |
+| applied / archived | `git worktree remove` + `git checkout <main_branch>` + `git branch -D <feature_branch>` + 软删除 → `archive/` |
 | finished | **[HARD STOP] 已完成的 change 不可 discard。** finished 是终态 |
 
 ---
@@ -62,13 +63,13 @@ alloy _config read . main_branch
 清理前必须展示将要删除的内容并等待用户精确确认：
 
 ```
-将删除以下内容，不可恢复:
+将软删除以下内容（移到 archive/ 保留审计链，可手动恢复）:
 
   Change:        <name>
   Phase:         <phase>
   Feature 分支:  <feature_branch>（如有）
   Worktree:      <path>（如有）
-  目录:          openspec/changes/<name>/
+  目录:          openspec/changes/<name>/ → archive/YYYY-MM-DD-discard-<name>/
   切回分支:      <main_branch>（如有）
 
 输入 'discard <name>' 确认，或输入其他任意内容取消。
@@ -87,10 +88,10 @@ alloy _config read . main_branch
 
 | 借口 | 现实 |
 |------|------|
-| "就删个目录而已，y 就行了" | 删除是不可逆操作。`discard <name>` 的精确匹配是防手滑的最后一道防线。"y"、"好"、"删了吧"都不算。 |
+| "就删个目录而已，y 就行了" | 即使软删除可恢复，确认步骤不可跳过。`discard <name>` 的精确匹配是防手滑的最后一道防线。"y"、"好"、"删了吧"都不算。 |
 | "这个 change 已完成，直接删了吧" | finished 是终态——不可 discard。已完成的 change 有完整审计链，删除会破坏追溯性。 |
 | "不用列出清单了，我知道有什么" | 必须先展示六行删除清单（Change/Phase/分支/Worktree/目录/切回分支），让用户确认每个待删除项的完整性和正确性。 |
-| "不用按顺序清理，直接 rm -rf 就行了" | 清理必须按序：worktree remove → checkout main → branch -D → rm 目录。不按序可能留下孤儿 worktree 或残留分支。
+| "不用按顺序清理，直接 rm -rf 就行了" | 清理必须按序：worktree remove → checkout main → branch -D → mv 到 archive。rm -rf 不可恢复，软删除保留审计链。 |
 
 ---
 
@@ -108,8 +109,13 @@ git checkout <main_branch>
 # 3. git branch -D <feature_branch>
 git branch -D <feature_branch>
 
-# 4. rm -rf openspec/changes/<name>/
-rm -rf openspec/changes/<name>/
+# 4. 软删除——移动到 archive/ 保留审计链
+DISCARD_DIR="openspec/changes/archive/$(date +%Y-%m-%d)-discard-<name>"
+mkdir -p openspec/changes/archive/
+mv openspec/changes/<name>/ "$DISCARD_DIR"
+
+# 5. 记录 discarded_at 时间戳
+alloy _state merge "$DISCARD_DIR" phase_timings "{\"discarded_at\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
 ```
 
 若 `main_branch` 未记录，跳过步骤 2，提示用户手动切回主分支。
@@ -123,7 +129,9 @@ rm -rf openspec/changes/<name>/
 Alloy · 放弃 Change — DONE
 ──────────────────────────────────────
 
-✓ <name> 已清理
-  已删除：<列出实际删除的内容（分支/worktree/目录）>
+✓ <name> 已软删除
+  分支/worktree：已清理
+  归档位置：archive/YYYY-MM-DD-discard-<name>/
+  恢复方式：mv 回 openspec/changes/<name>/ 即可恢复
   当前分支：<main_branch>（或提示用户手动切换）
 ```

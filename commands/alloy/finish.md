@@ -6,8 +6,8 @@ tags: [alloy, workflow]
 spec: 01-product-spec/05-finish-spec.md
 behaviors:
   preconditions: 5
-  hard_stops:    7
-  user_gates:    4
+  hard_stops:    8
+  user_gates:    5
   warns:         2
   artifacts: []
   transitions_to: finished
@@ -21,12 +21,12 @@ behaviors:
 ```
 [HARD_STOP] NO MERGE WITHOUT EXACT CONFIRMATION
 phase != archived / 分支不存在 / merge 精确确认未通过 / spec 已归档需修改 / merge 冲突自动 abort 任一存在 = 拒绝执行
-违反字面 = 违反精神：哪怕"用户口头同意了"或"merge 冲突很简单 abort 一下"，也算违反 Iron Law
+违反字面 = 违反精神：哪怕"用户口头同意了"、"用户说'可以，合吧'"、"merge 冲突很简单 abort 一下"，也算违反 Iron Law。精确字符串确认不可被任何形式的口头同意替代——用户说"合"不算确认，必须亲手输入 merge 指令。
 ```
 
 **核心原则：只做代码合入，不碰 spec。** spec 已归档封存，任何 spec 级变更应走新 change（[HARD_STOP]）。
 
-**交互规则：** `🔴 STOP` 等价 `USER_GATE`，必须用 `AskUserQuestion`（`commands/alloy/references/interaction-style.md`）。跳过任何 USER_GATE = 违反 Iron Law。
+**交互规则：** `🔴 STOP` 等价 `USER_GATE`，必须用 `AskUserQuestion`（`commands/alloy/references/interaction-style.md`，含"沉默 ≠ 授权"通用禁令——禁批量打包、禁基于内容跳过、禁 agent 回填精确字符串）。跳过任何 USER_GATE = 违反 Iron Law。
 
 **状态符号：** `⛔` = HARD_STOP / PRECONDITION_FAIL，`🔴` = USER_GATE，`⚠️` = WARN（视觉规范 §七）。
 
@@ -47,7 +47,7 @@ PHASE_START=$(alloy _state timestamp ensure openspec/changes/<name> finish)
 | "分支已经删了，finish 白跑了" | 分支不存在 = 无需再次 finish，直接告知用户。 |
 | "PR 审查说要改 spec，顺手改了吧" | spec 已归档封存。任何 spec 变更 = 新 change。 |
 | "选'保持分支'等于没做完，直接 merge 吧" | 保持分支是合法选项——用户可能有后续计划。替用户选 merge 是越权。 |
-| "用户说了 'y'，应该等于 merge 确认吧" | 精确字符串确认是仪式感，"y"/"好"/"可以"全部不算（§Iron Law）。 |
+| "用户说了 'y'，应该等于 merge 确认吧" | 精确字符串确认不可被口头同意替代。"y"/"好"/"可以"/"合吧"全部不算（§Iron Law）。即使用户说"我同意了，直接合"，也不算确认——必须亲手输入 merge 指令。 |
 | "git pull 失败一次，重试一下静默继续" | pull 失败 = 远端状态未知，silent 继续 = 基于过期 main 做 squash，污染主分支历史。必须 USER_GATE。 |
 | "merge --squash 冲突了，git merge --abort 让流程重启" | abort = 撕毁现场，用户的 in-progress 工作消失。退出 skill 让用户处理是唯一合法路径（§3.5.1）。 |
 | "feature_branch 看起来像 main，应该没事" | branch -D 变量未替换或与主分支同名 = 强删主分支引用，灾难性。必须 PRECONDITION_FAIL（task #25）。 |
@@ -97,6 +97,33 @@ alloy status --json 2>/dev/null | grep -c '"phase":"archived"' || true
 
 WARN 不阻断流程，但提醒用户人工确认顺序后再继续。
 
+**5. Retrospective 离场审查（🔴 USER_GATE，task L7）：** merge 前最后一道审查窗口——retrospective 中的 §5 意外发现可能包含"应开新 change 的技术债"或"边界 case 发现"等影响合入决策的信息。
+
+读取 retrospective.md（路径与 phase 推进取 CHANGE_DIR 一致）：
+
+```bash
+ARCHIVE_DIR=$(ls -d openspec/changes/archive/*-<name> 2>/dev/null | sort -r | head -1)
+CHANGE_DIR="${ARCHIVE_DIR:-openspec/changes/<name>}"
+RETRO_FILE="${CHANGE_DIR}/retrospective.md"
+```
+
+`$RETRO_FILE` 存在 → 🔴 USER_GATE（必须 AskUserQuestion）：
+
+> 离场审查：retrospective 关键发现
+>
+> [展示 retrospective.md §5 意外发现全文，以及 §4 技能跳过模式（如有）]
+>
+> §6 Promote Candidates 已在 archive 阶段处理（写入 memory / 跳过记录）。
+>
+> 以上发现是否影响合入决策？
+> (a) 不影响——确认合入，进入 Step 2
+> (b) 有影响——记录待处理项后继续（不影响本次合入，但标注后续 new change）
+> (c) 需要讨论——退出 finish，先处理 retrospective 发现再决定
+
+**[HARD_STOP]** agent 不得基于 "retrospective 已在 archive 审过" 跳过此 USER_GATE——archive 审查的是"是否写入 memory"，finish 审查的是"是否影响合入决策"，两件事不同。
+
+`$RETRO_FILE` 不存在 → 跳过本步骤（无 retrospective = 无离场审查内容）。
+
 ---
 
 ## 执行
@@ -129,6 +156,8 @@ alloy _skill log openspec/changes/<name> finish superpowers:finishing-a-developm
 > 违反字面 = 违反精神：哪怕"先回到干净状态再重试"，也算违反 §3.5.1 禁令——必须 USER_GATE 让用户决策。
 
 **合并确认（USER_GATE，精确字符串）：**
+
+**[HARD_STOP] 即使用户说"我同意了"、"可以，合吧"、"口头确认过"，也不算确认。** 精确字符串不可被任何形式的口头同意替代——用户必须亲手输入 `merge <branch> into <branch>`。
 
 > 🔴 USER_GATE: 确认合并：源 `<feature_branch>` → 目标 `<main_branch>`
 > 即将合入的提交：
@@ -285,85 +314,3 @@ finish 不产生额外 commit——合入 commit 或 PR 本身就是终端动作
 
 **git add 路径化（§5.2.1）：** 仅用精确路径（`"$CHANGE_DIR" openspec/config.yaml`），禁用 `-A` / `-a` / `.`。违反字面 = 违反精神：哪怕"反正只有一个文件改动"，也禁止 `-A`——agent 看不到的副作用文件可能被一并提交。
 
----
-
-## 流程图（dot）
-
-```dot
-digraph finish {
-  rankdir=TB;
-  node [fontname="Helvetica"];
-
-  start [label="/alloy:finish <name>", shape=doublecircle];
-
-  // 前置检查
-  pre0 [label="0. Skill 预检\n(finishing-a-development-branch)", shape=diamond];
-  pre0_fail [label="⛔ PRECONDITION_FAIL\nskill 缺失", shape=octagon, color=red];
-  pre1 [label="1. phase=archived?", shape=diamond];
-  pre1_fail [label="⛔ PRECONDITION_FAIL\nphase 路由跳转", shape=octagon, color=red];
-  pre2 [label="2. 分支存在?", shape=diamond];
-  pre2_fail [label="⛔ PRECONDITION_FAIL\n分支已合并/删除", shape=octagon, color=red];
-  pre3 [label="3. main_branch", shape=invhouse, color=blue];
-  pre4 [label="4. 多 change 并行?\n(task #14)", shape=diamond];
-  pre4_warn [label="⚠️ WARN\n建议串行", shape=parallelogram];
-
-  // 选项分流
-  branch [label="🔴 USER_GATE\n选择处理方式", shape=invhouse, color=blue];
-
-  // 选项 1：本地 merge
-  opt1_confirm [label="🔴 USER_GATE\n精确字符串确认\nmerge X into Y", shape=invhouse, color=blue];
-  opt1_phase [label="phase → finished\n(§5.2.3 路径 B)", shape=box];
-  opt1_pull [label="git pull --ff-only\n(§3.5.1)", shape=diamond];
-  opt1_pull_fail [label="⛔ PRECONDITION_FAIL\nUSER_GATE 三选项\n(task #23)", shape=octagon, color=red];
-  opt1_branch_check [label="branch -D 变量校验\n(task #25)", shape=diamond];
-  opt1_branch_fail [label="⛔ PRECONDITION_FAIL\nfeature_branch 异常", shape=octagon, color=red];
-  opt1_squash [label="git merge --squash\n禁 abort / reset --hard\n(§3.5.1)", shape=box];
-  opt1_conflict [label="⛔ HARD_STOP\nmerge 冲突 → 退出", shape=octagon, color=red];
-  opt1_branch_del [label="git branch -D\n(task #13: hash 已 frozen,\n无需重录)", shape=box];
-
-  // 选项 2：PR
-  opt2_phase [label="phase → finished\n(§5.2.3 路径 B)", shape=box];
-  opt2_pr [label="gh pr create", shape=box];
-  opt2_review [label="🔴 USER_GATE\nPR 反馈是否需要\nspec 变更?", shape=invhouse, color=blue];
-  opt2_spec [label="⛔ HARD_STOP\nspec 已归档\n→ 新 change", shape=octagon, color=red];
-
-  // 选项 3：保持分支
-  opt3 [label="记录 deferred_at\n(task #27)\nphase 保持 archived", shape=box];
-
-  done [label="完成", shape=doublecircle];
-
-  // 边
-  start -> pre0;
-  pre0 -> pre0_fail [label="缺失"];
-  pre0 -> pre1 [label="可用"];
-  pre1 -> pre1_fail [label="否"];
-  pre1 -> pre2 [label="是"];
-  pre2 -> pre2_fail [label="否"];
-  pre2 -> pre3 [label="是"];
-  pre3 -> pre4;
-  pre4 -> pre4_warn [label="是"];
-  pre4 -> branch [label="否"];
-  pre4_warn -> branch;
-
-  branch -> opt1_confirm [label="(1) 本地 merge"];
-  branch -> opt2_phase [label="(2) PR"];
-  branch -> opt3 [label="(3) 保持分支"];
-
-  opt1_confirm -> opt1_phase [label="精确确认"];
-  opt1_phase -> opt1_pull;
-  opt1_pull -> opt1_pull_fail [label="失败"];
-  opt1_pull -> opt1_squash [label="成功"];
-  opt1_squash -> opt1_conflict [label="冲突"];
-  opt1_squash -> opt1_branch_check [label="成功"];
-  opt1_branch_check -> opt1_branch_fail [label="变量异常"];
-  opt1_branch_check -> opt1_branch_del [label="校验通过"];
-  opt1_branch_del -> done;
-
-  opt2_phase -> opt2_pr;
-  opt2_pr -> opt2_review;
-  opt2_review -> opt2_spec [label="(b) 需要 spec 变更"];
-  opt2_review -> done [label="(a) 仅代码"];
-
-  opt3 -> done;
-}
-```
