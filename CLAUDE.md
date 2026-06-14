@@ -21,7 +21,7 @@
 | `docs/specification/`（产品规格） | — | 同上 | — |
 | `docs/handbook.md`（开发手册） | — | 同上 | — |
 
-> **ignore目录：** `docs/superpowers/` 是开发过程产物（53 个 design spec + plan 的历史快照），已不维护。不要读取、不要参考、不要在"文档对齐代码"时检查。真相源是 `docs/specification/`。
+> **ignore目录：** `docs/superpowers/` 是开发过程产物（design spec + plan 的历史快照），已不维护。不要读取、不要参考、不要在"文档对齐代码"时检查。真相源是 `docs/specification/`。该目录已在 `.gitignore` 中，**禁止 `git add` 该目录下的任何文件**。
 
 **分支规范：** 先问"是否建分支"，用户确认后执行。分支命名：`feature/`、`fix/`、`docs/`、`refactor/`、`test/`、`chore/`
 
