@@ -206,14 +206,20 @@ alloy _skill log openspec/changes/<name> apply superpowers:using-git-worktrees
 
 4. 🔴 USER_GATE（必须 AskUserQuestion）: 选择执行策略（SDD / EP）。必须等用户选择后才加载技能。
 
-**SDD 路径：** 加载 `superpowers:subagent-driven-development`，由其驱动分派子 agent → 每个独立 TDD + code review（transitive 激活）。子 agent 各自勾选 tasks.md checkbox。
+**SDD 路径：**
 
+**先记录技能使用，再加载技能：**
 ```bash
 alloy _skill log openspec/changes/<name> apply superpowers:subagent-driven-development
 alloy _skill log openspec/changes/<name> apply test-driven-development --via subagent-driven-development
 alloy _skill log openspec/changes/<name> apply spec-compliance-review --via subagent-driven-development
 alloy _skill log openspec/changes/<name> apply code-quality-review --via subagent-driven-development
 ```
+
+加载 `superpowers:subagent-driven-development`，由其驱动分派子 agent → 每个独立 TDD + code review（transitive 激活）。
+
+**构造子 agent 任务描述时，必须注入以下指令到任务描述末尾：**
+> 实现完成时，在**同一个 commit** 中包含：实现代码 + 测试 + `openspec/changes/<name>/tasks.md` 中你负责的 task checkbox 从 `- [ ]` 改为 `- [x]`（含父级和子级）。不要分两个 commit。
 
 **EP 路径：** 四步显式加载补偿（EP 不 transitive 激活 TDD/spec 合规/code review）：
 1. 加载 `test-driven-development`（设定 TDD 预期，RED→GREEN→REFACTOR 成为硬约束）

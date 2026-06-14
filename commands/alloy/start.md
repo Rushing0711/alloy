@@ -135,6 +135,8 @@ date "+%Y-%m-%d %H:%M:%S"
 
 用户确认方案后，执行以下步骤：
 
+> **交互风格恢复（HARD_STOP）：** brainstorming 已结束。从此刻起，所有 `🔴 USER_GATE` 必须恢复使用 `AskUserQuestion` 工具（`commands/alloy/references/interaction-style.md`），不用纯文本 (a)(b)(c)。Agent 刚从 brainstorming 的"每次一个问题"模式出来，容易延续纯文本习惯——这是 Iron Law 违规。违反字面 = 违反精神：哪怕"就这一个确认用文本也行"，也算违反——USER_GATE 必须 AskUserQuestion。
+
 > **git 自救禁令（§3.5.1 内嵌约束，HARD_STOP）：** 步骤 2 git init / 步骤 3 分支创建/切换 / 步骤 9 commit 任何环节失败，禁 agent 运行 `git reset --hard` / `git checkout .` / `git restore .` / `git stash` / `git clean -fd` / `git push --force` —— 退出 skill 让用户处理是唯一合法路径。
 >
 > **git add 限路径（§5.2.1 内嵌约束，HARD_STOP）：** 所有 commit 用精确路径（`.claude/` `openspec/` `CLAUDE.md` 等明确列举），禁 `-A`/`-a`/`.`。违反字面 = 违反精神：哪怕"反正只改了已知文件"，也禁通配——可能把 `.superpowers/` 临时目录或测试残留一并 commit。
