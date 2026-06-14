@@ -36,6 +36,7 @@ test/coverage/
 
 ### Superpowers ###
 .superpowers/
+docs/superpowers/
 .worktrees/
 worktrees/
 
