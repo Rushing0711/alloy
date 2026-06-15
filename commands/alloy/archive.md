@@ -198,6 +198,15 @@ git diff --cached --quiet || git commit -m "chore(<name>): 归档目录移动"
 
 未使用 worktree（`worktree=skipped` 或字段缺失且 git 无残留）时跳过本段。
 
+**Worktree 合并时间记录：** worktree merge + remove + branch -d 全部成功后，写入 `worktree_merged_at`：
+
+```bash
+WORKTREE_MERGED_AT=$(date '+%Y-%m-%d %H:%M:%S')
+alloy _state write "$ARCHIVE_DIR" worktree_merged_at "$WORKTREE_MERGED_AT"
+```
+
+未使用 worktree 时跳过本步。
+
 **记录完成时间并提交（HARD_STOP §5.2.1 git add 限路径）：**
 
 ```bash

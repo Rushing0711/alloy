@@ -165,6 +165,10 @@ alloy _guard branch-position openspec/changes/<name>
 
 ```bash
 alloy _skill log openspec/changes/<name> apply superpowers:using-git-worktrees
+# _skill log 写入后必须 commit——git worktree add 基于 HEAD 创建，
+# 不 commit 会导致此条记录在 worktree 中丢失
+git add openspec/changes/<name>/.alloy.yaml
+git diff --cached --quiet || git commit -m "chore(<name>): 记录 using-git-worktrees 技能使用"
 ```
 
 **用户选择不创建：** `alloy _state write openspec/changes/<name> worktree skipped`，跳到 Step 1 完成框。

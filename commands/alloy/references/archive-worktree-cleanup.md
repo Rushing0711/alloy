@@ -70,8 +70,7 @@ USER_GATE_TEMPLATE
     # 用户选 (a) 后执行清理：
     git worktree remove "$WORKTREE_PATH"
     git branch -d "$WORKTREE_BRANCH"
-    WORKTREE_MERGED_AT=$(date '+%Y-%m-%d %H:%M:%S')
-    alloy _state write "$ARCHIVE_DIR" worktree_merged_at "$WORKTREE_MERGED_AT"
+    # worktree_merged_at 由 archive.md 主流程内联记录，此处仅做清理
     echo "  ✓ worktree 已合并至 $FEATURE_BRANCH 分支并清理"
   else
     # [HARD_STOP] merge 冲突时禁止运行 git merge --abort 或任何 git 自救命令。

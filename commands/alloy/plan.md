@@ -295,9 +295,13 @@ fi
 
 **[HARD_STOP]** agent 不得基于 "_guard 也会校验" 跳过尾扫——_guard 校验与尾扫是独立防线，尾扫逐条命名文件确保"全量 6/6"，_guard 内部实现可能只校验 records 中存在的条目（文件存但 records 不存的 tainted artifact 会漏掉）。
 
-**通过 `alloy _guard` 校验并更新 phase：**
+**记录完成时间并推进 phase：**
 ```bash
+COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
+alloy _state merge openspec/changes/<name> phase_timings "{\"plan\":{\"completed_at\":\"${COMPLETED_AT:-$(date '+%Y-%m-%d %H:%M:%S')}\"}}"
 alloy _guard openspec/changes/<name> planned --apply
+git add openspec/changes/<name>/
+git commit -m "chore(<name>): 记录 plan 阶段完成时间，推进到 planned"
 ```
 
 `_guard` 校验 hash 一致性后推进 phase。返回非零时检查缺哪个制品或 hash 不匹配。

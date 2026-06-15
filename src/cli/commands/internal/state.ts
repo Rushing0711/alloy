@@ -41,6 +41,9 @@ function deepMerge(target: unknown, source: unknown): unknown {
     if (!(key in result)) {
       // 新 key：直接添加
       result[key] = src[key];
+    } else if (result[key] === null) {
+      // target 值为 null（sentinel，timestamp ensure 写入）→ 允许覆盖
+      result[key] = src[key];
     } else if (
       typeof src[key] === "object" &&
       src[key] !== null &&
