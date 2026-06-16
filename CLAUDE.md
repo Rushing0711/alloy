@@ -17,11 +17,11 @@
 |-------------|------|---------|------|
 | `commands/alloy/*.md`（Skill 文件） | `docs/reference/skill-writing-guide.md` | 默认问分支。用户说"直接改"、纯读取、测试验证时不触发 | 提醒同步 spec |
 | `openspec/schemas/`（Schema） | — | 同上 | — |
-| `src/`（TypeScript 源码） | — | 同上 | 提醒同步 08-cli-spec.md |
+| `src/`（TypeScript 源码） | — | 同上 | 提醒同步 01-product-spec/08-cli-spec.md |
 | `docs/specification/`（产品规格） | — | 同上 | — |
 | `docs/handbook.md`（开发手册） | — | 同上 | — |
 
-> **ignore目录：** `docs/superpowers/` 是开发过程产物（design spec + plan 的历史快照），已不维护。不要读取、不要参考、不要在"文档对齐代码"时检查。真相源是 `docs/specification/`。该目录已在 `.gitignore` 中，**禁止 `git add` 该目录下的任何文件**。
+> **注意：** `docs/superpowers/` 是 Superpowers 技能生成的设计和计划产物，仍在正常使用。真相源是 `docs/specification/`，文档对齐时不检查此目录。该目录已在 `.gitignore` 中，**禁止 `git add` 该目录下的任何文件**。
 
 **分支规范：** 先问"是否建分支"，用户确认后执行。分支命名：`feature/`、`fix/`、`docs/`、`refactor/`、`test/`、`chore/`
 
@@ -32,8 +32,10 @@
 ## 构建与测试
 
 - Node.js ≥ 18，TypeScript 源码在 `src/`，编译产物输出到 `dist/`
-- 修改代码后运行 `npm test`（vitest 全量）
-- **每次修复/功能更新完成后**：确保测试通过，运行 `npm run build`。本地开发用 `aldev` 测试（`node /Users/wenqiu/AIAgent/alloy/dist/cli/index.js`），不依赖 npm link
+- 测试文件在 `test/` 目录（与 `src/` 平级），非 `src/` 内
+- 修改代码后运行 `npm test`（vitest 全量），watch 模式用 `npm run test:watch`
+- TypeScript watch 模式：`npm run dev`
+- **每次修复/功能更新完成后**：确保测试通过，运行 `npm run build`。本地开发用 `node dist/cli/index.js` 测试，不依赖 npm link
 
 ## 代码架构
 
@@ -41,7 +43,7 @@
 
 ```
 src/cli/          # CLI 命令（init/status/doctor/update/completion）
-src/core/         # 核心模块（检测/安装/部署/健康检查）
+src/core/         # 核心模块（检测/安装/部署/健康检查/agents/artifacts/skills/openspec/superpowers/claude-md）
 src/utils/        # 工具函数（文件系统/提示）
 commands/alloy/   # Skill 文件（start/plan/apply/archive/finish/fix/discard/status）
 openspec/schemas/ # 制品 schema 定义
