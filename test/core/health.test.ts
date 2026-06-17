@@ -171,6 +171,40 @@ describe("runHealthCheck", () => {
     expect(spResult!.current).toContain("v5.1.0");
   });
 
+  it("Superpowers 通过旧 marketplace（superpowers-marketplace）检测到安装时也应 pass", async () => {
+    vi.mocked(loadCompat).mockResolvedValue(MOCK_CONFIG);
+    vi.mocked(execSync).mockReturnValue(Buffer.from("1.3.1\n") as any);
+    vi.mocked(detectEnv).mockReturnValue({
+      nodeVersion: "20.0.0",
+      gitInstalled: true,
+    });
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFile).mockImplementation((path: any) => {
+      const pathStr = String(path);
+      if (pathStr.includes("installed_plugins.json")) {
+        return Promise.resolve(JSON.stringify({
+          version: 2,
+          plugins: {
+            "superpowers@superpowers-marketplace": [
+              {
+                scope: "user",
+                installPath: "/home/user/.claude/plugins/cache/superpowers-marketplace/superpowers/5.1.0",
+                version: "5.1.0",
+              },
+            ],
+          },
+        }));
+      }
+      return Promise.resolve(JSON.stringify({ version: "0.1.0" }));
+    });
+
+    const results = await runHealthCheck("/fake/packagedir", "/fake/project");
+    const spResult = results.find((r) => r.name === "Superpowers");
+    expect(spResult).toBeDefined();
+    expect(spResult!.status).toBe("pass");
+    expect(spResult!.current).toContain("v5.1.0");
+  });
+
   it("Superpowers 插件文件存在但无对应条目时 fallback 到 npx skills list", async () => {
     vi.mocked(loadCompat).mockResolvedValue(MOCK_CONFIG);
     vi.mocked(detectEnv).mockReturnValue({

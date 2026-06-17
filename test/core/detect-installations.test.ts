@@ -215,27 +215,25 @@ describe("detectSkill", () => {
 // ---------------------------------------------------------------------------
 describe("detectSkill — plugin 检测", () => {
   let tmpHome: string;
+  let realExistsSync: typeof import("node:fs").existsSync;
 
   beforeEach(async () => {
     tmpHome = join(tmpdir(), `alloy-detect-test-${Date.now()}`);
     vi.mocked(homedir).mockReturnValue(tmpHome);
+    // plugin 检测会扫描多层目录，让 existsSync 落到真实 fs（路径都在 tmpHome 下）
+    const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
+    realExistsSync = actual.existsSync;
+    vi.mocked(existsSync).mockImplementation((p) => realExistsSync(p));
   });
 
   afterEach(async () => {
     await rm(tmpHome, { recursive: true, force: true });
   });
 
-  it("找到用户级 plugin 时返回 user-plugin 并附带版本", async () => {
-    // 创建 plugin 目录结构
+  it("找到用户级 plugin（obra marketplace）时返回 user-plugin 并附带版本", async () => {
     const pluginBase = join(tmpHome, ".claude", "plugins", "cache", "superpowers-marketplace", "superpowers");
     const skillDir = join(pluginBase, "5.2.0", "skills", "superpowers");
     await mkdir(skillDir, { recursive: true });
-
-    vi.mocked(existsSync).mockImplementation((p) => {
-      // 项目级和用户级 skill 不存在，plugin base 和 skill 存在
-      const str = String(p);
-      return str === pluginBase || str === skillDir;
-    });
 
     const result = detectSkill("superpowers", claudeAgent, PROJECT);
 
@@ -247,6 +245,21 @@ describe("detectSkill — plugin 检测", () => {
     });
   });
 
+  it("找到用户级 plugin（claude-plugins-official marketplace）时返回 user-plugin 并附带版本", async () => {
+    const pluginBase = join(tmpHome, ".claude", "plugins", "cache", "claude-plugins-official", "superpowers");
+    const skillDir = join(pluginBase, "5.1.0", "skills", "brainstorming");
+    await mkdir(skillDir, { recursive: true });
+
+    const result = detectSkill("brainstorming", claudeAgent, PROJECT);
+
+    expect(result).toEqual({
+      found: true,
+      location: "user-plugin",
+      path: skillDir,
+      version: "5.1.0",
+    });
+  });
+
   it("plugin 目录中多个版本时返回其中一个", async () => {
     const pluginBase = join(tmpHome, ".claude", "plugins", "cache", "superpowers-marketplace", "superpowers");
     const skillDir1 = join(pluginBase, "5.1.0", "skills", "superpowers");
@@ -254,32 +267,19 @@ describe("detectSkill — plugin 检测", () => {
     await mkdir(skillDir1, { recursive: true });
     await mkdir(skillDir2, { recursive: true });
 
-    vi.mocked(existsSync).mockImplementation((p) => {
-      const str = String(p);
-      return str === pluginBase || str === skillDir1 || str === skillDir2;
-    });
-
     const result = detectSkill("superpowers", claudeAgent, PROJECT);
 
     expect(result.location).toBe("user-plugin");
-    // readdirSync 返回的顺序取决于文件系统，但 version 应该是 5.1.0 或 5.2.0
     expect(["5.1.0", "5.2.0"]).toContain(result.version);
     expect(result.path).toContain(result.version!);
   });
 
   it("plugin 目录中跳过非目录条目", async () => {
     const pluginBase = join(tmpHome, ".claude", "plugins", "cache", "superpowers-marketplace", "superpowers");
-    // 创建一个普通文件（非目录）
     await mkdir(pluginBase, { recursive: true });
     await writeFile(join(pluginBase, "readme.txt"), "");
-    // 创建版本目录
     const skillDir = join(pluginBase, "5.2.0", "skills", "superpowers");
     await mkdir(skillDir, { recursive: true });
-
-    vi.mocked(existsSync).mockImplementation((p) => {
-      const str = String(p);
-      return str === pluginBase || str === skillDir;
-    });
 
     const result = detectSkill("superpowers", claudeAgent, PROJECT);
 
@@ -290,13 +290,7 @@ describe("detectSkill — plugin 检测", () => {
 
   it("plugin 目录存在但目标 skill 不存在时返回 NOT_FOUND", async () => {
     const pluginBase = join(tmpHome, ".claude", "plugins", "cache", "superpowers-marketplace", "superpowers");
-    // 创建版本目录但不创建 skill 子目录
     await mkdir(join(pluginBase, "5.2.0", "skills"), { recursive: true });
-
-    vi.mocked(existsSync).mockImplementation((p) => {
-      const str = String(p);
-      return str === pluginBase;
-    });
 
     const result = detectSkill("nonexistent", claudeAgent, PROJECT);
 

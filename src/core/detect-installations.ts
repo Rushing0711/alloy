@@ -63,15 +63,23 @@ export function detectSkill(name: string, agent: AgentInfo, projectPath: string)
   }
 
   // 用户级 plugin（superpowers 插件）
-  const pluginBase = join(home, ".claude", "plugins", "cache", "superpowers-marketplace", "superpowers");
-  if (existsSync(pluginBase)) {
+  // 扫描 ~/.claude/plugins/cache/<marketplace>/superpowers/<version>/skills/<name>
+  // 兼容任意 marketplace（obra/superpowers-marketplace、anthropics/claude-plugins-official 等）
+  const cacheBase = join(home, ".claude", "plugins", "cache");
+  if (existsSync(cacheBase)) {
     try {
-      const versions = readdirSync(pluginBase, { withFileTypes: true });
-      for (const v of versions) {
-        if (!v.isDirectory()) continue;
-        const skillPath = join(pluginBase, v.name, "skills", name);
-        if (existsSync(skillPath)) {
-          return { found: true, location: "user-plugin", path: skillPath, version: v.name };
+      const marketplaces = readdirSync(cacheBase, { withFileTypes: true });
+      for (const mk of marketplaces) {
+        if (!mk.isDirectory()) continue;
+        const pluginBase = join(cacheBase, mk.name, "superpowers");
+        if (!existsSync(pluginBase)) continue;
+        const versions = readdirSync(pluginBase, { withFileTypes: true });
+        for (const v of versions) {
+          if (!v.isDirectory()) continue;
+          const skillPath = join(pluginBase, v.name, "skills", name);
+          if (existsSync(skillPath)) {
+            return { found: true, location: "user-plugin", path: skillPath, version: v.name };
+          }
         }
       }
     } catch {

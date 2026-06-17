@@ -44,12 +44,17 @@ export async function checkSuperpowers(requiredRange: string): Promise<DepCheckR
     const pluginsJsonPath = join(home, ".claude", "plugins", "installed_plugins.json");
     const pluginsRaw = await readFile(pluginsJsonPath, "utf-8");
     const plugins = JSON.parse(pluginsRaw);
-    const sp = plugins?.plugins?.["superpowers@claude-plugins-official"];
-    if (sp && sp.length > 0) {
+    // 扫描所有 superpowers@<marketplace> 条目，兼容任意 marketplace
+    const pluginsMap = (plugins?.plugins ?? {}) as Record<string, Array<{ version?: string }>>;
+    for (const [key, entries] of Object.entries(pluginsMap)) {
+      if (!key.startsWith("superpowers@")) continue;
+      if (!entries || entries.length === 0) continue;
+      const sp = entries[0];
+      if (!sp?.version) continue;
       return {
         installed: true,
-        version: sp[0].version,
-        compatible: semver.satisfies(sp[0].version, requiredRange),
+        version: sp.version,
+        compatible: semver.satisfies(sp.version, requiredRange),
       };
     }
   } catch {
