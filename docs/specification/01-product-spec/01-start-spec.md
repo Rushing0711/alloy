@@ -31,7 +31,8 @@ behaviors:
 → 全新开始: explore + brainstorming → draft.md（唯一产出，包含 Why/What/关键决策/范围边界）
 → brainstorming 的详细设计论述写入 draft.md"关键决策"章节，不单独产出 superpowers spec 文件
 → brainstorming 确认后，由 Agent 建议 kebab-case change name，用户确认后调用 `/opsx:new` 创建 change 目录 + `alloy _state init` 写入初始状态
-→ git 仓库就绪：已有项目跳过；空项目先 git init → 基础设施 commit（锚点，确保可创建分支）
+→ git 仓库就绪：已由 `alloy init` 保证（HOME 拦截 + `ensureGitRepo` 兜底）。start 阶段仅校验 `git rev-parse --git-dir`，不再兜底 git init
+→ 基础设施 commit（锚点，确保可创建分支）：start 步骤 9 把 init 写入的 `.claude/` `.gitignore` `openspec/` 等文件首次提交进 git
 → 分支选择（3 级自动检测主分支）:
   ① `git symbolic-ref refs/remotes/origin/HEAD` → 远程 HEAD
   ② `git config --get init.defaultBranch` → 本地配置

@@ -23,7 +23,7 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 
 | 命令 | 参数 | 说明 |
 |------|------|------|
-| `alloy init` | `[path]` | 项目初始化：检测环境 → 安装依赖 → 部署 schema + skill |
+| `alloy init` | `[path]` | 项目初始化：HOME 拦截 → 确保 git 仓库 → 安装依赖 → 部署 schema + skill |
 | | `--scope <global\|project>` | 安装范围，默认 project |
 | | `--inject-claude-md` | 注入 CLAUDE.md（默认关闭） |
 | | `--agents <id,id,...>` | 非交互式模式，指定 AI 工具（逗号分隔），默认交互式多选 |
@@ -362,6 +362,8 @@ alloy init --scope global:
   openspec/ 目录   → <项目路径>/openspec/（始终项目级，由 deploySchema 创建）
 ```
 
+注意：HOME 拦截与 git 仓库初始化对当前目录生效，与 scope 无关。scope 只控制 skill 文件安装位置（决策 #16）。
+
 ### alloy init 流程
 
 ```
@@ -372,7 +374,9 @@ $ alloy init
   **检测环境...**
      ✓ Node.js v22.0.0
      ✓ git 已安装
-     ⚠ Claude Code 已安装
+
+  **检查 git 仓库...**
+     ✓ git 仓库 已存在
 
   **安装 OpenSpec CLI...**
      ✓ @fission-ai/openspec@1 已安装
@@ -397,22 +401,24 @@ $ alloy init
      ✓ shell 补全已注册 → ~/.zshrc
 
   ✅ Alloy 就绪！
-   在 Claude Code 中输入 /alloy:start <topic> 开始工作
+   在 Claude Code / Cursor 中输入 /alloy:start <topic> 开始工作
 ```
 
 关键步骤：
 
 1. **选择 scope** — 交互式选择 project（当前目录）或 global（home 目录），也可 `--scope` 参数指定
 2. **选择目标 Agent** — 交互式多选安装目标（Claude Code / Cursor / OpenCode 等 8 个平台），也可 `--agents` 非交互式指定
-3. **环境检测** — `detectEnv()` 检测 Node.js 版本、git、Claude Code。git 缺失则 HARD STOP
-4. **安装 OpenSpec CLI** — `npm install -g @fission-ai/openspec@1`
-5. **初始化 OpenSpec 项目结构** — `openspec init <path> --tools claude --profile custom`。传入临时 custom profile 确保全部 11 个 workflow 启用
-6. **安装 Superpowers** — `npx skills add obra/superpowers -y --agent claude-code`（project scope 不加 `-g`）
-7. **部署 Alloy command + schema** — 从包复制 `commands/alloy/`，自动生成冒号版和横线版到各平台目录，写入 `openspec/schemas/alloy/`，追加 `schema: alloy` 到 `openspec/config.yaml`
-8. **更新 .gitignore** — 追加 5 条规则（`docs/superpowers/` `.worktrees/` `worktrees/` `*.local.*` `.superpowers/`）
-9. **注入 CLAUDE.md** — 可选（`--inject-claude-md`），默认关闭
-10. **兼容性检查** — 根据 `compat.yaml` 校验版本
-11. **注册 shell 补全** — 自动检测 shell 类型，注册 `alloy completion` 到 rc 文件。失败不阻断 init
+3. **环境检测** — `detectEnv()` 检测 Node.js 版本、git。git 缺失则 HARD STOP
+4. **HOME 拦截** — 当前目录为 `$HOME` 时拒绝初始化（避免污染主目录）。无论 scope 均生效
+5. **确保 git 仓库** — `ensureGitRepo()` 检测当前目录是否已在 git 仓库，未在则 `git init` 兜底。失败硬退出
+6. **安装 OpenSpec CLI** — `npm install -g @fission-ai/openspec@1`
+7. **初始化 OpenSpec 项目结构** — `openspec init <path> --tools claude --profile custom`。传入临时 custom profile 确保全部 11 个 workflow 启用
+8. **安装 Superpowers** — `npx skills add obra/superpowers -y --agent claude-code`（project scope 不加 `-g`）
+9. **部署 Alloy command + schema** — 从包复制 `commands/alloy/`，自动生成冒号版和横线版到各平台目录，写入 `openspec/schemas/alloy/`，追加 `schema: alloy` 到 `openspec/config.yaml`
+10. **更新 .gitignore** — 追加 6 条规则（`docs/superpowers/` `.claude/worktrees/` `.worktrees/` `worktrees/` `.superpowers/` `*.local.*`）
+11. **注入 CLAUDE.md** — 可选（`--inject-claude-md`），默认关闭
+12. **兼容性检查** — 根据 `compat.yaml` 校验版本
+13. **注册 shell 补全** — 自动检测 shell 类型，注册 `alloy completion` 到 rc 文件。失败不阻断 init
 
 ### alloy update
 
@@ -463,6 +469,10 @@ alloy update [path]
 | 30 | 归档 commit 在 worktree 清理之前 | `/opsx:archive` 执行 `mv` 移动目录但不 git commit。如果在 worktree 中，变更必须先 commit 到 worktree 分支，否则 worktree merge 时会丢失归档操作。顺序：归档 commit → worktree 清理 → 完成时间 commit → guard commit |
 | 31 | 技能使用审计持久化 | `alloy _skill log` 在每个技能加载后立即记录到 `skill_usage[]`，retrospective §4 自动读取生成全周期技能审计表。解决之前 retrospective 靠 Agent 自报（不准、会漏）的问题 |
 | 32 | 交互降级策略 | 技能文件中 `AskUserQuestion` JSON 块必须附带降级文本格式。Agent 执行时检测平台能力——支持则用原生交互组件，不支持则自动降级为结构化文本选项。确保同一流程在 8 个平台体验一致 |
+| 33 | HOME 目录拒绝初始化 | 主目录写入 openspec/、.gitignore 等会污染环境；可能将整个 home 变为 git 仓库。init 入口硬拦截 |
+| 34 | git init 前置到 alloy init | 守门前移，符合"CLI 守门 / Skill 信任"原则（决策 #15）。`/alloy:start` 不再兜底 git init，仅校验 |
+| 35 | `/alloy:start` 环境完整性检测扩展为完整集 | 入口检测 git/config/schema/commands 四项基础设施，任一缺失引导 `alloy init`。Skill 预检（具体技能加载）保持独立 |
+| 36 | init 不检测 agent 是否安装 | init 职责是给选中的 agent 部署 Alloy 工作流，agent 是否安装/是否在该项目用过不影响部署（deployCommands 会自建目录）。原 Claude Code 硬检与后续的 agent 配置目录检测都无决策价值，一律删除 |
 
 ---
 

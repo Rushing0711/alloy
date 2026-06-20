@@ -1,6 +1,8 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { homedir } from "node:os";
 import { detectEnv } from "../../core/detect.js";
+import { ensureGitRepo } from "../../core/git.js";
 import { runHealthCheck } from "../../core/health.js";
 import { installOpenSpecCli, initOpenSpecProject } from "../../core/openspec.js";
 import { installSuperpowers } from "../../core/superpowers.js";
@@ -10,7 +12,6 @@ import { KNOWN_AGENTS } from "../../core/agents.js";
 import type { AgentInfo, DeployOptions } from "../../core/types.js";
 import { getPackageRoot } from "../../utils/fs.js";
 import { promptSelect, promptMultiSelect } from "../../utils/prompt.js";
-import { color, spinner } from "../../utils/format.js";
 import { section, check, success, error, warn, banner, info } from "../../utils/output.js";
 
 export async function selectScope(passedScope?: string): Promise<"global" | "project"> {
@@ -63,11 +64,39 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   const env = detectEnv();
   check("Node.js", env.nodeVersion, "pass");
   check("git", env.gitInstalled ? "已安装" : "未安装", env.gitInstalled ? "pass" : "fail");
-  check("Claude Code", env.claudeCodeInstalled ? "已安装" : "未检测到 CLI，请确保已安装", env.claudeCodeInstalled ? "pass" : "warn");
 
   if (!env.gitInstalled) {
     error("❌ 缺少必要依赖，请先安装 git");
     process.exit(1);
+    return;
+  }
+
+  // 1.5 HOME 拦截——拒绝在用户主目录初始化（scope 不影响此判断，projectPath 始终不能是 $HOME）
+  const resolved = resolve(opts.projectPath);
+  const home = resolve(homedir());
+  const isHome =
+    (process.platform === "win32" || process.platform === "darwin")
+      ? resolved.toLowerCase() === home.toLowerCase()
+      : resolved === home;
+  if (isHome) {
+    error("⛔ 拒绝在用户主目录初始化 Alloy");
+    info("当前目录是 $HOME，初始化会在主目录写入 openspec/、.gitignore 等文件，并可能将整个主目录变成 git 仓库。");
+    info("请先 cd 到具体项目目录后再运行 alloy init。");
+    process.exit(1);
+    return;
+  }
+
+  // 1.6 确保 git 仓库就绪——alloy init 守门，/alloy:start 不再兜底
+  section("检查 git 仓库...");
+  const gitResult = ensureGitRepo(opts.projectPath);
+  if (gitResult === "exists") {
+    check("git 仓库", "已存在", "pass");
+  } else if (gitResult === "initialized") {
+    check("git 仓库", "原无仓库，本次已初始化", "pass");
+  } else {
+    error("git init 失败，请检查目录权限或磁盘空间");
+    process.exit(1);
+    return;
   }
 
   // 2. 安装 OpenSpec CLI（npm 全局包）
@@ -78,6 +107,7 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   } else if (openspecResult === "failed") {
     error("OpenSpec CLI 安装失败");
     process.exit(1);
+    return;
   }
   // "skipped" — 函数内部已输出跳过信息
 
@@ -87,6 +117,7 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   if (initResult === "failed") {
     error("OpenSpec 项目初始化失败");
     process.exit(1);
+    return;
   }
 
   // 4. 安装 Superpowers
@@ -116,6 +147,7 @@ export async function initCommand(opts: InitOptions): Promise<void> {
     } catch (e) {
       error(`command 部署失败: ${(e as Error).message}`);
       process.exit(1);
+      return;
     }
   }
   const schemaPath = await deploySchema(opts);
@@ -185,5 +217,8 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   }
 
   banner("✅ Alloy 就绪！");
-  info("在 Claude Code 中输入 /alloy:start <topic> 开始工作\n");
+  const labels = opts.targetAgents.length > 0
+    ? opts.targetAgents.map(a => a.label).join(" / ")
+    : "目标 Agent";
+  info(`在 ${labels} 中输入 /alloy:start <topic> 开始工作\n`);
 }

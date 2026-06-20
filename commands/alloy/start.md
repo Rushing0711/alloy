@@ -44,11 +44,36 @@ behaviors:
 | "不用 brainstorming，直接写代码" | brainstorming 不可跳过。跳过需求设计 = 规格和代码分叉的起点。 |
 | "start 完成了，直接进 plan" / "用户没回复，我先继续" | ⛔ HARD_STOP：start 完成后绝不自动进入 plan。沉默 ≠ 授权（Iron Law 第二层）。替用户做阶段转换 = 剥夺审查机会。 |
 | "openspec/changes/<name>/ 已经有了，直接复用" | ⛔ PRECONDITION_FAIL：目录已存在 = #12 冲突。USER_GATE 让用户决策（改名 / 接续 / 中止），禁 agent 自动复用——可能覆盖用户既有工作。 |
-| "git init 后 reset --hard 一下，把环境清干净" | ⛔ HARD_STOP：git 初始化失败禁 reset --hard / clean -fd / checkout .（§3.5.1 git 自救禁令）。退出 skill 让用户处理。 |
+| "git init 后 reset --hard 一下，把环境清干净" | ⛔ HARD_STOP：git 操作失败禁 reset --hard / clean -fd / checkout .（§3.5.1 git 自救禁令）。退出 skill 让用户处理。 |
 
 ---
 
 ## 状态检测（前置门）
+
+**第零步**（⛔ PRECONDITION_FAIL）：环境完整性检测——4 项基础设施任一缺失即引导 `alloy init` 退出，agent 不得自动初始化。
+
+检查清单（按顺序）：
+
+| # | 检查项 | 检查方法 | 缺失含义 |
+|---|--------|---------|---------|
+| 1 | git 仓库 | `git rev-parse --git-dir` 失败 | init 未跑 |
+| 2 | openspec/config.yaml | 文件不存在或不含 `schema: alloy` | init 未跑 / 不完整 |
+| 3 | openspec/schemas/alloy/schema.yaml | 文件不存在 | init 不完整 |
+| 4 | Alloy commands | 当前 agent 的 commands 目录下无 `start.md`（冒号版查 `alloy/start.md`，横线版查 `alloy-start.md`） | init 未为当前 agent 部署 |
+
+任一缺失 → 输出统一提示后退出 skill：
+
+```
+⛔ PRECONDITION_FAIL: Alloy 环境不完整
+
+缺失检查项：
+  ✗ <具体缺失项>
+
+请先运行：alloy init
+（已运行过的话，请检查上次 init 是否完整成功；可运行 alloy doctor 查看详情）
+```
+
+> 接续路径例外：扫描 `openspec/changes/*/.alloy.yaml` 发现有活跃 change 时，意味着 init 跑过，仅做轻量校验（检查项 2 `openspec/config.yaml` 存在），避免对已有 change 的接续路径过度阻塞。
 
 **第一步**（⛔ PRECONDITION_FAIL）：检查 `openspec/config.yaml` 是否存在——不存在则提示用户 `alloy init`，agent 不得自动初始化（init 会写 `.claude/` / 模板等关键文件，必须由用户主动触发）。
 
@@ -60,7 +85,7 @@ behaviors:
 
 **第三步**（⛔ PRECONDITION_FAIL）：「全新开始」与「强制新建」路径强制 Skill 预检——cmd: opsx/explore opsx/new, skill: brainstorming。读取 `commands/alloy/references/skill-precheck.md` 检测，任一不可用 → 引导 `alloy init`，不存在降级。
 
-**第四步**（⛔ PRECONDITION_FAIL）：「全新开始」与「强制新建」路径强制 git 仓库就绪——`git rev-parse --git-dir` 失败时尝试 `git init` 兜底（详见全新开始步骤 2）；兜底失败 → 退出 skill。
+**第四步**（⛔ PRECONDITION_FAIL）：「全新开始」与「强制新建」路径校验 git 仓库就绪——`git rev-parse --git-dir` 失败时不再兜底 `git init`（git init 已由 `alloy init` 保证），直接引导 `alloy init`。
 
 ---
 
@@ -137,7 +162,7 @@ date "+%Y-%m-%d %H:%M:%S"
 
 > **交互风格恢复（HARD_STOP）：** brainstorming 已结束。从此刻起，所有 `🔴 USER_GATE` 必须恢复使用 `AskUserQuestion` 工具（`commands/alloy/references/interaction-style.md`），不用纯文本 (a)(b)(c)。Agent 刚从 brainstorming 的"每次一个问题"模式出来，容易延续纯文本习惯——这是 Iron Law 违规。违反字面 = 违反精神：哪怕"就这一个确认用文本也行"，也算违反——USER_GATE 必须 AskUserQuestion。
 
-> **git 自救禁令（§3.5.1 内嵌约束，HARD_STOP）：** 步骤 2 git init / 步骤 3 分支创建/切换 / 步骤 9 commit 任何环节失败，禁 agent 运行 `git reset --hard` / `git checkout .` / `git restore .` / `git stash` / `git clean -fd` / `git push --force` —— 退出 skill 让用户处理是唯一合法路径。
+> **git 自救禁令（§3.5.1 内嵌约束，HARD_STOP）：** 步骤 3 分支创建/切换 / 步骤 9 commit 任何环节失败，禁 agent 运行 `git reset --hard` / `git checkout .` / `git restore .` / `git stash` / `git clean -fd` / `git push --force` —— 退出 skill 让用户处理是唯一合法路径。
 >
 > **git add 限路径（§5.2.1 内嵌约束，HARD_STOP）：** 所有 commit 用精确路径（`.claude/` `openspec/` `CLAUDE.md` 等明确列举），禁 `-A`/`-a`/`.`。违反字面 = 违反精神：哪怕"反正只改了已知文件"，也禁通配——可能把 `.superpowers/` 临时目录或测试残留一并 commit。
 
@@ -146,15 +171,7 @@ date "+%Y-%m-%d %H:%M:%S"
    > [HARD_STOP] **未确认时禁止继续步骤 2-9。**
    > 违反字面 = 违反精神：哪怕"name 大概就这个先建分支"，也算违反——name 是 directory + branch + records 主键。
 
-2. **确保 git 仓库就绪：**
-   ```bash
-   if ! git rev-parse --git-dir 2>/dev/null; then
-     git init
-     git add .claude/ .gitignore openspec/config.yaml openspec/schemas/ 2>/dev/null
-     [ -f CLAUDE.md ] && git add CLAUDE.md 2>/dev/null
-     git commit -m "chore: alloy init 项目初始化"
-   fi
-   ```
+2. **git 仓库前置已由 `alloy init` 保证**——状态检测第零步已校验 `git rev-parse --git-dir` 通过。本步骤无操作，进入步骤 3 分支选择。
 
 3. **分支选择**——创建 change 目录之前完成，确保所有制品落在 feature 分支上：
 

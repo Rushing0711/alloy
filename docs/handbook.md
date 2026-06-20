@@ -168,7 +168,7 @@ worktree 是 apply 的**本地实现细节**。apply 完成后代码已经合并
 
 | 命令 | 参数 | 说明 |
 |------|------|------|
-| `alloy init` | `[path]` | 项目初始化：检测环境 → 安装依赖 → 部署 schema + skill |
+| `alloy init` | `[path]` | 项目初始化：HOME 拦截 → 确保 git 仓库 → 安装依赖 → 部署 schema + skill |
 | | `--scope <global\|project>` | 安装范围，默认 project |
 | | `--inject-claude-md` | 注入 CLAUDE.md（默认关闭） |
 | | `--agents <id,id,...>` | 非交互式模式，指定 AI 工具 |
@@ -433,6 +433,7 @@ openspec/
 | `.alloy.yaml` phase 不更新 | guard 无制品检查 | 补充制品缺失检查 |
 | "Alloy 未初始化" | 未运行 `alloy init` | 运行 `alloy init` |
 | "OpenSpec 项目结构未找到" | `openspec/config.yaml` 不存在 | 运行 `alloy init` |
+| `alloy init` 报"拒绝在用户主目录初始化" | 当前目录是 `$HOME` | `cd` 到具体项目目录后重跑 |
 
 ### 诊断工具
 

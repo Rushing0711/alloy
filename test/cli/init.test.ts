@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // Mock 所有外部依赖 - 使用 vi.hoisted 确保在 vi.mock 之前可用
-const { mockDetectEnv, mockRunHealthCheck, mockInstallOpenSpecCli, mockInitOpenSpecProject, mockInstallSuperpowers, mockDeployCommands, mockDeploySchema, mockInjectClaudeMd, mockPromptSelect, mockPromptMultiSelect, mockSpinnerInstance, mockSpinner } = vi.hoisted(() => {
+const { mockDetectEnv, mockRunHealthCheck, mockInstallOpenSpecCli, mockInitOpenSpecProject, mockInstallSuperpowers, mockDeployCommands, mockDeploySchema, mockInjectClaudeMd, mockPromptSelect, mockPromptMultiSelect, mockSpinnerInstance, mockSpinner, mockEnsureGitRepo } = vi.hoisted(() => {
   const mockSpinnerInstance = {
     start: vi.fn().mockReturnThis(),
     stop: vi.fn().mockReturnThis(),
@@ -23,10 +23,14 @@ const { mockDetectEnv, mockRunHealthCheck, mockInstallOpenSpecCli, mockInitOpenS
     mockPromptMultiSelect: vi.fn(),
     mockSpinnerInstance,
     mockSpinner,
+    mockEnsureGitRepo: vi.fn(),
   };
 });
 
-vi.mock("../../src/core/detect.js", () => ({ detectEnv: mockDetectEnv }));
+vi.mock("../../src/core/detect.js", () => ({
+  detectEnv: mockDetectEnv,
+}));
+vi.mock("../../src/core/git.js", () => ({ ensureGitRepo: mockEnsureGitRepo }));
 vi.mock("../../src/core/health.js", () => ({ runHealthCheck: mockRunHealthCheck }));
 vi.mock("../../src/core/openspec.js", () => ({
   installOpenSpecCli: mockInstallOpenSpecCli,
@@ -51,7 +55,7 @@ import { selectScope, selectTargetAgents, initCommand } from "../../src/cli/comm
 import { KNOWN_AGENTS } from "../../src/core/agents.js";
 import { writeFile, mkdir, rm, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { tmpdir, homedir } from "node:os";
 
 describe("init", () => {
   let tmpDir: string;
@@ -71,7 +75,6 @@ describe("init", () => {
     mockDetectEnv.mockReturnValue({
       nodeVersion: "v18.0.0",
       gitInstalled: true,
-      claudeCodeInstalled: true,
     });
     mockRunHealthCheck.mockResolvedValue([]);
     mockInstallOpenSpecCli.mockResolvedValue("installed");
@@ -80,6 +83,7 @@ describe("init", () => {
     mockDeployCommands.mockResolvedValue([]);
     mockDeploySchema.mockResolvedValue(join(tmpDir, "openspec/schemas/alloy"));
     mockInjectClaudeMd.mockResolvedValue(false);
+    mockEnsureGitRepo.mockReturnValue("exists");
   });
 
   afterEach(async () => {
@@ -175,7 +179,6 @@ describe("init", () => {
       mockDetectEnv.mockReturnValue({
         nodeVersion: "v18.0.0",
         gitInstalled: false,
-        claudeCodeInstalled: false,
       });
 
       await initCommand(defaultOpts);
@@ -264,6 +267,73 @@ describe("init", () => {
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("✓ Node.js"));
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("⚠ OpenSpec"));
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("✗ Git"));
+    });
+
+    it("projectPath 等于 $HOME 时拒绝并 exit 1", async () => {
+      const home = homedir();
+      const opts = { ...defaultOpts, projectPath: home };
+
+      await initCommand(opts);
+
+      expect(processExitSpy).toHaveBeenCalledWith(1);
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("拒绝在用户主目录初始化"));
+      expect(mockEnsureGitRepo).not.toHaveBeenCalled();
+      expect(mockInstallOpenSpecCli).not.toHaveBeenCalled();
+    });
+
+    it("projectPath 不是 $HOME 时正常继续", async () => {
+      // tmpDir 由 beforeEach 创建，确保不是 $HOME 且可写（ensureGitignore 会真实 writeFile）
+      const opts = { ...defaultOpts, projectPath: tmpDir };
+
+      await initCommand(opts);
+
+      expect(processExitSpy).not.toHaveBeenCalled();
+      expect(mockEnsureGitRepo).toHaveBeenCalledWith(tmpDir);
+    });
+
+    it("ensureGitRepo 返回 failed 时 exit 1", async () => {
+      mockEnsureGitRepo.mockReturnValue("failed");
+
+      await initCommand(defaultOpts);
+
+      expect(processExitSpy).toHaveBeenCalledWith(1);
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("git init 失败"));
+      expect(mockInstallOpenSpecCli).not.toHaveBeenCalled();
+    });
+
+    it("ensureGitRepo 返回 initialized 时继续后续步骤", async () => {
+      mockEnsureGitRepo.mockReturnValue("initialized");
+
+      await initCommand(defaultOpts);
+
+      expect(processExitSpy).not.toHaveBeenCalled();
+      expect(mockInstallOpenSpecCli).toHaveBeenCalled();
+    });
+
+    it("ensureGitRepo 返回 exists 时输出已存在", async () => {
+      mockEnsureGitRepo.mockReturnValue("exists");
+
+      await initCommand(defaultOpts);
+
+      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("git 仓库"));
+      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("已存在"));
+    });
+
+    it("banner 输出包含所有 targetAgents 的 label", async () => {
+      const opts = {
+        ...defaultOpts,
+        targetAgents: [
+          { id: "claude-code", label: "Claude Code", supportsColonCommands: true, commandsDir: ".claude/commands/" },
+          { id: "cursor", label: "Cursor", supportsColonCommands: false, commandsDir: ".cursor/commands/" },
+        ],
+      };
+
+      await initCommand(opts);
+
+      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("Claude Code"));
+      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("Cursor"));
+      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("Claude Code / Cursor"));
+      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("/alloy:start <topic>"));
     });
   });
 });

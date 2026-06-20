@@ -12,13 +12,5 @@ export function detectEnv(): EnvInfo {
     // git 未安装
   }
 
-  let claudeCodeInstalled = false;
-  try {
-    execSync("claude --version", { stdio: "pipe" });
-    claudeCodeInstalled = true;
-  } catch {
-    // Claude Code CLI 未安装
-  }
-
-  return { nodeVersion, gitInstalled, claudeCodeInstalled };
+  return { nodeVersion, gitInstalled };
 }
