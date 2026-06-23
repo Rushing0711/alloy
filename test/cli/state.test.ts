@@ -183,65 +183,9 @@ describe("state utils", () => {
     expect(loaded.worktree_branch).toBe("worktree-test-feat");
   });
 
-  it("_state merge 可追加新字段", async () => {
-    const changeDir = join(tmpDir, "merge-add");
-    await mkdir(changeDir, { recursive: true });
-    const state = createInitialState();
-    state.phase_timings = { start: { started_at: "2026-06-06 08:00:00", completed_at: "2026-06-06 09:00:00" } };
-    await writeState(changeDir, state);
-
-    const { stateCommand } = await import("../../src/cli/commands/internal/state.js");
-    await stateCommand(["merge", changeDir, "phase_timings", JSON.stringify({ plan: { started_at: "2026-06-06 09:30:00" } })]);
-
-    const loaded = await readState(changeDir);
-    expect(loaded.phase_timings?.start).toBeDefined();
-    expect(loaded.phase_timings?.start?.started_at).toBe("2026-06-06 08:00:00");
-    expect(loaded.phase_timings?.plan).toBeDefined();
-    expect(loaded.phase_timings?.plan?.started_at).toBe("2026-06-06 09:30:00");
-  });
-
-  it("_state merge 不覆盖已有 leaf 值", async () => {
-    const changeDir = join(tmpDir, "merge-idempotent");
-    await mkdir(changeDir, { recursive: true });
-    const state = createInitialState();
-    state.phase_timings = { start: { started_at: "2026-06-06 08:00:00" } };
-    await writeState(changeDir, state);
-
-    const { stateCommand } = await import("../../src/cli/commands/internal/state.js");
-    await stateCommand(["merge", changeDir, "phase_timings", JSON.stringify({ start: { started_at: "SHOULD_NOT_OVERWRITE" } })]);
-
-    const loaded = await readState(changeDir);
-    expect(loaded.phase_timings?.start?.started_at).toBe("2026-06-06 08:00:00");
-  });
-
-  it("_state merge 嵌套对象递归合并", async () => {
-    const changeDir = join(tmpDir, "merge-nested");
-    await mkdir(changeDir, { recursive: true });
-    const state = createInitialState();
-    state.phase_timings = { start: { started_at: "08:00", completed_at: "09:00" } };
-    await writeState(changeDir, state);
-
-    const { stateCommand } = await import("../../src/cli/commands/internal/state.js");
-    await stateCommand(["merge", changeDir, "phase_timings", JSON.stringify({ plan: { started_at: "09:30" } })]);
-
-    const loaded = await readState(changeDir);
-    expect(loaded.phase_timings?.start?.started_at).toBe("08:00");
-    expect(loaded.phase_timings?.start?.completed_at).toBe("09:00");
-    expect(loaded.phase_timings?.plan?.started_at).toBe("09:30");
-  });
-
-  it("_state merge phase_timings 字段不存在时等价于 write", async () => {
-    const changeDir = join(tmpDir, "merge-from-scratch");
-    await mkdir(changeDir, { recursive: true });
-    const state = createInitialState();
-    await writeState(changeDir, state); // 无 phase_timings
-
-    const { stateCommand } = await import("../../src/cli/commands/internal/state.js");
-    await stateCommand(["merge", changeDir, "phase_timings", JSON.stringify({ apply: { started_at: "10:00" } })]);
-
-    const loaded = await readState(changeDir);
-    expect(loaded.phase_timings?.apply?.started_at).toBe("10:00");
-  });
+  // 注：原 _state merge phase_timings 的 4 个测试已移除——phase_timings 现为受管字段
+  // （N2 修复），merge 入口被拦截。deepMerge 嵌套合并行为改由 _phase start/complete 内部
+  // 通过 writeState 直接写入覆盖，不再经 _state merge 暴露。受管字段拦截见 internal/state.test.ts
 });
 
 describe("project config", () => {

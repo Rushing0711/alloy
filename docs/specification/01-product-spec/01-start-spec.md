@@ -33,12 +33,9 @@ behaviors:
 → brainstorming 确认后，由 Agent 建议 kebab-case change name，用户确认后调用 `/opsx:new` 创建 change 目录 + `alloy _state init` 写入初始状态
 → git 仓库就绪：已由 `alloy init` 保证（HOME 拦截 + `ensureGitRepo` 兜底）。start 阶段仅校验 `git rev-parse --git-dir`，不再兜底 git init
 → 基础设施 commit（锚点，确保可创建分支）：start 步骤 9 把 init 写入的 `.claude/` `.gitignore` `openspec/` 等文件首次提交进 git
-→ 分支选择（3 级自动检测主分支）:
-  ① `git symbolic-ref refs/remotes/origin/HEAD` → 远程 HEAD
-  ② `git config --get init.defaultBranch` → 本地配置
-  ③ `git branch --list main master` → 名称匹配
-  → 用户 Y/n 确认主分支 → 写入 openspec/config.yaml（`alloy.main_branch`）
-  → 检测当前分支位置：
+→ 分支选择:
+  ① 主分支读取：`alloy init` 阶段已确认并写入 `openspec/config.yaml`，start 阶段直接读取（`alloy _config read . main_branch`）。未配置 → PRECONDITION_FAIL，引导重跑 `alloy init`
+  ② 检测当前分支位置：
     - 在主分支上 → HARD STOP（不允许在主分支开发），只展示"新建分支"
     - 在 feature 分支且名称含 change 名 → 提示可沿用
     - 在非主分支的已有分支上 → 展示选项

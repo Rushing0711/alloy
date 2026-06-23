@@ -157,7 +157,7 @@ alloy:
 
 | 字段 | 读写 | 含义 |
 |------|------|------|
-| `alloy.main_branch` | start 阶段写入，finish/discard 读取 | 项目主分支名，分支管理和合并目标的基准 |
+| `alloy.main_branch` | alloy init 阶段写入，finish/discard 读取 | 项目主分支名，分支管理和合并目标的基准 |
 
 `alloy _config` CLI 命令用于读写项目级配置：
 ```bash
@@ -410,15 +410,22 @@ $ alloy init
 2. **选择目标 Agent** — 交互式多选安装目标（Claude Code / Cursor / OpenCode 等 8 个平台），也可 `--agents` 非交互式指定
 3. **环境检测** — `detectEnv()` 检测 Node.js 版本、git。git 缺失则 HARD STOP
 4. **HOME 拦截** — 当前目录为 `$HOME` 时拒绝初始化（避免污染主目录）。无论 scope 均生效
-5. **确保 git 仓库** — `ensureGitRepo()` 检测当前目录是否已在 git 仓库，未在则 `git init` 兜底。失败硬退出
-6. **安装 OpenSpec CLI** — `npm install -g @fission-ai/openspec@1`
-7. **初始化 OpenSpec 项目结构** — `openspec init <path> --tools claude --profile custom`。传入临时 custom profile 确保全部 11 个 workflow 启用
-8. **安装 Superpowers** — `npx skills add obra/superpowers -y --agent claude-code`（project scope 不加 `-g`）
-9. **部署 Alloy command + schema** — 从包复制 `commands/alloy/`，自动生成冒号版和横线版到各平台目录，写入 `openspec/schemas/alloy/`，追加 `schema: alloy` 到 `openspec/config.yaml`
-10. **更新 .gitignore** — 追加 6 条规则（`docs/superpowers/` `.claude/worktrees/` `.worktrees/` `worktrees/` `.superpowers/` `*.local.*`）
-11. **注入 CLAUDE.md** — 可选（`--inject-claude-md`），默认关闭
-12. **兼容性检查** — 根据 `compat.yaml` 校验版本
-13. **注册 shell 补全** — 自动检测 shell 类型，注册 `alloy completion` 到 rc 文件。失败不阻断 init
+5. **采集项目状态（不改变项目目录）** — 检测 git 仓库是否存在、HEAD 是否 unborn（无 commit）、现有 config 是否已有 main_branch、检测主分支（remote HEAD / init.defaultBranch / 本地分支匹配）
+6. **USER_GATE 1：确认主分支** — 若 config 已有 main_branch 则跳过（幂等）；否则检测后让用户确认（检测值 / 自定义）
+7. **USER_GATE 2：确认执行清单** — 展示将部署的文件 + git 操作（是否 git init、是否初始 commit），用户拒绝则 exit 0，项目目录零变化
+8. **确保 git 仓库** — `ensureGitRepo()` 检测当前目录是否已在 git 仓库，未在则 `git init`。失败硬退出
+9. **安装 OpenSpec CLI** — `npm install -g @fission-ai/openspec@1`
+10. **初始化 OpenSpec 项目结构** — `openspec init <path> --tools claude --profile custom`。传入临时 custom profile 确保全部 11 个 workflow 启用
+11. **安装 Superpowers** — `npx skills add obra/superpowers -y --agent claude-code`（project scope 不加 `-g`）
+12. **部署 Alloy command + schema** — 从包复制 `commands/alloy/`，自动生成冒号版和横线版到各平台目录，写入 `openspec/schemas/alloy/`
+13. **更新 .gitignore** — 追加 6 条规则（`docs/superpowers/` `.claude/worktrees/` `.worktrees/` `worktrees/` `.superpowers/` `*.local.*`）
+14. **注入 CLAUDE.md** — 可选（`--inject-claude-md`），默认关闭
+15. **写入 main_branch 配置** — `openspec/config.yaml` 写入 `alloy.main_branch: <确认值>`
+16. **若 HEAD unborn：创建初始 commit 锁定 main 分支** — `git add .claude/ .gitignore openspec/config.yaml openspec/schemas/ CLAUDE.md` + `git commit -m "chore: alloy init 项目初始化"`。在 main 分支创建第一个 commit，让 main 引用文件诞生，后续 `/alloy:start` 切到 feature 分支后 main 保留。若 HEAD 已有 commit 则不自动提交，文件留工作目录，提示用户自行 commit
+17. **兼容性检查** — 根据 `compat.yaml` 校验版本
+18. **注册 shell 补全** — 自动检测 shell 类型，注册 `alloy completion` 到 rc 文件。失败不阻断 init
+
+> **main 分支锁定（关键设计）：** `git init` 后 HEAD 指向 `refs/heads/main` 但引用文件不存在（unborn 状态）。若此时直接切到 feature 分支，main 永久缺失——`/alloy:finish` 阶段 `git checkout main` 会失败。alloy init 在 unborn 时创建初始 commit，让 main 分支真正诞生，从源头避免此问题。
 
 ### alloy update
 

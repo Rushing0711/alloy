@@ -5,8 +5,8 @@ category: Workflow
 tags: [alloy, workflow]
 spec: 01-product-spec/03-apply-spec.md
 behaviors:
-  preconditions: 11
-  hard_stops:    8
+  preconditions: 12
+  hard_stops:    9
   user_gates:    8
   warns:         3
   artifacts: [verify, retrospective]
@@ -30,12 +30,15 @@ behaviors:
 
 **状态符号：** `⛔` = HARD_STOP / PRECONDITION_FAIL，`🔴` = USER_GATE，`⚠️` = WARN（视觉规范 §七）。
 
+**输出规则：** 阶段入口/出口必须按 `docs/specification/02-visual-spec.md` 输出 Phase 框（`┌─┐` Unicode 单线框，38 字符宽）、Step 标题（`[Step N/M]` + 38 字符 `─` 下划线）、`>` 块引用、`→` 引导行。**skill md 中的 Phase 框代码块是必须输出到终端的格式，不是文档示例。** 审查窗口、制品汇总表同理。
+
 **调用外部命令或技能前，先输出标题和状态描述，再执行操作。**
 
-**捕获阶段启动时间**（幂等，重入时返回已有值）：
+**捕获阶段启动时间 + 独立"阶段开始"commit**（幂等，重入时 started_at 不覆盖）：
 ```bash
-PHASE_START=$(alloy _state timestamp ensure openspec/changes/<name> apply)
+alloy _phase start openspec/changes/<name> apply
 ```
+> `alloy _phase start` 原子完成：幂等写 `phase_timings.apply.started_at` + git add 限路径 + commit。产生独立的"阶段开始"commit（仅 .alloy.yaml），不并入后续制品 commit。
 
 ---
 
@@ -53,10 +56,11 @@ PHASE_START=$(alloy _state timestamp ensure openspec/changes/<name> apply)
 
 ## 前置检查
 
+**进入阶段时，必须输出以下 Phase 框到终端**:
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [3/5] · Phase: Apply           │
-│ 启动时间: $PHASE_START               │
+│ 启动时间: phase_timings.apply.started_at │
 └──────────────────────────────────────┘
 ```
 
@@ -88,7 +92,7 @@ git rev-parse --git-dir
 
 读取 `commands/alloy/references/apply-precheck.md` 执行检测。WARN 不阻断——仅提示。
 
-提交前置状态（worktree 创建前确保 .alloy.yaml 变更已落地）：
+提交前置状态（worktree 创建前确保 .alloy.yaml 变更已落地；若 `_phase start` 之后无新变更则自动跳过）：
 ```bash
 # §5.2.1: git add 限路径，禁 -A 无路径
 git add openspec/changes/<name>/.alloy.yaml
@@ -103,27 +107,22 @@ git diff --cached --quiet || git commit -m "chore(<name>): apply 阶段开始前
 
 ## 需求变更闸门
 
-用户提出需求/设计变更时，以编码是否已开始为分界线：
+**[HARD_STOP] plan 已完成，apply 阶段不允许任何需求变更。** 任何功能增删、行为变更、设计调整都必须走"放弃当前 change + 开新 change"路径。
 
-```bash
-grep -c '\[x\]' openspec/changes/<name>/tasks.md
-```
+**Why：** plan 完成 = 制品已 hash-lock + records 完整链。apply 阶段开始 = worktree 可能已创建 + 代码生成在即。在此阶段就地修改 plans/specs 制品 = hash 锁定形同虚设；回溯到 brainstorming = 编码工作可能丢失或冲突。统一走 discard 重开是唯一合法路径。
 
-- **返回 0（未编码）：** 🔴 USER_GATE（必须 AskUserQuestion）: 检测到需求变更，tasks 尚未编码。选择处理路径：
-  - (a) 回溯清理 plan 制品，回到 brainstorming
-  - (b) 取消变更，继续 apply
+🔴 USER_GATE（必须 AskUserQuestion）：检测到需求变更，apply 阶段不允许就地变更。
 
-  选 (a)：清理 plan 制品 → 回到 brainstorming（plan.md 的回溯清理步骤）。
-  选 (b)：继续当前 apply 流程。
+> apply 阶段一旦进入，plan 已锁定的制品（proposal/design/specs/tasks/plans）和 records 链不可逆。
+> 任何需求变更必须开新 change，复用本 change 的 spec 沉淀作为参考即可。
+>
+> (a) 放弃当前 change，开新 change 处理变更——执行 `/alloy:discard <name>` 后 `/alloy:start <new-name>`
+> (b) 取消变更，继续当前 apply
 
-- **返回 > 0（已编码）：** 🔴 USER_GATE（必须 AskUserQuestion）: 检测到需求变更，tasks 已有编码完成项。选择处理路径：
-  - (a) 开新 change 处理变更（引导 `/alloy:start <建议名称>`）
-  - (b) 取消变更，继续 apply
+选 (a)：引导用户运行 `/alloy:discard <name>`（会软删除当前 change 到 archive/），然后 `/alloy:start <new-name>` 开新 change。
+选 (b)：继续当前 apply 流程。
 
-  选 (a)：引导用户运行 `/alloy:start <建议名称>` 开新 change。
-  选 (b)：继续当前 apply 流程。
-
-> 违反字面 = 违反精神：禁直接编辑 plans.md "顺手"承载需求变更——必须走 (a) 回溯或开新 change，否则 plans hash 锁定形同虚设。
+> 违反字面 = 违反精神：禁直接编辑 plans.md "顺手"承载需求变更；禁在 apply 阶段调用 alloy _artifact reset / _checkpoint switch / 手动改制品文件——这些都是绕过 plan 锁定的反模式。CLI 命令本身已有 phase 校验（_checkpoint 系列硬校验 phase===started），手动改文件没有校验，**必须按 (a) 路径走**。
 
 ## 执行步骤
 
@@ -148,7 +147,7 @@ alloy _guard worktree-status openspec/changes/<name>
 alloy _guard branch-position openspec/changes/<name>
 ```
 
-- `on-feature` → ✓ 位置正确
+- `on-feature` → ✓ 合规：当前在 feature 分支（非 main），符合 Alloy 工作流推荐——所有 change 工作应在 feature 分支进行，main 只接收合入
 - `on-main` / `feature-missing` / `feature-lost:<branch>` / `on-other:<branch>` → ⛔ `[PRECONDITION_FAIL] 分支位置异常`：
   - on-main：在主分支，不允许创建 worktree——plan 阶段 commit 在 feature 分支上
   - feature-missing / feature-lost：feature_branch 状态记录与实际不符
@@ -158,28 +157,49 @@ alloy _guard branch-position openspec/changes/<name>
 
 **主分支确认：** 读取 `commands/alloy/references/main-branch-detection.md`。若 `openspec/config.yaml` 已有 `alloy.main_branch`，直接用，跳过确认。
 
-分支验证通过后，加载 `superpowers:using-git-worktrees` 技能获取用户 consent：
-- 传入：工作目录偏好 `.claude/worktrees/<name>`，分支命名 `worktree-<name>`，基于 `<feature_branch>`
-- **仅使用 Step 0（检测+consent）。不要用 Step 1a/1b 的创建方法——EnterWorktree 默认从 origin/main 分出，base ref 错误。**
-- **必须等用户明确选择（创建/跳过）后才继续。模糊回复（"嗯"、"好吧"）不算同意。** 🔴 USER_GATE（必须 AskUserQuestion）: 确认 worktree 选择（创建 / 跳过）。
+分支验证通过后，加载 `superpowers:using-git-worktrees` 技能：
+- **完整执行技能 Step 0-4**（检测 + consent + 创建 + 项目设置 + 基线测试），不再限制仅 Step 0
+- **前置条件（alloy init 已配置）：** Claude Code agent 的 `.claude/settings.json` 含 `worktree.baseRef: head`，EnterWorktree 从当前 feature 分支分出（非 origin/main），base ref 正确。其他 agent 无 EnterWorktree，技能走 Step 1b git worktree fallback。
+- **传入 name=`<name>`**（change 名）：EnterWorktree(name) → 路径 `.claude/worktrees/<name>`，分支 `worktree-<name>`，可预测；git fallback 同样用此 name 作为分支名
+- **必须等用户明确选择（创建/跳过）后才继续。模糊回复（"嗯"、"好吧"）不算同意。**
+
+🔴 USER_GATE（必须 AskUserQuestion）: 确认 worktree 选择。**提示用户时必须说明 worktree 特点，帮助决策：**
+
+> Worktree 隔离当前工作区，在独立目录+独立分支执行 apply，不影响 feature 分支现场。
+> - **特点：** 执行期间可随时切回 feature/main 分支处理其他任务，apply 工作不受干扰
+> - **建议：** 任务大/执行久（多子任务、需 TDD 迭代）→ 建议创建 worktree；任务小/快速完成 → 可跳过
+> - 选项：(a) 创建 worktree (b) 跳过，直接在 feature 分支执行
 
 ```bash
 alloy _skill log openspec/changes/<name> apply superpowers:using-git-worktrees
-# _skill log 写入后必须 commit——git worktree add 基于 HEAD 创建，
+# _skill log 写入后必须 commit——后续 worktree 创建基于 HEAD，
 # 不 commit 会导致此条记录在 worktree 中丢失
 git add openspec/changes/<name>/.alloy.yaml
 git diff --cached --quiet || git commit -m "chore(<name>): 记录 using-git-worktrees 技能使用"
 ```
 
+> **[HARD_STOP] `_skill log` 后必须立即 commit，禁止未 commit 就 EnterWorktree。**
+> 违反字面 = 违反精神：哪怕"先检查 worktree 状态再 commit"、"commit 前先验证环境"——也禁止跳过 commit。
+> worktree 从 feature HEAD checkout，未 commit 的 skill_usage 记录不在 HEAD 里 → worktree 内 .alloy.yaml 缺失这条记录 + feature 分支残留未提交变更。
+> **EnterWorktree 前必须校验主仓 clean：**
+> ```bash
+> DIRTY=$(git status --porcelain)
+> if [ -n "$DIRTY" ]; then
+>   echo "⛔ [HARD_STOP] 主仓有未提交变更，禁止 EnterWorktree"
+>   git status --short
+>   echo "  先 commit 再创建 worktree——worktree 基于 HEAD，未 commit 的变更不会带入 worktree"
+>   exit 1
+> fi
+> ```
+
 **用户选择不创建：** `alloy _state write openspec/changes/<name> worktree skipped`，跳到 Step 1 完成框。
 
-**用户选择创建：** 手动创建确保正确 base ref。
+**用户选择创建：** 由 using-git-worktrees 技能驱动创建（EnterWorktree 优先，git worktree fallback），agent 不手动 `git worktree add`。
 
-**路径占用检查 + 创建后状态记录 + worktree 内分支锁定**：读取 `commands/alloy/references/apply-worktree.md`：
+**创建后状态记录 + worktree 内分支锁定**：读取 `commands/alloy/references/apply-worktree.md`：
 
-- 路径占用 → ⛔ PRECONDITION_FAIL + 🔴 USER_GATE（复用 / 重命名 / 中止）。**禁 agent 自动 `rm -rf` 或 `git worktree remove --force` 清场（§3.5.1）。**
-- 路径未占用 → `git worktree add` 创建并 `EnterWorktree` 进入
-- 创建后写入 worktree / worktree_branch / worktree_created_at 三字段并 commit（断点恢复）
+- 技能执行完毕后，**必须验证已在 worktree 内**（`GIT_DIR != GIT_COMMON`），否则 ⛔ PRECONDITION_FAIL——禁 fallback 到主仓写入（元信息写到 feature 分支会导致 worktree 内状态分裂）
+- 在 worktree 内写入 worktree / worktree_branch / worktree_created_at 三字段并 commit（断点恢复）
 - 进入后校验 HEAD == `worktree-<name>`（task #18）；不一致 ⛔ PRECONDITION_FAIL，**禁 agent 自动 git checkout 切换。**
 
 **Step 1/5 完成：**
@@ -212,7 +232,7 @@ git diff --cached --quiet || git commit -m "chore(<name>): 记录 using-git-work
 
 **SDD 路径：**
 
-**先记录技能使用，再加载技能：**
+**⛔ HARD_STOP：先记录技能使用，再加载技能——`_skill log` 是必执行命令，不是可选。** 跳过 `_skill log` = skill_usage 缺失 = 后续无法证明技能已加载，违反 Iron Law。
 ```bash
 alloy _skill log openspec/changes/<name> apply superpowers:subagent-driven-development
 alloy _skill log openspec/changes/<name> apply test-driven-development --via subagent-driven-development
@@ -231,6 +251,7 @@ alloy _skill log openspec/changes/<name> apply code-quality-review --via subagen
 3. Spec 合规审查（Agent 自检：每个 checkbox ↔ 代码实现，无 over-building，排除范围未碰，不通过→修复→重审）
 4. 加载 `requesting-code-review`（代码审查闸门——所有代码变更必须经审查才进 Step 3）
 
+**⛔ HARD_STOP：`_skill log` 是必执行命令，不是可选。** 跳过 = skill_usage 缺失 = 后续无法证明技能已加载。
 ```bash
 alloy _skill log openspec/changes/<name> apply superpowers:test-driven-development
 alloy _skill log openspec/changes/<name> apply superpowers:executing-plans
@@ -246,6 +267,55 @@ alloy _skill log openspec/changes/<name> apply superpowers:requesting-code-revie
 1. **分支再校验**（⛔ PRECONDITION_FAIL，task #18）—— `git rev-parse --abbrev-ref HEAD` ≠ `worktree-<name>` 时退出，禁 agent 自动 `git checkout` 切回。
 2. **git add 限路径**（⛔ HARD_STOP §5.2.1）—— 精确路径，禁 `-A`/`-a`/`.`。违反字面 = 违反精神：哪怕"反正只有这一个文件"也禁 `-A`，副作用文件会被一并 commit。判断不准 🔴 USER_GATE。
 3. **stash 残留检查**（⚠️ WARN，task #19）—— commit 前 `git stash list`，非空播报让用户决策，禁 agent 自动 `git stash drop`（§3.5.1）。
+
+#### Step 2/5 完成前：skill_usage 校验（⛔ HARD_STOP）
+
+进入 Step 3 前，必须验证 skill_usage 已记录 apply 阶段必需技能。跳过 `_skill log` 的 agent 无法证明技能已加载——校验失败 = Iron Law 违规。
+
+```bash
+# 校验 apply 阶段 skill_usage 包含必需技能（SDD 或 EP 路径其一）
+SKILL_USAGE=$(alloy _state read openspec/changes/<name> skill_usage 2>/dev/null)
+
+# 检查 executing-plans 或 subagent-driven-development（至少一个）
+if ! echo "$SKILL_USAGE" | grep -qE '"skill":"(superpowers:)?(subagent-driven-development|executing-plans)"'; then
+  echo "⛔ [HARD_STOP] skill_usage 缺失：未记录 subagent-driven-development 或 executing-plans"
+  echo "  apply Step 2 必须执行 _skill log 记录执行策略技能。"
+  echo "  禁止：agent 自动补 _skill log 后继续——记录必须反映真实加载。"
+  exit 1
+fi
+
+# 检查 test-driven-development
+if ! echo "$SKILL_USAGE" | grep -qE '"skill":"(superpowers:)?test-driven-development"'; then
+  echo "⛔ [HARD_STOP] skill_usage 缺失：未记录 test-driven-development"
+  exit 1
+fi
+
+echo "✓ skill_usage 校验通过：apply 阶段必需技能已记录"
+```
+
+#### Step 2/5 完成前：主仓清洁度校验（worktree 模式，⛔ PRECONDITION_FAIL）
+
+worktree 模式下，所有子 agent 变更应落在 worktree 分支。主仓工作目录若 dirty，说明子 agent 误用主仓绝对路径 Edit，变更"游离"在 feature 工作目录——破坏 worktree 隔离。读取 `commands/alloy/references/apply-subagent-commit.md` 规则 4-5 执行完整校验：
+
+```bash
+WORKTREE=$(alloy _state read openspec/changes/<name> worktree)
+if [ "$WORKTREE" != "skipped" ] && [ -n "$WORKTREE" ] && [ "$WORKTREE" != "null" ]; then
+  MAIN_ROOT=$(git rev-parse --git-common-dir | xargs dirname)
+  (cd "$MAIN_ROOT" && git status --porcelain) | if [ -n "$(cat)" ]; then
+    echo "⛔ [PRECONDITION_FAIL] 主仓工作目录有未提交变更（worktree 模式下应全部落在 worktree 分支）"
+    (cd "$MAIN_ROOT" && git status --short)
+    echo ""
+    echo "  可能原因：子 agent 用主仓绝对路径 Edit 了文件，绕过 worktree 隔离"
+    echo "  修复路径："
+    echo "    1) 确认 worktree 分支已有正确版本（git log worktree-<name> --oneline）"
+    echo "    2) 丢弃主仓误改：git checkout -- <误改文件>"
+    echo "  禁止：agent 自动 git checkout -- 丢弃变更——必须用户确认 worktree 分支版本正确后手动丢弃。"
+    exit 1
+  fi
+fi
+```
+
+跳过 worktree 模式（`worktree=skipped`）不跑此校验——主仓 dirty 是正常的。
 
 ### [Step 3/5] 代码层验证
 
@@ -290,11 +360,11 @@ check 失败 → ⛔ `[PRECONDITION_FAIL] plans 上游 hash 失效——plans.md
 > 违反字面 = 违反精神：哪怕"FAIL 仅 1 项 retro 写一笔继续"，也算违反——FAIL 必须先修到 PASS。
 > WARNING 项可继续，但需在 retrospective §2 Misses 记录。
 
-**tasks.md checkbox 已更新，重录 hash（§5.2.1 git add 限路径）：**
+**tasks.md checkbox 已更新，重录 hash——原子命令 `alloy _artifact commit` 内部完成 hash 重算 + records 更新 + git add 限路径 + commit（§5.2.1）：**
 ```bash
-HASH=$(alloy _record compute openspec/changes/<name> tasks)
-alloy _record write openspec/changes/<name> tasks "$HASH" "$(date "+%Y-%m-%d %H:%M:%S")" "$(alloy _record approver openspec/changes/<name>)"
+alloy _artifact commit openspec/changes/<name> tasks
 ```
+> tasks 在 plan 阶段已首次锁定，apply 阶段 checkbox 变更后 hash 改变，`_artifact commit` 检测到 hash 不同允许重新锁定（N3），产生独立的 "tasks 已锁定" commit。**禁止用旧命令 `_record compute/write` 手动重录——绕过原子 commit 会导致 records 更新混入后续 verify commit，hash 链与 git 历史错位。**
 
 **verify.md 审查窗口（🔴 USER_GATE）：**
 
@@ -307,15 +377,9 @@ alloy _record write openspec/changes/<name> tasks "$HASH" "$(date "+%Y-%m-%d %H:
 > 违反字面 = 违反精神：哪怕 verify.md 看似"明显合理"，没经过用户明确选择 (a) = 不算授权。
 > 禁止 agent 基于"diff 短"或"全 PASS"自动跳过此 USER_GATE，必须完整阅读 diff。
 
-选 (a)：hash 锁定 + commit（§5.2.1 git add 限路径）：
+选 (a)：hash 锁定 + commit——原子命令 `alloy _artifact commit` 内部完成 hash 计算 + records 写入 + git add 限路径 + commit：
 ```bash
-HASH=$(alloy _record compute openspec/changes/<name> verify)
-APPROVED_AT=$(date "+%Y-%m-%d %H:%M:%S")
-APPROVER=$(alloy _record approver openspec/changes/<name>)
-alloy _record write openspec/changes/<name> verify "$HASH" "$APPROVED_AT" "$APPROVER"
-# §5.2.1: 限路径，禁 -A
-git add openspec/changes/<name>/verify.md openspec/changes/<name>/.alloy.yaml
-git commit -m "docs(<name>): verify 已确认"
+alloy _artifact commit openspec/changes/<name> verify
 ```
 
 选 (b)：重新生成 verify.md（不是直接编辑），重新展示审查窗口。
@@ -379,18 +443,20 @@ echo "本 change 累计 commit 数: $COMMIT_COUNT"
 >
 > 违反字面 = 违反精神：禁 agent 基于"内容看起来挺全"自动跳过此 USER_GATE。
 
-选 (a)：审批时间 + hash 锁定 + commit（一个 commit 包含所有累积变更——retrospective + 阶段完成时间 + worktree 状态）（§5.2.1 git add 限路径）：
+选 (a)：分两步——先制品 commit，再阶段完成 commit（制品 commit 不含 phase_timings，阶段完成 commit 不含制品）：
 ```bash
+# 1. 填写 retrospective 审批栏（模板既有结构，非制品内容变更）
 APPROVAL_TIME=$(date "+%Y-%m-%d %H:%M:%S")
 sed -i '' "s/| retrospective |.*| 待确认 |/| retrospective | $(alloy _record approver openspec/changes/<name>) | — | ${APPROVAL_TIME} |/" openspec/changes/<name>/retrospective.md
-COMPLETED_AT="${APPROVAL_TIME}"
-alloy _state merge openspec/changes/<name> phase_timings "{\"apply\":{\"completed_at\":\"${COMPLETED_AT:-$(date '+%Y-%m-%d %H:%M:%S')}\"}}"
-HASH=$(alloy _record compute openspec/changes/<name> retrospective)
-alloy _record write openspec/changes/<name> retrospective "$HASH" "$APPROVAL_TIME" "$(alloy _record approver openspec/changes/<name>)"
-# §5.2.1: git add 限路径，禁 -A——openspec/changes/<name>/ 是该 change 的根目录，不会扩散
-git add openspec/changes/<name>/
-git commit -m "docs(<name>): retrospective 已确认"
+
+# 2. 制品 commit：hash-lock + records + git add 限路径 + commit（原子命令）
+alloy _artifact commit openspec/changes/<name> retrospective
+
+# 3. 阶段完成 commit：completed_at + phase 推进 + git add 限路径 + commit（原子命令）
+alloy _phase complete openspec/changes/<name> apply
 ```
+
+> 注意：步骤 2 和 3 是两个独立 commit。步骤 2 仅含 retrospective.md + records，步骤 3 仅含 .alloy.yaml 的 phase_timings + phase 字段。
 
 选 (b)：重新生成（不是直接编辑），重新展示审查窗口。
 
@@ -398,6 +464,7 @@ git commit -m "docs(<name>): retrospective 已确认"
 
 ### 完成
 
+**阶段完成时，必须输出以下 Phase 完成框到终端**:
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [3/5] · Phase: Apply — DONE    │
@@ -413,18 +480,9 @@ git commit -m "docs(<name>): retrospective 已确认"
 
 **apply 完成后不要自动进入 archive** — archive 是人工闸门，留给用户做 QA。
 
-**通过 `alloy _guard` 校验并推进 phase（⛔ HARD_STOP §5.2.3 路径 B 降级）：**
+**phase 推进已在 Step 5 retrospective 审查通过后由 `alloy _phase complete openspec/changes/<name> apply` 原子完成**（completed_at + phase→applied + commit）。此处不再重复推进。
 
-降级路径详见 `commands/alloy/references/phase-downgrade-path.md`（apply 阶段降级 → `planned`）。**禁止 agent 自动 `git reset --hard` / `git checkout .` 清场（§3.5.1）。** 违反字面 = 违反精神：哪怕"清理一下让流程重启"也算违反——退出 skill 让用户决策是唯一合法路径。
-
-```bash
-alloy _guard openspec/changes/<name> applied --apply
-# §5.2.1 git add 限路径，禁 -A
-git add openspec/changes/<name>/.alloy.yaml
-git commit -m "chore(<name>): phase → applied"
-```
-
-`git commit` 失败 → ⛔ `[HARD_STOP] phase commit 失败，apply 中止。.alloy.yaml 变更未提交时 archive 状态不一致。检查 git 状态后重试，禁止在 commit 失败时继续。`
+**§5.2.3 路径 B 降级（HARD_STOP）：** 若 `_phase complete` 失败（commit 失败等不可恢复状态），降级路径详见 `commands/alloy/references/phase-downgrade-path.md`（apply 阶段降级 → `planned`）。**禁止 agent 自动 `git reset --hard` / `git checkout .` 清场（§3.5.1）。** 违反字面 = 违反精神：哪怕"清理一下让流程重启"也算违反——退出 skill 让用户决策是唯一合法路径。
 
 ```
 💡 建议执行 QA 测试或浏览器测试，确认后再进入 archive。

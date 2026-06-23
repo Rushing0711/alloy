@@ -27,10 +27,11 @@ for cmd in <cmd列表>; do
 done
 
 # 检测 skill（project skill → user skill → user plugin）
+# plugin 路径扫描任意 marketplace（obra/superpowers-marketplace、anthropics/claude-plugins-official 等）
 for skill in <skill列表>; do
   if test -d ".claude/skills/$skill"; then echo "  ✓ superpowers:$skill（项目级 skill）"
   elif test -d "$HOME/.claude/skills/$skill"; then echo "  ✓ superpowers:$skill（用户级 skill）"
-  elif for d in "$HOME/.claude/plugins/cache/superpowers-marketplace/superpowers/"*"/skills/$skill"; do test -d "$d" && break; done 2>/dev/null; then echo "  ✓ superpowers:$skill（用户级 plugin）"
+  elif ls -d "$HOME"/.claude/plugins/cache/*/superpowers/*/skills/"$skill" >/dev/null 2>&1; then echo "  ✓ superpowers:$skill（用户级 plugin）"
   else echo "  ✗ superpowers:$skill — 未找到"; MISSING=$((MISSING+1)); fi
 done
 

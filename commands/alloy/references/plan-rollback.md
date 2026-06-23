@@ -1,10 +1,13 @@
 # plan-rollback.md
 
-plan 阶段的制品回溯清理——轻量修正和需求变更两条路径。
+plan 阶段的制品回溯清理——两条路径：轻量修正、全新变更（重新沟通）。
+
+> **检查点切换**已由 `alloy _checkpoint create/list/switch` CLI 处理（见 plan.md 需求变更闸门）。
+> 本文件只负责"全新变更——清理 plan 制品回 brainstorming"的清理动作。
 
 ## 轻量修正（措辞/格式，不改变功能边界）
 
-**判断规则：** 只有用户明确说"措辞/格式调整"才走此路径。用户主动提出"加入/删除/修改功能"= 需求变更，**禁止使用 `alloy _artifact reset`**，必须走下面的回溯路径。不确定时默认需求变更。
+**判断规则：** 只有用户明确说"措辞/格式调整"才走此路径。用户主动提出"加入/删除/修改功能"= 需求变更，**禁止使用 `alloy _artifact reset`**，必须走下面的全新变更路径。不确定时默认需求变更。
 
 使用 `alloy _artifact reset` 一步完成 hash 清除 + 文件删除：
 
@@ -23,62 +26,49 @@ git add openspec/changes/<name>/
 git commit -m "chore(<name>): 轻量修正——清除 <artifact>，准备重新生成"
 ```
 
-## 需求变更回溯清理（功能增删、行为变更）
+## 场景 A：全新变更（清理 plan 制品回 brainstorming）
 
-删除所有 plan 制品（保留 draft.md），重置 records 和 phase_timings：
+**触发：** plan 过程中用户提出新需求，选择"重新沟通"路径（plan.md 需求变更闸门 Step 2 选 (b)）。
+
+**前提：** 用户在 Step 1 已经选择"是否创建检查点当前进度"。若选暂存，当前 commit 已有 alloy-checkpoint tag 保护；若选不暂存，当前 commit 链将在切换后被遗忘。
+
+**流程：** 清理 plan 制品（保留 draft）→ 清理 phase_timings → phase 重置为 started → 回 brainstorming。
+
+**用原子命令清理，禁 `_state write records/phase_timings`**——这两个是受管字段（N2），直接 write 会被拦截。records 用 `_artifact reset` 逐个清除（同时删文件 + 清 hash 记录），phase_timings 用 `_phase reset` 逐个清除：
 
 ```bash
-# 1. 打 snapshot tag（task #15）——回溯前留恢复入口
-# 不可逆删除前必须留 git tag，事后用户可 git checkout <tag> 完整恢复 plan 制品
-TS=$(date +%Y%m%d-%H%M%S)
-SNAPSHOT_TAG="rollback-<name>-${TS}"
-git tag "$SNAPSHOT_TAG"
-echo "已打 snapshot tag: $SNAPSHOT_TAG（事后恢复：git checkout $SNAPSHOT_TAG -- openspec/changes/<name>/）"
+# 1. 逐个清除 plan 制品（_artifact reset = 删文件 + 清 records 条目，原子操作）
+#    draft 保留，只清 proposal/design/specs/tasks/plans
+for ARTIFACT in proposal design specs tasks plans; do
+  alloy _artifact reset openspec/changes/<name> "$ARTIFACT"
+done
 
-# 2. 删除 plan 制品文件（保留 draft.md）
-rm -f openspec/changes/<name>/proposal.md
-rm -f openspec/changes/<name>/design.md
-rm -f openspec/changes/<name>/tasks.md
-rm -f openspec/changes/<name>/plans.md
-rm -rf openspec/changes/<name>/specs/
+# 2. 逐个清除 plan/apply/archive/finish 的 phase_timings（_phase reset = 删 timing key，原子操作）
+#    start 保留（brainstorming 阶段不需回退），仅清后续阶段
+for PHASE in plan apply archive finish; do
+  alloy _phase reset openspec/changes/<name> "$PHASE"
+done
 
-# 3. 清理 records（只保留 draft）
-DRAFT_RECORD=$(alloy _state read openspec/changes/<name> records | python3 -c "
-import sys,json
-content = sys.stdin.read().strip()
-records = json.loads(content) if content and content != 'null' else []
-draft = [r for r in records if r.get('artifact') == 'draft']
-print(json.dumps(draft))
-")
-alloy _state write openspec/changes/<name> records "$DRAFT_RECORD"
-
-# 4. 清理 phase_timings
-# ⚠️ 此处是 phase_timings 唯一允许 _state write 的场景：回溯需要删除 key + 覆盖值，merge 语义不支持
-TIMINGS=$(alloy _state read openspec/changes/<name> phase_timings 2>/dev/null || echo "{}")
-echo "$TIMINGS" | python3 -c "
-import sys,json
-content = sys.stdin.read().strip()
-d = json.loads(content) if content and content != 'null' else {}
-for k in ['plan','apply','archive','finish']:
-    d.pop(k, None)
-if 'start' in d:
-    d['start']['completed_at'] = None
-print(json.dumps(d))
-" | while read -r val; do alloy _state write openspec/changes/<name> phase_timings "$val"; done
+# 3. phase 重置为 started（phase 不受管，可直接 _state write）
+#    回溯到 brainstorming = 回到 start 阶段，phase 必须 = started
+alloy _state write openspec/changes/<name> phase started
 
 git add openspec/changes/<name>/
 git commit -m "chore(<name>): 回溯——清理 plan 制品，回到 brainstorming"
 ```
 
 ```
-→ 制品已清理（仅保留 draft），records/phase_timings 已重置
+→ 制品已清理（仅保留 draft），records/phase_timings 已重置，phase=started
+→ 若 Step 1 选了暂存，当前 checkpoint tag 可通过 alloy _checkpoint list 查看
 → 请运行 /alloy:start <name> 重新走需求确认流程
 ```
 
 ## apply 阶段的需求变更
 
-apply 阶段的需求变更闸门见 apply.md——以 tasks.md checkbox 状态判断：
-- 未编码（全部 unchecked）→ 清理 plan 制品 → 回到 brainstorming（使用上面的回溯清理步骤）
-- 已编码（有 [x]）→ 拒绝回溯，开新 change
+**新规则：** plan 完成后（phase=planned/applied/archived/finished），所有需求变更**只能走 discard 重开 change**。
 
-apply 的 verify/retrospective 验证"代码是否匹配规格"，发现问题修正代码，不改变需求/设计。
+- 不允许在 apply 阶段回溯到 brainstorming
+- 不允许在 apply 阶段使用 _checkpoint 切换检查点（CLI 已硬校验 phase===started）
+- 处理路径：`/alloy:discard <name>` + `/alloy:start <new-name>`
+
+详见 apply.md 的"需求变更处理"段落。

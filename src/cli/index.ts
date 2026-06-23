@@ -17,6 +17,9 @@ import { skillUsageCommand } from "./commands/internal/skill-usage.js";
 import { progressCommand } from "./commands/internal/progress.js";
 import { artifactCommand } from "./commands/internal/artifact.js";
 import { specAuditCommand } from "./commands/internal/spec-audit.js";
+import { phaseCommand } from "./commands/internal/phase.js";
+import { envCheckCommand } from "./commands/internal/env.js";
+import { checkpointCommand } from "./commands/internal/checkpoint.js";
 
 const USAGE = `
 alloy <command> [options]
@@ -374,6 +377,24 @@ async function main() {
     }
     case "_spec-audit": {
       await specAuditCommand(restArgs);
+      break;
+    }
+    case "_phase": {
+      await phaseCommand(restArgs);
+      break;
+    }
+    case "_env": {
+      const sub = restArgs[0];
+      if (sub === "check") {
+        await envCheckCommand();
+      } else {
+        console.error("用法: alloy _env check");
+        process.exit(1);
+      }
+      break;
+    }
+    case "_checkpoint": {
+      await checkpointCommand(restArgs);
       break;
     }
     default:

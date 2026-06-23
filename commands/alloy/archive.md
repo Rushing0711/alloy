@@ -5,9 +5,9 @@ category: Workflow
 tags: [alloy, workflow]
 spec: 01-product-spec/04-archive-spec.md
 behaviors:
-  preconditions: 5
-  hard_stops:    7
-  user_gates:    3
+  preconditions: 6
+  hard_stops:    8
+  user_gates:    4
   warns:         1
   artifacts: [delta-spec, archive]
   transitions_to: archived
@@ -28,10 +28,13 @@ verify.md FAIL / merge 冲突 / memory 批量 / git status dirty 任一存在 = 
 
 **调用外部命令或技能前，先输出标题和状态描述，再执行操作。**
 
-**捕获阶段启动时间**（幂等，重入时返回已有值）：
+**输出规则：** 阶段入口/出口必须按 `docs/specification/02-visual-spec.md` 输出 Phase 框（`┌─┐` Unicode 单线框，38 字符宽）、Step 标题（`[Step N/M]` + 38 字符 `─` 下划线）、`>` 块引用、`→` 引导行。**skill md 中的 Phase 框代码块是必须输出到终端的格式，不是文档示例。** 制品汇总表同理。
+
+**捕获阶段启动时间 + 独立"阶段开始"commit**（幂等，重入时 started_at 不覆盖）：
 ```bash
-PHASE_START=$(alloy _state timestamp ensure openspec/changes/<name> archive)
+alloy _phase start openspec/changes/<name> archive
 ```
+> `alloy _phase start` 原子完成：幂等写 `phase_timings.archive.started_at` + git add 限路径 + commit。产生独立的"阶段开始"commit（仅 .alloy.yaml），不并入后续操作 commit。
 
 ---
 
@@ -51,10 +54,11 @@ PHASE_START=$(alloy _state timestamp ensure openspec/changes/<name> archive)
 
 ## 前置检查
 
+**进入阶段时，必须输出以下 Phase 框到终端**:
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [4/5] · Phase: Archive         │
-│ 启动时间: $PHASE_START
+│ 启动时间: phase_timings.archive.started_at
 └──────────────────────────────────────┘
 ```
 
@@ -123,6 +127,12 @@ fi
 正在归档——Delta Spec 合并到主 spec → 移入 archive/...
 ```
 
+**[HARD_STOP] 禁止 agent 跳过 `/opsx:archive` CLI 自行归档。**
+**违反字面 = 违反精神：哪怕"openspec/specs/ 为空（新项目首 change）"、"看起来没有主 spec 可 sync"、**
+**"change 的 specs/ 内容简单直接 mv 过去"——也必须调用 `/opsx:archive` 让 openspec archive CLI 执行。**
+**新项目首 change 的 delta specs 必须作为初始主 spec 写入 openspec/specs/，不可跳过。**
+**agent 自行 `mv openspec/changes/<name> openspec/changes/archive/...` = 绕过 CLI = delta specs 永久丢失 promote 机会。**
+
 调用 `/opsx:archive`，传入 change name。该命令自动完成 Delta Spec 合并 + 目录移动。自有幂等检查——已归档则 Skip。
 
 **错误处理（HARD_STOP）：** 返回错误 → ⛔ `[HARD_STOP] /opsx:archive 失败，归档中止`。不可用 → 引导 `alloy init`。**禁止：忽略错误继续后续步骤——Delta Spec 未合并时主 spec 与代码已分叉，强行推进 phase 会永久封存分叉。**
@@ -131,9 +141,47 @@ fi
 alloy _skill log openspec/changes/<name> archive opsx:archive
 ```
 
+**Delta Spec promote 硬校验（PRECONDITION_FAIL）：** `/opsx:archive` 返回成功 ≠ spec 真被 promote——中等模型 agent 常见反模式是看到 `openspec/specs/` 为空（新项目首 change），误判"无需 sync"，自行 `mv openspec/changes/<name> openspec/changes/archive/...` 跳过 `openspec archive` CLI，导致 delta specs 永久丢失 promote 机会。必须**逐 capability 验证**主 spec 已写入。
+
+```bash
+ARCHIVE_DIR="openspec/changes/archive/$(date +%Y-%m-%d)-<name>"
+
+if [ ! -d "$ARCHIVE_DIR" ]; then
+  echo "⛔ [PRECONDITION_FAIL] 归档目录不存在: $ARCHIVE_DIR"
+  echo "  /opsx:archive 未完成目录移动——可能 agent 自行实现归档跳过了 openspec archive CLI。"
+  echo "  请重新调用 /opsx:archive，禁止用 git mv / mv 手动模拟归档。"
+  exit 1
+fi
+
+if [ -d "$ARCHIVE_DIR/specs" ]; then
+  MISSING_SPECS=""
+  for CAP_DIR in "$ARCHIVE_DIR"/specs/*/; do
+    [ -d "$CAP_DIR" ] || continue
+    CAP=$(basename "$CAP_DIR")
+    if [ ! -f "openspec/specs/$CAP/spec.md" ]; then
+      MISSING_SPECS="$MISSING_SPECS $CAP"
+    fi
+  done
+
+  if [ -n "$MISSING_SPECS" ]; then
+    echo "⛔ [PRECONDITION_FAIL] Delta Spec 未 promote 到主 spec："
+    echo "  缺失 capabilities:$MISSING_SPECS"
+    echo "  归档目录: $ARCHIVE_DIR/specs/"
+    echo "  主 spec:  openspec/specs/"
+    echo ""
+    echo "  /opsx:archive 未执行真正的 spec sync——agent 可能自行 mv 目录跳过了 openspec archive CLI。"
+    echo "  即使 openspec/specs/ 原本为空（新项目首 change），delta specs 也必须作为初始主 spec 写入，不可跳过。"
+    echo "  禁止用 git mv / mv 手动补齐——必须重新调用 /opsx:archive 让 openspec archive CLI 执行合并。"
+    exit 1
+  fi
+else
+  echo "ℹ️ change 无 specs/ 目录（纯 spec-less change），跳过 sync 校验"
+fi
+```
+
 **Delta Spec 合并审查（USER_GATE，task #22 强制 diff 注入）：**
 
-合并完成后，**必须先采集 diff 写入 AskUserQuestion 上下文**，沉默不算授权——agent 不可基于"看起来没问题"自动通过。
+合并完成后，**必须先采集 diff 写入 AskUserQuestion 上下文**，沉默不算授权——agent 不可基于"看起来没问题"自动通过。**`git diff openspec/specs/` 为空 ≠ 无需 sync——可能 sync 根本未发生（见上方 PRECONDITION_FAIL）**。空 diff 必须先回到上方硬校验确认 change 无 specs/ 才算合法跳过。
 
 ```bash
 SPEC_DIFF=$(git diff --stat openspec/specs/)
@@ -154,7 +202,7 @@ SPEC_DIFF_FULL=$(git diff openspec/specs/ | head -200)  # 截 200 行防爆量
 > (a) 确认并继续提交归档变更
 > (b) 调整 spec 合并内容——退出 skill，回到 `/opsx:archive` 参数调整或手动修正 spec 后重新运行
 
-**违反字面 = 违反精神：** 哪怕 diff 看似"明显合理"，没经过用户明确选择 (a) = 不算授权。禁止 agent 基于"diff 短"或"无 conflict"自动跳过此 USER_GATE。
+**违反字面 = 违反精神：** 哪怕 diff 看似"明显合理"或"diff 为空"，没经过用户明确选择 (a) = 不算授权。禁止 agent 基于"diff 短"、"无 conflict"或"specs/ 原本为空"自动跳过此 USER_GATE。
 
 **归档变更提交（HARD_STOP §5.2.1 git add 限路径）：** 必须在 worktree 清理之前 commit，否则清理时 merge 会丢失归档操作。**禁止 `git add -A` 无路径——只 add `openspec/specs/ openspec/changes/` 两个明确路径，避免把无关 working tree 变更卷入归档 commit（§5.2.1）。**
 
@@ -164,8 +212,6 @@ git diff --cached --quiet || git commit -m "chore(<name>): 归档目录移动"
 ```
 
 `git commit` 失败 → ⛔ `[HARD_STOP] 归档 commit 失败，archive 中止。检查 git 状态后重试。`
-
-归档路径：`ARCHIVE_DIR="openspec/changes/archive/$(date +%Y-%m-%d)-<name>"`
 
 **读取 retrospective.md §6 Promote Candidates：** 标记 `→ Promote to: memory` 的条目，将 Why/How to apply 写入 `~/.claude/memory/` 对应文件。这是 retrospective 从"死文档"变"活反馈"的关键。
 
@@ -207,31 +253,34 @@ alloy _state write "$ARCHIVE_DIR" worktree_merged_at "$WORKTREE_MERGED_AT"
 
 未使用 worktree 时跳过本步。
 
-**记录完成时间并提交（HARD_STOP §5.2.1 git add 限路径）：**
+**ExitWorktree（HARD_STOP，worktree 模式）：** worktree 清理后必须调用 `ExitWorktree` 退出 session 的 worktree 绑定，让 cwd 回到主仓。
 
-```bash
-COMPLETED_AT="${COMPLETED_AT:-$(date '+%Y-%m-%d %H:%M:%S')}"
-COMPLETED_AT_JSON=$(python3 -c "import json; print(json.dumps({'archive':{'completed_at': '$COMPLETED_AT'}}))")
-alloy _state merge "$ARCHIVE_DIR" phase_timings "$COMPLETED_AT_JSON"
-# §5.2.1: git add 限路径，禁 -A 无路径
-git add openspec/specs/ openspec/changes/
-git commit -m "chore(<name>): 归档阶段完成"
+> **[HARD_STOP] worktree remove 后必须 ExitWorktree，禁止 session 仍绑定在已删除的 worktree 目录。**
+> 违反字面 = 违反精神：哪怕"后面命令用 cd 切到主仓"——也必须 ExitWorktree。
+> EnterWorktree 会把 session cwd 绑定到 worktree 目录，即使 `cd /主仓` + `rm -rf worktree`，session cwd 仍注册在已删除的 worktree 目录。后续命令默认在已删除目录执行，报错 "No such file or directory"。
+> ExitWorktree 解绑后 cwd 自动回到主仓，finish 阶段才能正常执行。
+
+```
+调用 ExitWorktree 工具（action: keep 或 remove 均可，worktree 已被 git worktree remove 清理）
+→ session cwd 自动回到主仓 /Users/<project>
+→ 后续命令在主仓执行
 ```
 
-`git commit` 失败 → ⛔ `[HARD_STOP] 归档 commit 失败，archive 中止。.alloy.yaml 变更未提交时 finish 状态不一致。检查 git 状态后重试，禁止在 commit 失败时继续执行后续步骤。`
+未使用 worktree 时跳过本步。
 
-### [Step 3/3] 推进 phase
-
-**通过 `alloy _guard` 校验并推进 phase（HARD_STOP §5.2.3 路径 B 降级）：**
-
-降级路径详见 `commands/alloy/references/phase-downgrade-path.md`（archive 阶段降级 → `applied`）。**禁止 agent 自动 `git reset --hard` / `git checkout .` 清场（§3.5.1）。**
+**记录完成时间并推进 phase——原子命令 `alloy _phase complete` 内部完成 completed_at 写入 + phase 推进 + git add 限路径 + commit：**
 
 ```bash
-alloy _guard "$ARCHIVE_DIR" archived --apply
-git add openspec/specs/ openspec/changes/
-git commit -m "chore(<name>): phase → archived"
+alloy _phase complete "$ARCHIVE_DIR" archive
 ```
 
+`_phase complete` 失败 → ⛔ `[HARD_STOP] archive 阶段完成失败。.alloy.yaml 变更未提交时 finish 状态不一致。检查 git 状态后重试，禁止在失败时继续执行后续步骤。`
+
+### [Step 3/3] 完成
+
+**§5.2.3 路径 B 降级（HARD_STOP）：** 若 `_phase complete` 失败，降级路径详见 `commands/alloy/references/phase-downgrade-path.md`（archive 阶段降级 → `applied`）。**禁止 agent 自动 `git reset --hard` / `git checkout .` 清场（§3.5.1）。**
+
+**阶段完成时，必须输出以下 Phase 完成框到终端**:
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [4/5] · Phase: Archive — DONE  │

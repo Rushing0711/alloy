@@ -1,8 +1,9 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { homedir } from "node:os";
+import { execSync } from "node:child_process";
 import { detectEnv } from "../../core/detect.js";
-import { ensureGitRepo } from "../../core/git.js";
+import { ensureGitRepo, isHeadUnborn, detectMainBranch } from "../../core/git.js";
 import { runHealthCheck } from "../../core/health.js";
 import { installOpenSpecCli, initOpenSpecProject } from "../../core/openspec.js";
 import { installSuperpowers } from "../../core/superpowers.js";
@@ -11,7 +12,8 @@ import { injectClaudeMd } from "../../core/claude-md.js";
 import { KNOWN_AGENTS } from "../../core/agents.js";
 import type { AgentInfo, DeployOptions } from "../../core/types.js";
 import { getPackageRoot } from "../../utils/fs.js";
-import { promptSelect, promptMultiSelect } from "../../utils/prompt.js";
+import { promptSelect, promptMultiSelect, promptConfirm, promptInput } from "../../utils/prompt.js";
+import { readProjectConfig, writeProjectConfig } from "../utils/state.js";
 import { section, check, success, error, warn, banner, info } from "../../utils/output.js";
 
 export async function selectScope(passedScope?: string): Promise<"global" | "project"> {
@@ -38,9 +40,21 @@ export async function selectTargetAgents(): Promise<AgentInfo[]> {
 
 export interface InitOptions extends DeployOptions {}
 
-const GITIGNORE_RULES = ["docs/superpowers/", ".claude/worktrees/", ".worktrees/", "worktrees/", ".superpowers/", "*.local.*"];
+// Alloy + Superpowers 运行时目录（每次逐条检测缺失并补齐）
+const GITIGNORE_RUNTIME_RULES = ["docs/superpowers/", ".claude/worktrees/", ".worktrees/", "worktrees/", ".superpowers/", "*.local.*"];
 
-async function ensureGitignore(projectPath: string): Promise<void> {
+// AI 开发工具产物（整组追加，以标记检测是否已写入）
+const GITIGNORE_AI_TOOLS_BLOCK = `### AI 开发工具产物 ###
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.playwright-mcp/
+.DS_Store
+*.log
+logs/`;
+const GITIGNORE_AI_TOOLS_MARKER = "### AI 开发工具产物 ###";
+
+export async function ensureGitignore(projectPath: string): Promise<void> {
   const gitignorePath = join(projectPath, ".gitignore");
   let content = "";
   try {
@@ -50,12 +64,61 @@ async function ensureGitignore(projectPath: string): Promise<void> {
     // 文件不存在，稍后创建
   }
 
-  const missing = GITIGNORE_RULES.filter((rule) => !content.includes(rule));
-  if (missing.length === 0) return;
+  // 运行时规则：逐条检测缺失
+  const missingRuntime = GITIGNORE_RUNTIME_RULES.filter((rule) => !content.includes(rule));
 
-  const block = `\n### Alloy + Superpowers 运行时 ###\n${missing.join("\n")}\n`;
+  // AI 工具产物：整组检测（标记存在则跳过，避免重复追加取反规则造成混乱）
+  const needAiBlock = !content.includes(GITIGNORE_AI_TOOLS_MARKER);
+
+  if (missingRuntime.length === 0 && !needAiBlock) return;
+
+  const sections: string[] = [];
+  if (missingRuntime.length > 0) {
+    sections.push(`### Alloy + Superpowers 运行时 ###\n${missingRuntime.join("\n")}`);
+  }
+  if (needAiBlock) {
+    sections.push(GITIGNORE_AI_TOOLS_BLOCK);
+  }
+  const block = `\n${sections.join("\n")}\n`;
   await writeFile(gitignorePath, content + block, "utf-8");
-  success(`.gitignore → 已追加 ${missing.length} 条规则`);
+  const total = missingRuntime.length + (needAiBlock ? GITIGNORE_AI_TOOLS_BLOCK.split("\n").length : 0);
+  success(`.gitignore → 已追加 ${total} 条规则`);
+}
+
+/**
+ * 为 Claude Code agent 写入 worktree.baseRef: head 配置。
+ *
+ * EnterWorktree 默认 baseRef=fresh（从 origin/main 分出），会导致 plan 阶段
+ * commit 丢失。配置 head 后从当前 HEAD（feature 分支）分出，base ref 正确。
+ *
+ * 仅 Claude Code 生效（EnterWorktree 是 CC 内置工具），其他 agent 走 git
+ * worktree fallback，无需此配置。
+ *
+ * 项目级 .claude/settings.json（每个项目独立，其他 agent 不认无副作用）。
+ */
+export async function ensureClaudeCodeWorktreeConfig(projectPath: string, hasClaudeCode: boolean): Promise<void> {
+  if (!hasClaudeCode) return;
+
+  const settingsPath = join(projectPath, ".claude", "settings.json");
+  let settings: Record<string, unknown> = {};
+  try {
+    const raw = await readFile(settingsPath, "utf-8");
+    settings = JSON.parse(raw);
+  } catch {
+    // 文件不存在或解析失败，稍后创建
+  }
+
+  // 幂等：worktree.baseRef 已是 head 则跳过
+  const worktree = (settings.worktree ?? {}) as Record<string, unknown>;
+  if (worktree.baseRef === "head") return;
+
+  worktree.baseRef = "head";
+  settings.worktree = worktree;
+
+  const { mkdir } = await import("node:fs/promises");
+  await mkdir(join(projectPath, ".claude"), { recursive: true });
+  await writeFile(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");
+  success(".claude/settings.json → worktree.baseRef: head（确保 EnterWorktree 从当前 feature 分支分出）");
 }
 
 export async function initCommand(opts: InitOptions): Promise<void> {
@@ -86,20 +149,145 @@ export async function initCommand(opts: InitOptions): Promise<void> {
     return;
   }
 
-  // 1.6 确保 git 仓库就绪——alloy init 守门，/alloy:start 不再兜底
-  section("检查 git 仓库...");
-  const gitResult = ensureGitRepo(opts.projectPath);
-  if (gitResult === "exists") {
-    check("git 仓库", "已存在", "pass");
-  } else if (gitResult === "initialized") {
-    check("git 仓库", "原无仓库，本次已初始化", "pass");
+  // ============ 阶段 1：采集（不改变项目目录）============
+  section("采集项目状态...");
+
+  // 1.6 检测 git 仓库状态（不执行 git init，仅检测）
+  let gitExists = false;
+  try {
+    execSync("git rev-parse --git-dir", { cwd: opts.projectPath, stdio: "pipe" });
+    gitExists = true;
+  } catch {
+    gitExists = false;
+  }
+  check("git 仓库", gitExists ? "已存在" : "不存在（将执行 git init）", "pass");
+
+  // 1.7 检测 HEAD 状态（是否 unborn）
+  let headUnborn = true;
+  if (gitExists) {
+    headUnborn = isHeadUnborn(opts.projectPath);
+  }
+  // 非 git 仓库视为 unborn（git init 后默认 unborn）
+
+  // 1.8 读取现有 config 的 main_branch
+  const existingConfig = await readProjectConfig(opts.projectPath);
+  const existingMainBranch = (existingConfig.alloy as Record<string, unknown>)?.main_branch as string | undefined;
+
+  // 1.9 主分支确认
+  let confirmedMainBranch: string;
+  if (existingMainBranch) {
+    check("主分支", `已配置: ${existingMainBranch}（跳过确认）`, "pass");
+    confirmedMainBranch = existingMainBranch;
   } else {
-    error("git init 失败，请检查目录权限或磁盘空间");
-    process.exit(1);
+    const detected = gitExists ? detectMainBranch(opts.projectPath) : null;
+    const defaultBranch = detected || "main";
+
+    // USER_GATE 1：确认主分支
+    const branchChoice = await promptSelect(
+      `确认主分支名（当前 git 默认: ${defaultBranch}）：`,
+      [
+        { name: `${defaultBranch}（检测值）`, value: defaultBranch },
+        { name: "自定义分支名", value: "__custom__" },
+      ]
+    );
+
+    if (branchChoice === "__custom__") {
+      confirmedMainBranch = await promptInput("请输入主分支名：", {
+        validate: (v: string) => v.trim().length > 0 ? true : "分支名不能为空",
+      });
+    } else {
+      confirmedMainBranch = branchChoice;
+    }
+  }
+
+  // 1.9.1 非 0 commit 项目校验主分支已存在——避免 config 记录不存在分支导致 finish 卡死
+  if (gitExists && !headUnborn) {
+    let branchMissing = false;
+    let allBranches = "";
+    try {
+      const branchList = execSync(`git branch --list ${confirmedMainBranch}`, {
+        cwd: opts.projectPath,
+        encoding: "utf-8",
+        stdio: "pipe",
+      }).trim();
+      if (!branchList) {
+        branchMissing = true;
+        try {
+          allBranches = execSync("git branch", {
+            cwd: opts.projectPath,
+            encoding: "utf-8",
+            stdio: "pipe",
+          }).trim();
+        } catch {
+          // 忽略
+        }
+      }
+    } catch {
+      // git branch 命令失败视为校验通过（不阻断 init，后续部署阶段会暴露真实问题）
+    }
+    if (branchMissing) {
+      error(`⛔ 主分支 '${confirmedMainBranch}' 不存在于当前仓库`);
+      if (allBranches) info(`仓库现有分支：\n${allBranches}`);
+      info("请选择已存在的分支作为主分支，或先创建该分支后再运行 alloy init");
+      process.exit(1);
+      return;
+    }
+  }
+
+  // 1.10 构造执行清单
+  const willGitInit = !gitExists;
+  const willCommit = headUnborn;  // unborn 时才 commit
+
+  // USER_GATE 2：确认执行清单
+  section("即将执行以下操作");
+  info("文件部署：");
+  info("  + .claude/commands/alloy/         （新建/更新）");
+  info("  + .claude/commands/opsx/          （新建/更新）");
+  info("  + .claude/settings.json           （新建/更新，worktree.baseRef: head）");
+  info("  + openspec/config.yaml            （新建/更新，含 main_branch: " + confirmedMainBranch + "）");
+  info("  + openspec/schemas/alloy/         （新建/更新）");
+  info("  + CLAUDE.md                       （新建/追加 Alloy 工作流提示）");
+  info("  + .gitignore                      （新建/追加 Alloy 运行时规则）");
+  info("");
+  info("Git 操作：");
+  if (willGitInit) {
+    info("  + git init                        （当前不是 git 仓库）");
+  }
+  if (willCommit) {
+    info(`  + git add .claude/ .gitignore openspec/config.yaml openspec/schemas/ CLAUDE.md`);
+    info(`  + git commit -m "chore: alloy init 项目初始化"`);
+    info(`    （仓库无任何 commit，将在 ${confirmedMainBranch} 分支创建初始 commit，锁定 main 分支）`);
+  } else {
+    info("  （仓库已有 commit，不自动提交——alloy 部署文件留工作目录，由你自行 commit）");
+  }
+  info("");
+  info(`主分支: ${confirmedMainBranch}`);
+
+  const confirmed = await promptConfirm("\n确认执行以上操作？", false);
+  if (!confirmed) {
+    info("✗ 已取消初始化，项目未发生任何变化");
+    process.exit(0);
     return;
   }
 
-  // 2. 安装 OpenSpec CLI（npm 全局包）
+  // ============ 阶段 2：执行（用户确认后）============
+
+  // 2. 确保 git 仓库就绪
+  section("初始化 git 仓库...");
+  if (gitExists) {
+    check("git 仓库", "已存在", "pass");
+  } else {
+    const gitResult = ensureGitRepo(opts.projectPath, confirmedMainBranch);
+    if (gitResult === "initialized") {
+      check("git 仓库", `原无仓库，本次已初始化（初始分支: ${confirmedMainBranch}）`, "pass");
+    } else {
+      error("git init 失败，请检查目录权限或磁盘空间");
+      process.exit(1);
+      return;
+    }
+  }
+
+  // 3. 安装 OpenSpec CLI（npm 全局包）
   section("安装 OpenSpec CLI...");
   const openspecResult = await installOpenSpecCli();
   if (openspecResult === "installed") {
@@ -111,7 +299,7 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   }
   // "skipped" — 函数内部已输出跳过信息
 
-  // 3. 初始化 OpenSpec 项目结构（openspec/ 目录 + .claude/commands/opsx/）
+  // 4. 初始化 OpenSpec 项目结构（openspec/ 目录 + .claude/commands/opsx/）
   section("初始化 OpenSpec 项目结构...");
   const initResult = await initOpenSpecProject(opts.projectPath, opts.scope, opts.targetAgents);
   if (initResult === "failed") {
@@ -120,7 +308,7 @@ export async function initCommand(opts: InitOptions): Promise<void> {
     return;
   }
 
-  // 4. 安装 Superpowers
+  // 5. 安装 Superpowers
   section("安装 Superpowers...");
   const claudeAgent = opts.targetAgents.find(a => a.id === "claude-code");
   const superpowersResult = await installSuperpowers(opts.scope, claudeAgent, opts.projectPath);
@@ -134,7 +322,7 @@ export async function initCommand(opts: InitOptions): Promise<void> {
     success(`Superpowers${versionInfo} 已安装${locationInfo}，跳过`);
   }
 
-  // 5. 部署 Alloy commands
+  // 6. 部署 Alloy commands
   section("部署 Alloy commands...");
   if (opts.targetAgents.length === 0) {
     warn("未选择任何 AI 工具，跳过 command 部署");
@@ -153,16 +341,90 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   const schemaPath = await deploySchema(opts);
   success(`项目 schema → ${schemaPath}`);
 
-  // 6. 确保 .gitignore 包含 Alloy 运行时目录
+  // 7. 确保 .gitignore 包含 Alloy 运行时目录
   await ensureGitignore(opts.projectPath);
 
-  // 7. 注入 CLAUDE.md
+  // 7.5 Claude Code worktree 配置（仅当用户选择 CC 时）
+  await ensureClaudeCodeWorktreeConfig(opts.projectPath, opts.targetAgents.some(a => a.id === "claude-code"));
+
+  // 8. 注入 CLAUDE.md
   const injected = await injectClaudeMd(opts);
   if (injected) {
     success("CLAUDE.md → 已追加 Alloy 工作流提示");
   }
 
-  // 8. 兼容性检查
+  // 8.5 写入 openspec/config.yaml 的 main_branch
+  section("写入主分支配置...");
+  const configToWrite = await readProjectConfig(opts.projectPath);
+  if (!configToWrite.alloy) configToWrite.alloy = {};
+  (configToWrite.alloy as Record<string, unknown>).main_branch = confirmedMainBranch;
+  await writeProjectConfig(opts.projectPath, configToWrite);
+  success(`openspec/config.yaml → main_branch: ${confirmedMainBranch}`);
+
+  // 8.6 若 HEAD unborn，创建初始 commit 锁定 main 分支
+  if (willCommit) {
+    section("创建初始 commit（锁定主分支）...");
+    try {
+      // 设置 git user（若未配置）
+      try {
+        execSync('git config user.name', { cwd: opts.projectPath, stdio: "pipe" });
+      } catch {
+        execSync('git config user.name "alloy-init"', { cwd: opts.projectPath, stdio: "pipe" });
+        execSync('git config user.email "alloy-init@local"', { cwd: opts.projectPath, stdio: "pipe" });
+      }
+
+      // 若 gitExists=true（用户曾 git init 但无 commit），git init -b 未被执行过，
+      // HEAD 可能指向默认 main 与用户确认的主分支不一致。需用 symbolic-ref 调整。
+      // 若 gitExists=false（alloy init 执行了 git init -b），HEAD 已正确，跳过。
+      if (gitExists) {
+        try {
+          const currentHeadBranch = execSync("git symbolic-ref --short HEAD", {
+            cwd: opts.projectPath,
+            encoding: "utf-8",
+            stdio: "pipe",
+          }).trim();
+          if (currentHeadBranch !== confirmedMainBranch) {
+            execSync(`git symbolic-ref HEAD refs/heads/${confirmedMainBranch}`, {
+              cwd: opts.projectPath,
+              stdio: "pipe",
+            });
+            info(`ℹ HEAD 已从 ${currentHeadBranch} 调整为 ${confirmedMainBranch}（与配置对齐）`);
+          }
+        } catch {
+          // symbolic-ref 失败不阻断——继续用默认 HEAD，commit 仍会落在某分支
+        }
+      }
+      // 逐个 add，避免某个文件不存在（如未注入 CLAUDE.md）导致整条 git add 失败
+      const addTargets = [".claude/", ".gitignore", "openspec/config.yaml", "openspec/schemas/", "CLAUDE.md"];
+      for (const target of addTargets) {
+        try {
+          execSync(`git add ${target}`, { cwd: opts.projectPath, stdio: "pipe" });
+        } catch {
+          // 文件不存在则跳过（如 CLAUDE.md 未注入）
+        }
+      }
+      execSync('git commit -m "chore: alloy init 项目初始化"', {
+        cwd: opts.projectPath,
+        stdio: "pipe",
+      });
+      success(`✓ 已在 ${confirmedMainBranch} 分支创建初始 commit，main 分支诞生`);
+    } catch (e) {
+      const err = e as { stderr?: Buffer; message: string };
+      const stderr = err.stderr?.toString() ?? "";
+      error(`初始 commit 失败: ${err.message}${stderr ? `\n${stderr}` : ""}`);
+      info("alloy 部署文件已写入工作目录，但 main 分支未锁定。");
+      info("请手动执行 git add + git commit 完成初始化。");
+      process.exit(1);
+      return;
+    }
+  } else {
+    info("ℹ 仓库已有 commit，alloy 部署文件留工作目录，请自行审查并 commit：");
+    info("    git status");
+    info("    git add .claude/ openspec/ .gitignore CLAUDE.md");
+    info('    git commit -m "chore: alloy init 项目初始化"');
+  }
+
+  // 9. 兼容性检查
   section("兼容性检查...");
   const packageDir = getPackageRoot();
   const results = await runHealthCheck(packageDir, opts.projectPath, opts.scope);
@@ -170,7 +432,7 @@ export async function initCommand(opts: InitOptions): Promise<void> {
     check(r.name, `${r.current}（要求 ${r.required}）`, r.status);
   }
 
-  // 9. 自动注册 shell 补全（失败不阻断 init）
+  // 10. 自动注册 shell 补全（失败不阻断 init）
   section("注册 shell 补全...");
   try {
     const home = process.env.HOME || process.env.USERPROFILE || "~";

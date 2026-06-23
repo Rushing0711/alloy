@@ -1,4 +1,4 @@
-import { select, checkbox, confirm } from "@inquirer/prompts";
+import { select, checkbox, confirm, input } from "@inquirer/prompts";
 
 export interface Choice {
   name: string;
@@ -27,4 +27,15 @@ export async function promptMultiSelect(
 
 export async function promptConfirm(message: string, defaultValue?: boolean): Promise<boolean> {
   return confirm({ message, default: defaultValue });
+}
+
+export async function promptInput(
+  message: string,
+  opts?: { default?: string; validate?: (v: string) => true | string }
+): Promise<string> {
+  return input({
+    message,
+    default: opts?.default,
+    validate: opts?.validate,
+  });
 }

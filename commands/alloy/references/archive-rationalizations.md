@@ -6,6 +6,7 @@
 |------|------|
 | "verify.md FAIL 是小问题，先归档再说" | FAIL = 阻塞问题。归档不可逆——带着 FAIL 归档意味着 spec 与代码偏差被永久封存。 |
 | "跳过 archive 直接 merge，spec 后面补" | Delta Spec 不同步 = 主 spec 落后。"后面补"的 spec 永远不会补。 |
+| "新项目 openspec/specs/ 为空，无需 sync，直接 mv 归档" | ⛔ 新项目首 change 的 delta specs 必须作为初始主 spec 写入 openspec/specs/。跳过 openspec archive CLI 自行 mv = delta specs 永久丢失 promote 机会。必须调用 `/opsx:archive`。 |
 | "openspec archive 报错了，但代码是对的" | 归档报错 = Delta Spec 合并失败。忽略 = 主 spec 停留在旧版本。 |
 | "spec 合并看起来没问题，直接继续" | 没看过的 spec 变更 = 代码与规格可能已分叉。审查只需 1 分钟，修复分叉需要 1 小时。 |
 | "worktree 合并没问题，直接清理吧" | merge 结果必须审查——未审查的合并可能引入意外变更或冲突残留。确认只需 30 秒，修复遗漏需要 1 小时。 |

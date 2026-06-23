@@ -68,7 +68,22 @@ elif [ "$WORKTREE_PATH" != "skipped" ]; then
 USER_GATE_TEMPLATE
 
     # 用户选 (a) 后执行清理：
-    git worktree remove "$WORKTREE_PATH"
+    # worktree 可能有未跟踪文件（node_modules/ dist/ 等），git worktree remove 默认拒绝
+    # 先检查未跟踪文件，让用户决策；禁自动 git clean -fd / rm -rf（§3.5.1）
+    UNTRACKED=$(cd "$WORKTREE_PATH" && git status --porcelain --untracked-files=all | grep '^??' || true)
+    if [ -n "$UNTRACKED" ]; then
+      echo "⚠️ worktree 目录有未跟踪文件，git worktree remove 会失败："
+      (cd "$WORKTREE_PATH" && git status --short)
+      echo ""
+      echo "  🔴 USER_GATE（必须 AskUserQuestion）：未跟踪文件如何处理？"
+      echo "    (a) 这些是构建产物/依赖，可安全删除——用 git worktree remove --force"
+      echo "    (b) 有需要保留的文件——退出 skill 让用户手动处理"
+      echo "  禁止：agent 自动 git clean -fd / rm -rf 删除——必须用户确认（§3.5.1）"
+      # 用户选 (a) 后：
+      git worktree remove --force "$WORKTREE_PATH"
+    else
+      git worktree remove "$WORKTREE_PATH"
+    fi
     git branch -d "$WORKTREE_BRANCH"
     # worktree_merged_at 由 archive.md 主流程内联记录，此处仅做清理
     echo "  ✓ worktree 已合并至 $FEATURE_BRANCH 分支并清理"

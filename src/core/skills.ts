@@ -1,4 +1,5 @@
 import { mkdir, cp, readFile, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { getPackageRoot } from "../utils/fs.js";
 import type { DeployOptions } from "./types.js";
@@ -40,6 +41,7 @@ export async function deployCommands(opts: DeployOptions): Promise<string[]> {
     const targetDir = getCommandTargetDir(agent, opts.scope, opts.projectPath);
     await mkdir(targetDir, { recursive: true });
 
+    // 顶层 .md 文件（slash command）逐个部署，横线版需 frontmatter 转换
     for (const entry of entries) {
       if (!entry.isFile()) continue;
 
@@ -63,6 +65,17 @@ export async function deployCommands(opts: DeployOptions): Promise<string[]> {
         await writeFile(dest, convertedContent, "utf-8");
         deployed.push(dest);
       }
+    }
+
+    // references/ 子目录：skill md 运行时按 commands/alloy/references/xxx.md 相对路径读取，
+    // 必须随 skill 一起部署。内容是纯文档（无 frontmatter），冒号版/横线版都原样拷贝，
+    // 保持 alloy/references/ 子目录结构（横线版 agent 按相对路径读，不依赖命名规则）。
+    const referencesSrc = join(colonSourceDir, "references");
+    if (existsSync(referencesSrc)) {
+      const referencesDest = join(targetDir, "references");
+      await mkdir(referencesDest, { recursive: true });
+      await cp(referencesSrc, referencesDest, { recursive: true });
+      deployed.push(referencesDest);
     }
   }
 

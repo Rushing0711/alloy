@@ -29,23 +29,34 @@ export async function skillUsageCommand(args: string[]): Promise<void> {
   let state: AlloyState;
   try {
     state = await readState(changeDir);
-  } catch {
-    state = createInitialState();
+  } catch (e) {
+    // 路径不存在时拒绝创建——避免 archive 后原路径被误重建残留 .alloy.yaml
+    console.error(`⛔ [PRECONDITION_FAIL] .alloy.yaml 不存在: ${changeDir}`);
+    console.error(`  _skill log 拒绝创建新 state——change 目录可能已归档。`);
+    console.error(`  archive 后 change 移到 openspec/changes/archive/YYYY-MM-DD-<name>/，`);
+    console.error(`  请用 archive 路径调用，禁用原路径 openspec/changes/<name>。`);
+    process.exit(1);
+    return;
   }
   if (!state.skill_usage) state.skill_usage = [];
-
-  const now = formatTimestamp();
 
   // 解析可选参数
   let via: string | undefined;
   let reason: string | undefined;
+  let at: string | undefined;
   for (let i = 4; i < args.length; i++) {
     if (args[i] === "--via" && i + 1 < args.length) {
       via = args[++i];
     } else if (args[i] === "--reason" && i + 1 < args.length) {
       reason = args[++i];
+    } else if (args[i] === "--at" && i + 1 < args.length) {
+      at = args[++i];
     }
   }
+
+  // --at 允许传入实际使用时间（Step 1/2 在 change 目录创建前执行，技能 log 只能补录；
+  // 不传 --at 时用当前时间——补录时刻，非实际使用时刻）
+  const now = at || formatTimestamp();
 
   // 幂等：同一 skill+stage 组合已存在时更新
   const existing = state.skill_usage.findIndex(

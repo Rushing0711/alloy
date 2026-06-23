@@ -73,3 +73,4 @@ alloy doctor [path] [--json]
 | `alloy _guard` | `precheck\|verify-passed\|branch-position\|worktree-status` + `<name> <phase> --apply` | 阶段转换校验 + phase 推进 |
 | `alloy _record` | `compute\|write\|check\|approver` | 制品 hash 记录管理 |
 | `alloy _config` | `read\|write` | 读写 `openspec/config.yaml` 项目级配置 |
+| `alloy _checkpoint` | `create\|list\|switch\|clean` | 检查点管理（plan 阶段变更保护 + 切换），详见 02-plan-spec.md |

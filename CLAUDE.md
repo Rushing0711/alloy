@@ -55,6 +55,7 @@ openspec/schemas/ # 制品 schema 定义
 2. **阶段转换必须通过 `alloy _guard` 校验**
 3. **修改 schema 后必须运行 `openspec schemas` 验证**
 4. **代码改动必须有测试覆盖**
+5. **提高 agent 执行稳定性是核心目标**——重复出现的多步 bash 序列（状态写入 + commit、hash-lock + commit 等）应下沉为原子 CLI 命令，由 TypeScript 实现并配测试；skill md 只负责编排和调用，不手写这类逻辑。实现指导是"原子性操作"，具体手段是 CLI——**不能为了 CLI 而 CLI**：只有当下沉真能提升稳定性、原子性、可测试性时才做，单次一次性 bash 或纯编排逻辑不必下沉。
 
 ## PR 规范
 

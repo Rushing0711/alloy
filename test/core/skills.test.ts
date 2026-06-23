@@ -42,6 +42,12 @@ describe("deployCommands", () => {
       );
     }
 
+    // 创建 references/ 子目录源文件（skill md 运行时按相对路径读取）
+    const referencesDir = join(sourceDir, "references");
+    await mkdir(referencesDir, { recursive: true });
+    await writeFile(join(referencesDir, "skill-precheck.md"), "# skill precheck\n", "utf-8");
+    await writeFile(join(referencesDir, "apply-worktree.md"), "# apply worktree\n", "utf-8");
+
     vi.mocked(getPackageRoot).mockReturnValue(join(tmpDir, "package"));
     vi.mocked(detectCommand).mockReturnValue({ found: false, location: null, path: null, version: null });
   });
@@ -59,7 +65,8 @@ describe("deployCommands", () => {
       targetAgents: [{ id: "claude-code", label: "CC", supportsColonCommands: true, commandsDir: ".claude/commands/" }],
     };
     const deployed = await deployCommands(opts);
-    expect(deployed.length).toBe(8);
+    // 8 个 skill md + 1 个 references 目录
+    expect(deployed.length).toBe(9);
     // 冒号版路径：.claude/commands/alloy/start.md
     expect(deployed.some(p => p.includes(".claude/commands/alloy/start.md"))).toBe(true);
     const startFile = deployed.find(p => p.includes("start.md"))!;
@@ -75,7 +82,8 @@ describe("deployCommands", () => {
       targetAgents: [{ id: "cursor", label: "Cursor", supportsColonCommands: false, commandsDir: ".cursor/commands/" }],
     };
     const deployed = await deployCommands(opts);
-    expect(deployed.length).toBe(8);
+    // 8 个横线 skill md + 1 个 references 目录
+    expect(deployed.length).toBe(9);
     // 横线版路径：.cursor/commands/alloy-start.md
     expect(deployed.some(p => p.includes(".cursor/commands/alloy-start.md"))).toBe(true);
     const startFile = deployed.find(p => p.includes("alloy-start.md"))!;
@@ -105,10 +113,10 @@ describe("deployCommands", () => {
       ],
     };
     const deployed = await deployCommands(opts);
-    // 8 个冒号版 + 8 个横线版
-    expect(deployed.length).toBe(16);
-    const colonFiles = deployed.filter(p => p.includes(".claude/commands/alloy/"));
-    const dashFiles = deployed.filter(p => p.includes(".cursor/commands/"));
+    // (8 冒号 + 1 references) + (8 横线 + 1 references) = 18
+    expect(deployed.length).toBe(18);
+    const colonFiles = deployed.filter(p => p.includes(".claude/commands/alloy/") && !p.includes("references"));
+    const dashFiles = deployed.filter(p => p.includes(".cursor/commands/") && !p.includes("references"));
     expect(colonFiles.length).toBe(8);
     expect(dashFiles.length).toBe(8);
   });
@@ -143,7 +151,7 @@ describe("deployCommands", () => {
       targetAgents: [{ id: "claude-code", label: "CC", supportsColonCommands: true, commandsDir: ".claude/commands/" }],
     };
     const deployed = await deployCommands(opts);
-    expect(deployed.length).toBe(8);
+    expect(deployed.length).toBe(9);
   });
 
   it("未检测到已有安装时正常部署", async () => {
@@ -156,8 +164,50 @@ describe("deployCommands", () => {
       targetAgents: [{ id: "claude-code", label: "CC", supportsColonCommands: true, commandsDir: ".claude/commands/" }],
     };
     const deployed = await deployCommands(opts);
-    expect(deployed.length).toBe(8);
+    expect(deployed.length).toBe(9);
     expect(promptConfirm).not.toHaveBeenCalled();
+  });
+
+  it("冒号版部署 references/ 子目录到 alloy/references/", async () => {
+    const opts: DeployOptions = {
+      scope: "project",
+      injectClaudeMd: false,
+      projectPath,
+      targetAgents: [{ id: "claude-code", label: "CC", supportsColonCommands: true, commandsDir: ".claude/commands/" }],
+    };
+    await deployCommands(opts);
+    const precheck = await readFile(join(projectPath, ".claude", "commands", "alloy", "references", "skill-precheck.md"), "utf-8");
+    expect(precheck).toContain("skill precheck");
+    const worktree = await readFile(join(projectPath, ".claude", "commands", "alloy", "references", "apply-worktree.md"), "utf-8");
+    expect(worktree).toContain("apply worktree");
+  });
+
+  it("横线版部署 references/ 子目录到 commands/references/", async () => {
+    const opts: DeployOptions = {
+      scope: "project",
+      injectClaudeMd: false,
+      projectPath,
+      targetAgents: [{ id: "cursor", label: "Cursor", supportsColonCommands: false, commandsDir: ".cursor/commands/" }],
+    };
+    await deployCommands(opts);
+    // 横线版 targetDir 是 .cursor/commands/（无 alloy/ 子目录），references 部署到 .cursor/commands/references/
+    // 注意：横线版 skill md 内的 references 路径转换是后续适配项，此处只验证部署动作
+    const precheck = await readFile(join(projectPath, ".cursor", "commands", "references", "skill-precheck.md"), "utf-8");
+    expect(precheck).toContain("skill precheck");
+  });
+
+  it("源目录无 references/ 时不报错（向后兼容）", async () => {
+    // 删除 references 源目录模拟旧版包
+    await rm(join(sourceDir, "references"), { recursive: true, force: true });
+    const opts: DeployOptions = {
+      scope: "project",
+      injectClaudeMd: false,
+      projectPath,
+      targetAgents: [{ id: "claude-code", label: "CC", supportsColonCommands: true, commandsDir: ".claude/commands/" }],
+    };
+    const deployed = await deployCommands(opts);
+    // 只部署 8 个 skill md，无 references
+    expect(deployed.length).toBe(8);
   });
 });
 

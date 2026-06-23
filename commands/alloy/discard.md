@@ -100,26 +100,29 @@ alloy _config read . main_branch
 **执行顺序（必须按序）：**
 
 ```bash
-# 1. git worktree remove（如存在且 phase ≥ applied）
+# 1. 清理该 change 的所有 checkpoint tag（plan 阶段检查点，change 放弃后无意义）
+alloy _checkpoint clean openspec/changes/<name>
+
+# 2. git worktree remove（如存在且 phase ≥ applied）
 git worktree remove <path> --force
 
-# 2. git checkout <main_branch>（切离要删的分支）
+# 3. git checkout <main_branch>（切离要删的分支）
 git checkout <main_branch>
 
-# 3. git branch -D <feature_branch>
+# 4. git branch -D <feature_branch>
 git branch -D <feature_branch>
 
-# 4. 软删除——移动到 archive/ 保留审计链
+# 5. 软删除——移动到 archive/ 保留审计链
 DISCARD_DIR="openspec/changes/archive/$(date +%Y-%m-%d)-discard-<name>"
 mkdir -p openspec/changes/archive/
 mv openspec/changes/<name>/ "$DISCARD_DIR"
 
-# 5. 记录 discarded_at 时间戳
+# 6. 记录 discarded_at 时间戳
 alloy _state merge "$DISCARD_DIR" phase_timings "{\"discarded_at\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
 ```
 
-若 `main_branch` 未记录，跳过步骤 2，提示用户手动切回主分支。
-若 `feature_branch` 未记录，跳过步骤 3。
+若 `main_branch` 未记录，跳过步骤 3，提示用户手动切回主分支。
+若 `feature_branch` 未记录，跳过步骤 4。
 
 ---
 

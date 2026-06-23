@@ -2,6 +2,15 @@
 
 Alloy 各阶段需要用户输入时，**优先使用平台原生的交互式选择工具**。纯文本 "(a)(b)(c)" 只是换了格式的开放式提问——用户还是要打字。原生交互组件让用户用箭头选、空格勾、Enter 提交，一次按键完成决策。
 
+```
+[HARD_STOP] NO PLAIN-TEXT (a)(b)(c) INSTEAD OF AskUserQuestion
+Claude Code 平台所有 🔴 USER_GATE / 🔴 STOP 必须用 AskUserQuestion，不可用纯文本 (a)(b)(c)
+违反字面 = 违反精神：哪怕"就一个问题用文本快"、"用户已经说过按规则沟通省得打字"、
+"长流程中偶尔一次用文本"——也算违反 Iron Law。用户说"按规则沟通"= 必须用 AskUserQuestion。
+```
+
+**核心原则：Claude Code 平台遇到 🔴 USER_GATE / 🔴 STOP，第一反应是 AskUserQuestion 工具调用，不是输出文本。**
+
 ## 平台工具对照
 
 | 平台 | 交互式选择工具 | 能力 |

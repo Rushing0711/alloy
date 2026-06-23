@@ -5,6 +5,34 @@ import type { AlloyState } from "../../../core/types.js";
 // shell 传入的所有值都是字符串，需根据字段类型转换
 const NUMERIC_FIELDS = new Set(["schema_version"]);
 
+// 受管字段：必须通过专用命令写入，禁止 _state write 直接操作
+// records → alloy _artifact commit；skill_usage → alloy _skill log/skip；phase_timings → alloy _phase start/complete|reset
+const MANAGED_FIELDS_WRITE: Record<string, string> = {
+  records: "alloy _artifact commit <change-dir> <artifact>",
+  skill_usage: "alloy _skill <log|skip> <change-dir> <stage> <skill>",
+  phase_timings: "alloy _phase <start|complete|reset> <change-dir> <phase>",
+};
+
+// merge 拦截的受管字段——phase_timings 放开 merge
+// 原因：merge 增量追加生命周期字段（discarded_at/deferred_at 等），不覆盖 started_at/completed_at
+// write 拦截 phase_timings 是因为覆盖式写入会清掉已有 started_at/completed_at（破坏阶段时间链）
+const MANAGED_FIELDS_MERGE: Record<string, string> = {
+  records: "alloy _artifact commit <change-dir> <artifact>",
+  skill_usage: "alloy _skill <log|skip> <change-dir> <stage> <skill>",
+};
+
+function rejectManagedField(field: string, action: "write" | "merge"): boolean {
+  const table = action === "write" ? MANAGED_FIELDS_WRITE : MANAGED_FIELDS_MERGE;
+  if (field in table) {
+    console.error(`[FAIL] 字段 '${field}' 受管，禁止 _state ${action} 直接操作`);
+    console.error(`  请使用专用命令: ${table[field]}`);
+    console.error("  违反 'Agent 不直接写 YAML' 规则——受管字段需经原子命令保证 hash-lock / commit 一致性");
+    process.exit(1);
+    return true;
+  }
+  return false;
+}
+
 function coerceValue(field: string, value: string | undefined): unknown {
   if (value === undefined) return undefined;
   if (value === "null") return null;
@@ -105,6 +133,7 @@ export async function stateCommand(args: string[]): Promise<void> {
         console.error("用法: alloy _state write <change-dir> <field> <value>");
         process.exit(1);
       }
+      if (rejectManagedField(field, "write")) return;
       // 如果文件不存在，用 createInitialState() 创建初始状态（确保 records: [] 等所有字段存在）
       let state: AlloyState;
       try {
@@ -121,6 +150,7 @@ export async function stateCommand(args: string[]): Promise<void> {
         console.error("用法: alloy _state merge <change-dir> <field> <partial-json>");
         process.exit(1);
       }
+      if (rejectManagedField(field, "merge")) return;
       let state: AlloyState;
       try {
         state = await readState(changeDir);

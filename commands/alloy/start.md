@@ -6,7 +6,7 @@ tags: [alloy, workflow]
 spec: 01-product-spec/01-start-spec.md
 behaviors:
   preconditions: 5
-  hard_stops:    8
+  hard_stops:    10
   user_gates:    8
   warns:         2
   artifacts: [draft]
@@ -32,6 +32,8 @@ behaviors:
 
 **状态符号：** `⛔` = HARD_STOP / PRECONDITION_FAIL，`🔴` = USER_GATE，`⚠️` = WARN（视觉规范 §七）。
 
+**输出规则：** 阶段入口/出口必须按 `docs/specification/02-visual-spec.md` 输出 Phase 框（`┌─┐` Unicode 单线框，38 字符宽）、Step 标题（`[Step N/M]` + 38 字符 `─` 下划线）、`>` 块引用、`→` 引导行。**skill md 中的 Phase 框代码块是必须输出到终端的格式，不是文档示例。** 制品汇总表同理。
+
 ---
 
 ### Red Flags（第三层防御——任一借口出现即 STOP）
@@ -52,26 +54,11 @@ behaviors:
 
 **第零步**（⛔ PRECONDITION_FAIL）：环境完整性检测——4 项基础设施任一缺失即引导 `alloy init` 退出，agent 不得自动初始化。
 
-检查清单（按顺序）：
-
-| # | 检查项 | 检查方法 | 缺失含义 |
-|---|--------|---------|---------|
-| 1 | git 仓库 | `git rev-parse --git-dir` 失败 | init 未跑 |
-| 2 | openspec/config.yaml | 文件不存在或不含 `schema: alloy` | init 未跑 / 不完整 |
-| 3 | openspec/schemas/alloy/schema.yaml | 文件不存在 | init 不完整 |
-| 4 | Alloy commands | 当前 agent 的 commands 目录下无 `start.md`（冒号版查 `alloy/start.md`，横线版查 `alloy-start.md`） | init 未为当前 agent 部署 |
-
-任一缺失 → 输出统一提示后退出 skill：
-
+```bash
+alloy _env check
 ```
-⛔ PRECONDITION_FAIL: Alloy 环境不完整
 
-缺失检查项：
-  ✗ <具体缺失项>
-
-请先运行：alloy init
-（已运行过的话，请检查上次 init 是否完整成功；可运行 alloy doctor 查看详情）
-```
+> `alloy _env check` 原子完成 4 项检测（git 仓库 / openspec/config.yaml 含 schema: alloy / openspec/schemas/alloy/schema.yaml / Alloy commands start.md）。任一缺失 exit(1) 并输出缺失项列表。agent 命名规则（冒号版 `alloy/start.md` vs 横线版 `alloy-start.md`，8 种 agent 目录）的真相源在 `src/core/agents.ts` 的 `KNOWN_AGENTS`，CLI 复用——避免 md 硬编码 agent 列表与 TS 漂移。
 
 > 接续路径例外：扫描 `openspec/changes/*/.alloy.yaml` 发现有活跃 change 时，意味着 init 跑过，仅做轻量校验（检查项 2 `openspec/config.yaml` 存在），避免对已有 change 的接续路径过度阻塞。
 
@@ -97,6 +84,7 @@ date "+%Y-%m-%d %H:%M:%S"
 ```
 > 不要混用 bash 变量——bash 状态在两次工具调用间不持久。直接捕获 date 输出文本。
 
+**进入阶段时，必须输出以下 Phase 框到终端**:
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [1/5] · Phase: Start           │
@@ -108,6 +96,12 @@ date "+%Y-%m-%d %H:%M:%S"
 
 ### [Step 1/2] 上下文探查
 
+**捕获 opsx:explore 开始时间（供步骤 8 补录技能使用）：**
+```bash
+EXPLORE_START=$(date "+%Y-%m-%d %H:%M:%S")
+```
+> bash 变量在工具调用间不持久——将 EXPLORE_START 输出值记在上下文中，步骤 8 补录时作为 `--at` 参数传入。
+
 加载 `opsx:explore` 技能，按其指引探索项目上下文。
 
 **交互风格：** 使用 `AskUserQuestion` 工具。详见 `commands/alloy/references/interaction-style.md`。
@@ -117,6 +111,12 @@ date "+%Y-%m-%d %H:%M:%S"
 ---
 
 ### [Step 2/2] 需求设计
+
+**捕获 superpowers:brainstorming 开始时间（供步骤 8 补录技能使用）：**
+```bash
+BRAINSTORM_START=$(date "+%Y-%m-%d %H:%M:%S")
+```
+> 同 EXPLORE_START，记在上下文中供步骤 8 使用。
 
 加载 `superpowers:brainstorming` 技能，传入探查结果和主题：
 
@@ -175,12 +175,17 @@ date "+%Y-%m-%d %H:%M:%S"
 
 3. **分支选择**——创建 change 目录之前完成，确保所有制品落在 feature 分支上：
 
-   **① 主分支检测：** 读取 `commands/alloy/references/main-branch-detection.md`。若 config 已有 `main_branch`，直接用。否则检测后 🔴 USER_GATE: 确认主分支（检测值 / 自定义）。确认后写入并提交（§5.2.1 git add 限路径）：
+   **① 主分支读取：** 主分支在 `alloy init` 阶段已确认并写入 `openspec/config.yaml`，此处直接读取：
    ```bash
-   alloy _config write . main_branch <确认值>
-   git add openspec/config.yaml
-   git diff --cached --quiet || git commit -m "chore: 配置主分支"
+   MAIN_BRANCH=$(alloy _config read . main_branch)
+   if [ -z "$MAIN_BRANCH" ] || [ "$MAIN_BRANCH" = "null" ]; then
+     echo "⛔ [PRECONDITION_FAIL] openspec/config.yaml 未配置 main_branch"
+     echo "  主分支配置已下沉到 alloy init 阶段（项目级配置）。"
+     echo "  请先运行 alloy init 完成项目初始化。"
+     exit 1
+   fi
    ```
+   > alloy init 时已 USER_GATE 确认主分支并写入 config；若仓库无 commit 还会创建初始 commit 锁定 main 分支。start 阶段不再重复确认。
 
    **② 当前分支决策**（🔴 USER_GATE，3 种情况共用同款语义节点）：
    ```bash
@@ -229,35 +234,67 @@ date "+%Y-%m-%d %H:%M:%S"
 
 4. **调用 `/opsx:new <name>`** 创建 change 目录（前置：步骤 3 ③ 验证已通过 + 步骤 3.5 目录冲突已解决）
 
-   调用后验证创建结果：
+   **捕获 opsx:new 开始时间（供步骤 8 补录技能使用）：**
    ```bash
-   if [ ! -f "openspec/changes/<name>/.alloy.yaml" ]; then
-     echo "⛔ PRECONDITION_FAIL: /opsx:new 创建失败——.alloy.yaml 缺失"
-     echo "  退出 skill 让用户排查 opsx 命令"
+   OPSX_NEW_START=$(date "+%Y-%m-%d %H:%M:%S")
+   ```
+
+   调用后验证创建结果——**必须检查 `.openspec.yaml`**（这是 `openspec new change` 生成的标志，含 `schema: alloy` + `created: <当天日期>`）：
+   ```bash
+   if [ ! -f "openspec/changes/<name>/.openspec.yaml" ]; then
+     echo "⛔ PRECONDITION_FAIL: /opsx:new 创建失败——.openspec.yaml 缺失"
+     echo "  .openspec.yaml 由 openspec new change 生成，是 opsx:new 真正执行的标志。"
+     echo "  可能原因："
+     echo "    1. agent 跳过 opsx:new，手动建目录（.alloy.yaml 可由 _state init 生成，但 .openspec.yaml 只能由 openspec new change 生成）"
+     echo "    2. openspec CLI 未安装或版本不兼容"
+     echo "  禁止：alloy 补写 .openspec.yaml（这是 OpenSpec 的事，alloy 不接管）。"
+     echo "  必须：退出 skill 让用户排查 opsx:new / openspec CLI。"
      exit 1
    fi
    ```
 
-5. **批量记录技能使用：**
-   ```bash
-   alloy _skill log openspec/changes/<name> start opsx:explore && \
-   alloy _skill log openspec/changes/<name> start superpowers:brainstorming && \
-   alloy _skill log openspec/changes/<name> start opsx:new
-   ```
-
-6. **写入 state：**
+5. **初始化 state（先于 _phase start 和 _skill log，确保 created_at 在最早时刻写入）：**
    ```bash
    alloy _state init openspec/changes/<name>
-   alloy _state merge openspec/changes/<name> phase_timings "{\"start\":{\"started_at\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}}"
+   ```
+   > 顺序硬约束：`_state init` 必须在 `_phase start` / `_skill log` 之前——后两者在 .alloy.yaml 不存在时会隐式创建并用当前时间作为 created_at，导致 created_at 滞后。`_state init` 先跑则 created_at 锁定在 change 创建的最早时刻。
+
+6. **基础设施 commit（幂等，已提交则跳过；§5.2.1 git add 限路径）——必须在阶段开始 commit 之前：**
+   ```bash
+   git add .claude/ .gitignore openspec/config.yaml openspec/schemas/ 2>/dev/null
+   [ -f CLAUDE.md ] && git add CLAUDE.md 2>/dev/null
+   git diff --cached --quiet || git commit -m "chore: alloy init 项目初始化"
    ```
 
-7. **记录分支信息：**
+7. **记录分支信息 + 阶段开始 commit（原子命令，前移到 _skill log 之前——阶段开始时间应早于技能使用）：**
    ```bash
    alloy _state write openspec/changes/<name> feature_branch <branch-name>
    alloy _state write openspec/changes/<name> worktree null
+   alloy _phase start openspec/changes/<name> start --at "$EXPLORE_START"
+   ```
+   > `alloy _phase start` 原子完成：幂等写 `phase_timings.start.started_at` + git add 限路径 + commit。产生独立的"阶段开始"commit（仅 .alloy.yaml，含 started_at + feature_branch + worktree）。
+   >
+   > **`--at "$EXPLORE_START"` 必传**——Step 1（opsx:explore）在 change 目录创建前执行，`_phase start` 在步骤 7 才能调用（需 change 目录存在）。若用当前时间，started_at 会晚于 explore/brainstorming 的技能使用时间，阶段时间链语义错乱。`EXPLORE_START` 是 start 阶段最早的动作，作为 started_at 补录时间最准确。
+
+8. **补录技能使用（带 --at 传入实际使用时间——Step 1/2 在 change 目录创建前执行，技能 log 只能补录）：**
+
+   > **[HARD_STOP] 三个 `--at` 必须用各自步骤捕获的独立时间戳，禁用同一个值。**
+   > 违反字面 = 违反精神：哪怕"时间差不多"、"先记一个后面改"——也禁止复用 `EXPLORE_START` 给 brainstorming/opsx:new。
+   > recorded_at 语义是"技能实际调用时间"，三个技能在不同步骤调用，时间戳必须不同。
+   >
+   > Step 1（opsx:explore）和 Step 2（superpowers:brainstorming）在步骤 4 创建 change 目录之前执行，技能 log 无法实时记录。此处补录时**必须用 Step 1/2 执行时捕获的开始时间**（`--at`），不可用当前时间——否则 recorded_at 全部相同且晚于实际使用。
+   >
+   > `opsx:new` 在步骤 4 执行，其时间也在步骤 4 捕获。
+
+   ```bash
+   # EXPLORE_START / BRAINSTORM_START / OPSX_NEW_START 在 Step 1 / Step 2 / 步骤 4 执行时已捕获
+   # ⛔ 禁止三个 --at 用同一个值——各自独立时间戳
+   alloy _skill log openspec/changes/<name> start opsx:explore --at "$EXPLORE_START"
+   alloy _skill log openspec/changes/<name> start superpowers:brainstorming --at "$BRAINSTORM_START"
+   alloy _skill log openspec/changes/<name> start opsx:new --at "$OPSX_NEW_START"
    ```
 
-8. **生成 `draft.md`** 到 `openspec/changes/<name>/draft.md`
+9. **生成 `draft.md`** 到 `openspec/changes/<name>/draft.md`
 
    **draft.md 审查窗口——start 阶段唯一的制品闸门：**
 
@@ -265,35 +302,25 @@ date "+%Y-%m-%d %H:%M:%S"
    > [展示 draft.md 完整内容]
    > 🔴 USER_GATE: 确认锁定 draft（确认并继续提交 / 需要调整回 brainstorming）
 
-   选确认 → 步骤 9；选调整 → 回到 Step 2/2 brainstorming。
+   选确认 → 步骤 10；选调整 → 回到 Step 2/2 brainstorming。
 
-9. **提交——仅用户确认锁定后，执行以下 2 个 commit：**
+10. **提交——仅用户确认锁定后，执行以下 2 个 commit（制品 / 阶段完成；基础设施与阶段开始已在前面独立 commit）：**
 
-   **commit 1/2——基础设施（幂等，已提交则跳过；§5.2.1 git add 限路径）：**
-   ```bash
-   git add .claude/ .gitignore openspec/config.yaml openspec/schemas/ 2>/dev/null
-   [ -f CLAUDE.md ] && git add CLAUDE.md 2>/dev/null
-   git diff --cached --quiet || git commit -m "chore: alloy init 项目初始化"
-   ```
+    **commit 1/2——draft 制品 hash-lock + records（原子命令，内部完成 hash 计算 + records 写入 + git add 限路径 + commit；不含 phase_timings）：**
+    ```bash
+    alloy _artifact commit openspec/changes/<name> draft
+    ```
 
-   **commit 2/2——draft hash-lock + .alloy.yaml 变更（§5.2.1 git add 限路径）：**
-   ```bash
-   COMPLETED_AT=$(date "+%Y-%m-%d %H:%M:%S")
-   alloy _state merge openspec/changes/<name> phase_timings "{\"start\":{\"completed_at\":\"${COMPLETED_AT:-$(date '+%Y-%m-%d %H:%M:%S')}\"}}"
-   DRAFT_HASH=$(alloy _record compute openspec/changes/<name> draft)
-   APPROVED_AT=$(date "+%Y-%m-%d %H:%M:%S")
-   APPROVER=$(git config user.name)
-   alloy _record write openspec/changes/<name> draft "$DRAFT_HASH" "$APPROVED_AT" "$APPROVER"
-   git add openspec/changes/<name>/
-   git commit -m "docs(<name>): draft 已确认"
-   ```
-
-   前面步骤写入的 `.alloy.yaml` 变更在 draft commit 中一并提交。
+    **commit 2/2——start 阶段完成（原子命令，内部完成 completed_at 写入 + git add 限路径 + commit；start 不推进 phase，保持 started）：**
+    ```bash
+    alloy _phase complete openspec/changes/<name> start
+    ```
 
 ---
 
 ### 完成
 
+**阶段完成时，必须输出以下 Phase 完成框到终端**:
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [1/5] · Phase: Start — DONE    │
@@ -317,6 +344,7 @@ date "+%Y-%m-%d %H:%M:%S"
 
 ## 自由探索（无活跃 change + 无 topic）
 
+**进入阶段时，必须输出以下 Phase 框到终端**:
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [1/5] · Phase: Start           │
@@ -350,6 +378,12 @@ date "+%Y-%m-%d %H:%M:%S"
 
 ## 接续（有 1 个活跃 change）
 
+```
+[HARD_STOP] 接续路径只读 state，禁重置 feature_branch / worktree / phase 等字段
+违反字面 = 违反精神：哪怕"字段看起来不对"也禁 agent 用 _state write 重置——字段异常 → PRECONDITION_FAIL 退出
+```
+
+**进入阶段时，必须输出以下 Phase 框到终端**:
 ```
 ┌──────────────────────────────────────┐
 │ Alloy [1/5] · Phase: Start           │

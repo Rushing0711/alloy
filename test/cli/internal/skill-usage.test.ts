@@ -98,6 +98,35 @@ describe("alloy _skill", () => {
 
       exitSpy.mockRestore();
     });
+
+    it("--at 传入实际使用时间（补录场景：技能在 change 目录创建前使用，事后补录）", async () => {
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+      await skillUsageCommand(["log", changeDir, "start", "opsx:explore", "--at", "2026-06-21 07:04:58"]);
+
+      const state = await readState(changeDir);
+      expect(state.skill_usage).toHaveLength(1);
+      expect(state.skill_usage[0].recorded_at).toBe("2026-06-21 07:04:58");
+
+      exitSpy.mockRestore();
+    });
+
+    it("不传 --at 时用当前时间（实时记录场景）", async () => {
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+      const before = new Date();
+      await skillUsageCommand(["log", changeDir, "start", "my-skill"]);
+
+      const state = await readState(changeDir);
+      const recorded = state.skill_usage[0].recorded_at!;
+      // 格式 YYYY-MM-DD HH:MM:SS（本地时间）
+      expect(recorded).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+      // 校验本地日期匹配（toISOString 是 UTC，用本地构造）
+      const pad = (n: number) => n.toString().padStart(2, "0");
+      const localDate = `${before.getFullYear()}-${pad(before.getMonth() + 1)}-${pad(before.getDate())}`;
+      expect(recorded.startsWith(localDate)).toBe(true);
+
+      exitSpy.mockRestore();
+    });
   });
 
   describe("skip", () => {
@@ -307,6 +336,37 @@ describe("alloy _skill", () => {
       expect(state.skill_usage[0].skill).toBe("my-skill");
 
       exitSpy.mockRestore();
+    });
+  });
+
+  describe("路径不存在时拒绝创建（防 archive 后残留）", () => {
+    let tmpDir: string;
+    let changeDir: string;
+
+    beforeEach(async () => {
+      tmpDir = join(tmpdir(), `alloy-skill-nopath-${Date.now()}`);
+      changeDir = join(tmpDir, "nonexistent-change");
+      // 故意不创建目录
+    });
+
+    afterEach(async () => {
+      await rm(tmpDir, { recursive: true, force: true });
+    });
+
+    it("change 目录不存在时拒绝 log，不创建 .alloy.yaml", async () => {
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+      const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      await skillUsageCommand(["log", changeDir, "finish", "my-skill"]);
+
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(errSpy.mock.calls.some(c => String(c[0]).includes("PRECONDITION_FAIL"))).toBe(true);
+      // 不应创建 .alloy.yaml
+      const { stat } = await import("node:fs/promises");
+      await expect(stat(join(changeDir, ".alloy.yaml"))).rejects.toThrow();
+
+      exitSpy.mockRestore();
+      errSpy.mockRestore();
     });
   });
 });

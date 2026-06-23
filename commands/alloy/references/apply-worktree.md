@@ -1,102 +1,76 @@
 # apply-worktree.md
 
-apply Step 1 worktree 路径占用检查、创建后状态记录、分支锁定校验。
+apply Step 1 worktree 创建后状态记录、分支锁定校验。
 
-## 路径占用检查（⛔ PRECONDITION_FAIL，task #10）
+## 前置说明
 
-`git worktree add` 在目标路径已存在时会失败；agent 不得用 `git worktree remove --force` 或 `rm -rf` 自动清理——目标路径可能是用户之前未归档的工作（被 alloy 早期版本遗留 / 用户手动创建 / 同名 change 重启）。
+worktree 创建由 `superpowers:using-git-worktrees` 技能驱动（EnterWorktree 优先，git worktree fallback），agent 不手动 `git worktree add`。本文件仅负责**创建后**的状态记录与分支锁定。
 
-```bash
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-TARGET_PATH="$REPO_ROOT/.claude/worktrees/<name>"
-TARGET_BRANCH="worktree-<name>"
+alloy init 已为 Claude Code agent 配置 `.claude/settings.json` 的 `worktree.baseRef: head`，EnterWorktree 从当前 feature 分支分出（非 origin/main），plan 阶段 commit 不丢失。其他 agent 无 EnterWorktree，技能走 git worktree fallback。
 
-if [ -e "$TARGET_PATH" ] || git worktree list --porcelain | grep -qF "worktree $TARGET_PATH"; then
-  echo "⛔ [PRECONDITION_FAIL] worktree 目标路径已被占用："
-  echo "  路径: $TARGET_PATH"
-  echo "  目录存在: $([ -e "$TARGET_PATH" ] && echo 是 || echo 否)"
-  echo "  已注册为 git worktree: $(git worktree list --porcelain | grep -qF "worktree $TARGET_PATH" && echo 是 || echo 否)"
-  echo ""
-  echo "  禁止：agent 自动运行 git worktree remove --force / rm -rf $TARGET_PATH /"
-  echo "        git worktree prune 强行清理。这些路径可能是用户之前未归档的工作。"
-  echo "  违反字面 = 违反精神：哪怕看似\"覆盖一下让 apply 继续\"，也算违反禁令——"
-  echo "  必须 USER_GATE 让用户决策。"
-fi
-```
+## 创建后验证：必须在 worktree 内（⛔ PRECONDITION_FAIL）
 
-路径已占用 → 🔴 USER_GATE：
-
-> 目标路径 `.claude/worktrees/<name>` 已被占用。
-> 选项：
-> (a) 复用现有 worktree——直接 `EnterWorktree(path=...)` 进入，跳过创建（要求该路径已是有效 git worktree 且分支为 `worktree-<name>`，否则降级到 (b)）
-> (b) 重命名当前 change——退出 skill，让用户用 `/alloy:start <new-name>` 重新发起，或手动重命名 change 目录
-> (c) 中止 apply——`alloy _state write openspec/changes/<name> worktree blocked` 后退出，待用户清理后重新运行
-
-- 选 (a)：检测分支匹配后 `EnterWorktree(path=".claude/worktrees/<name>")`，跳到"创建后状态记录"
-- 选 (b)：退出 skill 并提示用户重命名后重跑
-- 选 (c)：写入 worktree=blocked 后退出 skill
-
-路径未占用 → 执行创建：
+using-git-worktrees 技能执行完毕后，agent 必须已在 worktree 内（EnterWorktree 进入或 git fallback cd 进入）。**强制验证**——元信息写到 feature 分支会导致 worktree 内状态分裂（worktree 从旧 commit checkout，看不到主仓后续写入的 worktree 元信息）：
 
 ```bash
-git worktree add .claude/worktrees/<name> -b worktree-<name> <feature_branch>
-```
-
-再用 `EnterWorktree(path=".claude/worktrees/<name>")` 进入。路径偏好 `.claude/worktrees/<name>`（`.claude/` 是 alloy 固定目录），分支命名 `worktree-<name>`（与 EnterWorktree 内置一致，archive 清理时无需猜测）。
-
-## 创建后状态记录
-
-worktree 创建完成后，检测实际位置并写入状态文件：
-
-```bash
-echo "  正在检测 worktree 实际状态..."
-
 # 判断是否已在 worktree 中：GIT_DIR != GIT_COMMON 表示在 linked worktree 中
 GIT_DIR=$(cd "$(git rev-parse --git-dir)" 2>/dev/null && pwd -P)
 GIT_COMMON=$(cd "$(git rev-parse --git-common-dir)" 2>/dev/null && pwd -P)
 
-if [ "$GIT_DIR" != "$GIT_COMMON" ]; then
-  # 已在 worktree 中，获取实际路径和分支名
-  WORKTREE_PATH=$(cd "$(git rev-parse --show-toplevel)" 2>/dev/null && pwd -P)
-  WORKTREE_BRANCH=$(cd "$WORKTREE_PATH" && git branch --show-current)
-  alloy _state write openspec/changes/<name> worktree "$WORKTREE_PATH"
-  alloy _state write openspec/changes/<name> worktree_branch "$WORKTREE_BRANCH"
-  alloy _state write openspec/changes/<name> worktree_created_at "$(date '+%Y-%m-%d %H:%M:%S')"
-  echo "  ✓ worktree 已记录: 分支=$WORKTREE_BRANCH  路径=$WORKTREE_PATH"
-  # commit 确保断点恢复时 state 不丢失
-  git add openspec/changes/<name>/.alloy.yaml
-  git diff --cached --quiet || git commit -m "chore(<name>): record worktree state"
-else
-  # EnterWorktree 失败后的 git worktree fallback
-  # 优先检测 .claude/worktrees/（EnterWorktree 原生路径），回退 .worktrees/
-  WT_PATH=""
-  for CANDIDATE in ".claude/worktrees/<name>" ".worktrees/<name>"; do
-    if [ -d "$CANDIDATE" ]; then
-      WT_PATH=$(cd "$CANDIDATE" 2>/dev/null && pwd -P)
-      break
-    fi
-  done
-  if [ -n "$WT_PATH" ]; then
-    WORKTREE_BRANCH=$(cd "$WT_PATH" && git branch --show-current 2>/dev/null)
-    alloy _state write openspec/changes/<name> worktree "$WT_PATH"
-    alloy _state write openspec/changes/<name> worktree_branch "$WORKTREE_BRANCH"
-    alloy _state write openspec/changes/<name> worktree_created_at "$(date '+%Y-%m-%d %H:%M:%S')"
-    echo "  ✓ worktree fallback 已记录: 分支=$WORKTREE_BRANCH  路径=$WT_PATH"
-    # 提交 source repo 的 state
-    git add openspec/changes/<name>/.alloy.yaml
-    git diff --cached --quiet || git commit -m "chore(<name>): record worktree state"
-    # worktree 内也写入并提交——bash cd 不跨工具调用持久化
-    cd "$WT_PATH" && \
-      alloy _state write openspec/changes/<name> worktree "$WT_PATH" && \
-      alloy _state write openspec/changes/<name> worktree_branch "$WORKTREE_BRANCH" && \
-      alloy _state write openspec/changes/<name> worktree_created_at "$(date '+%Y-%m-%d %H:%M:%S')" && \
-      git add openspec/changes/<name>/.alloy.yaml && \
-      git diff --cached --quiet || git commit -m "chore(<name>): record worktree state (worktree)"
-  else
-    echo "  ℹ 未检测到 worktree，按用户选择记录"
-    alloy _state write openspec/changes/<name> worktree skipped
-  fi
+# submodule guard：GIT_DIR != GIT_COMMON 在 submodule 内也成立
+SUPERPROJECT=$(git rev-parse --show-superproject-working-tree 2>/dev/null)
+
+if [ "$GIT_DIR" = "$GIT_COMMON" ] || [ -n "$SUPERPROJECT" ]; then
+  echo "⛔ [PRECONDITION_FAIL] 不在 worktree 内（GIT_DIR == GIT_COMMON 或在 submodule 中）"
+  echo "  using-git-worktrees 技能执行后 agent 必须已在 worktree 内。"
+  echo "  可能原因："
+  echo "    1. EnterWorktree 失败且 git worktree fallback 未执行"
+  echo "    2. 技能执行中断或 agent 未完整执行 Step 1a/1b"
+  echo "    3. agent 在主仓执行了状态写入（错误位置）"
+  echo ""
+  echo "  禁止：在主仓 feature 分支写入 worktree 元信息（会导致 worktree 内状态分裂）。"
+  echo "  必须：退出 skill 让用户排查 using-git-worktrees 技能执行情况。"
+  exit 1
 fi
+```
+
+验证通过 → 获取实际路径和分支名（技能可能用 EnterWorktree 或 git fallback，路径不一定完全一致）：
+
+```bash
+WORKTREE_PATH=$(cd "$(git rev-parse --show-toplevel)" 2>/dev/null && pwd -P)
+WORKTREE_BRANCH=$(cd "$WORKTREE_PATH" && git branch --show-current)
+```
+
+## 状态记录（在 worktree 内写入 + commit）
+
+**关键：** 以下命令在 worktree 内执行，commit 落在 worktree 分支（非主仓 feature 分支）。
+
+```bash
+alloy _state write openspec/changes/<name> worktree "$WORKTREE_PATH"
+alloy _state write openspec/changes/<name> worktree_branch "$WORKTREE_BRANCH"
+alloy _state write openspec/changes/<name> worktree_created_at "$(date '+%Y-%m-%d %H:%M:%S')"
+echo "  ✓ worktree 已记录: 分支=$WORKTREE_BRANCH  路径=$WORKTREE_PATH"
+# commit 确保断点恢复时 state 不丢失（落在 worktree 分支）
+git add openspec/changes/<name>/.alloy.yaml
+git diff --cached --quiet || git commit -m "chore(<name>): 记录 worktree 信息"
+```
+
+## Worktree 创建后反显（必须输出到终端）
+
+状态记录完成后，必须输出以下反显框，让用户清楚 worktree 的路径、分支、源分支、创建时间——后续切回主仓处理其他任务时需要这些信息：
+
+```
+> ┌─ Worktree 已就绪 ──────────────────────────
+>   路径:       $WORKTREE_PATH
+>   分支:       $WORKTREE_BRANCH
+>   源分支:     feature/<name>（plan 阶段 commit 保留在此分支）
+>   创建时间:   $(date '+%Y-%m-%d %H:%M:%S')
+> ─────────────────────────────────────────────
+>
+> 后续操作：
+>   - 在 worktree 内执行 apply 任务实现
+>   - 切回主仓：cd <主仓路径>（worktree 保留，apply 结束前不要手动 remove）
+>   - archive 阶段会合并 worktree 分支到 feature 分支并清理
 ```
 
 ## 状态记录字段
@@ -111,7 +85,7 @@ fi
 
 ## Worktree 内分支锁定（⛔ PRECONDITION_FAIL，task #18）
 
-进入 worktree 后必须验证当前分支与状态记录一致——子 agent 后续在错误分支编辑 = 用户主分支被污染。
+进入 worktree 后必须验证当前分支与预期一致——子 agent 后续在错误分支编辑 = 用户主分支被污染。
 
 ```bash
 WORKTREE_PATH=$(alloy _state read openspec/changes/<name> worktree)
@@ -121,9 +95,9 @@ if [ "$WORKTREE_PATH" != "skipped" ] && [ "$WORKTREE_PATH" != "blocked" ] && [ -
   ACTUAL_BRANCH=$(git -C "$WORKTREE_PATH" rev-parse --abbrev-ref HEAD 2>/dev/null)
   if [ "$ACTUAL_BRANCH" != "$EXPECTED_BRANCH" ]; then
     echo "⛔ [PRECONDITION_FAIL] worktree 内分支 ($ACTUAL_BRANCH) 与预期 ($EXPECTED_BRANCH) 不一致"
-    echo "  可能原因：用户在 worktree 内手动切换了分支 / 旧 worktree 残留 / 复用 (a) 进入了错误 worktree"
+    echo "  可能原因：用户在 worktree 内手动切换了分支 / 旧 worktree 残留 / 技能 fallback 用了不同分支名"
     echo "  禁止：agent 自动 git checkout 切换分支——可能丢弃用户未提交的工作（§3.5.1）。"
-    echo "  必须：USER_GATE 让用户决策修复方式（手动切回 / 退出 skill 重建 worktree / 复用前确认分支）。"
+    echo "  必须：USER_GATE 让用户决策修复方式（手动切回 / 退出 skill 重建 worktree）。"
     exit 1
   fi
 fi

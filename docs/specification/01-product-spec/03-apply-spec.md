@@ -33,10 +33,19 @@ behaviors:
 
 ## 需求变更闸门
 
-apply 阶段用户提出需求/设计变更时，检查 tasks.md checkbox：
-全部 unchecked（未开始编码）→ 允许回溯到 brainstorming（当前 change 内）；
-有 [x]（已开始编码）→ 拒绝，应开新 change。
-详见 apply.md"需求变更处理"段落。
+apply 阶段不允许任何需求变更——plan 已锁定，统一走 discard 重开。
+
+用户提出需求/设计变更时：
+1. AskUserQuestion 展示选项：
+   - (a) 放弃当前 change，开新 change 处理变更（执行 `/alloy:discard` + `/alloy:start`）
+   - (b) 取消变更，继续当前 apply
+2. 选 (a) 引导用户运行 discard 命令；选 (b) 继续 apply。
+
+详见 apply.md "需求变更闸门"段落。
+
+**Why：** plan 完成 = 制品 hash-lock + records 完整链。apply 阶段开始 = worktree 可能已创建。
+在此阶段就地修改 plans/specs = hash 锁定形同虚设；回溯到 brainstorming = 编码工作可能丢失或冲突。
+统一走 discard 重开是唯一合法路径。
 
 ## 执行步骤（共 5 步，每步自带幂等检查，验证失败回到 Step 2 修复）
 

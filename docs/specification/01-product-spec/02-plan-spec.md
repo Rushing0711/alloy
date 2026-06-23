@@ -49,10 +49,29 @@ change 目录存在且 .alloy.yaml phase=started（/alloy:start 已完成）
 每步生成后有审查窗口，可确认或要求修改
 始终分步，不提供一键生成
 
-审查期间可沟通调整。用户选 (b) 说明修改点后，AI 内部评估修改性质，然后呈现确认选项：
-(a) 确认变更，回溯到 brainstorming / (b) 取消变更，继续当前审查。用户始终掌握最终决定权。
+审查期间可沟通调整。用户选 (b) 说明修改点后，AI 内部评估修改性质，然后呈现两步 USER_GATE：
+
+**Step 1（是否创建检查点当前进度）：**
+- (a) 创建检查点——`alloy _checkpoint create` 在当前 HEAD 打带注释 tag（alloy-checkpoint-<name>-<ts>），保护当前 commit 不被遗忘
+- (b) 不创建检查点——直接进入 Step 2，当前 commit 链可能被切走后遗忘
+
+**Step 2（选择去向）：**
+- (a) 回到某个检查点——`alloy _checkpoint list` 列出可恢复 tag，用户选择后 `alloy _checkpoint switch` 切换分支
+- (b) 重新沟通——清理 plan 制品回到 brainstorming
+- (c) 取消，继续当前审查
+
 plan 阶段处理"构建什么"，任何需求/设计层面的调整统一回到 brainstorming 重新审视
 （在当前 change 内，不创建新 change），不做就地修补。plan 完成后不允许手动修改制品文件。
+
+## 检查点（Checkpoint）机制
+
+plan 阶段允许在制品审查过程中打检查点（tag），用户可在变更触发时选择回到任意检查点继续 plan。
+
+**限制：** `alloy _checkpoint create` / `_checkpoint switch` 命令硬校验 `phase === "started"`——plan 完成后（phase=planned 及之后）一律拒绝，需求变更必须走 discard 重开。
+
+**清理：** finish / discard 时调用 `alloy _checkpoint clean` 删除该 change 所有 checkpoint tag，避免堆积。archive 阶段不清理——此时 change 目录已移到 `openspec/changes/archive/`，原路径失效；finish 阶段 change 封存，且已有 `$CHANGE_DIR` 解析 archive 路径，是更合适的清理时机。
+
+详见 plan.md "需求变更闸门"段落和 `commands/alloy/references/plan-rollback.md` 场景 A。
 
 ## plans.md 定位
 
