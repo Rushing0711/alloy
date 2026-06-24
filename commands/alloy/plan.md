@@ -186,6 +186,14 @@ alloy _progress artifacts openspec/changes/<name>
 
   **commit 后必须等待用户明确指示才生成下一个制品**——不可自动调用 `/opsx:continue` 生成下游。用户响应"继续"/"下一个"等明确指令后，才进入下一制品流程。
 
+  **commit 成功后输出固定模板（禁自行改写措辞，禁建议用户去敲命令）：**
+  ```
+  > 制品 [N/5] <artifact> ✓ 已锁定
+  > 下一个制品：<next_artifact>
+  > 等待你的指示——回复"继续"或"下一个"生成 <next_artifact>，或提出调整。
+  ```
+  禁止输出"运行 /opsx:continue""请执行 /opsx:continue"等让用户去敲命令的措辞——生成下游是 agent 的职责，用户只需口头指示。最后一个制品锁定后无 next_artifact，输出改为"所有制品已锁定，等待指示推进 phase"。
+
   生成下一制品前校验上游 hash：`alloy _record check openspec/changes/<name> <upstream>`，失败 → ⛔ PRECONDITION_FAIL（上游被破坏，必须修复后才能继续生成下游）。
 
 - **选 (b)：** 用户提出修改后，**先分类再行动**：

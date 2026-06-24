@@ -1,5 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
-import { readFileSync, existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { deployCommands, deploySchema } from "../../core/skills.js";
@@ -10,9 +9,8 @@ import { promptConfirm } from "../../utils/prompt.js";
 import { color } from "../../utils/format.js";
 import { section, check, success, info } from "../../utils/output.js";
 import type { DeployOptions } from "../../core/types.js";
-
-const CLAUDE_MD_MARKER_START = "<!-- ALLOY-WORKFLOW:START -->";
-const CLAUDE_MD_MARKER_END = "<!-- ALLOY-WORKFLOW:END -->";
+import { injectAgentConfigs } from "../../core/agent-config.js";
+import { readProjectConfig, writeProjectConfig } from "../utils/state.js";
 
 function isDevMode(): boolean {
   // npm link 下包根目录不是 symlink，但 .git 存在标记了开发环境
@@ -107,9 +105,13 @@ export async function updateCommand(projectPath: string): Promise<string[]> {
     return results;
   }
 
+  // 读取已记录的注入深度（缺失则兜底 medium）
+  const config = await readProjectConfig(projectPath);
+  const depth = config.alloy?.inject_depth ?? "medium";
+
   const deployOpts: DeployOptions = {
     scope,
-    injectClaudeMd: false,
+    injectDepth: depth,
     projectPath,
     targetAgents: deployedAgents,
   };
@@ -127,50 +129,19 @@ export async function updateCommand(projectPath: string): Promise<string[]> {
     results.push(`${color.yellow("⚠️")} schema 部署失败`);
   }
 
-  // 4. 更新 CLAUDE.md 标记区域
-  const claudeMdPath = join(projectPath, "CLAUDE.md");
-  if (existsSync(claudeMdPath)) {
-    try {
-      let content = await readFile(claudeMdPath, "utf-8");
-      if (content.includes(CLAUDE_MD_MARKER_START)) {
-        const latestFragment = getLatestClaudeMdFragment();
-        const startIdx = content.indexOf(CLAUDE_MD_MARKER_START);
-        const endIdx = content.indexOf(CLAUDE_MD_MARKER_END);
-        if (endIdx > startIdx) {
-          content =
-            content.slice(0, startIdx) +
-            latestFragment +
-            content.slice(endIdx + CLAUDE_MD_MARKER_END.length);
-          await writeFile(claudeMdPath, content, "utf-8");
-          results.push(`${color.green("✓")} CLAUDE.md → Alloy 标记区域已更新`);
-        }
-      }
-    } catch {
-      results.push(`${color.yellow("⚠️")} CLAUDE.md 更新失败`);
+  // 4. 重新注入 agent 配置（指令文件 + 专有配置）
+  try {
+    await injectAgentConfigs(deployOpts, depth);
+    results.push(`${color.green("✓")} agent 配置已重新注入（深度: ${depth}）`);
+    // 若 config 缺失 inject_depth，补写
+    if (!config.alloy?.inject_depth) {
+      if (!config.alloy) config.alloy = {};
+      config.alloy.inject_depth = depth;
+      await writeProjectConfig(projectPath, config);
     }
+  } catch {
+    results.push(`${color.yellow("⚠️")} agent 配置注入失败`);
   }
 
   return results;
-}
-
-function getLatestClaudeMdFragment(): string {
-  return [
-    "",
-    CLAUDE_MD_MARKER_START,
-    "## Alloy 工作流",
-    "",
-    "本项目使用 [Alloy](https://github.com/Rushing0711/alloy) 管理开发工作流。",
-    "",
-    "常用命令：",
-    "- `/alloy-start [topic]` - 智能入口",
-    "- `/alloy-plan [name]` - 制品规划",
-    "- `/alloy-apply [name]` - 执行实现",
-    "- `/alloy-archive [name]` - 归档与收尾",
-    "- `/alloy-finish [name]` - 独立收尾",
-    "- `/alloy-fix` - Bug 修复",
-    "- `/alloy-status [name]` - 查看状态",
-    "",
-    CLAUDE_MD_MARKER_END,
-    "",
-  ].join("\n");
 }

@@ -25,7 +25,7 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 |------|------|------|
 | `alloy init` | `[path]` | 项目初始化：HOME 拦截 → 确保 git 仓库 → 安装依赖 → 部署 schema + skill |
 | | `--scope <global\|project>` | 安装范围，默认 project |
-| | `--inject-claude-md` | 注入 CLAUDE.md（默认关闭） |
+| | `--inject-depth <low\|medium\|high>` | 指令注入深度，默认交互式询问 |
 | | `--agents <id,id,...>` | 非交互式模式，指定 AI 工具（逗号分隔），默认交互式多选 |
 | `alloy status` | `[path\|name] [--json]` | 查看活跃 change 总览，指定 name 查看详情 |
 | | `--json` | JSON 格式输出 |
@@ -419,7 +419,7 @@ $ alloy init
 11. **安装 Superpowers** — `npx skills add obra/superpowers -y --agent claude-code`（project scope 不加 `-g`）
 12. **部署 Alloy command + schema** — 从包复制 `commands/alloy/`，自动生成冒号版和横线版到各平台目录，写入 `openspec/schemas/alloy/`
 13. **更新 .gitignore** — 追加 6 条规则（`docs/superpowers/` `.claude/worktrees/` `.worktrees/` `worktrees/` `.superpowers/` `*.local.*`）
-14. **注入 CLAUDE.md** — 可选（`--inject-claude-md`），默认关闭
+14. **注入 agent 配置** — 按 `--inject-depth <low|medium|high>`（默认交互式询问）注入指令文件（AGENTS.md / CLAUDE.md / .cursor/rules/alloy.mdc，按选中 agent 去重）+ 专有配置（Claude Code 的 `.claude/settings.json` worktree.baseRef）。深度记入 `openspec/config.yaml` 的 `alloy.inject_depth`
 15. **写入 main_branch 配置** — `openspec/config.yaml` 写入 `alloy.main_branch: <确认值>`
 16. **若 HEAD unborn：创建初始 commit 锁定 main 分支** — `git add .claude/ .gitignore openspec/config.yaml openspec/schemas/ CLAUDE.md` + `git commit -m "chore: alloy init 项目初始化"`。在 main 分支创建第一个 commit，让 main 引用文件诞生，后续 `/alloy:start` 切到 feature 分支后 main 保留。若 HEAD 已有 commit 则不自动提交，文件留工作目录，提示用户自行 commit
 17. **兼容性检查** — 根据 `compat.yaml` 校验版本
@@ -450,7 +450,7 @@ alloy update [path]
 | 4 | Agent 内流程 + CLI 辅助 | 核心工作流依赖 AI 编排能力，CLI 只做确定性操作 |
 | 5 | alloy init 自动安装 OpenSpec + Superpowers | 用户从零到可用只需两条命令（install + init） |
 | 6 | compat.yaml 钉版本 | init 装已验证的组合，doctor 警告超出范围的非兼容风险 |
-| 7 | CLAUDE.md 注入默认关闭 | 非功能必需，减少对项目文件的侵入。需要时显式 `--inject-claude-md` |
+| 7 | 指令注入按深度分档 | 默认交互式询问深度（low/medium/high），弱模型可选 high 获得更多规则提示，强模型可选 low 减少干扰 |
 | 8 | verify 在 apply 内部闭环，两层验证 | 代码层（verification-before-completion）+ 制品层（/opsx:verify → verify.md），任意 FAIL 回退到 SDD |
 | 9 | archive 与 finish 分离，先文档后代码 | archive 提交 spec 归档，finish 处理代码合入。避免"代码合入了 spec 还没跟上"的窗口期 |
 | 10 | fix 以 apply 为 spec 变更分水岭 | 无代码（phase< applied）并入当前 change；有代码新开 change |

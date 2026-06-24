@@ -36,6 +36,15 @@ vi.mock("../../src/utils/prompt.js", () => ({
   promptConfirm: vi.fn(),
 }));
 
+vi.mock("../../src/core/agent-config.js", () => ({
+  injectAgentConfigs: vi.fn(),
+}));
+
+vi.mock("../../src/cli/utils/state.js", () => ({
+  readProjectConfig: vi.fn(),
+  writeProjectConfig: vi.fn(),
+}));
+
 import { readFile, writeFile } from "node:fs/promises";
 import { readFileSync, existsSync } from "node:fs";
 import { execSync } from "node:child_process";
@@ -44,11 +53,16 @@ import { detectDeployedAgents } from "../../src/core/agents.js";
 import { runHealthCheck } from "../../src/core/health.js";
 import { getPackageRoot } from "../../src/utils/fs.js";
 import { promptConfirm } from "../../src/utils/prompt.js";
+import { injectAgentConfigs } from "../../src/core/agent-config.js";
+import { readProjectConfig, writeProjectConfig } from "../../src/cli/utils/state.js";
 import { updateCommand } from "../../src/cli/commands/update.js";
 
 describe("updateCommand", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(readProjectConfig).mockResolvedValue({ schema: "alloy", alloy: { inject_depth: "medium" } });
+    vi.mocked(writeProjectConfig).mockResolvedValue(undefined);
+    vi.mocked(injectAgentConfigs).mockResolvedValue(undefined);
   });
 
   it("未初始化时应提示先运行 alloy init", async () => {
@@ -76,6 +90,8 @@ describe("updateCommand", () => {
         label: "Claude Code",
         supportsColonCommands: true,
         commandsDir: ".claude/commands/",
+        instructionFile: "CLAUDE.md",
+        instructionFormat: "md" as const,
       },
     ]);
 
@@ -110,6 +126,8 @@ describe("updateCommand", () => {
         label: "Claude Code",
         supportsColonCommands: true,
         commandsDir: ".claude/commands/",
+        instructionFile: "CLAUDE.md",
+        instructionFormat: "md" as const,
       },
     ]);
 
@@ -151,6 +169,8 @@ describe("updateCommand", () => {
         label: "Claude Code",
         supportsColonCommands: true,
         commandsDir: ".claude/commands/",
+        instructionFile: "CLAUDE.md",
+        instructionFormat: "md" as const,
       },
     ]);
 
@@ -190,6 +210,8 @@ describe("updateCommand", () => {
         label: "Claude Code",
         supportsColonCommands: true,
         commandsDir: ".claude/commands/",
+        instructionFile: "CLAUDE.md",
+        instructionFormat: "md" as const,
       },
     ]);
 
@@ -216,12 +238,11 @@ describe("updateCommand", () => {
     expect(results).toContain("⚠️ 未检测到已部署的 Alloy commands，请先运行 alloy init");
   });
 
-  it("应更新 CLAUDE.md 中的 Alloy 标记区域", async () => {
+  it("应调用注入器重新注入 agent 配置", async () => {
     // mock scope 检测：项目级存在
     vi.mocked(existsSync).mockImplementation((path) => {
       if (path.toString().includes(".claude/commands/alloy")) return true;
       if (path.toString().includes(".git")) return true; // 开发模式
-      if (path.toString().includes("CLAUDE.md")) return true;
       return false;
     });
 
@@ -232,6 +253,8 @@ describe("updateCommand", () => {
         label: "Claude Code",
         supportsColonCommands: true,
         commandsDir: ".claude/commands/",
+        instructionFile: "CLAUDE.md",
+        instructionFormat: "md" as const,
       },
     ]);
 
@@ -239,18 +262,50 @@ describe("updateCommand", () => {
     vi.mocked(deployCommands).mockResolvedValue(["/path/to/command.md"]);
     vi.mocked(deploySchema).mockResolvedValue("/path/to/schema");
 
-    // mock CLAUDE.md 内容
-    const claudeMdContent = `# Project
-
-<!-- ALLOY-WORKFLOW:START -->
-旧内容
-<!-- ALLOY-WORKFLOW:END -->
-`;
-    vi.mocked(readFile).mockResolvedValue(claudeMdContent);
-    vi.mocked(writeFile).mockResolvedValue(undefined);
+    // mock config 有 inject_depth
+    vi.mocked(readProjectConfig).mockResolvedValue({ schema: "alloy", alloy: { inject_depth: "medium" } });
+    vi.mocked(injectAgentConfigs).mockResolvedValue(undefined);
 
     const results = await updateCommand("/fake/project");
-    expect(results).toContain("✓ CLAUDE.md → Alloy 标记区域已更新");
-    expect(writeFile).toHaveBeenCalled();
+    expect(results).toContain("✓ agent 配置已重新注入（深度: medium）");
+    expect(injectAgentConfigs).toHaveBeenCalled();
+  });
+
+  it("config 缺失 inject_depth 时兜底 medium 并补写 config", async () => {
+    // mock scope 检测：项目级存在
+    vi.mocked(existsSync).mockImplementation((path) => {
+      if (path.toString().includes(".claude/commands/alloy")) return true;
+      if (path.toString().includes(".git")) return true; // 开发模式
+      return false;
+    });
+
+    vi.mocked(detectDeployedAgents).mockReturnValue([
+      {
+        id: "claude-code",
+        label: "Claude Code",
+        supportsColonCommands: true,
+        commandsDir: ".claude/commands/",
+        instructionFile: "CLAUDE.md",
+        instructionFormat: "md" as const,
+      },
+    ]);
+
+    vi.mocked(deployCommands).mockResolvedValue(["/path/to/command.md"]);
+    vi.mocked(deploySchema).mockResolvedValue("/path/to/schema");
+
+    // mock config 无 inject_depth（旧项目）
+    vi.mocked(readProjectConfig).mockResolvedValue({ schema: "alloy", alloy: {} });
+    vi.mocked(writeProjectConfig).mockResolvedValue(undefined);
+    vi.mocked(injectAgentConfigs).mockResolvedValue(undefined);
+
+    const results = await updateCommand("/fake/project");
+    expect(results).toContain("✓ agent 配置已重新注入（深度: medium）");
+    // 应补写 inject_depth 到 config
+    expect(writeProjectConfig).toHaveBeenCalledWith(
+      "/fake/project",
+      expect.objectContaining({
+        alloy: expect.objectContaining({ inject_depth: "medium" }),
+      })
+    );
   });
 });

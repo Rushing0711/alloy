@@ -8,7 +8,7 @@ import { runHealthCheck } from "../../core/health.js";
 import { installOpenSpecCli, initOpenSpecProject } from "../../core/openspec.js";
 import { installSuperpowers } from "../../core/superpowers.js";
 import { deployCommands, deploySchema } from "../../core/skills.js";
-import { injectClaudeMd } from "../../core/claude-md.js";
+import { injectAgentConfigs, type InjectDepth } from "../../core/agent-config.js";
 import { KNOWN_AGENTS } from "../../core/agents.js";
 import type { AgentInfo, DeployOptions } from "../../core/types.js";
 import { getPackageRoot } from "../../utils/fs.js";
@@ -38,7 +38,21 @@ export async function selectTargetAgents(): Promise<AgentInfo[]> {
   return KNOWN_AGENTS.filter((a) => ids.includes(a.id));
 }
 
-export interface InitOptions extends DeployOptions {}
+export async function selectInjectDepth(): Promise<InjectDepth> {
+  const choice = await promptSelect(
+    "选择指令注入深度（影响 AGENTS.md / CLAUDE.md 等文件注入多少规则提示）：",
+    [
+      { name: "medium - 命令列表 + 3 条核心规则（推荐，适合中等模型）", value: "medium" },
+      { name: "low - 命令列表 + 1 条交互规则（适合强模型，最少干扰）", value: "low" },
+      { name: "high - 命令列表 + 5 条核心规则 + 阶段流转（适合弱模型，最多提示）", value: "high" },
+    ]
+  );
+  return choice as InjectDepth;
+}
+
+export interface InitOptions extends DeployOptions {
+  injectDepthFromCli?: boolean;
+}
 
 // Alloy + Superpowers 运行时目录（每次逐条检测缺失并补齐）
 const GITIGNORE_RUNTIME_RULES = ["docs/superpowers/", ".claude/worktrees/", ".worktrees/", "worktrees/", ".superpowers/", "*.local.*"];
@@ -85,42 +99,6 @@ export async function ensureGitignore(projectPath: string): Promise<void> {
   success(`.gitignore → 已追加 ${total} 条规则`);
 }
 
-/**
- * 为 Claude Code agent 写入 worktree.baseRef: head 配置。
- *
- * EnterWorktree 默认 baseRef=fresh（从 origin/main 分出），会导致 plan 阶段
- * commit 丢失。配置 head 后从当前 HEAD（feature 分支）分出，base ref 正确。
- *
- * 仅 Claude Code 生效（EnterWorktree 是 CC 内置工具），其他 agent 走 git
- * worktree fallback，无需此配置。
- *
- * 项目级 .claude/settings.json（每个项目独立，其他 agent 不认无副作用）。
- */
-export async function ensureClaudeCodeWorktreeConfig(projectPath: string, hasClaudeCode: boolean): Promise<void> {
-  if (!hasClaudeCode) return;
-
-  const settingsPath = join(projectPath, ".claude", "settings.json");
-  let settings: Record<string, unknown> = {};
-  try {
-    const raw = await readFile(settingsPath, "utf-8");
-    settings = JSON.parse(raw);
-  } catch {
-    // 文件不存在或解析失败，稍后创建
-  }
-
-  // 幂等：worktree.baseRef 已是 head 则跳过
-  const worktree = (settings.worktree ?? {}) as Record<string, unknown>;
-  if (worktree.baseRef === "head") return;
-
-  worktree.baseRef = "head";
-  settings.worktree = worktree;
-
-  const { mkdir } = await import("node:fs/promises");
-  await mkdir(join(projectPath, ".claude"), { recursive: true });
-  await writeFile(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");
-  success(".claude/settings.json → worktree.baseRef: head（确保 EnterWorktree 从当前 feature 分支分出）");
-}
-
 export async function initCommand(opts: InitOptions): Promise<void> {
   // 1. 环境检测（detectEnv 是同步操作，无需 spinner）
   section("检测环境...");
@@ -148,6 +126,10 @@ export async function initCommand(opts: InitOptions): Promise<void> {
     process.exit(1);
     return;
   }
+
+  const hasClaudeCode = opts.targetAgents.some(a => a.id === "claude-code");
+  const hasCursor = opts.targetAgents.some(a => a.id === "cursor");
+  const hasAgentsMdAgent = opts.targetAgents.some(a => a.instructionFile === "AGENTS.md");
 
   // ============ 阶段 1：采集（不改变项目目录）============
   section("采集项目状态...");
@@ -234,6 +216,19 @@ export async function initCommand(opts: InitOptions): Promise<void> {
     }
   }
 
+  // 1.9.2 注入深度选择
+  const existingDepth = (existingConfig.alloy as Record<string, unknown>)?.inject_depth as InjectDepth | undefined;
+  let injectDepth: InjectDepth;
+  if (opts.injectDepthFromCli) {
+    injectDepth = opts.injectDepth;
+    check("注入深度", `CLI 指定: ${injectDepth}`, "pass");
+  } else if (existingDepth) {
+    injectDepth = existingDepth;
+    check("注入深度", `已配置: ${existingDepth}（跳过选择）`, "pass");
+  } else {
+    injectDepth = await selectInjectDepth();
+  }
+
   // 1.10 构造执行清单
   const willGitInit = !gitExists;
   const willCommit = headUnborn;  // unborn 时才 commit
@@ -243,10 +238,18 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   info("文件部署：");
   info("  + .claude/commands/alloy/         （新建/更新）");
   info("  + .claude/commands/opsx/          （新建/更新）");
-  info("  + .claude/settings.json           （新建/更新，worktree.baseRef: head）");
   info("  + openspec/config.yaml            （新建/更新，含 main_branch: " + confirmedMainBranch + "）");
   info("  + openspec/schemas/alloy/         （新建/更新）");
-  info("  + CLAUDE.md                       （新建/追加 Alloy 工作流提示）");
+  if (hasAgentsMdAgent) {
+    info(`  + AGENTS.md                       （新建/追加，深度: ${injectDepth}）`);
+  }
+  if (hasClaudeCode) {
+    info(`  + CLAUDE.md                       （新建/追加，深度: ${injectDepth}）`);
+    info("  + .claude/settings.json           （新建/更新，worktree.baseRef: head）");
+  }
+  if (hasCursor) {
+    info(`  + .cursor/rules/alloy.mdc         （新建/追加，深度: ${injectDepth}）`);
+  }
   info("  + .gitignore                      （新建/追加 Alloy 运行时规则）");
   info("");
   info("Git 操作：");
@@ -344,22 +347,28 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   // 7. 确保 .gitignore 包含 Alloy 运行时目录
   await ensureGitignore(opts.projectPath);
 
-  // 7.5 Claude Code worktree 配置（仅当用户选择 CC 时）
-  await ensureClaudeCodeWorktreeConfig(opts.projectPath, opts.targetAgents.some(a => a.id === "claude-code"));
-
-  // 8. 注入 CLAUDE.md
-  const injected = await injectClaudeMd(opts);
-  if (injected) {
-    success("CLAUDE.md → 已追加 Alloy 工作流提示");
+  // 7.5 注入 agent 配置（指令文件 + 专有配置）
+  // injectDepth 在采集阶段确定（CLI 传入或交互选择或 config 已有值）
+  section("注入 agent 配置...");
+  try {
+    const injectOpts: DeployOptions = { ...opts, injectDepth };
+    await injectAgentConfigs(injectOpts, injectDepth);
+    const injectedFiles = new Set<string>();
+    for (const a of opts.targetAgents) injectedFiles.add(a.instructionFile);
+    for (const f of injectedFiles) success(`${f} → 已注入（深度: ${injectDepth}）`);
+    if (hasClaudeCode) success(".claude/settings.json → worktree.baseRef: head");
+  } catch (e) {
+    warn(`agent 配置注入失败: ${(e as Error).message}`);
   }
 
-  // 8.5 写入 openspec/config.yaml 的 main_branch
-  section("写入主分支配置...");
+  // 8.5 写入 openspec/config.yaml 的 main_branch + inject_depth
+  section("写入主分支与注入深度配置...");
   const configToWrite = await readProjectConfig(opts.projectPath);
   if (!configToWrite.alloy) configToWrite.alloy = {};
   (configToWrite.alloy as Record<string, unknown>).main_branch = confirmedMainBranch;
+  (configToWrite.alloy as Record<string, unknown>).inject_depth = injectDepth;
   await writeProjectConfig(opts.projectPath, configToWrite);
-  success(`openspec/config.yaml → main_branch: ${confirmedMainBranch}`);
+  success(`openspec/config.yaml → main_branch: ${confirmedMainBranch}, inject_depth: ${injectDepth}`);
 
   // 8.6 若 HEAD unborn，创建初始 commit 锁定 main 分支
   if (willCommit) {
@@ -395,7 +404,7 @@ export async function initCommand(opts: InitOptions): Promise<void> {
         }
       }
       // 逐个 add，避免某个文件不存在（如未注入 CLAUDE.md）导致整条 git add 失败
-      const addTargets = [".claude/", ".gitignore", "openspec/config.yaml", "openspec/schemas/", "CLAUDE.md"];
+      const addTargets = [".claude/", ".gitignore", "openspec/config.yaml", "openspec/schemas/", "CLAUDE.md", "AGENTS.md", ".cursor/rules/alloy.mdc"];
       for (const target of addTargets) {
         try {
           execSync(`git add ${target}`, { cwd: opts.projectPath, stdio: "pipe" });
@@ -420,7 +429,7 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   } else {
     info("ℹ 仓库已有 commit，alloy 部署文件留工作目录，请自行审查并 commit：");
     info("    git status");
-    info("    git add .claude/ openspec/ .gitignore CLAUDE.md");
+    info("    git add .claude/ openspec/ .gitignore CLAUDE.md AGENTS.md .cursor/rules/alloy.mdc");
     info('    git commit -m "chore: alloy init 项目初始化"');
   }
 
