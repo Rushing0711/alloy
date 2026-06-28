@@ -1,13 +1,13 @@
 # plan-rollback.md
 
-plan 阶段的制品回溯清理——两条路径：轻量修正、全新变更（重新沟通）。
+plan 阶段的制品回溯清理——两条路径：边界内重新生成、全新变更（重新沟通）。
 
 > **检查点切换**已由 `alloy _checkpoint create/list/switch` CLI 处理（见 plan.md 需求变更闸门）。
 > 本文件只负责"全新变更——清理 plan 制品回 brainstorming"的清理动作。
 
-## 轻量修正（措辞/格式，不改变功能边界）
+## 边界内重新生成（规格边界内调整，不改 data model / API / 功能边界）
 
-**判断规则：** 只有用户明确说"措辞/格式调整"才走此路径。用户主动提出"加入/删除/修改功能"= 需求变更，**禁止使用 `alloy _artifact reset`**，必须走下面的全新变更路径。不确定时默认需求变更。
+**判断规则：** 由 agent 判断变更是否触犯规格边界（不是让用户分类，见 plan.md 选 (b) Step 0）。**不越界**（纯展示样式、文案、不改数据契约和功能边界）走此路径重新生成当前制品；**越界**（改 Capabilities / data model 字段 / API 契约 / 核心功能行为）必须走下面的全新变更路径，**禁止使用 `alloy _artifact reset`**。
 
 使用 `alloy _artifact reset` 一步完成 hash 清除 + 文件删除：
 
@@ -23,45 +23,39 @@ alloy _artifact reset openspec/changes/<name> <artifact>
 
 ```bash
 git add openspec/changes/<name>/
-git commit -m "chore(<name>): 轻量修正——清除 <artifact>，准备重新生成"
+git commit -m "chore(<name>): 边界内调整——清除 <artifact>，准备重新生成"
 ```
 
-## 场景 A：全新变更（清理 plan 制品回 brainstorming）
+## 场景 A：越界变更（回 brainstorming 检查点）
 
-**触发：** plan 过程中用户提出新需求，选择"重新沟通"路径（plan.md 需求变更闸门 Step 2 选 (b)）。
+**触发：** plan 过程中用户提出新需求，agent 判断越界，用户在 Step 1 选"继续变更——回 brainstorming"。
 
-**前提：** 用户在 Step 1 已经选择"是否创建检查点当前进度"。若选暂存，当前 commit 已有 alloy-checkpoint tag 保护；若选不暂存，当前 commit 链将在切换后被遗忘。
+**机制：** 用 git checkout 回退到 brainstorming 检查点，替代原地清理。回退 = `git checkout -B feature/<name> <tag>`，HEAD 回到检查点 commit，.alloy.yaml/records/phase_timings/skill_usage 随 tag 状态恢复，plan 阶段的 commit/records/phase_timings 自然消失。无需原地清理。
 
-**流程：** 清理 plan 制品（保留 draft）→ 清理 phase_timings → phase 重置为 started → 回 brainstorming。
+**完整流程见 plan.md "越界变更检查点流程"段落**，要点：
 
-**用原子命令清理，禁 `_state write records/phase_timings`**——这两个是受管字段（N2），直接 write 会被拦截。records 用 `_artifact reset` 逐个清除（同时删文件 + 清 hash 记录），phase_timings 用 `_phase reset` 逐个清除：
+1. 废弃未 commit 信息（git restore，不问用户）
+2. 回退前创建 plan 检查点（保护当前进度，--kind plan）
+3. 列出 brainstorming 检查点让用户选（USER_GATE）
+4. `_checkpoint switch` 回退到所选 tag
+5. 重新 brainstorming + `_skill log`（count++）+ `_artifact reset draft` + 重新生成 draft
+6. 打新 brainstorming 检查点（--kind brainstorming，N+1）
 
-```bash
-# 1. 逐个清除 plan 制品（_artifact reset = 删文件 + 清 records 条目，原子操作）
-#    draft 保留，只清 proposal/design/specs/tasks/plans
-for ARTIFACT in proposal design specs tasks plans; do
-  alloy _artifact reset openspec/changes/<name> "$ARTIFACT"
-done
+**关键约束：**
+- 禁止原地清理 plan 制品（`_artifact reset` 逐个清）——git checkout 已让 plan 阶段的 records/phase_timings 自然消失
+- 禁止 `_state write phase started`——git checkout 后 phase 已是 tag 时的状态（started）
+- 回退后 draft 保留（tag 时已 commit），但因越界变更必须 `_artifact reset draft` 重新生成
+- phase_timings.start.started_at 保留第一次时间（不重置）
 
-# 2. 逐个清除 plan/apply/archive/finish 的 phase_timings（_phase reset = 删 timing key，原子操作）
-#    start 保留（brainstorming 阶段不需回退），仅清后续阶段
-for PHASE in plan apply archive finish; do
-  alloy _phase reset openspec/changes/<name> "$PHASE"
-done
+## apply 阶段的需求变列
 
-# 3. phase 重置为 started（phase 不受管，可直接 _state write）
-#    回溯到 brainstorming = 回到 start 阶段，phase 必须 = started
-alloy _state write openspec/changes/<name> phase started
+**新规则：** plan 完成后（phase=planned/applied/archived/finished），所有需求变更**只能走 discard 重开 change**。
 
-git add openspec/changes/<name>/
-git commit -m "chore(<name>): 回溯——清理 plan 制品，回到 brainstorming"
-```
+- 不允许在 apply 阶段回溯到 brainstorming（worktree/代码已生成，回退会破坏一致性）
+- 不允许在 apply 阶段使用 _checkpoint 切换检查点（CLI 已硬校验 phase 仅 started/planned 允许）
+- 处理路径：`/alloy:discard <name>` + `/alloy:start <new-name>`
 
-```
-→ 制品已清理（仅保留 draft），records/phase_timings 已重置，phase=started
-→ 若 Step 1 选了暂存，当前 checkpoint tag 可通过 alloy _checkpoint list 查看
-→ 请运行 /alloy:start <name> 重新走需求确认流程
-```
+详见 apply.md 的"需求变更处理"段落。
 
 ## apply 阶段的需求变更
 

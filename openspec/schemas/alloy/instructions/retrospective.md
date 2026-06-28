@@ -24,50 +24,18 @@ FAIL 时 STOP，告知用户先修复 verify 中的阻塞问题。
 
 ## 生成流程
 
-### Step 1: 收集证据（§0）
+### Step 1: 生成机械数据骨架（CLI）
 
-从三个来源自动收集，不依赖 LLM 判断：
+调用 `alloy _retro scaffold openspec/changes/<change-name>` 生成 §0 量化全景 + §4 技能审计，直接写入 retrospective.md。
 
-**来源一：.alloy.yaml（制品审批链）**
-```bash
-alloy _state read openspec/changes/<name> records
-alloy _state read openspec/changes/<name> created_at
-alloy _state read openspec/changes/<name> worktree
-```
+CLI 从以下数据源权威生成（不依赖 LLM 记忆，跨 session 中断也完整）：
+- `.alloy.yaml`：started_at/completed_at、records（制品审批链）、skill_usage（技能审计，全部不漏）、phase_timings（阶段耗时 + 阶段间隔）、worktree
+- `git log <merge-base>..HEAD`：commit 按 type 分组、完整提交链、变更规模
+- `git tag -l "alloy-checkpoint-<name>-*"`：检查点使用 + 回退检测
+- `tasks.md`：任务完成比
+- `verify.md`：验证状态
 
-提取每个制品的 artifact / hash / approver / committed_at，构建审批链。
-**retrospective 行特殊处理：** hash 列填 `—`（自指 hash 悖论：写入 hash 会导致文件变化、hash 失效），审批时间填"待确认"——等用户审查通过后再补。hash 仅记录在 `.alloy.yaml` 中。
-
-**来源二：git log（全周期 commit 全景）**
-```bash
-git log <base>..HEAD --oneline
-git log <base>..HEAD --format="%ai %s"
-git diff --stat <base>..HEAD | tail -1
-```
-
-按 Conventional Commits type 分组统计（feat / fix / docs / chore / test 等），再按阶段分组（start / plan / apply）。
-
-**来源三：文件系统（制品状态）**
-- `tasks.md` checkbox 完成比（`[x]` / 总数）
-- `verify.md` Overall Decision
-- `plans.md` YAML frontmatter（strategy / reason）
-
-**§0 输出字段：**
-
-| 字段 | 来源 | 说明 |
-|------|------|------|
-| 全周期时间线 | `.alloy.yaml` records | 从 draft 到 retrospective 每个制品的 committed_at |
-| Commit 汇总（按 type） | `git log` | feat / docs / chore 各多少，是否还有 fix/test 等 |
-| Commit 汇总（按阶段） | `git log` + commit message 前缀 | start / plan / apply 各多少 |
-| 制品审批链 | `.alloy.yaml` records | 制品 + 审批人 + Hash + 时间 四列 |
-| 阶段耗时 | `.alloy.yaml` + `git log` | created_at → 最后 commit 时间；各阶段间隔 |
-| 任务完成比 | `tasks.md` | 已勾 / 总数 |
-| 变更规模 | `git diff --stat` | 文件数、行数 |
-| Worktree 状态 | `.alloy.yaml` worktree | 是否使用隔离环境 |
-| 计划策略 vs 实际策略 | `plans.md` + Agent 自报 | plans/strategy vs 实际采用的执行方式 |
-| 验证状态 | `verify.md` | Overall Decision (PASS/FAIL/WARNING) |
-| 测试覆盖信号 | `git diff --stat` 分析 | 测试文件变更 vs 源文件变更的比例 |
-| 完整提交链 | `git log --oneline` | 每条 commit message |
+**agent 不再手动跑 `alloy _state read` / `git log` / `git diff --stat` 等命令——这些已由 scaffold 承担。** §0/§4 生成后 agent 只读不改。
 
 ### Step 2: 写入定性分析（§1-§6）
 
@@ -90,25 +58,14 @@ git diff --stat <base>..HEAD | tail -1
 
 #### §4 全周期技能审计
 
-从 `.alloy.yaml` 的 `skill_usage[]` 字段读取全周期技能使用记录（各阶段 `alloy _skill log` 写入）：
+§4 审计表由 `alloy _retro scaffold` 生成（读 `.alloy.yaml` skill_usage，used=true 填 ✓ 带 count，used=false 填 ✗ 带 reason，按阶段分组）。agent 只读不改表格。
 
-```bash
-alloy _state read openspec/changes/<name> skill_usage
-```
-
-按 `templates/retrospective.md` 的 §4 格式生成审计表：
-
-- `used=true` → 填 `✓`，有 `count` 时追加 `(×N)`，有 `via` 时原因列填 `via <source>`
-- `used=false` → 填 `✗`，原因列填 `reason` 字段的值
-- 不在 `skill_usage[]` 中（旧 change 无记录）→ 填 `—`
-- `skill_usage[]` 为空数组 → 所有行填 `—`，在表前加一行提示："> ⚠️ 当前 change 无 skill_usage 记录（旧 change），以下数据不可用。"
-
-**Deliberately Skipped Skills：** 对于每个 `used=false` 的条目，展开三问：
+**Deliberately Skipped Skills（agent 职责）：** 对每个标 ✗ 的技能，展开三问：
 1. **What was skipped** — 具体跳过了哪个技能或子步骤
-2. **Why this cycle** — 具体触发原因（优先用 `reason` 字段的值）
+2. **Why this cycle** — 具体触发原因（优先用 reason 字段）
 3. **How to prevent recurrence** — schema graph fix / skill description tightening / CLAUDE.md trigger / scope-judgment rule / one-off
 
-如果多个 cycle 因相似原因跳过同一技能，该模式应成为 §6 的 Promote candidate。
+多个 cycle 因相似原因跳过同一技能 → 应成为 §6 Promote candidate。
 
 #### §5 意外发现
 `- <被推翻的假设>` — 哪些假设被证明是错误的

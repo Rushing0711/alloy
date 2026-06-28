@@ -54,6 +54,8 @@ export async function printStatusDetail(
   check("Change", name, "pass");
   check("路径", changePath, "pass");
   check("创建时间", state.created_at, "pass");
+  check("开始时间", state.started_at ?? "—", "pass");
+  if (state.completed_at) check("完成时间", state.completed_at, "pass");
   check("更新时间", state.updated_at, "pass");
 
   section("制品状态");
@@ -133,6 +135,8 @@ async function detailMode(
     `${color.bold("Change:")}  ${name}`,
     `${color.bold("路径:")}    ${changePath}`,
     `${color.bold("创建时间:")} ${state.created_at}`,
+    `${color.bold("开始时间:")} ${state.started_at ?? "—"}`,
+    `${color.bold("完成时间:")} ${state.completed_at ?? "—"}`,
     `${color.bold("更新时间:")} ${state.updated_at}`,
     color.bold("制品状态:"),
     ...ARTIFACTS.map(

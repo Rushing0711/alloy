@@ -5,8 +5,10 @@ category: Workflow
 tags: [alloy, workflow]
 spec: 01-product-spec/06-fix-spec.md
 behaviors:
-  stops: 8
-  hard_stops: 5
+  preconditions: 1
+  hard_stops:    6
+  user_gates:    7
+  warns:         0
   artifacts: []
   transitions_to: ""
   external_calls: [superpowers:systematic-debugging, superpowers:test-driven-development, superpowers:verification-before-completion]

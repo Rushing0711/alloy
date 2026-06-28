@@ -5,25 +5,27 @@ import type { AlloyState, ProjectConfig } from "../../core/types.js";
 
 export type { AlloyState, ProjectConfig };
 
-function formatTimestamp(): string {
+export function formatTimestamp(): string {
   const d = new Date();
   const pad = (n: number) => n.toString().padStart(2, "0");
   // 本地时间，人类可读格式：YYYY-MM-DD HH:MM:SS
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-export function createInitialState(): AlloyState {
+export function createInitialState(startedAt?: string, featureBranch?: string): AlloyState {
   const now = formatTimestamp();
   return {
     phase: "started",
     worktree: null,
-    feature_branch: null,
+    feature_branch: featureBranch ?? null,
     worktree_branch: null,
     worktree_created_at: null,
     worktree_merged_at: null,
     schema_version: 1,
+    started_at: startedAt ?? now,
     created_at: now,
     updated_at: now,
+    completed_at: null,
     records: [],
     skill_usage: [],
   };
@@ -40,7 +42,17 @@ export async function readState(changePath: string): Promise<AlloyState> {
     }
     throw err;
   }
-  return parseYaml(content) as AlloyState;
+  const state = parseYaml(content) as AlloyState;
+  // 旧字段兼容：recorded_at → called_at（rename 后旧 change 仍可读）
+  if (state.skill_usage) {
+    for (const e of state.skill_usage) {
+      if ((e as any).recorded_at && !e.called_at) {
+        e.called_at = (e as any).recorded_at;
+        delete (e as any).recorded_at;
+      }
+    }
+  }
+  return state;
 }
 
 export async function writeState(

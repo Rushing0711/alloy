@@ -314,4 +314,51 @@ describe("alloy _state", () => {
       expect(state.phase_timings?.plan?.started_at).toBe(out);
     });
   });
+
+  describe("createInitialState 时间字段", () => {
+    it("不传 startedAt 时 started_at 兜底为当前时间（等于 created_at）", () => {
+      const state = createInitialState();
+      expect(state.started_at).toBe(state.created_at);
+      expect(state.completed_at).toBeNull();
+    });
+
+    it("传入 startedAt 时 started_at 用传入值，created_at 仍是当前时间", () => {
+      const state = createInitialState("2026-06-24 16:50:53");
+      expect(state.started_at).toBe("2026-06-24 16:50:53");
+      expect(state.created_at).not.toBe("2026-06-24 16:50:53");
+      expect(state.completed_at).toBeNull();
+    });
+  });
+
+  describe("_state init --at", () => {
+    let tmpDir2: string;
+    let changeDir2: string;
+
+    beforeEach(async () => {
+      tmpDir2 = join(tmpdir(), `alloy-state-init-test-${Date.now()}`);
+      changeDir2 = join(tmpDir2, "test-change");
+      await mkdir(changeDir2, { recursive: true });
+    });
+
+    afterEach(async () => {
+      await rm(tmpDir2, { recursive: true, force: true });
+    });
+
+    it("--at 传入时 started_at 用传入值", async () => {
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+      await stateCommand(["init", changeDir2, "--at", "2026-06-24 16:50:53"]);
+      const state = await readState(changeDir2);
+      expect(state.started_at).toBe("2026-06-24 16:50:53");
+      exitSpy.mockRestore();
+    });
+
+    it("不传 --at 时 started_at 兜底当前时间", async () => {
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+      await stateCommand(["init", changeDir2]);
+      const state = await readState(changeDir2);
+      expect(state.started_at).toBeTruthy();
+      expect(state.started_at).toBe(state.created_at);
+      exitSpy.mockRestore();
+    });
+  });
 });

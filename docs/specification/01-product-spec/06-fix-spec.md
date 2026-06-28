@@ -1,7 +1,9 @@
 ---
 behaviors:
-  stops: 6
-  hard_stops: 1
+  preconditions: 1
+  hard_stops:    6
+  user_gates:    7
+  warns:         0
   artifacts: []
   transitions_to: ""
   external_calls: [superpowers:systematic-debugging, superpowers:test-driven-development, superpowers:verification-before-completion]

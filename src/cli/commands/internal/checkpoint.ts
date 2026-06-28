@@ -33,17 +33,40 @@ function findGitRoot(changeDir: string): { root: string; relPath: string } | nul
   }
 }
 
-/** 校验 phase === "started"——检查点切换仅 plan 完成之前允许。返回 true 表示通过。 */
-async function assertStartedPhase(changeDir: string): Promise<boolean> {
+/** 校验 phase 允许检查点操作。
+ *  start/plan 阶段：允许。
+ *  apply 阶段：仅当 worktree 未创建 + SDD/EP 未启动（apply 早期）时允许；否则禁止。
+ *  archive/finish 阶段：禁止。
+ */
+async function assertCheckpointPhase(changeDir: string): Promise<boolean> {
   const state = await readState(changeDir);
-  if (state.phase !== "started") {
-    console.error(`⛔ [PRECONDITION_FAIL] 检查点切换仅 plan 完成之前允许，当前 phase=${state.phase}`);
-    console.error(`  plan 完成后（phase=planned/applied/archived/finished）禁止检查点切换。`);
+  const phase = state.phase;
+
+  if (phase === "started" || phase === "planned") {
+    return true;
+  }
+
+  if (phase === "applied") {
+    // apply 早期判断：worktree 未创建 + SDD/EP 未启动
+    const worktreeCreated = state.worktree && state.worktree !== "skipped" && state.worktree !== "null";
+    const sddEpStarted = (state.skill_usage ?? []).some(
+      s => s.skill === "superpowers:subagent-driven-development" || s.skill === "superpowers:executing-plans"
+    );
+    if (!worktreeCreated && !sddEpStarted) {
+      return true; // apply 早期，允许检查点操作
+    }
+    console.error(`⛔ [PRECONDITION_FAIL] apply 中后期禁止检查点操作——worktree 已创建或 SDD/EP 已启动，回退会破坏一致性。`);
+    console.error(`  worktree: ${state.worktree ?? "null"} | SDD/EP 已启动: ${sddEpStarted}`);
     console.error(`  如需变更，请用 /alloy:discard 重开 change。`);
     process.exit(1);
     return false;
   }
-  return true;
+
+  // archive/finished
+  console.error(`⛔ [PRECONDITION_FAIL] 检查点操作仅 start/plan/apply 早期允许，当前 phase=${phase}`);
+  console.error(`  ${phase} 阶段禁止检查点操作。如需变更，请用 /alloy:discard 重开 change。`);
+  process.exit(1);
+  return false;
 }
 
 /** 从 change name 推导 tag 前缀 */
@@ -77,22 +100,37 @@ function readTagAnnotation(gitRoot: string, tag: string): string {
 }
 
 /**
- * alloy _checkpoint create <change-dir>
- * 在当前 HEAD 打 tag，注释含锁定制品列表 + phase + 时间。
+ * alloy _checkpoint create <change-dir> [--reason <原因>] [--kind <brainstorming|progress>]
+ * 在当前 HEAD 打 tag，注释含原因/制品/phase/commit数/时间。
+ *
+ * --kind brainstorming: 打 brainstorming-N 检查点（draft commit 后锚点，N=现有 brainstorming tag 数+1）
+ * --kind progress: 打 progress-<ts> 检查点（回退前进度快照）
+ * 不传 --kind: 打 <ts> 检查点（用户主动创建）
  *
  * 前置校验：
- * 1. phase === "started"（仅 plan 完成前允许创建检查点）
+ * 1. phase 允许检查点操作（start/plan 阶段）
  * 2. working tree clean（避免未提交变更在切换检查点时丢失）——agent 必须先 commit
  */
 async function checkpointCreate(args: string[]): Promise<void> {
   const changeDir = args[0];
   if (!changeDir) {
-    console.error("用法: alloy _checkpoint create <change-dir>");
+    console.error("用法: alloy _checkpoint create <change-dir> [--reason <原因>] [--kind <brainstorming|progress>]");
     process.exit(1);
     return;
   }
 
-  if (!(await assertStartedPhase(changeDir))) return;
+  // 解析可选参数
+  let reason: string | undefined;
+  let kind: string | undefined;
+  for (let i = 1; i < args.length; i++) {
+    if (args[i] === "--reason" && i + 1 < args.length) {
+      reason = args[++i];
+    } else if (args[i] === "--kind" && i + 1 < args.length) {
+      kind = args[++i];
+    }
+  }
+
+  if (!(await assertCheckpointPhase(changeDir))) return;
 
   const gitRoot = findGitRoot(changeDir);
   if (!gitRoot) {
@@ -102,9 +140,6 @@ async function checkpointCreate(args: string[]): Promise<void> {
   }
 
   // 校验 working tree clean——dirty 时拒绝创建检查点
-  // 原因：检查点是 git tag 指向当前 HEAD commit，未提交变更不在 tag 范围内。
-  // 切换到其他检查点会让未提交变更"漂浮"（不属于任何检查点），用户后续无法定位。
-  // 禁止 agent 自行 git stash 兜底——必须让用户先 commit。
   try {
     const dirty = execSync("git status --porcelain", {
       cwd: gitRoot.root,
@@ -114,11 +149,7 @@ async function checkpointCreate(args: string[]): Promise<void> {
     if (dirty) {
       console.error(`⛔ [PRECONDITION_FAIL] working tree 有未提交变更，拒绝创建检查点`);
       console.error(`  检查点是 git tag 指向 HEAD commit，未提交变更不会被 tag 保护。`);
-      console.error(`  请先 commit 当前变更后再创建检查点：`);
-      console.error(`    git status                          # 查看变更`);
-      console.error(`    git add <精确路径>                   # 暂存（禁 -A，§5.2.1）`);
-      console.error(`    git commit -m "<描述>"               # 提交`);
-      console.error(`    alloy _checkpoint create ${changeDir}  # 重新创建检查点`);
+      console.error(`  请先 commit 当前变更后再创建检查点。`);
       console.error(`  禁止 agent 自动 git stash 兜底（§3.5.1 自救禁令）。`);
       process.exit(1);
       return;
@@ -135,13 +166,46 @@ async function checkpointCreate(args: string[]): Promise<void> {
   const now = formatTimestamp();
 
   const changeName = basename(changeDir);
-  const ts = tagTimestamp();
-  const tagName = `${tagPrefix(changeName)}${ts}`;
 
-  // 构造注释——只描述"包含什么"，不含"原因"
+  // 计算 base..HEAD commit 数（用于 tag message）
+  let commitCount = "—";
+  try {
+    const mainBranch = state.feature_branch ? "main" : "main";
+    const base = execSync(`git merge-base ${mainBranch} HEAD`, {
+      cwd: gitRoot.root, encoding: "utf-8", stdio: "pipe",
+    }).trim();
+    if (base) {
+      const count = execSync(`git rev-list --count ${base}..HEAD`, {
+        cwd: gitRoot.root, encoding: "utf-8", stdio: "pipe",
+      }).trim();
+      commitCount = count;
+    }
+  } catch {
+    // base 计算失败用 —
+  }
+
+  // 确定 tag 名
+  const ts = tagTimestamp();
+  let tagName: string;
+  if (kind === "brainstorming") {
+    // brainstorming-N：N = 现有 brainstorming tag 数 + 1
+    const existing = listCheckpointTags(gitRoot.root, changeName)
+      .filter(t => t.match(/-brainstorming-\d+$/));
+    const N = existing.length + 1;
+    tagName = `${tagPrefix(changeName)}brainstorming-${N}`;
+  } else if (kind === "progress") {
+    tagName = `${tagPrefix(changeName)}progress-${ts}`;
+  } else {
+    tagName = `${tagPrefix(changeName)}${ts}`;
+  }
+
+  // 构造增强注释
+  const reasonLine = reason || (kind === "brainstorming" ? "brainstorming 锚点（draft 已锁定，发起变更回退点）" : kind === "progress" ? "回退前进度快照（放弃变更回退点）" : "用户主动创建");
   const annotation = [
-    `锁定制品: ${artifactList}`,
+    `原因: ${reasonLine}`,
+    `制品: ${artifactList}`,
     `phase: ${phase}`,
+    `commit 数: ${commitCount}`,
     `时间: ${now}`,
   ].join("\n");
 
@@ -234,7 +298,7 @@ async function checkpointSwitch(args: string[]): Promise<void> {
     return;
   }
 
-  if (!(await assertStartedPhase(changeDir))) return;
+  if (!(await assertCheckpointPhase(changeDir))) return;
 
   const gitRoot = findGitRoot(changeDir);
   if (!gitRoot) {

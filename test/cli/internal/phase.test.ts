@@ -97,6 +97,56 @@ describe("alloy _phase complete", () => {
     expect(log).toContain("记录 finish 阶段完成时间，推进到 finished");
   });
 
+  it("finish 阶段 complete 写顶层 completed_at", async () => {
+    const yaml = [
+      "phase: archived",
+      "schema_version: 1",
+      "worktree: null",
+      'created_at: "2020-01-01 00:00:00"',
+      'started_at: "2020-01-01 09:00:00"',
+      'updated_at: "2020-01-01 00:00:00"',
+      "completed_at: null",
+      "phase_timings:",
+      "  finish:",
+      '    started_at: "2020-01-01 11:00:00"',
+      "    completed_at: null",
+      "records: []",
+      "skill_usage: []",
+    ].join("\n");
+    await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
+
+    await phaseCommand(["complete", changeDir, "finish"]);
+
+    const state = await readState(changeDir);
+    expect(state.completed_at).toBeTruthy();
+    expect(state.phase).toBe("finished");
+    expect(state.phase_timings?.finish?.completed_at).toBe(state.completed_at);
+  });
+
+  it("非 finish 阶段 complete 不写顶层 completed_at", async () => {
+    const yaml = [
+      "phase: started",
+      "schema_version: 1",
+      "worktree: null",
+      'created_at: "2020-01-01 00:00:00"',
+      'updated_at: "2020-01-01 00:00:00"',
+      "completed_at: null",
+      "phase_timings:",
+      "  plan:",
+      '    started_at: "2020-01-01 10:00:00"',
+      "    completed_at: null",
+      "records: []",
+      "skill_usage: []",
+    ].join("\n");
+    await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
+
+    await phaseCommand(["complete", changeDir, "plan"]);
+
+    const state = await readState(changeDir);
+    expect(state.completed_at).toBeNull();
+    expect(state.phase).toBe("planned");
+  });
+
   it("幂等：重复调用不产生新 commit（completed_at 已写入但 .alloy.yaml 内容相同则跳过）", async () => {
     await phaseCommand(["complete", changeDir, "start"]);
     const firstLog = gitLog();
@@ -115,6 +165,26 @@ describe("alloy _phase complete", () => {
     const state = await readState(changeDir);
     expect(state.phase_timings?.start?.started_at).toBe("2020-01-01 10:00:00");
     expect(state.phase_timings?.start?.completed_at).toBeTruthy();
+  });
+
+  it("started_at 缺失时 PRECONDITION_FAIL（agent 跳过 _phase start 的防御）", async () => {
+    // 模拟 agent 跳过 _phase start plan，直接 _phase complete plan
+    // beforeEach 的 .alloy.yaml 只有 phase_timings.start，没有 plan
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await phaseCommand(["complete", changeDir, "plan"]);
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errSpy.mock.calls.some((c) => String(c[0]).includes("PRECONDITION_FAIL"))).toBe(true);
+    expect(errSpy.mock.calls.some((c) => String(c[0]).includes("未执行 _phase start"))).toBe(true);
+
+    // 确认没写入污染数据——plan 不应出现在 phase_timings
+    const state = await readState(changeDir);
+    expect(state.phase_timings?.plan).toBeUndefined();
+
+    exitSpy.mockRestore();
+    errSpy.mockRestore();
   });
 
   it("无效 phase 时 exit(1)", async () => {

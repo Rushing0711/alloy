@@ -6,8 +6,8 @@ tags: [alloy, workflow]
 spec: 01-product-spec/03-apply-spec.md
 behaviors:
   preconditions: 12
-  hard_stops:    9
-  user_gates:    8
+  hard_stops:    14
+  user_gates:    7
   warns:         3
   artifacts: [verify, retrospective]
   transitions_to: applied
@@ -107,22 +107,50 @@ git diff --cached --quiet || git commit -m "chore(<name>): apply 阶段开始前
 
 ## 需求变更闸门
 
-**[HARD_STOP] plan 已完成，apply 阶段不允许任何需求变更。** 任何功能增删、行为变更、设计调整都必须走"放弃当前 change + 开新 change"路径。
+**apply 阶段的需求变更处理分两档，由两个标志位决定：**
 
-**Why：** plan 完成 = 制品已 hash-lock + records 完整链。apply 阶段开始 = worktree 可能已创建 + 代码生成在即。在此阶段就地修改 plans/specs 制品 = hash 锁定形同虚设；回溯到 brainstorming = 编码工作可能丢失或冲突。统一走 discard 重开是唯一合法路径。
+**标志位检测**（agent 执行，结果决定走哪一档）：
+```bash
+# 标志位 1：worktree 是否创建（读 .alloy.yaml worktree 字段）
+WORKTREE=$(alloy _state read openspec/changes/<name> worktree)
+# worktree=skipped 或 null → 未创建 worktree
+# worktree=<路径> → 已创建 worktree
 
-🔴 USER_GATE（必须 AskUserQuestion）：检测到需求变更，apply 阶段不允许就地变更。
+# 标志位 2：SDD/EP 是否启动（读 skill_usage）
+SKILL_USAGE=$(alloy _state read openspec/changes/<name> skill_usage)
+# 含 subagent-driven-development 或 executing-plans → 已启动代码生成
+# 都不含 → 未启动
+```
 
-> apply 阶段一旦进入，plan 已锁定的制品（proposal/design/specs/tasks/plans）和 records 链不可逆。
-> 任何需求变更必须开新 change，复用本 change 的 spec 沉淀作为参考即可。
->
-> (a) 放弃当前 change，开新 change 处理变更——执行 `/alloy:discard <name>` 后 `/alloy:start <new-name>`
+**档位 A：apply 早期（worktree 未创建 + SDD/EP 未启动）→ 允许回退到 brainstorming**
+
+两个标志位都满足"未创建/未启动"时，apply 阶段仍可回退。走 plan.md 的检查点回退流程：
+- 废弃未 commit 信息（git restore）
+- 回退前创建 progress 检查点（`_checkpoint create --kind progress --reason "apply 早期回退前快照"`）——保护当前 apply 进度，供放弃变更时切回
+- 列出 brainstorming 检查点让用户选（USER_GATE，筛选 brainstorming- 前缀）
+- _checkpoint switch 回退到所选 brainstorming 检查点
+- 重走 start.md 步骤 9-11（brainstorming → draft → 检查点 → _phase complete start）→ 重新走 plan → 重新进 apply
+
+> apply 早期回退成本极低（无 worktree、无代码），强行 discard 重开太重。复用 plan 阶段的检查点回退机制即可。
+
+**档位 B：apply 中后期（worktree 已创建 或 SDD/EP 已启动）→ 只能 discard 重开**
+
+任一标志位不满足（worktree 已创建 或 SDD/EP 已启动）时，回退会破坏 worktree 隔离或丢失代码。此时只能 discard。
+
+🔴 USER_GATE（必须 AskUserQuestion）：检测到需求变更，根据标志位结果选择路径：
+
+**档位 A（apply 早期）选项：**
+> 检测到需求变更。当前处于 apply 早期（worktree 未创建 + 代码未生成），可回退到 brainstorming。
+> (a) 回退到 brainstorming 检查点（走 plan.md 检查点回退流程）
 > (b) 取消变更，继续当前 apply
 
-选 (a)：引导用户运行 `/alloy:discard <name>`（会软删除当前 change 到 archive/），然后 `/alloy:start <new-name>` 开新 change。
-选 (b)：继续当前 apply 流程。
+**档位 B（apply 中后期）选项：**
+> 检测到需求变更。apply 中后期（worktree 已创建 或 代码已生成），回退会破坏一致性。
+> (a) 放弃当前 change，开新 change——执行 `/alloy:discard <name>` 后 `/alloy:start <new-name>`
+> (b) 取消变更，继续当前 apply
 
-> 违反字面 = 违反精神：禁直接编辑 plans.md "顺手"承载需求变更；禁在 apply 阶段调用 alloy _artifact reset / _checkpoint switch / 手动改制品文件——这些都是绕过 plan 锁定的反模式。CLI 命令本身已有 phase 校验（_checkpoint 系列硬校验 phase===started），手动改文件没有校验，**必须按 (a) 路径走**。
+> ⛔ [HARD_STOP] 禁直接编辑 plans.md/specs 制品承载需求变更。无论档位 A 还是 B，制品修改都必须通过"重新生成"（reset + 重新走流程）或"discard 重开"实现，不可直接 Edit。
+> 违反字面 = 违反精神：哪怕"只改一行 spec 描述"，直接编辑都会让制品 hash 与 records 失配。
 
 ## 执行步骤
 
@@ -290,7 +318,30 @@ if ! echo "$SKILL_USAGE" | grep -qE '"skill":"(superpowers:)?test-driven-develop
   exit 1
 fi
 
-echo "✓ skill_usage 校验通过：apply 阶段必需技能已记录"
+# 检查审查技能——按实际路径分别校验（审查是 apply 质量闸门，漏记 = retrospective §4 审计缺失）
+if echo "$SKILL_USAGE" | grep -qE '"skill":"(superpowers:)?subagent-driven-development"'; then
+  # SDD 路径：内嵌两阶段审查（spec 合规 + 代码质量），必须各记一条
+  if ! echo "$SKILL_USAGE" | grep -q '"skill":"spec-compliance-review"'; then
+    echo "⛔ [HARD_STOP] skill_usage 缺失：SDD 路径未记录 spec-compliance-review"
+    echo "  SDD 每个 task 后必做 spec 合规审查，必须 _skill log 留痕。"
+    echo "  禁止：agent 自动补记——记录必须反映真实做过的审查。"
+    exit 1
+  fi
+  if ! echo "$SKILL_USAGE" | grep -q '"skill":"code-quality-review"'; then
+    echo "⛔ [HARD_STOP] skill_usage 缺失：SDD 路径未记录 code-quality-review"
+    echo "  SDD 每个 task 后必做代码质量审查，必须 _skill log 留痕。"
+    exit 1
+  fi
+else
+  # EP 路径：显式补 requesting-code-review 作为代码审查闸门
+  if ! echo "$SKILL_USAGE" | grep -qE '"skill":"(superpowers:)?requesting-code-review"'; then
+    echo "⛔ [HARD_STOP] skill_usage 缺失：EP 路径未记录 requesting-code-review"
+    echo "  EP 不 transitive 激活代码审查，必须显式加载 + _skill log 留痕。"
+    exit 1
+  fi
+fi
+
+echo "✓ skill_usage 校验通过：apply 阶段必需技能 + 审查技能已记录"
 ```
 
 #### Step 2/5 完成前：主仓清洁度校验（worktree 模式，⛔ PRECONDITION_FAIL）
@@ -408,9 +459,17 @@ alloy _record check openspec/changes/<name> verify
 
 失败 → ⛔ `[PRECONDITION_FAIL] verify 上游 hash 失效——verify.md 可能被未审批修改`。禁止 agent 自动重新锁定，必须用户审查后决定。
 
-读取 `instructions/retrospective.md`，按 `templates/retrospective.md` 生成。输出语言与模板一致。代码标识符、commit hash、文件名保持原文。
+**生成 retrospective（机械数据由 CLI 预生成）：**
 
-**§0-§6：** §0 量化全景（records + git log + 文件系统三来源）、§1 Wins（evidence 格式）、§2 Misses（🔴 blocking / 🟡 painful / 📌 nit）、§3 Plan Deviations、§4 技能审计（从 `.alloy.yaml` skill_usage[] 读取，空填 `—`，跳过的展开三问）、§5 Surprises、§6 Promote Candidates（`→ Promote to: memory` 的条目在 archive 阶段写入 memory）。
+1. 跑 CLI 生成 §0/§4 机械数据骨架（直接写 retrospective.md）：
+   ```bash
+   alloy _retro scaffold openspec/changes/<name>
+   ```
+   > CLI 从 `.alloy.yaml` + `git log` + `git tag` 权威生成 §0 量化全景（含全周期时间线、制品审批链、commit 汇总、阶段耗时 + 阶段间隔、检查点使用、任务完成比、变更规模、验证状态、完整提交链）和 §4 技能审计（全部 skill_usage 不漏）。跨 session 中断也能完整生成——不依赖会话记忆。
+
+2. 读 `instructions/retrospective.md` 的"Step 2 定性分析"，用 Edit 补充定性章节：§1 Wins（evidence 格式）、§2 Misses（🔴 blocking / 🟡 painful / 📌 nit）、§3 Plan Deviations、§5 Surprises、§6 Promote Candidates（`→ Promote to: memory` 的条目在 archive 阶段写入 memory），以及 §4 的 Deliberately Skipped Skills 三问。
+
+   > **§0/§4 机械数据由 CLI 填好，agent 只读不改。** agent 职责仅限定性章节（§1/§2/§3/§5/§6 + §4 Skipped 三问）。
 
 **Retrospective 跳过判定（🔴 USER_GATE + ⛔ HARD_STOP，task #17）：**
 
@@ -445,18 +504,16 @@ echo "本 change 累计 commit 数: $COMMIT_COUNT"
 
 选 (a)：分两步——先制品 commit，再阶段完成 commit（制品 commit 不含 phase_timings，阶段完成 commit 不含制品）：
 ```bash
-# 1. 填写 retrospective 审批栏（模板既有结构，非制品内容变更）
-APPROVAL_TIME=$(date "+%Y-%m-%d %H:%M:%S")
-sed -i '' "s/| retrospective |.*| 待确认 |/| retrospective | $(alloy _record approver openspec/changes/<name>) | — | ${APPROVAL_TIME} |/" openspec/changes/<name>/retrospective.md
-
-# 2. 制品 commit：hash-lock + records + git add 限路径 + commit（原子命令）
+# 1. 制品 commit：hash-lock + records + git add 限路径 + commit（原子命令）
+#    审批信息（审批人/hash/时间）由 _artifact commit 写入 records，retrospective.md 正文
+#    不含 retrospective 自身的审批栏（scaffold 生成的审批链只列 retrospective 之前的制品）。
 alloy _artifact commit openspec/changes/<name> retrospective
 
-# 3. 阶段完成 commit：completed_at + phase 推进 + git add 限路径 + commit（原子命令）
+# 2. 阶段完成 commit：completed_at + phase 推进 + git add 限路径 + commit（原子命令）
 alloy _phase complete openspec/changes/<name> apply
 ```
 
-> 注意：步骤 2 和 3 是两个独立 commit。步骤 2 仅含 retrospective.md + records，步骤 3 仅含 .alloy.yaml 的 phase_timings + phase 字段。
+> 注意：步骤 1 和 2 是两个独立 commit。步骤 1 仅含 retrospective.md + records，步骤 2 仅含 .alloy.yaml 的 phase_timings + phase 字段。
 
 选 (b)：重新生成（不是直接编辑），重新展示审查窗口。
 

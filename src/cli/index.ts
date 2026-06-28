@@ -20,6 +20,7 @@ import { specAuditCommand } from "./commands/internal/spec-audit.js";
 import { phaseCommand } from "./commands/internal/phase.js";
 import { envCheckCommand } from "./commands/internal/env.js";
 import { checkpointCommand } from "./commands/internal/checkpoint.js";
+import { retroCommand } from "./commands/internal/retro.js";
 
 const USAGE = `
 alloy <command> [options]
@@ -411,6 +412,10 @@ async function main() {
     }
     case "_checkpoint": {
       await checkpointCommand(restArgs);
+      break;
+    }
+    case "_retro": {
+      await retroCommand(restArgs);
       break;
     }
     default:

@@ -5,9 +5,10 @@ category: Workflow
 tags: [alloy, workflow]
 spec: 01-product-spec/07-discard-spec.md
 behaviors:
-  stops: 0
-  hard_stops: 1
-  artifacts: [discard-archive]
+  preconditions: 1
+  hard_stops:    1
+  user_gates:    1
+  warns:         0
   artifacts: []
   transitions_to: ""
   external_calls: []

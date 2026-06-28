@@ -185,10 +185,17 @@ worktree 是 apply 的**本地实现细节**。apply 完成后代码已经合并
 
 | 命令 | 说明 |
 |------|------|
-| `alloy _state` | 读写 `.alloy.yaml` 状态文件（`read\|write\|init\|check`） |
-| `alloy _guard` | 阶段转换校验 + phase 推进 |
+| `alloy _state` | 读写 `.alloy.yaml` 状态文件（`read\|write\|init\|merge\|check\|timestamp`） |
+| `alloy _skill` | 技能使用记录管理（`log\|skip`），持久化到 `skill_usage[]` |
+| `alloy _guard` | 阶段转换校验 + phase 推进（`precheck\|verify-passed\|branch-position\|worktree-status`） |
+| `alloy _phase` | 阶段时间记录（`start\|complete\|reset`） |
+| `alloy _artifact` | 制品 hash-lock + commit（`commit\|reset`），原子命令 |
 | `alloy _record` | 制品 hash 记录管理（`compute\|write\|check\|approver`） |
 | `alloy _config` | 读写 `openspec/config.yaml` 项目级配置 |
+| `alloy _checkpoint` | 检查点管理（`create\|list\|switch\|clean`） |
+| `alloy _retro` | retrospective 机械数据预生成（`scaffold`） |
+| `alloy _env` | 环境完整性检测（`check`） |
+| `alloy _progress` | 制品进度扫描（`artifacts`） |
 
 ### 4.3 Slash Command（AI Agent 内使用）
 

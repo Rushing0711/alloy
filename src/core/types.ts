@@ -64,7 +64,7 @@ export interface SkillUsageEntry {
   count?: number;
   via?: string;
   reason?: string;
-  recorded_at: string;
+  called_at: string;
 }
 
 export interface PhaseTiming {
@@ -88,7 +88,9 @@ export interface AlloyState {
   worktree_merged_at?: string | null;
   schema_version: number;
   created_at: string;
+  started_at?: string;
   updated_at: string;
+  completed_at?: string | null;
   phase_timings?: PhaseTimings;
   records: ArtifactRecord[];
   skill_usage: SkillUsageEntry[];

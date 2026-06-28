@@ -289,35 +289,32 @@ git add 限路径（如 openspec/specs/ openspec/changes/<name>/），
 
 ---
 
-## 附录 A：现有 5 个阶段 skill 的 frontmatter 偏离现状
+## 附录 A：5 个阶段 skill 的 frontmatter 对齐状态
 
-> 本附录描述截至 2026-06-13 的客观偏离事实，作为按本规范执行情况的证据。
-> 重写后 frontmatter 应与正文一致，本附录将更新或删除。
+> 本附录记录按本规范执行后的 frontmatter 对齐结果。代码是真相源——skill md 改动后必须重新审计节点并同步 frontmatter。
 
-### A.1 节点统计偏离
+### A.1 当前对齐状态（2026-06-27 审计）
 
-| skill | 字段 | 标称 | 实际 | 偏离 |
-|-------|------|------|------|------|
-| start.md | hard_stops | 5 | 8 | -3 |
-| plan.md | stops | 6 | ≥8（按 user_gates 计） | -2+ |
-| plan.md | hard_stops | 3 | 9 | -6 |
-| apply.md | hard_stops | 6 | 11 | -5 |
-| archive.md | stops | 3 | 3（按 user_gates 计） | 0 |
-| archive.md | hard_stops | 2 | 9+ | -7 |
-| finish.md | stops | 3 | 4（按 user_gates 计） | -1 |
-| finish.md | hard_stops | 0 | 8+ | -8 |
+| skill | preconditions | hard_stops | user_gates | warns |
+|-------|--------------|------------|------------|-------|
+| start.md | 8 | 13 | 9 | 2 |
+| plan.md | 7 | 19 | 9 | 1 |
+| apply.md | 12 | 14 | 7 | 3 |
+| archive.md | 6 | 10 | 3 | 1 |
+| finish.md | 5 | 8 | 5 | 2 |
+| fix.md | 1 | 6 | 7 | 0 |
+| discard.md | 1 | 1 | 1 | 0 |
 
-### A.2 缺字段现状
+### A.2 审计方法
 
-5 个 skill 全部**缺**以下字段，重写时新增：
+按 §5.2.2 手段 1（节点审计）执行：
+- 一个语义节点计 1 次，不论其在正文里出现几次（顶部 Iron Law + 步骤里强调 = 同一节点）
+- 同一行不兼具两类语义（HARD_STOP 后跟 USER_GATE 是合法串联，分别计 1）
+- Iron Law 是 hard_stops 之一，位置在顶部不另计
 
-- `preconditions`（PRECONDITION_FAIL 数）
-- `warns`（WARN 数）
-- `user_gates`（替换 `stops`）
+### A.3 漂移防护
 
-### A.3 数据来源
-
-- start / plan / apply：参照 `docs/superpowers/specs/2026-06-13-skills-test-design-wip.md` §3
-- archive / finish：参照同文档新增的 archive.md 和 finish.md 章节
-
-详细节点清单（含每个节点的行号、缺失项分析）见 WIP 文档 §3 与 §3.5 五个 skill 偏离汇总表。
+frontmatter 四字段（`preconditions`/`hard_stops`/`user_gates`/`warns`）与正文实际节点数必须一致。修改 skill md 后：
+1. 重新审计节点（按 §5.2.2 手段 1）
+2. 同步 frontmatter
+3. 同步对应 spec 文件（`docs/specification/01-product-spec/0X-*-spec.md`）的 frontmatter

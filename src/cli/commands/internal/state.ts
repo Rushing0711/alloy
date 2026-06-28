@@ -101,14 +101,24 @@ export async function stateCommand(args: string[]): Promise<void> {
 
   switch (action) {
     case "init": {
+      // 解析 --at（全周期开始时间，补录场景：start 阶段 EXPLORE_START 早于 change 目录创建）
+      let at: string | undefined;
+      let featureBranch: string | undefined;
+      for (let i = 2; i < args.length; i++) {
+        if (args[i] === "--at" && i + 1 < args.length) {
+          at = args[i + 1];
+        } else if (args[i] === "--feature-branch" && i + 1 < args.length) {
+          featureBranch = args[i + 1];
+        }
+      }
       // 非破坏性初始化：如果文件已存在（如 _skill log 已提前创建），保留已有数据
       try {
         await readState(changeDir);
         console.log(`state 已存在: ${changeDir} (跳过初始化)`);
       } catch {
-        const initialState = createInitialState();
+        const initialState = createInitialState(at, featureBranch);
         await writeState(changeDir, initialState);
-        console.log(`✓ state 已初始化: ${changeDir}`);
+        console.log(`✓ state 已初始化: ${changeDir}${at ? ` (started_at=${at})` : ""}${featureBranch ? ` (feature_branch=${featureBranch})` : ""}`);
       }
       break;
     }

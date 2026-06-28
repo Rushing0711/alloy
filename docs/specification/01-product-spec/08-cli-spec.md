@@ -1,7 +1,9 @@
 ---
 behaviors:
-  stops: 0
-  hard_stops: 0
+  preconditions: 0
+  hard_stops:    0
+  user_gates:    0
+  warns:         0
   artifacts: []
   transitions_to: ""
   external_calls: []
@@ -68,9 +70,15 @@ alloy doctor [path] [--json]
 
 | 命令 | 子命令 | 说明 |
 |------|--------|------|
-| `alloy _state` | `read\|write\|init\|merge\|check\|timestamp` | 读写 `.alloy.yaml` 状态文件 |
-| `alloy _skill` | `log\|skip` | 技能使用记录管理，持久化到 `skill_usage[]` |
+| `alloy _state` | `read\|write\|init\|merge\|check\|timestamp` | 读写 `.alloy.yaml` 状态文件。`init` 支持 `--at <timestamp>` 回填顶层 `started_at` + `--feature-branch <name>` 一次成型写入 feature_branch |
+| `alloy _skill` | `log\|skip` | 技能使用记录管理，持久化到 `skill_usage[]`。字段 `called_at`（调用时间，多次调用更新为最新）+ `count`（累加）。`log` 同一 skill+stage 已存在时 count++ |
 | `alloy _guard` | `precheck\|verify-passed\|branch-position\|worktree-status` + `<name> <phase> --apply` | 阶段转换校验 + phase 推进 |
+| `alloy _phase` | `start\|complete\|reset` | 阶段时间记录。`complete finish` 额外写顶层 `completed_at`（全周期完成时间） |
 | `alloy _record` | `compute\|write\|check\|approver` | 制品 hash 记录管理 |
 | `alloy _config` | `read\|write` | 读写 `openspec/config.yaml` 项目级配置 |
-| `alloy _checkpoint` | `create\|list\|switch\|clean` | 检查点管理（plan 阶段变更保护 + 切换），详见 02-plan-spec.md |
+| `alloy _checkpoint` | `create\|list\|switch\|clean` | 检查点管理。`create` 支持 `--kind brainstorming\|progress`（brainstorming-N 发起变更锚点 / progress-<ts> 放弃变更进度快照）+ `--reason <原因>`。tag message 含原因/制品/phase/commit数/时间。phase 限制：start/plan 全程允许，apply 早期（worktree 未创建 + SDD/EP 未启动）允许，apply 中后期 + archive/finish 禁止。`create` 校验 working tree clean（dirty 拒绝）；`switch` 用 `git checkout -B` 原子回退，输出 tag 指向的 records 状态（已锁定/缺失制品） |
+| `alloy _retro` | `scaffold` | 从 `.alloy.yaml` + `git log` + `git tag` 权威生成 retrospective.md 的 §0 量化全景 + §4 技能审计，agent 只填定性章节。跨 session 中断也能完整生成 |
+| `alloy _env` | `check` | 环境完整性检测（git 仓库 / openspec/config.yaml / schema.yaml / Alloy commands start.md），4 项任一缺失 exit(1) |
+| `alloy _progress` | `artifacts` | 制品进度扫描，输出每个制品状态（done/missing/hash-mismatch/pending），供 plan/apply 决定从哪个制品开始 |
+| `alloy _artifact` | `commit\|reset` | `commit` 原子完成 hash 计算 + records 写入 + git add 限路径 + commit（重复锁定且 hash 未变时跳过）；`reset` 清掉指定制品的 record |
+| `alloy _spec-audit` | — | spec 审计工具，详见 `alloy _spec-audit --help` |

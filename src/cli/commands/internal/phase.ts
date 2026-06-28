@@ -35,17 +35,36 @@ function findGitRoot(changeDir: string): { root: string; relPath: string } | nul
   }
 }
 
-/** 写 phase_timings.<phase>.completed_at（writeState 自动刷新 updated_at） */
+/** 写 phase_timings.<phase>.completed_at（writeState 自动刷新 updated_at）。
+ *  前置校验:started_at 必须已存在——_phase complete 前必须先 _phase start。
+ *  缺失时 PRECONDITION_FAIL,避免 started_at 退化为空字符串污染时间线。 */
 async function writeCompletedAt(changeDir: string, phase: string, completedAt: string): Promise<void> {
   const state = await readState(changeDir);
   const timings = (state.phase_timings ?? {}) as PhaseTimings;
   const phaseKey = phase as keyof PhaseTimings;
   const existing = timings[phaseKey];
+
+  if (!existing?.started_at) {
+    console.error(`⛔ [PRECONDITION_FAIL] ${phase} 阶段未执行 _phase start,拒绝写 completed_at`);
+    console.error(`  phase_timings.${phase}.started_at 缺失——_phase complete 前必须先 _phase start。`);
+    console.error(`  可能原因:agent 跳过了阶段入口的 _phase start 调用。`);
+    console.error(`  修复:先运行 alloy _phase start ${changeDir} ${phase},再运行 _phase complete。`);
+    process.exit(1);
+    return; // 测试 mock process.exit 时不真退出,此处防御继续执行
+  }
+
   timings[phaseKey] = {
-    started_at: existing?.started_at ?? "",
+    started_at: existing.started_at,
     completed_at: completedAt,
   };
   state.phase_timings = timings;
+  await writeState(changeDir, state);
+}
+
+/** finish 阶段额外写顶层 completed_at（全周期完成时间） */
+async function writeTopLevelCompletedAt(changeDir: string, completedAt: string): Promise<void> {
+  const state = await readState(changeDir);
+  state.completed_at = completedAt;
   await writeState(changeDir, state);
 }
 
@@ -205,6 +224,11 @@ async function phaseComplete(args: string[]): Promise<void> {
 
   // 1. 写 completed_at（writeState 自动刷新 updated_at）
   await writeCompletedAt(changeDir, phase, completedAt);
+
+  // finish 阶段额外写顶层 completed_at（全周期完成）
+  if (phase === "finish") {
+    await writeTopLevelCompletedAt(changeDir, completedAt);
+  }
 
   // 2. 推进 phase（start 除外——start 完成 phase 保持 started）
   if (target) {

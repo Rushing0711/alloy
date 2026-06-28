@@ -9,8 +9,11 @@
 
 ## §0 量化全景
 
+> 本节由 `alloy _retro scaffold` 自动生成（含全周期时间线、制品审批链、Commit 汇总、阶段耗时 + 阶段间隔、检查点使用、任务完成比、变更规模、Worktree 状态、验证状态、完整提交链）。以下为字段示意。
+
 ### 全周期时间线
-<!-- 从 .alloy.yaml records 提取：created_at → 每个制品的 committed_at -->
+<!-- 从 .alloy.yaml 提取：started_at（全周期开始）→ 截止本次 retrospective 生成时刻。
+     retrospective 在 apply 阶段生成，此时尚未 finish，completed_at 待 finish 阶段写入 -->
 
 | 制品 | 审批人 | Hash | 审批时间 |
 |------|--------|------|---------|
@@ -21,7 +24,9 @@
 | tasks | | | |
 | plans | | | |
 | verify | | | |
-| retrospective | | — | 待确认 |
+<!-- 审批链只列 retrospective 之前已锁定的制品。retrospective 自身在 scaffold 运行时
+     尚未审批，不列入（避免自指）；其审批信息在审查通过后由 _artifact commit 写入 records -->
+
 
 ### Commit 汇总（按 type）
 <!-- git log <base>..HEAD --oneline，按 Conventional Commits type 分组 -->
@@ -44,15 +49,18 @@
 | plan | |
 | apply | |
 
-### 阶段耗时
-<!-- .alloy.yaml created_at + git log 最后 commit 时间 -->
+### 阶段耗时 + 阶段间隔
+<!-- .alloy.yaml phase_timings：各阶段 started/completed/阶段内耗时 + 距上阶段间隔（间隔 = 本阶段 started − 上阶段 completed，揭示中断/停顿） -->
 
-| 阶段 | 开始 | 结束 | 耗时 |
-|------|------|------|-----|
-| start | | | |
-| plan | | | |
-| apply | | | |
-| **总计** | | | |
+| 阶段 | 开始 | 结束 | 阶段内耗时 | 距上阶段间隔 |
+|------|------|------|-----------|------------|
+| start | | | | — |
+| plan | | | | |
+| apply | | | | |
+
+### 检查点使用
+<!-- git tag -l "alloy-checkpoint-<name>-*"：打了几个检查点 + 是否回退。无检查点 = 需求稳定 -->
+
 
 ### 任务完成比
 <!-- tasks.md checkbox -->
@@ -107,6 +115,8 @@
 | | | |
 
 ## §4 全周期技能审计
+
+> 本节技能审计表由 `alloy _retro scaffold` 自动生成（读 .alloy.yaml skill_usage）。Deliberately Skipped Skills 由 agent 填写。
 
 数据来源：`.alloy.yaml` 的 `skill_usage[]` 字段。`skill_usage[]` 为空（旧 change 无记录）→ 对应行填 `—`。
 

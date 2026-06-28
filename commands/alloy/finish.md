@@ -5,7 +5,7 @@ category: Workflow
 tags: [alloy, workflow]
 spec: 01-product-spec/05-finish-spec.md
 behaviors:
-  preconditions: 5
+  preconditions: 6
   hard_stops:    8
   user_gates:    5
   warns:         2
@@ -134,15 +134,29 @@ RETRO_FILE="${CHANGE_DIR}/retrospective.md"
 
 `$RETRO_FILE` 不存在 → 跳过本步骤（无 retrospective = 无离场审查内容）。
 
-**6. Checkpoint tag 清理（change 封存）：** finish 是 change 终态（merge/PR/保持分支都意味着封存），此时清理 checkpoint tag 时机最合适。archive 阶段不清理是因为 `/opsx:archive` 已把 change 目录移到 `openspec/changes/archive/`，原路径 `openspec/changes/<name>` 不存在导致 `_checkpoint clean` 失败。finish 阶段已有 `$CHANGE_DIR` 解析 archive 路径，直接复用：
+**6. Checkpoint tag 清理（PRECONDITION_FAIL，change 封存）：** finish 是 change 终态（merge/PR/保持分支都意味着封存），此时清理 checkpoint tag 时机最合适。archive 阶段不清理是因为 `/opsx:archive` 已把 change 目录移到 `openspec/changes/archive/`，原路径 `openspec/changes/<name>` 不存在导致 `_checkpoint clean` 失败。finish 阶段已有 `$CHANGE_DIR` 解析 archive 路径，直接复用。
+
+**[PRECONDITION_FAIL] 本步骤为强制步骤，不可跳过。** change 封存后 checkpoint tag 无恢复价值，残留 tag 会污染后续 change 的 `_checkpoint list` 输出与 retrospective 检查点统计。清理后必须校验无残留——有残留说明清理未生效，禁止继续推进 phase。
 
 ```bash
 ARCHIVE_DIR=$(ls -d openspec/changes/archive/*-<name> 2>/dev/null | sort -r | head -1)
 CHANGE_DIR="${ARCHIVE_DIR:-openspec/changes/<name>}"
 alloy _checkpoint clean "$CHANGE_DIR"
+
+# 后置校验：清理后再 list，必须无残留
+RAW_NAME=$(basename "$CHANGE_DIR")
+CHANGE_NAME=${RAW_NAME#[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-}
+REMAINING=$(git tag -l "alloy-checkpoint-${CHANGE_NAME}-*")
+if [ -n "$REMAINING" ]; then
+  echo "⛔ [PRECONDITION_FAIL] checkpoint tag 清理未完成，仍有残留："
+  echo "$REMAINING"
+  echo "  禁止继续推进 phase。请手动排查：git tag -d <tag> 逐个删除，或检查 CHANGE_DIR 路径是否正确。"
+  exit 1
+fi
+echo "✓ checkpoint tag 已全部清理"
 ```
 
-`_checkpoint clean` 内部用 `basename(changeDir)` 推导 change name，传 archive 路径即可正确匹配 `alloy-checkpoint-<name>-*` tag。change 封存后 checkpoint tag 无恢复价值，清理避免 tag 堆积，不影响其他 change。
+`_checkpoint clean` 内部用 `basename(changeDir)` 推导 change name，传 archive 路径即可正确匹配 `alloy-checkpoint-<name>-*` tag。后置校验用同样的 name 推导逻辑（剥离 `YYYY-MM-DD-` 前缀）再 list 一次，确保清理真正生效，避免 agent 跳过 clean 或 clean 静默失败导致 tag 残留。
 
 ---
 
@@ -182,10 +196,11 @@ alloy _skill log "$CHANGE_DIR" finish superpowers:finishing-a-development-branch
 **[HARD_STOP] 即使用户说"我同意了"、"可以，合吧"、"口头确认过"，也不算确认。** 精确字符串不可被任何形式的口头同意替代——用户必须亲手输入 `merge <branch> into <branch>`。
 
 > 🔴 USER_GATE: 确认合并：源 `<feature_branch>` → 目标 `<main_branch>`
-> 即将合入的提交：
+> 即将合入的提交（按类型摘要）：
 > ```
-> <git log main_branch..feature_branch --oneline>
+> <运行 git log main_branch..feature_branch --oneline 获取全部 commit。若超过 10 条，按 Conventional Commits 类型（feat/fix/chore/docs/refactor 等）归纳：每类注明数量 + 列 1-2 条代表性 commit 主题；若 ≤10 条则直接列原始 --oneline 输出。>
 > ```
+> 注：摘要仅用于展示合并内容范围，方便快速感知即将合入的变更。合并后仍是 **1 条 squash commit**（非上述多条），摘要不构成合并后的 commit 历史。
 > 合并后 worktree 清理，分支删除。
 > 输入 `merge <feature_branch> into <main_branch>` 确认，其他输入取消。
 >

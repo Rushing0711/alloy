@@ -106,7 +106,7 @@ describe("alloy _skill", () => {
 
       const state = await readState(changeDir);
       expect(state.skill_usage).toHaveLength(1);
-      expect(state.skill_usage[0].recorded_at).toBe("2026-06-21 07:04:58");
+      expect(state.skill_usage[0].called_at).toBe("2026-06-21 07:04:58");
 
       exitSpy.mockRestore();
     });
@@ -117,7 +117,7 @@ describe("alloy _skill", () => {
       await skillUsageCommand(["log", changeDir, "start", "my-skill"]);
 
       const state = await readState(changeDir);
-      const recorded = state.skill_usage[0].recorded_at!;
+      const recorded = state.skill_usage[0].called_at!;
       // 格式 YYYY-MM-DD HH:MM:SS（本地时间）
       expect(recorded).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
       // 校验本地日期匹配（toISOString 是 UTC，用本地构造）

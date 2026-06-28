@@ -98,9 +98,10 @@ describe("alloy _checkpoint", () => {
 
       // 注释含制品列表
       const annotation = execSync(`git tag -l "${tags[0]}" --format='%(contents)'`, { cwd: tmpDir, encoding: "utf-8" }).trim();
-      expect(annotation).toContain("锁定制品: draft");
+      expect(annotation).toContain("制品: draft");
       expect(annotation).toContain("phase: started");
       expect(annotation).toContain("时间:");
+      expect(annotation).toContain("原因:");
     });
 
     it("无制品时注释显示（无）", async () => {
@@ -108,13 +109,13 @@ describe("alloy _checkpoint", () => {
 
       const tags = listTags();
       const annotation = execSync(`git tag -l "${tags[0]}" --format='%(contents)'`, { cwd: tmpDir, encoding: "utf-8" }).trim();
-      expect(annotation).toContain("锁定制品: （无）");
+      expect(annotation).toContain("制品: （无）");
     });
 
-    it("phase 不是 started 时拒绝（PRECONDITION_FAIL）", async () => {
-      // 改 phase 为 planned
+    it("phase 不是 started/planned 时拒绝（PRECONDITION_FAIL）", async () => {
+      // 改 phase 为 applied（apply 后禁止检查点）
       await writeFile(join(changeDir, ".alloy.yaml"), [
-        "phase: planned",
+        "phase: applied",
         "schema_version: 1",
         "worktree: null",
         "feature_branch: feature/test-change",
@@ -146,6 +147,18 @@ describe("alloy _checkpoint", () => {
       expect(exitSpy).toHaveBeenCalledWith(1);
       exitSpy.mockRestore();
       errSpy.mockRestore();
+    });
+
+    it("--kind progress 打 progress-<ts> tag", async () => {
+      await checkpointCommand(["create", changeDir, "--kind", "progress", "--reason", "回退前快照"]);
+
+      const tags = listTags();
+      expect(tags.length).toBe(1);
+      expect(tags[0]).toMatch(/^alloy-checkpoint-test-change-progress-\d{8}-\d{6}$/);
+
+      const annotation = execSync(`git tag -l "${tags[0]}" --format='%(contents)'`, { cwd: tmpDir, encoding: "utf-8" }).trim();
+      expect(annotation).toContain("原因: 回退前快照");
+      expect(annotation).toContain("phase: started");
     });
 
     it("working tree dirty 时拒绝创建", async () => {
@@ -189,7 +202,7 @@ describe("alloy _checkpoint", () => {
 
       const output = logs.join("\n");
       expect(output).toContain(tags[0]);
-      expect(output).toContain("锁定制品:");
+      expect(output).toContain("制品:");
       expect(output).toContain("phase: started");
 
       spy.mockRestore();
@@ -258,15 +271,15 @@ describe("alloy _checkpoint", () => {
       expect(currentBranch()).toBe("feature/test-change");
     });
 
-    it("phase 不是 started 时拒绝", async () => {
+    it("apply 中后期（worktree 已创建）时拒绝", async () => {
       await checkpointCommand(["create", changeDir]);
       const tag = listTags()[0];
 
-      // 改 phase 为 planned
+      // phase=applied + worktree 有值 = apply 中后期
       const yamlContent = [
-        "phase: planned",
+        "phase: applied",
         "schema_version: 1",
-        "worktree: null",
+        "worktree: .worktrees/test-change",
         "feature_branch: feature/test-change",
         'created_at: "2020-01-01 00:00:00"',
         'updated_at: "2020-01-01 00:00:00"',
@@ -285,6 +298,31 @@ describe("alloy _checkpoint", () => {
 
       exitSpy.mockRestore();
       errSpy.mockRestore();
+    });
+
+    it("apply 早期（worktree 未创建 + SDD/EP 未启动）允许检查点操作", async () => {
+      // 先在 started 阶段创建一个 tag（create 需要 working tree clean）
+      await checkpointCommand(["create", changeDir]);
+      const tag = listTags()[0];
+
+      // 改 phase=applied + worktree=null + skill_usage=[] = apply 早期
+      const yamlContent = [
+        "phase: applied",
+        "schema_version: 1",
+        "worktree: null",
+        "feature_branch: feature/test-change",
+        'created_at: "2020-01-01 00:00:00"',
+        'updated_at: "2020-01-01 00:00:00"',
+        "records: []",
+        "skill_usage: []",
+      ].join("\n");
+      await writeFile(join(changeDir, ".alloy.yaml"), yamlContent, "utf-8");
+
+      // switch 应该成功（apply 早期允许，不 exit(1)）
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+      await checkpointCommand(["switch", changeDir, tag]);
+      expect(exitSpy).not.toHaveBeenCalledWith(1);
+      exitSpy.mockRestore();
     });
 
     it("tag 不存在时拒绝", async () => {

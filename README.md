@@ -70,7 +70,6 @@ alloy init
 
 | 我想… | 读这个 |
 |-------|------|
-| 快速了解 Alloy | [可视化介绍](docs/intro/index.html) — 幻灯片 |
 | 快速上手使用 | [handbook.md](docs/handbook.md) |
 | 看完整产品规格 | [specification/01-product-spec.md](docs/specification/01-product-spec.md) |
 | 写或改 Alloy Skill | [reference/skill-writing-guide.md](docs/reference/skill-writing-guide.md) |

@@ -67,7 +67,7 @@ export async function skillUsageCommand(args: string[]): Promise<void> {
     skill,
     stage,
     used: action === "log",
-    recorded_at: now,
+    called_at: now,
   };
 
   if (action === "log") {

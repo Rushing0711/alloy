@@ -1,8 +1,8 @@
 ---
 behaviors:
   preconditions: 7
-  hard_stops:    8
-  user_gates:    5
+  hard_stops:    19
+  user_gates:    9
   warns:         1
   artifacts: [proposal, design, specs, tasks, plans]
   transitions_to: planned

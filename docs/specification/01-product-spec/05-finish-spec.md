@@ -1,8 +1,8 @@
 ---
 behaviors:
   preconditions: 5
-  hard_stops:    7
-  user_gates:    4
+  hard_stops:    8
+  user_gates:    5
   warns:         2
   artifacts: []
   transitions_to: finished

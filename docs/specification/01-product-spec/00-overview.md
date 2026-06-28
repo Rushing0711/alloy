@@ -1,7 +1,9 @@
 ---
 behaviors:
-  stops: 0
-  hard_stops: 0
+  preconditions: 0
+  hard_stops:    0
+  user_gates:    0
+  warns:         0
   artifacts: []
   transitions_to: ""
   external_calls: []
@@ -40,11 +42,18 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 
 | 命令 | 说明 |
 |------|------|
-| `alloy _state` | 读写 `.alloy.yaml` 状态文件（`read\|write\|init\|merge\|check\|timestamp`） |
-| `alloy _skill` | 技能使用记录管理（`log\|skip`），持久化到 `skill_usage[]` |
-| `alloy _guard` | 阶段转换校验 + phase 推进（校验 hash 一致性后 `--apply` 推进） |
+| `alloy _state` | 读写 `.alloy.yaml` 状态文件（`read\|write\|init\|merge\|check\|timestamp`）。`init` 支持 `--at` 回填 `started_at` + `--feature-branch` 一次成型 |
+| `alloy _skill` | 技能使用记录管理（`log\|skip`），持久化到 `skill_usage[]`，字段 `called_at` + `count` |
+| `alloy _guard` | 阶段转换校验 + phase 推进（`precheck\|verify-passed\|branch-position\|worktree-status` + `<name> <phase> --apply`） |
+| `alloy _phase` | 阶段时间记录（`start\|complete\|reset`），`complete finish` 写顶层 `completed_at` |
+| `alloy _artifact` | 制品 hash-lock + commit（`commit\|reset`），原子命令 |
 | `alloy _record` | 制品 hash 记录管理（`compute\|write\|check\|approver`） |
 | `alloy _config` | 读写 `openspec/config.yaml` 项目级配置（`read\|write`） |
+| `alloy _checkpoint` | 检查点管理（`create\|list\|switch\|clean`），支持 `--kind` + `--reason` |
+| `alloy _retro` | retrospective 机械数据预生成（`scaffold`） |
+| `alloy _env` | 环境完整性检测（`check`），4 项基础设施任一缺失 exit(1) |
+| `alloy _progress` | 制品进度扫描（`artifacts`），输出 done/missing/hash-mismatch/pending |
+| `alloy _spec-audit` | spec 审计工具 |
 
 ### Slash Command（Agent 内部执行）
 
@@ -97,8 +106,10 @@ worktree_created_at: null | "2026-05-28 09:10:00"
 worktree_merged_at: null | "2026-05-28 12:00:00"  # archive 阶段合并后写入
 feature_branch: "feat/login"    # 本次 change 使用的 feature 分支
 schema_version: 1
-created_at: "2026-05-28 09:00:00"
+started_at: "2026-05-28 09:00:00"   # 全周期开始时间（EXPLORE_START），由 _state init --at 写入
+created_at: "2026-05-28 09:00:00"   # .alloy.yaml 文件创建时间
 updated_at: "2026-05-28 15:30:00"
+completed_at: null | "2026-05-28 16:00:00"  # 全周期完成时间，finish 阶段由 _phase complete 写入
 phase_timings:
   start:
     started_at: "2026-05-28 09:00:00"
@@ -119,12 +130,12 @@ skill_usage:
   - skill: superpowers:brainstorming
     stage: start
     used: true
-    recorded_at: "2026-05-28 09:05:00"
+    called_at: "2026-05-28 09:05:00"
   - skill: opsx:continue
     stage: plan
     used: true
     count: 5
-    recorded_at: "2026-05-28 09:15:00"
+    called_at: "2026-05-28 09:15:00"
 ```
 
 | 字段 | 读写 | 含义 |
@@ -140,7 +151,7 @@ skill_usage:
 | `updated_at` | phase 变更时写入 | 最后状态变更时间，调试和排序用 |
 | `phase_timings` | 各阶段写入 | 每个阶段的 `started_at` / `completed_at`，接续时不丢失耗时数据 |
 | `records` | plan/apply 阶段写入 | 每个制品提交后的 hash 记录，格式 `ArtifactRecord[]`，含 artifact/hash/committed_at/approver |
-| `skill_usage` | 各阶段写入 | 技能使用记录数组，格式 `SkillUsageEntry[]`，含 skill/stage/used/count/via/reason/recorded_at。retrospective §4 全周期技能审计的数据源 |
+| `skill_usage` | 各阶段写入 | 技能使用记录数组，格式 `SkillUsageEntry[]`，含 skill/stage/used/count/via/reason/called_at。retrospective §4 全周期技能审计的数据源 |
 
 断点恢复：`/alloy:start` 检测到活跃 change → 读 phase + worktree + 文件系统 → 自动加载对应阶段命令。不设子步骤状态——Agent 通过文件存在性自判断。
 

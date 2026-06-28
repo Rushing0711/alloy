@@ -1,7 +1,7 @@
 ---
 behaviors:
-  preconditions: 5
-  hard_stops: 7
+  preconditions: 6
+  hard_stops: 10
   user_gates: 3
   warns: 1
   artifacts: [delta-spec, archive]

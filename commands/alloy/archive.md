@@ -6,8 +6,8 @@ tags: [alloy, workflow]
 spec: 01-product-spec/04-archive-spec.md
 behaviors:
   preconditions: 6
-  hard_stops:    8
-  user_gates:    4
+  hard_stops:    10
+  user_gates:    3
   warns:         1
   artifacts: [delta-spec, archive]
   transitions_to: archived

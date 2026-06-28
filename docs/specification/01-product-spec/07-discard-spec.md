@@ -1,7 +1,9 @@
 ---
 behaviors:
-  stops: 0
-  hard_stops: 1
+  preconditions: 1
+  hard_stops:    1
+  user_gates:    1
+  warns:         0
   artifacts: []
   transitions_to: ""
   external_calls: []
