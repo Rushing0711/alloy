@@ -26,7 +26,7 @@ phase != archived / 分支不存在 / merge 精确确认未通过 / spec 已归�
 
 **核心原则：只做代码合入，不碰 spec。** spec 已归档封存，任何 spec 级变更应走新 change（[HARD_STOP]）。
 
-**交互规则：** `🔴 STOP` 等价 `USER_GATE`，必须用 `AskUserQuestion`（`commands/alloy/references/interaction-style.md`，含"沉默 ≠ 授权"通用禁令——禁批量打包、禁基于内容跳过、禁 agent 回填精确字符串）。跳过任何 USER_GATE = 违反 Iron Law。
+**交互规则：** `🔴 STOP` 等价 `USER_GATE`，首次呈现即必须调用平台原生交互工具——禁"先文本展示 (a)/(b) 再等待用户打字"。Claude Code 用 `AskUserQuestion`；其他平台按 `commands/alloy/references/interaction-style.md` §平台工具对照 降级为结构化文本选项。含"沉默 ≠ 授权"通用禁令——禁批量打包、禁基于内容跳过、禁 agent 回填精确字符串。跳过任何 USER_GATE = 违反 Iron Law。
 
 **状态符号：** `⛔` = HARD_STOP / PRECONDITION_FAIL，`🔴` = USER_GATE，`⚠️` = WARN（视觉规范 §七）。
 
@@ -174,6 +174,9 @@ echo "✓ checkpoint tag 已全部清理"
 3. 保持分支   —— 暂不处理
 ```
 
+> ⛔ [HARD_STOP] 禁增设第 4 选项"放弃工作"——放弃走 `/alloy:discard <name>` 独立命令,不在 finish 阶段。
+> 违反字面 = 违反精神：哪怕"用户想放弃,顺便在 finish 里给选项方便",也算违反——finish 是封存阶段（merge/PR/保持）,放弃是独立流程（删分支+删 change 目录）,混在一起 = 职责不清。引导用户运行 `/alloy:discard` 而非在 finish 增设选项。
+
 加载 `superpowers:finishing-a-development-branch` 技能，传入：
 ```
 Change: <name>
@@ -194,7 +197,11 @@ alloy _skill log "$CHANGE_DIR" finish superpowers:finishing-a-development-branch
 > 任一步失败时严禁 agent 自动 reset --hard / checkout . / stash drop 清场。
 > 违反字面 = 违反精神：哪怕"先回到干净状态再重试"，也算违反 §3.5.1 禁令——必须 USER_GATE 让用户决策。
 
-**合并确认（USER_GATE，精确字符串）：**
+**合并确认（USER_GATE 特例——精确字符串，不用 AskUserQuestion）：**
+
+> 本确认是 `commands/alloy/references/interaction-style.md` §"不能使用 AskUserQuestion 的场景"列出的特例——破坏性操作确认必须用户输入精确字符串,不能用选择题替代。**agent 禁用 AskUserQuestion 实现**（options 是选择题,无法承接精确字符串输入,强行用会导致 options < 2 报错或用户选"确认"不等于输入精确字符串）,改用终端直接让用户输入。
+>
+> ⛔ [HARD_STOP] 禁用 `read -p` 等 bash 交互命令——Claude Code 平台 bash 非交互,`read -p` 报 `no coprocess` 失败。"终端直接输入"在 CC 平台指**对话提示用户输入**（输出提示文本后等待用户下一条消息）,不是 `read -p`。其他平台按 `interaction-style.md` §平台工具对照 处理。
 
 **[HARD_STOP] 即使用户说"我同意了"、"可以，合吧"、"口头确认过"，也不算确认。** 精确字符串不可被任何形式的口头同意替代——用户必须亲手输入 `merge <branch> into <branch>`。
 
@@ -224,24 +231,34 @@ CHANGE_DIR="${ARCHIVE_DIR:-openspec/changes/<name>}"
 # 详见 docs/reference/alloy-skill-writing-guide.md §5.2.3 路径 B
 alloy _phase complete "$CHANGE_DIR" finish
 
+# ⛔ [HARD_STOP] 以下 git checkout + remote 检查 + pull 是完整 bash 块,必须照此执行。
+# 禁 agent 自行简化（如省略 `git remote -v` 检查直接 `git pull`）——无 remote 时 git pull 会失败,agent 可能误判"无 remote 跳过"而实际是上游配置问题。
+# 违反字面 = 违反精神：哪怕"看起来无 remote 直接 pull 试一下",也算违反——必须先查 remote 决定是否 pull。
 git checkout <main_branch>
 
-# [HARD_STOP] git pull 失败时禁止自动忽略——基于过期 main 做 squash 会污染主分支历史。
-# 禁止 agent 在 pull 失败时运行 git reset --hard / git checkout . / git stash 任何一个。
-# 详见 docs/reference/skill-writing-guide.md §3.5.1
-if ! git pull --ff-only; then
-  echo "[PRECONDITION_FAIL] git pull 失败——squash merge 不能基于过期 main"
-  echo ""
-  echo "  失败原因可能：远端无法访问 / 本地 main 偏离 / 凭证过期"
-  echo ""
-  echo "  🔴 USER_GATE: 选择处理方式"
-  echo "    (a) 重试——用户手动修复后再次运行 /alloy:finish"
-  echo "    (b) 跳过 pull 直接 squash（仅当用户确认 main 已是最新——风险自负）"
-  echo "    (c) 中止 finish——保持当前分支，回退 phase："
-  echo "        alloy _state set \"$CHANGE_DIR\" phase archived"
-  echo ""
-  echo "  禁止：agent 自动运行 git reset --hard origin/<main_branch> 强制对齐。"
-  exit 1
+# 检查 remote 是否存在——无 remote 时 git pull --ff-only 会失败,提前给出明确提示
+REMOTE=$(git remote -v | head -1)
+if [ -z "$REMOTE" ]; then
+  echo "ℹ️ 无 remote 配置——跳过 git pull,直接基于本地 main 做 squash merge"
+  echo "  注意：本地 main 可能不是最新,确认后继续"
+else
+  # [HARD_STOP] git pull 失败时禁止自动忽略——基于过期 main 做 squash 会污染主分支历史。
+  # 禁止 agent 在 pull 失败时运行 git reset --hard / git checkout . / git stash 任何一个。
+  # 详见 docs/reference/skill-writing-guide.md §3.5.1
+  if ! git pull --ff-only; then
+    echo "[PRECONDITION_FAIL] git pull 失败——squash merge 不能基于过期 main"
+    echo ""
+    echo "  失败原因可能：远端无法访问 / 本地 main 偏离 / 凭证过期"
+    echo ""
+    echo "  🔴 USER_GATE: 选择处理方式"
+    echo "    (a) 重试——用户手动修复后再次运行 /alloy:finish"
+    echo "    (b) 跳过 pull 直接 squash（仅当用户确认 main 已是最新——风险自负）"
+    echo "    (c) 中止 finish——保持当前分支，回退 phase："
+    echo "        alloy _state set \"$CHANGE_DIR\" phase archived"
+    echo ""
+    echo "  禁止：agent 自动运行 git reset --hard origin/<main_branch> 强制对齐。"
+    exit 1
+  fi
 fi
 
 # [HARD_STOP] git merge --squash 冲突时禁止 agent 自动运行：
@@ -251,6 +268,10 @@ fi
 # 详见 docs/reference/skill-writing-guide.md §3.5.1
 # 冲突时必须：列出冲突文件 → 退出 skill → 让用户解决 → 用户重新运行 /alloy:finish
 git merge --squash <feature_branch>
+# ⛔ [HARD_STOP] squash merge commit 两项硬约束：
+# 1. commit type 必须 chore,禁 feat/fix/docs——squash merge 是合入操作,不是新功能
+# 2. COMMIT_LOG 范围必须 <main_branch>..<feature_branch>,禁 git log <feature_branch>（会包含 main 历史）
+# 违反字面 = 违反精神：哪怕"feat 更准确描述内容",也禁——合入 commit 用 chore 是惯例
 COMMIT_LOG=$(git log <main_branch>..<feature_branch> --format="* %s")
 git commit -m "$(cat <<EOF
 chore(<name>): 合入 main（squash merge）
@@ -274,6 +295,9 @@ if [ -z "<feature_branch>" ] || [ "<feature_branch>" = "<main_branch>" ] || [ "<
   echo "  禁止：agent 自动猜测分支名继续执行。退出 skill 让用户检查 .alloy.yaml。"
   exit 1
 fi
+# [HARD_STOP] 直接用 -D 强删——禁先试 `git branch -d` 再改 -D
+# squash merge 不保留 ancestry,`git branch -d` 必然失败（not fully merged）
+# 先试 -d 失败再 -D 是无谓重试,偏离 skill md 设计。直接 -D,上方变量校验已保证安全
 git branch -D <feature_branch>
 ```
 

@@ -34,7 +34,7 @@ start 完成后绝不自动进 plan。沉默 ≠ 授权。
 
 > **`<TIMESTAMP>`：** 每次渲染阶段头部时执行 `date "+%Y-%m-%d %H:%M:%S"` 获取本地时间。`<START_TIME>` 是"全新开始"路径中捕获的时间——agent 捕获后复用于 header 和 phase_timings。`<created_at>` 从 `.alloy.yaml` 读取。
 
-**交互规则：** `🔴 STOP` 等价 `USER_GATE`，必须用 `AskUserQuestion`（`commands/alloy/references/interaction-style.md`，含"沉默 ≠ 授权"通用禁令）。跳过任何 USER_GATE / 批量打包 / 基于内容跳过 = 违反 Iron Law。
+**交互规则：** `🔴 STOP` 等价 `USER_GATE`，首次呈现即必须调用平台原生交互工具——禁"先文本展示 (a)/(b) 再等待用户打字"。Claude Code 用 `AskUserQuestion`；其他平台按 `commands/alloy/references/interaction-style.md` §平台工具对照 降级为结构化文本选项。含"沉默 ≠ 授权"通用禁令。跳过任何 USER_GATE / 批量打包 / 基于内容跳过 = 违反 Iron Law。
 
 **状态符号：** `⛔` = HARD_STOP / PRECONDITION_FAIL，`🔴` = USER_GATE，`⚠️` = WARN（视觉规范 §七）。
 
@@ -68,11 +68,18 @@ alloy _env check
 
 > `alloy _env check` 原子完成 4 项检测（git 仓库 / openspec/config.yaml 含 schema: alloy / openspec/schemas/alloy/schema.yaml / Alloy commands start.md）。任一缺失 exit(1) 并输出缺失项列表。agent 命名规则（冒号版 `alloy/start.md` vs 横线版 `alloy-start.md`，8 种 agent 目录）的真相源在 `src/core/agents.ts` 的 `KNOWN_AGENTS`，CLI 复用——避免 md 硬编码 agent 列表与 TS 漂移。
 
-> 接续路径例外：扫描 `openspec/changes/*/.alloy.yaml` 发现有活跃 change 时，意味着 init 跑过，仅做轻量校验（检查项 2 `openspec/config.yaml` 存在），避免对已有 change 的接续路径过度阻塞。
+> 接续路径例外：`alloy status` 检测有活跃 change 时，意味着 init 跑过，仅做轻量校验（检查项 2 `openspec/config.yaml` 存在），避免对已有 change 的接续路径过度阻塞。
 
 **第一步**（⛔ PRECONDITION_FAIL）：检查 `openspec/config.yaml` 是否存在——不存在则提示用户 `alloy init`，agent 不得自动初始化（init 会写 `.claude/` / 模板等关键文件，必须由用户主动触发）。
 
-**第二步（⛔ HARD_STOP — 路由决策前置闸门）：** 扫描 `openspec/changes/*/.alloy.yaml`，统计 phase != `finished` 的 change。**有活跃 change 时，必须先完成路由决策才能加载任何技能（包括 explore/brainstorming/opsx:new）。**
+**第二步（⛔ HARD_STOP — 路由决策前置闸门）：** 运行 `alloy status` 检测活跃 change——CLI 的 `findActiveChanges` 已扫描非归档 `openspec/changes/*/` 和归档 `openspec/changes/archive/<date>-<name>/` 两级目录。**有活跃 change 时，必须先完成路由决策才能加载任何技能（包括 explore/brainstorming/opsx:new）。**
+
+```bash
+alloy status
+```
+
+> ⛠️ `alloy status` 列出所有活跃 change（phase != finished），含归档目录下的 change。归档 change 名格式 `<date>-<name>`，路径 `openspec/changes/archive/<name>`。
+> 发现 phase=archived 的归档 active change 时,引导用户运行 `/alloy:finish <name>` 接续完成,不在 start 阶段接续（archived 阶段已完成,下一步是 finish）。
 - 0 个活跃 change → 进入统一流程（explore 探测 + 确认主题 + new change）
 - 有活跃 change → 🔴 USER_GATE 让用户选：
   - (a) 接续某个活跃 change（列出可选）
@@ -134,6 +141,9 @@ EXPLORE_START=$(date "+%Y-%m-%d %H:%M:%S")
 
 加载 `opsx:explore` 技能，按其指引探索项目上下文：
 
+> ⛔ [HARD_STOP] 必须用 `Skill` 工具加载 `opsx:explore`——禁手动 `ls`/`find`/`cat`/`grep` 替代探查。
+> 违反字面 = 违反精神：哪怕"手动 ls 也能探查项目结构",也算违反——skill_usage 必须反映真实技能加载,手动 bash 替代 = skill_usage 造假 = retrospective §4 审计失真。
+
 - **有 topic（用户 `/alloy:start <topic>` 带主题来）：** 围绕 topic + 当前项目情况探测，验证 topic 可行性、补充上下文
 - **无 topic（用户 `/alloy:start` 未带主题）：** 与用户沟通探测——扫描项目（README、代码、requirement.md 等），基于探查给 2-3 个建议方向，或问用户想做什么
 
@@ -142,10 +152,17 @@ EXPLORE_START=$(date "+%Y-%m-%d %H:%M:%S")
 **额外上下文：** 扫描 `openspec/changes/archive/` 下最近 3 个 `retrospective.md`，提取 §5 意外发现、§6 值得推广、§4 技能跳过模式，作为后续 brainstorming 参考。
 
 > explore 的产出是"主题名 + 探查发现"，不深入需求设计。深入需求在步骤 9 的 brainstorming（change 目录已存在后）进行。
+>
+> ⛔ [HARD_STOP] explore 阶段禁问设计细节——文件名 / 参数方式 / 存放位置 / 行为逻辑等属于需求设计,在 Step 9 brainstorming 确认。
+> 违反字面 = 违反精神：哪怕"顺便问一下文件名效率高",也算违反——explore 只验证 topic 可行性 + 补充上下文,设计细节提前问 = 阶段错位 = 后续 brainstorming 无内容可做。
 
 **主题确认 USER_GATE（🔴 AskUserQuestion）：** explore 探测后，向用户确认主题：
 - 有 topic → 确认该 topic 或调整
 - 无 topic → 给 2-3 个建议方向让用户选，或用户自定义
+
+> ⛔ [HARD_STOP] 主题确认 USER_GATE 只确认 topic 本身——禁合并设计细节问题（参数方式 / 文件名 / 存放位置 / 行为逻辑）到本次 AskUserQuestion。
+> 违反字面 = 违反精神：哪怕"主题已明确顺便问参数方式效率高"，也算违反——设计细节属于 Step 9 brainstorming，提前问 = 阶段错位 = brainstorming 无内容可做。
+> AskUserQuestion 一次最多 4 个问题，但 4 个问题都必须围绕 topic 本身（确认 / 调整 / 方向选择），禁夹带设计细节。常见违规模式：把"脚本如何接收 name?""文件放哪个目录?""用什么参数格式?"等设计问题塞进主题确认 AskUserQuestion——这些都是 Step 9 brainstorming 的内容。
 
 > 主题确认后**直接进入步骤 1（change name 确认）**，不要求用户重新输入 `/alloy:start <topic>`——主题已在流程内确认。
 
@@ -178,39 +195,41 @@ EXPLORE_START=$(date "+%Y-%m-%d %H:%M:%S")
    ```
    > alloy init 时已 USER_GATE 确认主分支并写入 config；若仓库无 commit 还会创建初始 commit 锁定 main 分支。start 阶段不再重复确认。
 
-   **② 开新 change 时：** 从 main_branch 创建新分支，**不可逾越**（不走步骤 ③ 的 USER_GATE，分支创建后才能继续后续步骤）：
-   ```bash
-   MAIN_BRANCH=$(alloy _config read . main_branch)
-   git checkout -b feature/<change-name> "$MAIN_BRANCH"
-   ```
-   > 从 main_branch 创建确保新 change 的 commit 链干净。若当前 working tree 有未提交变更，用户已在开新 change 前处理（stash/放弃），此处直接创建。
+   **② 分支决策（🔴 USER_GATE，开新/接续统一——按 spec L36-42）：** 检测当前分支位置,根据状态给选项：
 
-   ⛔ [HARD_STOP] **stash → 开新分支 → 才能继续后续步骤。这三步不可逾越。**
+   ```bash
+   CURRENT_BRANCH=$(git branch --show-current)
+   MAIN_BRANCH=$(alloy _config read . main_branch)
+   ```
+
+   - **当前分支 = main_branch** → 🔴 USER_GATE: 确认分支名（默认 `feature/<change-name>`,可自定义,过白名单校验）→ 新建
+   - **当前分支 ≠ main_branch** → 🔴 USER_GATE 选择：
+     - (a) 新建 `feature/<change-name>`（推荐,可自定义,过白名单校验）—— 从 main_branch 创建确保 commit 链干净
+     - (b) 用当前分支（`feature_branch` = `$CURRENT_BRANCH`,跳过新建）—— 适合用户已提前创建分支想在此开发
+
+   > **选定分支名记为 `$FEATURE_BRANCH`**（USER_GATE 结果）——步骤 5 `_state init` 用此变量写入 .alloy.yaml 的 feature_branch 字段,禁写死 `feature/<name>`。
+   > 选 (a) 新建：`$FEATURE_BRANCH` = 用户确认的新分支名（默认 `feature/<change-name>` 或自定义）
+   > 选 (b) 用当前：`$FEATURE_BRANCH` = `$CURRENT_BRANCH`（当前分支名）
+
+   选 (a) 新建：
+   ```bash
+   git checkout -b <branch-name> "$MAIN_BRANCH"
+   ```
+   选 (b) 用当前：跳过创建。
+
+   新建分支命名：默认 `feature/<change-name>`,用户可自定义。
+
+   **⛔ PRECONDITION_FAIL 白名单校验**（读取 `commands/alloy/references/branch-naming.md`）：自定义分支名必须以 `feature/` `fix/` `docs/` `refactor/` `test/` `chore/` 之一开头,后缀 kebab-case,且不与主分支同名。校验失败 → USER_GATE 让用户重新输入合法名称,**禁 agent 自动改写后继续**。
+
+   ⛔ [HARD_STOP] **stash → 分支决策 → 才能继续后续步骤。不可逾越。**
    无例外：
    - 不要"先写 proposal 再建分支"
    - 不要"先生成制品再补分支"
-   - 不要"在当前分支上继续，分支后面再说"
+   - 不要"在当前分支上继续,分支后面再说"（除非用户在 USER_GATE 明确选 (b) 用当前分支）
    - 不要"分支已存在就跳过创建直接进入下一步"
-   违反字面 = 违反精神：哪怕"反正马上要生成 draft，先写了再切分支"——制品必须一诞生就在正确分支上。跳过分支创建 = 制品路径错位，后续 commit 污染错误分支。
+   违反字面 = 违反精神：哪怕"反正马上要生成 draft,先写了再切分支"——制品必须一诞生就在正确分支上。跳过分支决策 = 制品路径错位,后续 commit 污染错误分支。
 
-   开新 change 时执行完此步骤后**直接跳过步骤 ③**（分支决策 USER_GATE），进入步骤 3.5 目录冲突预检。步骤 ③ 仅限接续/非开新场景。
-
-   **③ 接续/非开新场景的分支决策**（🔴 USER_GATE，3 种情况共用同款语义节点，**开新 change 时跳过此步**）：
-   ```bash
-   CURRENT_BRANCH=$(git branch --show-current)
-   ```
-
-   - **在主分支上** → ⛔ HARD_STOP："不允许在主分支开发。" → 🔴 USER_GATE: 只展示"新建分支"
-   - **在 feature 分支且名称含 change 名** → 🔴 USER_GATE: 继续使用当前分支 / 新建分支
-   - **在非主分支的已有分支上** → 🔴 USER_GATE: 切换到已有分支 / 新建分支
-
-   无可用本地非主分支时 → 直接新建。
-
-   新建分支命名：默认 `feature/<change-name>`，用户可自定义。
-
-   **⛔ PRECONDITION_FAIL 白名单校验**（读取 `commands/alloy/references/branch-naming.md`）：自定义分支名必须以 `feature/` `fix/` `docs/` `refactor/` `test/` `chore/` 之一开头，后缀 kebab-case，且不与主分支同名。校验失败 → USER_GATE 让用户重新输入合法名称，**禁 agent 自动改写后继续**。
-
-   通过校验后：`git checkout -b <branch-name>`
+   开新 change 与接续场景统一走此分支决策 USER_GATE,不再跳过。
 
    **③ 分支验证（⛔ HARD_STOP）：** 创建/切换后必须验证才能继续：
    ```bash
@@ -263,19 +282,19 @@ EXPLORE_START=$(date "+%Y-%m-%d %H:%M:%S")
 
 5. **初始化 state（先于 _phase start 和 _skill log，确保时间字段在最早时刻写入）：**
    ```bash
-   alloy _state init openspec/changes/<name> --at "$EXPLORE_START" --feature-branch "feature/<name>"
+   alloy _state init openspec/changes/<name> --at "$EXPLORE_START" --feature-branch "$FEATURE_BRANCH"
    ```
    > 顺序硬约束：`_state init` 必须在 `_phase start` / `_skill log` 之前——后两者在 .alloy.yaml 不存在时会隐式创建并用当前时间作为 created_at。`_state init` 先跑则字段写入受控。
    >
    > **`--at "$EXPLORE_START"` 让顶层 `started_at` 回填为全周期开始时间**（`/alloy:start` 敲下时刻，= Step 1 捕获的 EXPLORE_START），与步骤 7 的 `_phase start --at "$EXPLORE_START"` 同源。`created_at` 仍是文件创建时间（opsx:new 后），两者语义不同：created_at 记文件诞生，started_at 记周期起点。
    >
-   > **`--feature-branch "feature/<name>"` 一次成型写入 feature_branch**，省去后续 `_state write feature_branch`。前置：步骤 3 已创建并切换到 feature 分支。
+   > **`--feature-branch "$FEATURE_BRANCH"` 一次成型写入 feature_branch**——用步骤 3 分支决策选定的分支名（变量）,禁写死 `feature/<name>`。选 (b) 用当前分支时 `$FEATURE_BRANCH` = 当前分支名,写死会导致 .alloy.yaml 与实际分支不一致。前置：步骤 3 已完成分支决策。
 
 6. **基础设施 commit（幂等，已提交则跳过；§5.2.1 git add 限路径）——必须在阶段开始 commit 之前：**
    ```bash
    git add .claude/ .gitignore openspec/config.yaml openspec/schemas/ 2>/dev/null
    [ -f CLAUDE.md ] && git add CLAUDE.md 2>/dev/null
-   git diff --cached --quiet || git commit -m "chore: alloy init 项目初始化"
+   git diff --cached --quiet || git commit -m "chore: 提交 alloy 基础设施文件"
    ```
 
 7. **补录技能使用（explore + new，带 --at 传入实际使用时间——这两个技能在 change 目录创建前/创建时执行，技能 log 只能补录）：**
@@ -329,6 +348,13 @@ EXPLORE_START=$(date "+%Y-%m-%d %H:%M:%S")
    单选用 radio，多选用 checkbox，代码方案对比用 preview。
    每次提问不超过 4 个问题，相关问题合并到一次调用。
    给出默认推荐——推荐选项在 description 中标注理由。
+
+   **⛔ [HARD_STOP] 主题明确时简化——禁多问方向：** 用户 `/alloy:start <topic>` 带主题来时（topic 已在流程内确认）:
+   - 禁给 2-3 个方向让用户选（主题已明确,不用再选方向）
+   - 禁"需求已清楚,不过还有一个关键细节需要确认"式的多问
+   - 直接确认设计要点（位置/行为/范围）,生成 draft
+   违反字面 = 违反精神：哪怕"多问显得更仔细"、"给方向让用户选更全面",也算违反——主题明确时多问 = 浪费用户时间 = 降低体验。
+   仅当用户主题模糊（如"做个工具"无具体描述）时,才给方向让用户选。
    ```
 
    **用户确认方案后，生成 draft.md**（不是 spec 文件）。用户要求调整时回到 brainstorming 继续。
@@ -352,7 +378,7 @@ EXPLORE_START=$(date "+%Y-%m-%d %H:%M:%S")
    > [HARD_STOP] **用户明确确认方案之前，不要生成 draft.md。**
    > 违反字面 = 违反精神：哪怕"内容已经基本明确再补审查"，也算违反——审查窗口是 USER_GATE，不可后置。
 
-   > **交互风格恢复（HARD_STOP）：** brainstorming 已结束。从此刻起，所有 `🔴 USER_GATE` 必须恢复使用 `AskUserQuestion` 工具（`commands/alloy/references/interaction-style.md`），不用纯文本 (a)(b)(c)。Agent 刚从 brainstorming 的"每次一个问题"模式出来，容易延续纯文本习惯——这是 Iron Law 违规。违反字面 = 违反精神：哪怕"就这一个确认用文本也行"，也算违反——USER_GATE 必须 AskUserQuestion。
+   > **交互风格恢复（HARD_STOP）：** brainstorming 已结束。从此刻起，所有 `🔴 USER_GATE` 首次呈现即必须调用平台原生交互工具——禁"先文本展示 (a)/(b) 再等待用户打字"。Claude Code 用 `AskUserQuestion`；其他平台按 `commands/alloy/references/interaction-style.md` §平台工具对照 降级。Agent 刚从 brainstorming 的"每次一个问题"模式出来，容易延续纯文本习惯——这是 Iron Law 违规。违反字面 = 违反精神：哪怕"就这一个确认用文本也行"、"先展示再问"，也算违反——首次即必须用平台交互工具。
 
 10. **生成 `draft.md` 审查窗口——start 阶段唯一的制品闸门：**
 
@@ -449,6 +475,14 @@ EXPLORE_START=$(date "+%Y-%m-%d %H:%M:%S")
 **需自动加载时：** 输出对应命令文件完整指令，将 change name 和进度信息传入。
 
 **需用户选择时：** 先校验 draft hash（`alloy _record check openspec/changes/<name> draft`），hash 有效 → 展示选择。
+
+**分支校验（⛔ PRECONDITION_FAIL）：** 接续前必须校验当前分支 = .alloy.yaml 记录的 feature_branch,避免 commit 落在错误分支：
+```bash
+alloy _guard branch-position openspec/changes/<name>
+```
+> `_guard branch-position` 内部完成：读 feature_branch + 读当前分支 + 校验一致。输出 `on-feature`（exit 0,正确）/ `on-main` / `feature-missing` / `on-other:<current>` / `feature-lost:<feature>`（exit 1,不一致）。
+> exit 1 时 ⛔ PRECONDITION_FAIL：当前分支与 feature_branch 不一致,commit 会落在错误分支。请 `git checkout <feature_branch>` 后重入,或 USER_GATE 选择处理路径。
+> 违反字面 = 违反精神：哪怕"当前分支也能开发",也算违反——feature_branch 是 change 的分支锚点,不一致 = 状态分裂。禁 agent 自动 `git checkout` 切换（§3.5.1）。
 
 一致性检查：
 - worktree 字段有值但路径不存在 → ⚠️ WARN 残留

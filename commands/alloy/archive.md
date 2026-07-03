@@ -203,6 +203,18 @@ git diff --cached --quiet || git commit -m "chore(<name>): 归档目录移动"
 
 无 Promote Candidates → 跳过本步骤。
 
+**解析归档后路径（后续命令统一用 `$ARCHIVE_DIR`）：** change 目录在 archive 阶段已移到 `openspec/changes/archive/<YYYY-MM-DD>-<name>/`,后续 `_state write` / `_phase complete` 都必须用归档后路径,用原路径 `openspec/changes/<name>` 会因目录已移走而失败。
+
+```bash
+ARCHIVE_DIR=$(ls -d openspec/changes/archive/*-<name> 2>/dev/null | sort -r | head -1)
+if [ -z "$ARCHIVE_DIR" ]; then
+  echo "⛔ [PRECONDITION_FAIL] archive 目录不存在——alloy _archive 可能未完成目录移动"
+  echo "  期望路径: openspec/changes/archive/<YYYY-MM-DD>-<name>/"
+  echo "  禁止: 用原路径 openspec/changes/<name> 调后续命令——目录已移走,会失败"
+  exit 1
+fi
+```
+
 **Worktree 清理（如果 apply 期间使用了 worktree）：** 读取 `commands/alloy/references/archive-worktree-cleanup.md` 执行完整流程。要点：
 
 - task #21 silent fallback 检测：state 字段未写但 worktree 存在 → ⛔ PRECONDITION_FAIL，禁 silent fallback

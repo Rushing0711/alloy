@@ -26,7 +26,7 @@ behaviors:
 
 **核心原则：先 TDD 再代码，先验证再复盘。** 所有阶段制品（verify / retrospective）以 hash-lock + 单独 commit 入 records，禁直接编辑。
 
-**交互规则：** `🔴 STOP` 等价 `USER_GATE`，必须用 `AskUserQuestion`（`commands/alloy/references/interaction-style.md`，含"沉默 ≠ 授权"通用禁令——禁批量打包、禁基于 diff 短/无 conflict 跳过、禁 agent 回填精确字符串）。跳过任何 USER_GATE = 违反 Iron Law。
+**交互规则：** `🔴 STOP` 等价 `USER_GATE`，首次呈现即必须调用平台原生交互工具——禁"先文本展示 (a)/(b) 再等待用户打字"。Claude Code 用 `AskUserQuestion`；其他平台按 `commands/alloy/references/interaction-style.md` §平台工具对照 降级为结构化文本选项。含"沉默 ≠ 授权"通用禁令——禁批量打包、禁基于 diff 短/无 conflict 跳过、禁 agent 回填精确字符串。跳过任何 USER_GATE = 违反 Iron Law。
 
 **状态符号：** `⛔` = HARD_STOP / PRECONDITION_FAIL，`🔴` = USER_GATE，`⚠️` = WARN（视觉规范 §七）。
 
@@ -195,12 +195,18 @@ alloy _guard branch-position openspec/changes/<name>
 - **传入 name=`<name>`**（change 名）：EnterWorktree(name) → 路径 `.claude/worktrees/<name>`，分支 `worktree-<name>`，可预测；git fallback 同样用此 name 作为分支名
 - **必须等用户明确选择（创建/跳过）后才继续。模糊回复（"嗯"、"好吧"）不算同意。**
 
-🔴 USER_GATE（必须 AskUserQuestion）: 确认 worktree 选择。**提示用户时必须说明 worktree 特点，帮助决策：**
+🔴 USER_GATE（必须 AskUserQuestion）: 确认 worktree 选择。**选项描述必须如实映射任务规模,禁说反：**
 
 > Worktree 隔离当前工作区，在独立目录+独立分支执行 apply，不影响 feature 分支现场。
 > - **特点：** 执行期间可随时切回 feature/main 分支处理其他任务，apply 工作不受干扰
-> - **建议：** 任务大/执行久（多子任务、需 TDD 迭代）→ 建议创建 worktree；任务小/快速完成 → 可跳过
-> - 选项：(a) 创建 worktree (b) 跳过，直接在 feature 分支执行
+> - 选项描述（必须如实映射,禁说反）：
+>   - (a) 创建 worktree：**适合任务大/执行久**（多子任务、需 TDD 迭代）。创建独立工作目录,执行期间可随时切回其他分支
+>   - (b) 跳过，直接在 feature 分支执行：**适合任务小/快速完成**
+>
+> ⛔ [HARD_STOP] 禁把 worktree 描述成"任务极简适合"——worktree 是任务大才用,任务极简应跳过。
+> 违反字面 = 违反精神：哪怕"想让用户选 worktree 所以描述得吸引人",也算违反——描述必须如实反映适用场景,不可为引导用户选择而说反。
+>
+> **禁加"推荐"后缀**——选项 label 不得加"（推荐）"等引导性标签。worktree 适合任务大,小任务加"推荐"会误导用户。让用户按任务规模自选,禁 agent 用"推荐"标签 bias 用户决策。
 
 ```bash
 alloy _skill log openspec/changes/<name> apply superpowers:using-git-worktrees
@@ -224,7 +230,13 @@ git diff --cached --quiet || git commit -m "chore(<name>): 记录 using-git-work
 > fi
 > ```
 
-**用户选择不创建：** `alloy _state write openspec/changes/<name> worktree skipped`，跳到 Step 1 完成框。
+**用户选择不创建：** `alloy _state write openspec/changes/<name> worktree skipped`,然后 commit（与 worktree 创建路径一样,_skill log + state write 后必须 commit,避免 .alloy.yaml 残留未提交变更）：
+```bash
+git add openspec/changes/<name>/.alloy.yaml
+git diff --cached --quiet || git commit -m "chore(<name>): 记录 worktree 决策 skipped"
+```
+> commit message 用"记录 worktree 决策 skipped",不用"记录 using-git-worktrees 技能使用（skipped）"——前者明确这是 worktree 决策记录,与上方 _skill log commit 语义区分;后者含"using-git-worktrees"会与上方 commit 看起来重复。
+跳到 Step 1 完成框。
 
 **用户选择创建：** 由 using-git-worktrees 技能驱动创建（EnterWorktree 优先，git worktree fallback），agent 不手动 `git worktree add`。
 
@@ -258,7 +270,15 @@ git diff --cached --quiet || git commit -m "chore(<name>): 记录 using-git-work
    - **subagent-driven-development** — 任务多（≥3）、相互独立、涉及不同文件/模块
    - **executing-plans** — 任务少（1-2）、紧密耦合、共享状态
 
-4. 🔴 USER_GATE（必须 AskUserQuestion）: 选择执行策略（SDD / EP）。必须等用户选择后才加载技能。
+   > ⛔ [HARD_STOP] 禁误述 SDD/EP 适用场景——SDD 适合"任务多（≥3）、相互独立",**不是"简单快速"**;EP 适合"任务少（1-2）、紧密耦合",不是"复杂"。
+   > 违反字面 = 违反精神：哪怕"简化描述方便用户选",也算违反——描述必须对齐上方设计语义,误述会误导用户选错策略。
+
+4. 🔴 USER_GATE（必须 AskUserQuestion）: 选择执行策略（`subagent-driven-development` / `executing-plans`）。必须等用户选择后才加载技能。
+
+   > ⛔ [HARD_STOP] options label 必须用技能全称 `subagent-driven-development` / `executing-plans`，禁缩写（SDD/EP）——SDD 缩写会被误解为 "Single Developer Direct"（单开发者直接执行），与实际 "Subagent-Driven Development"（子 agent 驱动）语义相反。
+   > 违反字面 = 违反精神：哪怕"缩写更简洁用户易选"，也算违反——缩写歧义导致 agent 误述描述（把 SDD 说成"任务少、简单直接"），误导用户选错策略。
+   > options description 必须对齐 L269 设计语义：`subagent-driven-development` = 任务多（≥3）、相互独立、涉及不同文件/模块；`executing-plans` = 任务少（1-2）、紧密耦合、共享状态。禁反转描述（把 SDD 说成"任务少/简单"、EP 说成"任务多/复杂"均算违反）。
+   > 常见违规模式：label 用"SDD 直接执行"/"Subagent 并行"等自造缩写，description 把 SDD 描述成"单开发者直接执行，适合任务少"——这反转了 SDD 实际语义（子 agent 驱动，适合任务多）。
 
    > **决策不回写 plans.md**——plans 仅保留 plan 阶段的推荐快照，apply 可覆写。
    > 实际执行方式由随后的 `_skill log` 留痕（加载 `superpowers:subagent-driven-development`
@@ -266,7 +286,7 @@ git diff --cached --quiet || git commit -m "chore(<name>): 记录 using-git-work
    > 得知实际策略。
    >
    > **异常态兜底**：若 frontmatter 无 strategy（plan 阶段未正常完成），USER_GATE 仍让
-   > 用户选 SDD/EP，决策落 skill_usage（不回写 plans）。提示用户 plans 异常，retro §3
+   > 用户选 `subagent-driven-development` / `executing-plans`，决策落 skill_usage（不回写 plans）。提示用户 plans 异常，retro §3
    > 计划偏离记录此情况。
 
 **SDD 路径：**
@@ -283,19 +303,31 @@ alloy _skill log openspec/changes/<name> apply code-quality-review --via subagen
 
 **构造子 agent 任务描述时，必须注入以下指令到任务描述末尾：**
 > 实现完成时，在**同一个 commit** 中包含：实现代码 + 测试 + `openspec/changes/<name>/tasks.md` 中你负责的 task checkbox 从 `- [ ]` 改为 `- [x]`（含父级和子级）。不要分两个 commit。
+>
+> ⛔ [HARD_STOP] 禁用 `git commit --amend` 实现"同一个 commit"——"同一个 commit"指**一次性 `git add` 实现+测试+tasks.md 再单个新 `git commit`**,不是"先 commit 实现再 `--amend` 加 tasks.md"。amend 改写历史,违反"创建新 commit 而非 amend"全局规则。
+> 违反字面 = 违反精神：哪怕"amend 后历史更干净",也算违反——必须一次性 git add 两者再新 commit。retrospective 不得把 amend 当 win 正向强化。
+>
+> ⛔ [HARD_STOP] 禁批量后置 checkbox——实现 commit 不含 tasks.md、所有任务完成后才批量勾选 + 单独 relock,也是违规。"同一个 commit"要求每个 task 的实现 commit **当即**含该 task 的 checkbox 勾选,不是最后统一勾选。
+> 违反字面 = 违反精神：哪怕"批量勾选效率高",也算违反——批量后置 = checkbox 不反映实时进度 = 回溯断点失效。每个 task 完成时当即勾选 + commit。
 
 **EP 路径：** 四步显式加载补偿（EP 不 transitive 激活 TDD/spec 合规/code review）：
-1. 加载 `test-driven-development`（设定 TDD 预期，RED→GREEN→REFACTOR 成为硬约束）
-2. 加载 `executing-plans`（逐步执行 plans.md，每步遵循 TDD）
-3. Spec 合规审查（Agent 自检：每个 checkbox ↔ 代码实现，无 over-building，排除范围未碰，不通过→修复→重审）
-4. 加载 `requesting-code-review`（代码审查闸门——所有代码变更必须经审查才进 Step 3）
 
-**⛔ HARD_STOP：`_skill log` 是必执行命令，不是可选。** 跳过 = skill_usage 缺失 = 后续无法证明技能已加载。
-```bash
-alloy _skill log openspec/changes/<name> apply superpowers:test-driven-development
-alloy _skill log openspec/changes/<name> apply superpowers:executing-plans
-alloy _skill log openspec/changes/<name> apply superpowers:requesting-code-review
-```
+> ⛔ [HARD_STOP] `_skill log` 必须在对应技能**实际加载后立即**执行，禁预录。预录 = skill_usage 不反映真实使用轨迹 = retrospective §4 审计失真。
+> 违反字面 = 违反精神：哪怕"先打完 log 再干活效率高"，也算违反——skill_usage 必须反映真实加载顺序。
+
+1. 加载 `test-driven-development`（设定 TDD 预期，RED→GREEN→REFACTOR 成为硬约束），加载后立即 log：
+   ```bash
+   alloy _skill log openspec/changes/<name> apply superpowers:test-driven-development
+   ```
+2. 加载 `executing-plans`（逐步执行 plans.md，每步遵循 TDD），加载后立即 log：
+   ```bash
+   alloy _skill log openspec/changes/<name> apply superpowers:executing-plans
+   ```
+3. Spec 合规审查（Agent 自检：每个 checkbox ↔ 代码实现，无 over-building，排除范围未碰，不通过→修复→重审）
+4. 加载 `requesting-code-review`（代码审查闸门——所有代码变更必须经审查才进 Step 3），加载后立即 log：
+   ```bash
+   alloy _skill log openspec/changes/<name> apply superpowers:requesting-code-review
+   ```
 
 ---
 
@@ -423,10 +455,14 @@ check 失败 → ⛔ `[PRECONDITION_FAIL] plans 上游 hash 失效——plans.md
 > WARNING 项可继续，但需在 retrospective §2 Misses 记录。
 
 **tasks.md checkbox 已更新，重录 hash——原子命令 `alloy _artifact commit` 内部完成 hash 重算 + records 更新 + git add 限路径 + commit（§5.2.1）：**
+
+> ⛔ [HARD_STOP] tasks 重锁必须先于 verify 锁定**串行**完成。禁在同一消息并行调用 `alloy _artifact commit tasks` 与 `alloy _artifact commit verify`——并行发出会导致 git commit 顺序倒置（verify 在前、tasks 在后），hash 链与设计时序错位。
+> 违反字面 = 违反精神：哪怕"两个命令看似独立"，git index 和 `.alloy.yaml` records 是共享资源，并行写会竞态。必须等 tasks 重锁 commit 完成后，才进入 verify 审查窗口 + 锁定。
+
 ```bash
 alloy _artifact commit openspec/changes/<name> tasks
 ```
-> tasks 在 plan 阶段已首次锁定，apply 阶段 checkbox 变更后 hash 改变，`_artifact commit` 检测到 hash 不同允许重新锁定（N3），产生独立的 "tasks 已锁定" commit。**禁止用旧命令 `_record compute/write` 手动重录——绕过原子 commit 会导致 records 更新混入后续 verify commit，hash 链与 git 历史错位。**
+> tasks 在 plan 阶段已首次锁定，apply 阶段 checkbox 变更后 hash 改变，`_artifact commit` 检测到 hash 不同允许重新锁定（N3），产生独立的 "relock tasks" commit。**禁止用旧命令 `_record compute/write` 手动重录——绕过原子 commit 会导致 records 更新混入后续 verify commit，hash 链与 git 历史错位。**
 
 **verify.md 审查窗口（🔴 USER_GATE）：**
 

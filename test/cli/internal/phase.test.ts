@@ -365,7 +365,7 @@ describe("alloy _phase start", () => {
     const log = gitLog();
     const lines = log.split("\n");
     // 最上面是 proposal commit，下面是 plan 开始 commit
-    expect(lines[0]).toContain("proposal 已锁定");
+    expect(lines[0]).toContain("锁定 proposal");
     expect(lines[1]).toContain("记录 plan 阶段开始时间");
   });
 });

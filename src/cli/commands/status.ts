@@ -92,7 +92,15 @@ async function overviewMode(changesDir: string): Promise<string> {
   const nextSteps: string[] = [];
 
   for (const [name, state] of changes) {
-    const artifacts = checkArtifacts(join(changesDir, name));
+    // 检测 change 路径——非归档（openspec/changes/<name>）或归档（openspec/changes/archive/<name>）
+    let changePath = join(changesDir, name);
+    if (!existsSync(join(changePath, ".alloy.yaml"))) {
+      const archivePath = join(changesDir, "archive", name);
+      if (existsSync(join(archivePath, ".alloy.yaml"))) {
+        changePath = archivePath;
+      }
+    }
+    const artifacts = checkArtifacts(changePath);
     const artifactStatus = ARTIFACTS.map(
       (a) => `${a} ${artifacts[a] ? color.green("✓") : color.red("✗")}`
     ).join(" ");

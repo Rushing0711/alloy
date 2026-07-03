@@ -147,11 +147,18 @@ async function artifactCommit(args: string[]): Promise<void> {
   }
 
   try {
-    execSync(`git commit -m "docs(${changeName}): ${artifactId} 已锁定"`, {
+    // commit message 区分首锁 vs 重锁——"已锁定"歧义（似"任务完成"），用 锁定/重锁 明确是 hash 锁定动作
+    // 首锁：docs(<change>): 锁定 <artifact>
+    // 重锁：docs(<change>): 重锁 <artifact> [<old>→<new>]
+    const oldHash = existingRecord?.hash;
+    const message = existingRecord
+      ? `docs(${changeName}): 重锁 ${artifactId} [${oldHash}→${hash}]`
+      : `docs(${changeName}): 锁定 ${artifactId}`;
+    execSync(`git commit -m "${message}"`, {
       cwd: gitRoot.root,
       stdio: "pipe",
     });
-    console.log(`✓ ${artifactId}: hash=${hash} 已 commit`);
+    console.log(`✓ ${artifactId}: hash=${hash} 已 commit (${existingRecord ? "重锁" : "锁定"})`);
   } catch (e) {
     console.error(`[FAIL] git commit 失败: ${(e as Error).message}`);
     return process.exit(1);

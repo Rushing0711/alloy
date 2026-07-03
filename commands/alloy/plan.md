@@ -26,7 +26,7 @@ behaviors:
 
 **核心原则：按 schema DAG 依赖顺序逐一产出制品，每步有审查闸门，不跳过上游直接产下游。** 5 制品（proposal/design/specs/tasks/plans）以 hash-lock + 单独 commit 入 records，禁直接编辑，禁互相替代。
 
-**交互规则：** `🔴 STOP` 等价 `USER_GATE`，必须用 `AskUserQuestion`（`commands/alloy/references/interaction-style.md`，含"沉默 ≠ 授权"通用禁令——禁批量打包、禁基于内容跳过、禁 agent 回填精确字符串）。跳过任何 USER_GATE = 违反 Iron Law。
+**交互规则：** `🔴 STOP` 等价 `USER_GATE`，首次呈现即必须调用平台原生交互工具——禁"先文本展示 (a)/(b) 再等待用户打字"。Claude Code 用 `AskUserQuestion`；其他平台按 `commands/alloy/references/interaction-style.md` §平台工具对照 降级为结构化文本选项。含"沉默 ≠ 授权"通用禁令——禁批量打包、禁基于内容跳过、禁 agent 回填精确字符串。跳过任何 USER_GATE = 违反 Iron Law。
 
 **状态符号：** `⛔` = HARD_STOP / PRECONDITION_FAIL，`🔴` = USER_GATE，`⚠️` = WARN（视觉规范 §七）。
 
@@ -175,6 +175,9 @@ alloy _skill log openspec/changes/<name> plan opsx:continue
 alloy _progress artifacts openspec/changes/<name>
 ```
 从第一个缺失/hash-mismatch 的制品开始生成。全部 done 时 🔴 USER_GATE：所有制品已锁定，确认推进 phase（确认 / 重新审查某个制品——指定制品名）。
+
+> ⛔ [HARD_STOP] 禁用 `openspec status` 检测制品状态——openspec CLI 不识别 alloy 的 hash 锁定,会误报制品未 commit（如 specs 状态显示 "ready" 但 alloy 已 hash-lock）,导致重复 `_skill log` + 重复 `opsx:continue`。
+> 违反字面 = 违反精神：哪怕"openspec status 看起来也能用",也会因不识别 hash 锁定而误判。必须用 `alloy _progress artifacts`。
 
 > [N/M] 是阶段内局部编号（M=5），不输出全局制品进度。全局进度由 `alloy status` 管理。
 
@@ -499,40 +502,21 @@ alloy _state read openspec/changes/<name> records
 → 制品: draft ✓ proposal ✓ design ✓ specs ✓ tasks ✓ plans ✓
 ```
 
-**hash 链尾扫（⛔ HARD_STOP，task L2）：** 在 phase 推进前对全部 6 个制品（draft + proposal + design + specs + tasks + plans）逐条执行 `alloy _record check`——这是 phase 锁定前最后一次完整性校验，任何 hash 不匹配都必须暴露给用户。
+**hash 链尾扫（⛔ HARD_STOP，task L2）：** 在 phase 推进前对全部 6 个制品（draft + proposal + design + specs + tasks + plans）逐条校验——这是 phase 锁定前最后一次完整性校验，任何 hash 不匹配都必须暴露给用户。
 
 ```bash
-ALL_PASS=true
-for ARTIFACT in draft proposal design specs tasks plans; do
-  if [ ! -f "openspec/changes/<name>/${ARTIFACT}.md" ]; then
-    echo "  ✗ $ARTIFACT: 文件缺失"
-    ALL_PASS=false
-  elif alloy _record check "openspec/changes/<name>" "$ARTIFACT" 2>/dev/null; then
-    echo "  ✓ $ARTIFACT: hash 一致"
-  else
-    echo "  ✗ $ARTIFACT: hash 不匹配"
-    ALL_PASS=false
-  fi
-done
-
-echo "---"
-if [ "$ALL_PASS" = "true" ]; then
-  echo "✓ 全部 6 个制品 hash 链完整"
-else
-  echo "⛔ HARD_STOP: hash 链断裂，禁止推进 phase"
-  echo "  制品文件被编辑后 hash 重算可能在单制品审查中漏过，"
-  echo "  尾扫是最后一道防线——必须逐条检查全部制品。"
-  echo ""
-  echo "  禁止：agent 自动补 _record write 修复 hash——"
-  echo "  必须 🔴 USER_GATE 让用户选择处理路径。"
-  exit 1
-fi
+# 原子命令 _record scan 内部完成：遍历 6 制品 + 检查文件/目录存在 + 检查 hash 一致 + 输出 ✓/✗
+# specs 是目录型工件,scan 内部已特判（用 -d 检查目录,其他用 -f 检查文件）
+alloy _record scan "openspec/changes/<name>"
 ```
 
-`$ALL_PASS` = false → ⛔ HARD_STOP，🔴 USER_GATE：
-- (a) 回溯到对应制品重新审查（显示哪个制品 hash 不匹配，让用户决定回退到哪个制品重新生成）
-- (b) 显示 git log 让用户排查（`git log --oneline openspec/changes/<name>/`）
-- (c) 中止 plan 阶段退出 skill
+> scan 退出码 0 = 全部 hash 一致,1 = 有断裂（✗ 输出具体制品 + 问题：文件缺失 / 无 record / hash 不匹配）。
+> scan 失败时 ⛔ HARD_STOP,🔴 USER_GATE：
+> - (a) 回溯到对应制品重新审查（scan 输出哪个制品 hash 不匹配,让用户决定回退到哪个制品重新生成）
+> - (b) 显示 git log 让用户排查（`git log --oneline openspec/changes/<name>/`）
+> - (c) 中止 plan 阶段退出 skill
+>
+> 禁止：agent 自动补 `_record write` 修复 hash——必须 🔴 USER_GATE 让用户选择处理路径。
 
 **[HARD_STOP]** agent 不得基于 "_guard 也会校验" 跳过尾扫——_guard 校验与尾扫是独立防线，尾扫逐条命名文件确保"全量 6/6"，_guard 内部实现可能只校验 records 中存在的条目（文件存但 records 不存的 tainted artifact 会漏掉）。
 

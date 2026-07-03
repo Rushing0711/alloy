@@ -74,6 +74,27 @@ export async function findActiveChanges(
     const entries = await readdir(changesDir, { withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
+      // archive/ 子目录：扫描归档 change（archive/<date>-<name>/）
+      if (entry.name === "archive") {
+        const archiveDir = join(changesDir, entry.name);
+        try {
+          const archiveEntries = await readdir(archiveDir, { withFileTypes: true });
+          for (const archiveEntry of archiveEntries) {
+            if (!archiveEntry.isDirectory()) continue;
+            try {
+              const state = await readState(join(archiveDir, archiveEntry.name));
+              if (state.phase !== "finished") {
+                changes.set(archiveEntry.name, state);
+              }
+            } catch {
+              // 归档子目录无 .alloy.yaml，跳过
+            }
+          }
+        } catch {
+          // archive 目录读取失败，跳过
+        }
+        continue;
+      }
       try {
         const state = await readState(join(changesDir, entry.name));
         if (state.phase !== "finished") {

@@ -51,6 +51,9 @@ CLI 从以下数据源权威生成（不依赖 LLM 记忆，跨 session 中断�
 - `- 🟡 [painful  | evidence: ...] <描述>` — 痛苦但不阻塞
 - `- 📌 [nit      | evidence: ...] <描述>` — 小问题
 
+> ⛔ [HARD_STOP] §2 禁止建议破坏设计——如果某现象是设计内建的承载机制（如 plans.md strategy 与实际执行不符由 §3 承载,不是 bug；apply 不回写 plans.md 是设计）,不要在 §2 当 miss 提"改进建议回写/留空"。§2 Misses 只记录真正的缺陷（阻塞/痛苦/小问题）,不记录设计内建的承载机制。
+> 违反字面 = 违反精神：把设计机制当 bug 提改进 = 误导后续 cycle 破坏设计。例如"plans.md strategy 不符"是 §3 计划偏离的预期内容,不是 §2 的改进点。
+
 #### §3 计划偏离
 表格：Plan task / What changed / Why
 哪些 task 的范围在执行中发生了变化，原因是什么。
@@ -78,6 +81,10 @@ CLI 从以下数据源权威生成（不依赖 LLM 记忆，跨 session 中断�
 - `> **How to apply**: <触发条件>`
 
 格式对齐 feedback memory schema，使 Why/How to apply 可直接转移到 `~/.claude/memory/`。
+
+> ⛔ [HARD_STOP] §6 只提取本 cycle 新发现的、尚未成文的设计模式或经验教训。禁提取 apply.md / plan.md / archive.md / finish.md 等已有硬规则的执行——这些是规则，不是新模式。
+> 违反字面 = 违反精神：哪怕"这条规则本 cycle 执行得很好值得强化",也算违反——规则执行得好是应有之义,不是"值得推广的新模式"。把硬规则当新模式提取 = retrospective 失去"发现未知"的价值,还会让用户误以为 alloy 流程不专业（连自己的规则都不认识）。
+> 常见违规模式：把"单 commit 含代码+测试+tasks checkbox"（apply.md L298-305 硬规则）当新模式提取；把"TDD 先写测试再写代码"（TDD 技能固有规则）当新模式提取。这些都不是"新模式",是已有规则的执行。
 
 ### Step 3: 跳过策略
 

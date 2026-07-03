@@ -70,9 +70,31 @@ describe("alloy _artifact commit", () => {
     // updated_at 已刷新（不再是 2020-01-01）
     expect(state.updated_at).not.toBe("2020-01-01 00:00:00");
 
-    // git commit 已产生
+    // git commit 已产生（首锁 message = lock）
     const log = gitLog();
-    expect(log).toContain("docs(test-change): draft 已锁定");
+    expect(log).toContain("docs(test-change): 锁定 draft");
+  });
+
+  it("重锁 message 含 重锁 + old hash → new hash", async () => {
+    await writeFile(join(changeDir, "draft.md"), "# v1", "utf-8");
+    await artifactCommand(["commit", changeDir, "draft"]);
+    const firstState = await readState(changeDir);
+    const firstHash = firstState.records[0].hash;
+
+    // 修改内容后重锁
+    await writeFile(join(changeDir, "draft.md"), "# v2 changed", "utf-8");
+    await artifactCommand(["commit", changeDir, "draft"]);
+
+    const secondState = await readState(changeDir);
+    const secondHash = secondState.records[0].hash;
+
+    const log = gitLog();
+    // 最新 commit 是重锁 message
+    const latestCommit = log.split("\n")[0];
+    expect(latestCommit).toContain("重锁 draft");
+    expect(latestCommit).toContain(firstHash);
+    expect(latestCommit).toContain(secondHash);
+    expect(latestCommit).toContain("→");
   });
 
   it("幂等：重复 commit 同一制品只产生一次 commit", async () => {
@@ -128,7 +150,7 @@ describe("alloy _artifact commit", () => {
     expect(state.records[0].hash).toMatch(/^[a-f0-9]{12}$/);
 
     const log = gitLog();
-    expect(log).toContain("docs(test-change): specs 已锁定");
+    expect(log).toContain("docs(test-change): 锁定 specs");
   });
 
   it("制品文件不存在时 exit(1)", async () => {
@@ -209,7 +231,7 @@ describe("alloy _artifact commit", () => {
       logSpy.mockRestore();
 
       expect(logs.some((l) => l.includes("已 commit"))).toBe(true);
-      expect(gitLog()).toContain("draft 已锁定");
+      expect(gitLog()).toContain("锁定 draft");
     });
   });
 });

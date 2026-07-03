@@ -25,7 +25,7 @@ NO FIX WITHOUT DIAGNOSIS
 先跑 systematic-debugging，再谈修复。跳诊的坏账率极高
 ```
 
-**交互规则：** `🔴 STOP` = 硬交互确认点，必须用 `AskUserQuestion`（`commands/alloy/references/interaction-style.md`，含"沉默 ≠ 授权"通用禁令——禁批量打包、禁基于内容跳过、禁 agent 回填精确字符串）。跳过任何 🔴 STOP = 违反 Iron Law。
+**交互规则：** `🔴 STOP` = 硬交互确认点，首次呈现即必须调用平台原生交互工具——禁"先文本展示 (a)/(b) 再等待用户打字"。Claude Code 用 `AskUserQuestion`；其他平台按 `commands/alloy/references/interaction-style.md` §平台工具对照 降级为结构化文本选项。含"沉默 ≠ 授权"通用禁令——禁批量打包、禁基于内容跳过、禁 agent 回填精确字符串。跳过任何 🔴 STOP = 违反 Iron Law。
 
 **调用外部命令或技能前，先输出标题和状态描述，再执行操作。**
 

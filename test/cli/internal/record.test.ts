@@ -473,4 +473,86 @@ describe("alloy _record", () => {
       exitSpy.mockRestore();
     });
   });
+
+  describe("scan", () => {
+    it("全部制品 hash 一致时 exit 0 + 输出完整", async () => {
+      // 创建 6 个 plan 阶段制品文件
+      await writeFile(join(changeDir, "draft.md"), "draft", "utf-8");
+      await writeFile(join(changeDir, "proposal.md"), "proposal", "utf-8");
+      await writeFile(join(changeDir, "design.md"), "design", "utf-8");
+      await mkdir(join(changeDir, "specs"), { recursive: true });
+      await writeFile(join(changeDir, "specs", "spec1.md"), "spec1", "utf-8");
+      await writeFile(join(changeDir, "tasks.md"), "tasks", "utf-8");
+      await writeFile(join(changeDir, "plans.md"), "plans", "utf-8");
+
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+      // compute + write 每个制品的 record
+      for (const artifact of ["draft", "proposal", "design", "specs", "tasks", "plans"]) {
+        const hash = await captureLog(() => recordCommand(["compute", changeDir, artifact]));
+        await recordCommand(["write", changeDir, artifact, hash.trim(), "2025-01-01T00:00:00", "alice"]);
+      }
+
+      const out = await captureLog(() => recordCommand(["scan", changeDir]));
+
+      expect(out).toContain("✓ draft: hash 一致");
+      expect(out).toContain("✓ specs: hash 一致");
+      expect(out).toContain("全部 6 个制品 hash 链完整");
+      expect(exitSpy).not.toHaveBeenCalledWith(1);
+
+      exitSpy.mockRestore();
+    });
+
+    it("制品文件缺失时 exit 1 + 输出文件缺失", async () => {
+      // 只创建 draft,其他 5 个缺失
+      await writeFile(join(changeDir, "draft.md"), "draft", "utf-8");
+
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+      const out = await captureLog(() => recordCommand(["scan", changeDir]));
+
+      expect(out).toContain("✗ proposal: 文件缺失");
+      expect(exitSpy).toHaveBeenCalledWith(1);
+
+      exitSpy.mockRestore();
+    });
+
+    it("hash 不匹配时 exit 1 + 输出 hash 不匹配", async () => {
+      await writeFile(join(changeDir, "draft.md"), "draft", "utf-8");
+      await recordCommand(["write", changeDir, "draft", "deadbeef0000", "2025-01-01T00:00:00", "alice"]);
+
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+      const out = await captureLog(() => recordCommand(["scan", changeDir]));
+
+      expect(out).toContain("✗ draft: hash 不匹配");
+      expect(exitSpy).toHaveBeenCalledWith(1);
+
+      exitSpy.mockRestore();
+    });
+
+    it("文件存在但无 record 时 exit 1 + 输出无 record", async () => {
+      await writeFile(join(changeDir, "draft.md"), "draft", "utf-8");
+
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+      const out = await captureLog(() => recordCommand(["scan", changeDir]));
+
+      expect(out).toContain("✗ draft: 无 record");
+      expect(exitSpy).toHaveBeenCalledWith(1);
+
+      exitSpy.mockRestore();
+    });
+
+    it("specs 目录型工件正确检测（目录缺失时输出目录缺失）", async () => {
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+      const out = await captureLog(() => recordCommand(["scan", changeDir]));
+
+      expect(out).toContain("✗ specs: 目录缺失");
+      expect(exitSpy).toHaveBeenCalledWith(1);
+
+      exitSpy.mockRestore();
+    });
+  });
 });

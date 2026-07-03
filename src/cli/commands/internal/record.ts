@@ -1,14 +1,16 @@
 import { execSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { readState, writeState } from "../../utils/state.js";
 import type { ArtifactRecord } from "../../../core/types.js";
 import { ARTIFACT_FILES, computeArtifactHash } from "../../../core/artifacts.js";
 
 export async function recordCommand(args: string[]): Promise<void> {
-  const action = args[0]; // write | check | compute
+  const action = args[0]; // write | check | scan | compute | approver
   const changeDir = args[1];
 
   if (!action || !changeDir) {
-    console.error("用法: alloy _record <write|check|compute|approver> <change-dir> [artifact] [hash] [committed_at] [approver]");
+    console.error("用法: alloy _record <write|check|scan|compute|approver> <change-dir> [artifact] [hash] [committed_at] [approver]");
     process.exit(1);
   }
 
@@ -77,6 +79,53 @@ export async function recordCommand(args: string[]): Promise<void> {
       }
 
       if (!allMatch) {
+        process.exit(1);
+      }
+      break;
+    }
+    case "scan": {
+      const artifacts = args.slice(2);
+      const defaultArtifacts = ["draft", "proposal", "design", "specs", "tasks", "plans"];
+      const targets = artifacts.length > 0 ? artifacts : defaultArtifacts;
+
+      const state = await readState(changeDir);
+      if (!state.records) state.records = [];
+
+      let allPass = true;
+      for (const artifact of targets) {
+        const fileName = ARTIFACT_FILES[artifact];
+        if (!fileName) {
+          console.log(`  ✗ ${artifact}: 未知制品`);
+          allPass = false;
+          continue;
+        }
+        const fullPath = join(changeDir, fileName);
+        const isDir = artifact === "specs";
+        if (!existsSync(fullPath)) {
+          console.log(`  ✗ ${artifact}: ${isDir ? "目录" : "文件"}缺失`);
+          allPass = false;
+          continue;
+        }
+        const record = state.records.find(r => r.artifact === artifact);
+        if (!record) {
+          console.log(`  ✗ ${artifact}: 无 record（未锁定）`);
+          allPass = false;
+          continue;
+        }
+        const currentHash = await computeArtifactHash(changeDir, artifact);
+        if (currentHash !== record.hash) {
+          console.log(`  ✗ ${artifact}: hash 不匹配 (recorded=${record.hash}, current=${currentHash})`);
+          allPass = false;
+        } else {
+          console.log(`  ✓ ${artifact}: hash 一致`);
+        }
+      }
+
+      console.log("---");
+      if (allPass) {
+        console.log(`✓ 全部 ${targets.length} 个制品 hash 链完整`);
+      } else {
+        console.log(`⛔ HARD_STOP: hash 链断裂，禁止推进 phase`);
         process.exit(1);
       }
       break;

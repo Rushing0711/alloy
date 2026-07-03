@@ -89,6 +89,35 @@ describe("state utils", () => {
     expect(changes.size).toBe(0);
   });
 
+  it("findActiveChanges 扫描归档目录 archive/<date>-<name>/", async () => {
+    const changesDir = join(tmpDir, "openspec", "changes");
+    // 归档 change 在 archive/<date>-<name>/ 二级子目录
+    const archiveChangeDir = join(changesDir, "archive", "2026-07-03-hello-script");
+    await mkdir(archiveChangeDir, { recursive: true });
+
+    const archived = createInitialState();
+    archived.phase = "archived";
+    await writeState(archiveChangeDir, archived);
+
+    const changes = await findActiveChanges(changesDir);
+    // 归档 active change（phase=archived 未 finished）应被检测到
+    expect(changes.has("2026-07-03-hello-script")).toBe(true);
+    expect(changes.get("2026-07-03-hello-script")?.phase).toBe("archived");
+  });
+
+  it("findActiveChanges 归档目录下 finished change 仍被过滤", async () => {
+    const changesDir = join(tmpDir, "openspec", "changes");
+    const archiveFinishedDir = join(changesDir, "archive", "2026-07-03-done-script");
+    await mkdir(archiveFinishedDir, { recursive: true });
+
+    const finished = createInitialState();
+    finished.phase = "finished";
+    await writeState(archiveFinishedDir, finished);
+
+    const changes = await findActiveChanges(changesDir);
+    expect(changes.has("2026-07-03-done-script")).toBe(false);
+  });
+
   it("writeState 和 readState records 往返一致", async () => {
     const changeDir = join(tmpDir, "test-change-records");
     await mkdir(changeDir, { recursive: true });
