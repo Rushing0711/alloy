@@ -34,8 +34,14 @@ reason: <策略背后的分析理由，apply 阶段展示给用户>
 ---
 ```
 
-- `strategy`: `sdd`（任务独立可并行）或 `serial`（任务耦合需串行）
-- `reason`: writing-plans 分析后的一两句话，apply 阶段展示给用户作为推荐依据
+- `strategy`: plan 阶段的**推荐快照**，非最终决策。`sdd`（任务独立可并行）或 `serial`（任务耦合需串行）
+- `reason`: writing-plans 分析后的一两句话，apply 阶段作为推荐依据展示给用户
+
+**语义约束（重要）：**
+
+- `strategy` 一经 plan 阶段锁定，**apply 阶段不回写、不覆写 plans.md**。即使 apply 阶段用户选了与 frontmatter 推荐不同的执行策略，也不修改 plans.md。
+- apply 的实际执行决策由 `skill_usage` 留痕（加载 `superpowers:subagent-driven-development` 或 `superpowers:executing-plans` 即记录），retrospective §4 审计读 skill_usage 得知实际策略。
+- plans.md 的 `strategy` 永远只反映"plan 阶段 writing-plans 的推荐"，是计划时的判断快照，不要求与实际执行方式一致——retrospective §3「计划偏离」专门承载"推荐与实际不符"的情况。
 
 ### 微步骤格式
 

@@ -34,12 +34,6 @@ behaviors:
 
 **调用外部命令或技能前，先输出标题和状态描述，再执行操作。**
 
-**捕获阶段启动时间 + 独立"阶段开始"commit**（幂等，重入时 started_at 不覆盖）：
-```bash
-alloy _phase start openspec/changes/<name> apply
-```
-> `alloy _phase start` 原子完成：幂等写 `phase_timings.apply.started_at` + git add 限路径 + commit。产生独立的"阶段开始"commit（仅 .alloy.yaml），不并入后续制品 commit。
-
 ---
 
 ### Red Flags（第三层防御——任一借口出现即 STOP）
@@ -65,6 +59,16 @@ alloy _phase start openspec/changes/<name> apply
 ```
 
 ### [Step 0/5] 前置检查
+
+**⛔ HARD_STOP（阶段入口必执行）：先记录阶段开始时间**
+
+```bash
+alloy _phase start openspec/changes/<name> apply
+```
+
+> 必须在 Step 0 任何前置检查之前执行——`_skill log` / `_artifact commit` 都依赖 `phase_timings.apply.started_at` 已存在，跳过会导致后续命令 PRECONDITION_FAIL。
+>
+> `alloy _phase start` 原子完成：幂等写 `phase_timings.apply.started_at` + git add 限路径 + commit。产生独立的"阶段开始"commit（仅 .alloy.yaml），不并入后续制品 commit。
 
 **1. plans.md 存在（PRECONDITION_FAIL）：** 文件不存在 → ⛔ `[PRECONDITION_FAIL] plans.md 不存在，apply 拒绝执行。请先运行 /alloy:plan 完成 plan 阶段。` 然后退出 skill。
 
@@ -254,9 +258,16 @@ git diff --cached --quiet || git commit -m "chore(<name>): 记录 using-git-work
    - **subagent-driven-development** — 任务多（≥3）、相互独立、涉及不同文件/模块
    - **executing-plans** — 任务少（1-2）、紧密耦合、共享状态
 
-   plans.md 无 strategy 时分析后给出推荐（不标记），策略决定后回写 frontmatter 并重新 hash 锁定。
-
 4. 🔴 USER_GATE（必须 AskUserQuestion）: 选择执行策略（SDD / EP）。必须等用户选择后才加载技能。
+
+   > **决策不回写 plans.md**——plans 仅保留 plan 阶段的推荐快照，apply 可覆写。
+   > 实际执行方式由随后的 `_skill log` 留痕（加载 `superpowers:subagent-driven-development`
+   > 或 `superpowers:executing-plans` 即记录决策）。retrospective §4 审计读 skill_usage
+   > 得知实际策略。
+   >
+   > **异常态兜底**：若 frontmatter 无 strategy（plan 阶段未正常完成），USER_GATE 仍让
+   > 用户选 SDD/EP，决策落 skill_usage（不回写 plans）。提示用户 plans 异常，retro §3
+   > 计划偏离记录此情况。
 
 **SDD 路径：**
 

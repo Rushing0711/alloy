@@ -30,12 +30,6 @@ verify.md FAIL / merge 冲突 / memory 批量 / git status dirty 任一存在 = 
 
 **输出规则：** 阶段入口/出口必须按 `docs/specification/02-visual-spec.md` 输出 Phase 框（`┌─┐` Unicode 单线框，38 字符宽）、Step 标题（`[Step N/M]` + 38 字符 `─` 下划线）、`>` 块引用、`→` 引导行。**skill md 中的 Phase 框代码块是必须输出到终端的格式，不是文档示例。** 制品汇总表同理。
 
-**捕获阶段启动时间 + 独立"阶段开始"commit**（幂等，重入时 started_at 不覆盖）：
-```bash
-alloy _phase start openspec/changes/<name> archive
-```
-> `alloy _phase start` 原子完成：幂等写 `phase_timings.archive.started_at` + git add 限路径 + commit。产生独立的"阶段开始"commit（仅 .alloy.yaml），不并入后续操作 commit。
-
 ---
 
 ### Red Flags（第三层防御——任一借口出现即 STOP）
@@ -63,6 +57,16 @@ alloy _phase start openspec/changes/<name> archive
 ```
 
 ### [Step 1/3] 前置检查
+
+**⛔ HARD_STOP（阶段入口必执行）：先记录阶段开始时间**
+
+```bash
+alloy _phase start openspec/changes/<name> archive
+```
+
+> 必须在 Step 1 任何前置检查之前执行——`_skill log` / `_artifact commit` 都依赖 `phase_timings.archive.started_at` 已存在。
+>
+> `alloy _phase start` 原子完成：幂等写 `phase_timings.archive.started_at` + git add 限路径 + commit。产生独立的"阶段开始"commit（仅 .alloy.yaml），不并入后续操作 commit。
 
 **0. Skill 预检：** cmd: opsx/archive
 

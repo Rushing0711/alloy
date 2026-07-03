@@ -34,18 +34,6 @@ phase != archived / 分支不存在 / merge 精确确认未通过 / spec 已归�
 
 **调用外部命令或技能前，先输出标题和状态描述，再执行操作。**
 
-**捕获阶段启动时间 + 独立"阶段开始"commit**（幂等，重入时 started_at 不覆盖）。
-
-> 先解析 archive 路径再调用 `_phase start`——archive 阶段已将 change 移入 `archive/`，
-> `openspec/changes/<name>/` 为空目录，直接调用会误创建残留 `.alloy.yaml`。
-
-```bash
-ARCHIVE_DIR=$(ls -d openspec/changes/archive/*-<name> 2>/dev/null | sort -r | head -1)
-CHANGE_DIR="${ARCHIVE_DIR:-openspec/changes/<name>}"
-alloy _phase start "$CHANGE_DIR" finish
-```
-> `alloy _phase start` 原子完成：幂等写 `phase_timings.finish.started_at` + git add 限路径 + commit。
-
 ---
 
 ### Red Flags（第三层防御——任一借口出现即 STOP）
@@ -78,6 +66,21 @@ alloy _phase start "$CHANGE_DIR" finish
 ### [Step 1/3] 前置检查
 
 > finish 仅操作 `feature_branch`。worktree-branch 已在 archive 阶段合入 feature_branch 并清理；finish 看不到 worktree-branch，也不应再去找它（task #26 注释）。
+
+**⛔ HARD_STOP（阶段入口必执行）：先解析 archive 路径 + 记录阶段开始时间**
+
+> 先解析 archive 路径再调用 `_phase start`——archive 阶段已将 change 移入 `archive/`，
+> `openspec/changes/<name>/` 为空目录，直接调用会误创建残留 `.alloy.yaml`。
+
+```bash
+ARCHIVE_DIR=$(ls -d openspec/changes/archive/*-<name> 2>/dev/null | sort -r | head -1)
+CHANGE_DIR="${ARCHIVE_DIR:-openspec/changes/<name>}"
+alloy _phase start "$CHANGE_DIR" finish
+```
+
+> 必须在 Step 1 任何前置检查之前执行——`_skill log` / `_artifact commit` 都依赖 `phase_timings.finish.started_at` 已存在。
+>
+> `alloy _phase start` 原子完成：幂等写 `phase_timings.finish.started_at` + git add 限路径 + commit。
 
 **0. Skill 预检（PRECONDITION_FAIL）：** skill: finishing-a-development-branch
 

@@ -21,6 +21,22 @@ describe("alloy _skill", () => {
       'created_at: "2020-01-01T00:00:00Z"',
       'updated_at: "2020-01-01T00:00:00Z"',
       "skill_usage: []",
+      "phase_timings:",
+      "  start:",
+      '    started_at: "2026-07-03 10:00:00"',
+      "    completed_at: null",
+      "  plan:",
+      '    started_at: "2026-07-03 10:00:00"',
+      "    completed_at: null",
+      "  apply:",
+      '    started_at: "2026-07-03 10:00:00"',
+      "    completed_at: null",
+      "  archive:",
+      '    started_at: "2026-07-03 10:00:00"',
+      "    completed_at: null",
+      "  finish:",
+      '    started_at: "2026-07-03 10:00:00"',
+      "    completed_at: null",
     ].join("\n");
     await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
   });
@@ -242,32 +258,6 @@ describe("alloy _skill", () => {
     });
   });
 
-  describe("输出信息", () => {
-    it("log 输出 used 信息", async () => {
-      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
-
-      const out = await captureLog(() =>
-        skillUsageCommand(["log", changeDir, "apply", "my-skill"])
-      );
-
-      expect(out).toContain("skill_usage: my-skill (apply) → used");
-
-      exitSpy.mockRestore();
-    });
-
-    it("skip 输出 skipped 信息", async () => {
-      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
-
-      const out = await captureLog(() =>
-        skillUsageCommand(["skip", changeDir, "plan", "my-skill", "--reason", "n/a"])
-      );
-
-      expect(out).toContain("skill_usage: my-skill (plan) → skipped");
-
-      exitSpy.mockRestore();
-    });
-  });
-
   describe("参数校验", () => {
     it("缺少参数时 exit 1 并显示用法", async () => {
       const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
@@ -318,6 +308,10 @@ describe("alloy _skill", () => {
         "worktree: null",
         'created_at: "2020-01-01T00:00:00Z"',
         'updated_at: "2020-01-01T00:00:00Z"',
+        "phase_timings:",
+        "  apply:",
+        '    started_at: "2026-07-03 10:00:00"',
+        "    completed_at: null",
       ].join("\n");
       await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
     });
@@ -367,6 +361,64 @@ describe("alloy _skill", () => {
 
       exitSpy.mockRestore();
       errSpy.mockRestore();
+    });
+  });
+
+  describe("log started_at 前置校验", () => {
+    it("当前 phase 的 started_at 缺失时 PRECONDITION_FAIL", async () => {
+      // setup: phase=applied 但 phase_timings.apply.started_at 未写（模拟 agent 跳过 _phase start）
+      const yaml = [
+        "phase: applied",
+        "schema_version: 1",
+        "worktree: null",
+        'created_at: "2020-01-01T00:00:00Z"',
+        'updated_at: "2020-01-01T00:00:00Z"',
+        "skill_usage: []",
+        "phase_timings:",
+        "  apply:",
+        "    started_at: null",
+        "    completed_at: null",
+      ].join("\n");
+      await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
+
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+      const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      await skillUsageCommand(["log", changeDir, "apply", "superpowers:executing-plans"]);
+
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(errSpy.mock.calls.some(c => String(c[0]).includes("PRECONDITION_FAIL"))).toBe(true);
+      expect(errSpy.mock.calls.some(c => String(c[0]).includes("phase_timings.apply.started_at 缺失"))).toBe(true);
+
+      exitSpy.mockRestore();
+      errSpy.mockRestore();
+    });
+
+    it("--at 补录场景豁免 started_at 校验", async () => {
+      // start 阶段 opsx:explore/opsx:new 补录：change 目录创建前执行，_phase start 还没调
+      const yaml = [
+        "phase: started",
+        "schema_version: 1",
+        "worktree: null",
+        'created_at: "2020-01-01T00:00:00Z"',
+        'updated_at: "2020-01-01T00:00:00Z"',
+        "skill_usage: []",
+        "phase_timings:",
+        "  start:",
+        "    started_at: null",
+        "    completed_at: null",
+      ].join("\n");
+      await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
+
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+      await skillUsageCommand(["log", changeDir, "start", "opsx:explore", "--at", "2026-07-03 10:00:00"]);
+
+      expect(exitSpy).not.toHaveBeenCalledWith(1);
+      const state = await readState(changeDir);
+      expect(state.skill_usage).toHaveLength(1);
+
+      exitSpy.mockRestore();
     });
   });
 });

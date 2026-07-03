@@ -58,6 +58,21 @@ export async function skillUsageCommand(args: string[]): Promise<void> {
   // 不传 --at 时用当前时间——补录时刻，非实际使用时刻）
   const now = at || formatTimestamp();
 
+  // 前置校验：当前 stage 的 started_at 必须已存在（agent 跳过 _phase start 时早期拦截）
+  // --at 补录场景豁免（start 阶段 opsx:explore/opsx:new 在 _phase start 之前执行）
+  if (!at) {
+    const stageKey = stage as keyof typeof state.phase_timings;
+    const timings = (state.phase_timings ?? {}) as Record<string, { started_at: string | null; completed_at: string | null } | undefined>;
+    const stageTiming = timings[stageKey];
+    if (!stageTiming?.started_at) {
+      console.error(`⛔ [PRECONDITION_FAIL] phase_timings.${stage}.started_at 缺失`);
+      console.error(`  _skill log 拒绝执行——agent 可能跳过了阶段入口的 _phase start 调用。`);
+      console.error(`  修复:先运行 alloy _phase start ${changeDir} ${stage},再运行 _skill log。`);
+      process.exit(1);
+      return;
+    }
+  }
+
   // 幂等：同一 skill+stage 组合已存在时更新
   const existing = state.skill_usage.findIndex(
     r => r.skill === skill && r.stage === stage

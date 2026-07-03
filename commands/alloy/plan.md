@@ -6,7 +6,7 @@ tags: [alloy, workflow]
 spec: 01-product-spec/02-plan-spec.md
 behaviors:
   preconditions: 7
-  hard_stops:    19
+  hard_stops:    20
   user_gates:    9
   warns:         1
   artifacts: [proposal, design, specs, tasks, plans]
@@ -34,12 +34,6 @@ behaviors:
 
 **调用外部命令或技能前，先输出标题和状态描述，再执行操作。**
 
-**捕获阶段启动时间 + 独立"阶段开始"commit**（幂等，重入时 started_at 不覆盖）：
-```bash
-alloy _phase start openspec/changes/<name> plan
-```
-> `alloy _phase start` 原子完成：幂等写 `phase_timings.plan.started_at` + git add 限路径 + commit。产生独立的"阶段开始"commit（仅 .alloy.yaml），不并入后续制品 commit。
-
 ---
 
 ### Red Flags（第三层防御——任一借口出现即 STOP）
@@ -61,10 +55,21 @@ alloy _phase start openspec/changes/<name> plan
 | "想确保 skill_usage 落地，_skill log 后单独 commit 一下" | ⛔ HARD_STOP：`_artifact commit` 的 git add 含 .alloy.yaml，会一起 commit。单独 commit 产生冗余的"记录技能使用"commit，与制品 commit 分离。 |
 | "plans 锁定后的提示用户已知，省了吧" | ⛔ HARD_STOP：回退后上下文已变，用户需重新知道 apply 阶段的变更边界。提示必须输出，禁省略。 |
 | "start 流程已重新走完，自然进 plan" | ⛔ HARD_STOP：回退改变了需求基线，NO AUTO ADVANCE 要求用户明确指示才进 plan。停在 start 等待用户指示。 |
+| "沿用 writing-plans 技能原文流程，末尾问 Which approach" | ⛔ HARD_STOP：技能固有行为，Alloy 注入流程覆盖压制。执行策略决策时机在 apply，不在 plan——plan 只产出推荐快照。违反字面 = 违反精神：哪怕「技能原文里有这一步」，也算违反。 |
 
 ---
 
 ### [Step 0/3] 前置检查
+
+**⛔ HARD_STOP（阶段入口必执行）：先记录阶段开始时间**
+
+```bash
+alloy _phase start openspec/changes/<name> plan
+```
+
+> 必须在 Step 0 任何前置检查之前执行——`_skill log` / `_artifact commit` 都依赖 `phase_timings.plan.started_at` 已存在，跳过会导致后续命令 PRECONDITION_FAIL。
+>
+> `alloy _phase start` 原子完成：幂等写 `phase_timings.plan.started_at` + git add 限路径 + commit。产生独立的"阶段开始"commit（仅 .alloy.yaml），不并入后续制品 commit。
 
 1. **change 目录存在 + draft.md 存在**（⛔ PRECONDITION_FAIL）：
    - change 不存在 → 引导 `/alloy:start <name>` 创建
@@ -414,7 +419,37 @@ tasks 审批通过并 commit 后，加载 `superpowers:writing-plans` 生成 pla
 - 传入 tasks + specs + design 作为上下文
 - **遵循 writing-plans 完整原始流程**——从任务拆解到执行交接
 - 保存路径：`openspec/changes/<name>/plans.md`（非默认的 `docs/superpowers/plans/`）
-- writing-plans 自行决定执行策略，写入 frontmatter（`strategy` + `reason`）
+- writing-plans 分析任务特征后，将**推荐**策略写入 frontmatter（`strategy` + `reason`）——此为 plan 阶段推荐快照，非最终决策
+
+**Alloy 流程覆盖（注入 writing-plans）：** 传入 tasks + specs + design 时，追加以下流程覆盖指令到 writing-plans 调用上下文，参照 start.md 对 brainstorming 的同款手法：
+
+```
+**Alloy 流程覆盖：** 本调用在 Alloy plan 流程内，writing-plans 完成后产出是
+openspec/changes/<name>/plans.md，不是 docs/superpowers/plans/ 文件。
+
+## 执行策略（strategy）—— 闸门节点
+
+plan 阶段只产出「推荐」，不决策。决策在 apply。
+
+[HARD_STOP] writing-plans 末尾「Two execution options / Which approach?」
+询问在 Alloy 流程内必须跳过——执行策略决策时机在 apply，不在 plan。
+
+无例外：
+- 不要「用户在 plan 阶段就想选」——时机未到
+- 不要「先问 plan 阶段，apply 再确认一次」——重复询问制造决策漂移
+- 不要「writing-plans 技能原文里有这一步」——技能固有行为，Alloy 注入覆盖
+
+违反字面 = 违反精神：哪怕「沿用技能原文流程」，也算违反——
+Alloy 委托 skill 时注入流程覆盖是该模式的设计，不是可选。
+
+writing-plans 应做：分析任务特征 → 将推荐策略写入 plans.md frontmatter
+strategy + reason 字段（此为 plan 阶段推荐快照，非最终决策）。
+
+请跳过 writing-plans checklist 中的「Invoke implementation skill」步骤
+（apply 阶段才加载 SDD/EP）。
+
+**交互风格：** 使用 AskUserQuestion，不用纯文本 (a)(b)(c)。
+```
 
 ```bash
 alloy _skill log openspec/changes/<name> plan superpowers:writing-plans
