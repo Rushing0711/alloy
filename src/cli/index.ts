@@ -418,6 +418,11 @@ async function main() {
       await retroCommand(restArgs);
       break;
     }
+    case "_archive": {
+      const { archiveCommand } = await import("./commands/internal/archive.js");
+      await archiveCommand(restArgs);
+      break;
+    }
     default:
       console.error(`未知命令: ${command}`);
       console.log(USAGE);

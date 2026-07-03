@@ -131,57 +131,21 @@ fi
 正在归档——Delta Spec 合并到主 spec → 移入 archive/...
 ```
 
-**[HARD_STOP] 禁止 agent 跳过 `/opsx:archive` CLI 自行归档。**
-**违反字面 = 违反精神：哪怕"openspec/specs/ 为空（新项目首 change）"、"看起来没有主 spec 可 sync"、**
-**"change 的 specs/ 内容简单直接 mv 过去"——也必须调用 `/opsx:archive` 让 openspec archive CLI 执行。**
+**[HARD_STOP] 禁止 agent 跳过 `alloy _archive` 自行归档。**
+**违反字面 = 违反精神：哪怕"openspec/specs/ 为空（新项目首 change）"、"看起来没有主 spec 可 sync"、"change 的 specs/ 内容简单直接 mv 过去"——也必须调用 `alloy _archive` 让 openspec archive CLI 执行。**
 **新项目首 change 的 delta specs 必须作为初始主 spec 写入 openspec/specs/，不可跳过。**
 **agent 自行 `mv openspec/changes/<name> openspec/changes/archive/...` = 绕过 CLI = delta specs 永久丢失 promote 机会。**
 
-调用 `/opsx:archive`，传入 change name。该命令自动完成 Delta Spec 合并 + 目录移动。自有幂等检查——已归档则 Skip。
-
-**错误处理（HARD_STOP）：** 返回错误 → ⛔ `[HARD_STOP] /opsx:archive 失败，归档中止`。不可用 → 引导 `alloy init`。**禁止：忽略错误继续后续步骤——Delta Spec 未合并时主 spec 与代码已分叉，强行推进 phase 会永久封存分叉。**
+调用 `alloy _archive`，传入 change dir。该命令原子完成：调用 `openspec archive` CLI + 校验 Delta Spec promote + 校验目录移动。agent 禁自行 mkdir/cp/mv 模拟。
 
 ```bash
 alloy _skill log openspec/changes/<name> archive opsx:archive
+alloy _archive openspec/changes/<name>
 ```
 
-**Delta Spec promote 硬校验（PRECONDITION_FAIL）：** `/opsx:archive` 返回成功 ≠ spec 真被 promote——中等模型 agent 常见反模式是看到 `openspec/specs/` 为空（新项目首 change），误判"无需 sync"，自行 `mv openspec/changes/<name> openspec/changes/archive/...` 跳过 `openspec archive` CLI，导致 delta specs 永久丢失 promote 机会。必须**逐 capability 验证**主 spec 已写入。
+**错误处理（HARD_STOP）：** `alloy _archive` 返回 PRECONDITION_FAIL → ⛔ `[HARD_STOP] 归档中止`。**禁止：忽略错误继续后续步骤——Delta Spec 未合并时主 spec 与代码已分叉，强行推进 phase 会永久封存分叉。** 禁止 agent 自行 mkdir/cp/mv 补救——必须重调 `alloy _archive`。
 
-```bash
-ARCHIVE_DIR="openspec/changes/archive/$(date +%Y-%m-%d)-<name>"
-
-if [ ! -d "$ARCHIVE_DIR" ]; then
-  echo "⛔ [PRECONDITION_FAIL] 归档目录不存在: $ARCHIVE_DIR"
-  echo "  /opsx:archive 未完成目录移动——可能 agent 自行实现归档跳过了 openspec archive CLI。"
-  echo "  请重新调用 /opsx:archive，禁止用 git mv / mv 手动模拟归档。"
-  exit 1
-fi
-
-if [ -d "$ARCHIVE_DIR/specs" ]; then
-  MISSING_SPECS=""
-  for CAP_DIR in "$ARCHIVE_DIR"/specs/*/; do
-    [ -d "$CAP_DIR" ] || continue
-    CAP=$(basename "$CAP_DIR")
-    if [ ! -f "openspec/specs/$CAP/spec.md" ]; then
-      MISSING_SPECS="$MISSING_SPECS $CAP"
-    fi
-  done
-
-  if [ -n "$MISSING_SPECS" ]; then
-    echo "⛔ [PRECONDITION_FAIL] Delta Spec 未 promote 到主 spec："
-    echo "  缺失 capabilities:$MISSING_SPECS"
-    echo "  归档目录: $ARCHIVE_DIR/specs/"
-    echo "  主 spec:  openspec/specs/"
-    echo ""
-    echo "  /opsx:archive 未执行真正的 spec sync——agent 可能自行 mv 目录跳过了 openspec archive CLI。"
-    echo "  即使 openspec/specs/ 原本为空（新项目首 change），delta specs 也必须作为初始主 spec 写入，不可跳过。"
-    echo "  禁止用 git mv / mv 手动补齐——必须重新调用 /opsx:archive 让 openspec archive CLI 执行合并。"
-    exit 1
-  fi
-else
-  echo "ℹ️ change 无 specs/ 目录（纯 spec-less change），跳过 sync 校验"
-fi
-```
+> `alloy _archive` 不 commit——归档变更提交由后续步骤（USER_GATE 审查 diff 后）执行。`openspec archive` CLI 内部可能产生 commit，agent 不自行 commit 归档目录移动。
 
 **Delta Spec 合并审查（USER_GATE，task #22 强制 diff 注入）：**
 
