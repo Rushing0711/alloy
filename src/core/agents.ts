@@ -8,8 +8,6 @@ export const KNOWN_AGENTS: AgentInfo[] = [
     label: "Claude Code",
     supportsColonCommands: true,
     commandsDir: ".claude/commands/",
-    instructionFile: "CLAUDE.md",
-    instructionFormat: "md",
     interactiveTool: "askuserquestion",
     settingsFile: ".claude/settings.json",
     settingsContent: { worktree: { baseRef: "head" } },
@@ -19,8 +17,6 @@ export const KNOWN_AGENTS: AgentInfo[] = [
     label: "CodeBuddy",
     supportsColonCommands: true,
     commandsDir: ".codebuddy/commands/",
-    instructionFile: "AGENTS.md",
-    instructionFormat: "md",
     interactiveTool: "none",
   },
   {
@@ -28,8 +24,6 @@ export const KNOWN_AGENTS: AgentInfo[] = [
     label: "Qoder",
     supportsColonCommands: true,
     commandsDir: ".qoder/commands/",
-    instructionFile: "AGENTS.md",
-    instructionFormat: "md",
     interactiveTool: "none",
   },
   {
@@ -37,8 +31,6 @@ export const KNOWN_AGENTS: AgentInfo[] = [
     label: "Cursor",
     supportsColonCommands: false,
     commandsDir: ".cursor/commands/",
-    instructionFile: ".cursor/rules/alloy.mdc",
-    instructionFormat: "mdc",
     interactiveTool: "partial",
   },
   {
@@ -46,8 +38,6 @@ export const KNOWN_AGENTS: AgentInfo[] = [
     label: "OpenCode",
     supportsColonCommands: false,
     commandsDir: ".opencode/commands/",
-    instructionFile: "AGENTS.md",
-    instructionFormat: "md",
     interactiveTool: "question",
   },
   {
@@ -56,8 +46,6 @@ export const KNOWN_AGENTS: AgentInfo[] = [
     supportsColonCommands: false,
     commandsDir: ".codex/prompts/",
     globalOnly: true,
-    instructionFile: "AGENTS.md",
-    instructionFormat: "md",
     interactiveTool: "none",
   },
   {
@@ -65,8 +53,6 @@ export const KNOWN_AGENTS: AgentInfo[] = [
     label: "Trae",
     supportsColonCommands: false,
     commandsDir: ".trae/commands/",
-    instructionFile: "AGENTS.md",
-    instructionFormat: "md",
     interactiveTool: "none",
   },
   {
@@ -74,8 +60,6 @@ export const KNOWN_AGENTS: AgentInfo[] = [
     label: "Pi",
     supportsColonCommands: false,
     commandsDir: ".pi/prompts/",
-    instructionFile: "AGENTS.md",
-    instructionFormat: "md",
     interactiveTool: "none",
   },
 ];

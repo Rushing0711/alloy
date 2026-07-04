@@ -60,7 +60,6 @@ describe("deployCommands", () => {
   it("冒号版 agent 部署到 alloy/ 子目录", async () => {
     const opts: DeployOptions = {
       scope: "project",
-      injectDepth: "medium",
       projectPath,
       targetAgents: [{ id: "claude-code", label: "CC", supportsColonCommands: true, commandsDir: ".claude/commands/" }],
     };
@@ -77,7 +76,6 @@ describe("deployCommands", () => {
   it("横线版 agent 部署到根 commands 目录", async () => {
     const opts: DeployOptions = {
       scope: "project",
-      injectDepth: "medium",
       projectPath,
       targetAgents: [{ id: "cursor", label: "Cursor", supportsColonCommands: false, commandsDir: ".cursor/commands/" }],
     };
@@ -94,7 +92,6 @@ describe("deployCommands", () => {
   it("Codex project 模式跳过部署", async () => {
     const opts: DeployOptions = {
       scope: "project",
-      injectDepth: "medium",
       projectPath,
       targetAgents: [{ id: "codex", label: "Codex", supportsColonCommands: false, commandsDir: ".codex/prompts/", globalOnly: true }],
     };
@@ -105,7 +102,6 @@ describe("deployCommands", () => {
   it("多 agent 同时部署", async () => {
     const opts: DeployOptions = {
       scope: "project",
-      injectDepth: "medium",
       projectPath,
       targetAgents: [
         { id: "claude-code", label: "CC", supportsColonCommands: true, commandsDir: ".claude/commands/" },
@@ -129,7 +125,6 @@ describe("deployCommands", () => {
 
     const opts: DeployOptions = {
       scope: "project",
-      injectDepth: "medium",
       projectPath,
       targetAgents: [{ id: "claude-code", label: "CC", supportsColonCommands: true, commandsDir: ".claude/commands/" }],
     };
@@ -146,7 +141,6 @@ describe("deployCommands", () => {
 
     const opts: DeployOptions = {
       scope: "project",
-      injectDepth: "medium",
       projectPath,
       targetAgents: [{ id: "claude-code", label: "CC", supportsColonCommands: true, commandsDir: ".claude/commands/" }],
     };
@@ -159,7 +153,6 @@ describe("deployCommands", () => {
 
     const opts: DeployOptions = {
       scope: "project",
-      injectDepth: "medium",
       projectPath,
       targetAgents: [{ id: "claude-code", label: "CC", supportsColonCommands: true, commandsDir: ".claude/commands/" }],
     };
@@ -171,7 +164,6 @@ describe("deployCommands", () => {
   it("冒号版部署 references/ 子目录到 alloy/references/", async () => {
     const opts: DeployOptions = {
       scope: "project",
-      injectDepth: "medium",
       projectPath,
       targetAgents: [{ id: "claude-code", label: "CC", supportsColonCommands: true, commandsDir: ".claude/commands/" }],
     };
@@ -185,7 +177,6 @@ describe("deployCommands", () => {
   it("横线版部署 references/ 子目录到 commands/references/", async () => {
     const opts: DeployOptions = {
       scope: "project",
-      injectDepth: "medium",
       projectPath,
       targetAgents: [{ id: "cursor", label: "Cursor", supportsColonCommands: false, commandsDir: ".cursor/commands/" }],
     };
@@ -201,7 +192,6 @@ describe("deployCommands", () => {
     await rm(join(sourceDir, "references"), { recursive: true, force: true });
     const opts: DeployOptions = {
       scope: "project",
-      injectDepth: "medium",
       projectPath,
       targetAgents: [{ id: "claude-code", label: "CC", supportsColonCommands: true, commandsDir: ".claude/commands/" }],
     };
@@ -239,7 +229,6 @@ describe("deploySchema", () => {
   it("创建 openspec/ 目录并部署 schema", async () => {
     const opts: DeployOptions = {
       scope: "project",
-      injectDepth: "medium",
       projectPath,
       targetAgents: [],
     };
@@ -265,7 +254,6 @@ describe("deploySchema", () => {
 
     const opts: DeployOptions = {
       scope: "project",
-      injectDepth: "medium",
       projectPath,
       targetAgents: [],
     };
@@ -284,7 +272,6 @@ describe("deploySchema", () => {
 
     const opts: DeployOptions = {
       scope: "project",
-      injectDepth: "medium",
       projectPath,
       targetAgents: [],
     };
@@ -300,7 +287,6 @@ describe("deploySchema", () => {
   it("创建 specs/ 和 changes/ 子目录", async () => {
     const opts: DeployOptions = {
       scope: "project",
-      injectDepth: "medium",
       projectPath,
       targetAgents: [],
     };

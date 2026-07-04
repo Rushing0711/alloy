@@ -26,7 +26,7 @@ const USAGE = `
 alloy <command> [options]
 
 Commands:
-  init        [path] [--scope <project|global>] [--inject-depth <low|medium|high>] [--agents <id,id,...>]
+  init        [path] [--scope <project|global>] [--agents <id,id,...>]
               项目初始化：检测环境 → 安装依赖 → 部署 schema + skill
   status      [path|name] [--json]
               查看活跃 change 总览，指定 name 查看详情
@@ -50,7 +50,6 @@ alloy init [path] [options]
 
 选项:
   --scope <project|global>  安装范围，默认 project
-  --inject-depth <depth>    指令注入深度: low | medium | high（默认交互式询问）
   --agents <id,id,...>      非交互式模式，指定要安装的 AI 工具（逗号分隔）
                             可用的 agent: claude-code, codebuddy, qoder, cursor, opencode, codex, trae, pi
   --help, -h                显示本帮助
@@ -226,7 +225,6 @@ async function main() {
         args: restArgs,
         options: {
           scope: { type: "string" },
-          "inject-depth": { type: "string" },
           agents: { type: "string" },
         },
         strict: true,
@@ -252,25 +250,8 @@ async function main() {
         targetAgents = await selectTargetAgents();
       }
 
-      const injectDepthRaw = values["inject-depth"] as string | undefined;
-      let injectDepth: "low" | "medium" | "high";
-      let injectDepthFromCli = false;
-      if (injectDepthRaw) {
-        if (!["low", "medium", "high"].includes(injectDepthRaw)) {
-          console.error(`无效的 --inject-depth 值: ${injectDepthRaw}（支持: low, medium, high）`);
-          process.exit(1);
-        }
-        injectDepth = injectDepthRaw as "low" | "medium" | "high";
-        injectDepthFromCli = true;
-      } else {
-        // 未传 --inject-depth，由 initCommand 内部交互式选择或读 config
-        injectDepth = "medium";  // 占位，initCommand 内部会覆盖
-      }
-
       await initCommand({
         scope,
-        injectDepth,
-        injectDepthFromCli,
         projectPath,
         targetAgents,
       });

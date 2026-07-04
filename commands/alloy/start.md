@@ -133,11 +133,11 @@ date "+%Y-%m-%d %H:%M:%S"
 
 ### [Step 1] explore 探测 + 确定主题
 
-**捕获 opsx:explore 开始时间（供步骤 8 补录技能使用）：**
+**捕获 opsx:explore 开始时间（供步骤 6 补录技能使用）：**
 ```bash
 EXPLORE_START=$(date "+%Y-%m-%d %H:%M:%S")
 ```
-> bash 变量在工具调用间不持久——将 EXPLORE_START 输出值记在上下文中，步骤 8 补录时作为 `--at` 参数传入。
+> bash 变量在工具调用间不持久——将 EXPLORE_START 输出值记在上下文中，步骤 6 补录时作为 `--at` 参数传入。
 
 加载 `opsx:explore` 技能，按其指引探索项目上下文：
 
@@ -151,7 +151,7 @@ EXPLORE_START=$(date "+%Y-%m-%d %H:%M:%S")
 
 **额外上下文：** 扫描 `openspec/changes/archive/` 下最近 3 个 `retrospective.md`，提取 §5 意外发现、§6 值得推广、§4 技能跳过模式，作为后续 brainstorming 参考。
 
-> explore 的产出是"主题名 + 探查发现"，不深入需求设计。深入需求在步骤 9 的 brainstorming（change 目录已存在后）进行。
+> explore 的产出是"主题名 + 探查发现"，不深入需求设计。深入需求在步骤 8 的 brainstorming（change 目录已存在后）进行。
 >
 > ⛔ [HARD_STOP] explore 阶段禁问设计细节——文件名 / 参数方式 / 存放位置 / 行为逻辑等属于需求设计,在 Step 9 brainstorming 确认。
 > 违反字面 = 违反精神：哪怕"顺便问一下文件名效率高",也算违反——explore 只验证 topic 可行性 + 补充上下文,设计细节提前问 = 阶段错位 = 后续 brainstorming 无内容可做。
@@ -164,24 +164,17 @@ EXPLORE_START=$(date "+%Y-%m-%d %H:%M:%S")
 > 违反字面 = 违反精神：哪怕"主题已明确顺便问参数方式效率高"，也算违反——设计细节属于 Step 9 brainstorming，提前问 = 阶段错位 = brainstorming 无内容可做。
 > AskUserQuestion 一次最多 4 个问题，但 4 个问题都必须围绕 topic 本身（确认 / 调整 / 方向选择），禁夹带设计细节。常见违规模式：把"脚本如何接收 name?""文件放哪个目录?""用什么参数格式?"等设计问题塞进主题确认 AskUserQuestion——这些都是 Step 9 brainstorming 的内容。
 
-> 主题确认后**直接进入步骤 1（change name 确认）**，不要求用户重新输入 `/alloy:start <topic>`——主题已在流程内确认。
+> 主题确认后**直接进入步骤 1（change name + 分支决策）**，不要求用户重新输入 `/alloy:start <topic>`——主题已在流程内确认。
 
 ---
 
 用户确认主题后，执行以下步骤创建 change：
 
-> **git 自救禁令（§3.5.1 内嵌约束，HARD_STOP）：** 步骤 3 分支创建/切换 / 步骤 11 commit 任何环节失败，禁 agent 运行 `git reset --hard` / `git checkout .` / `git restore .` / `git stash` / `git clean -fd` / `git push --force` —— 退出 skill 让用户处理是唯一合法路径。
+> **git 自救禁令（§3.5.1 内嵌约束，HARD_STOP）：** 步骤 1 ④ 分支创建/切换 / 步骤 10 commit 任何环节失败，禁 agent 运行 `git reset --hard` / `git checkout .` / `git restore .` / `git stash` / `git clean -fd` / `git push --force` —— 退出 skill 让用户处理是唯一合法路径。
 >
 > **git add 限路径（§5.2.1 内嵌约束，HARD_STOP）：** 所有 commit 用精确路径（`.claude/` `openspec/` `CLAUDE.md` 等明确列举），禁 `-A`/`-a`/`.`。违反字面 = 违反精神：哪怕"反正只改了已知文件"，也禁通配——可能把 `.superpowers/` 临时目录或测试残留一并 commit。
 
-1. **建议 change name**——kebab-case，🔴 USER_GATE: 确认 change name（建议名 / 自定义）。
-
-   > [HARD_STOP] **未确认时禁止继续步骤 2-9。**
-   > 违反字面 = 违反精神：哪怕"name 大概就这个先建分支"，也算违反——name 是 directory + branch + records 主键。
-
-2. **git 仓库前置已由 `alloy init` 保证**——状态检测第零步已校验 `git rev-parse --git-dir` 通过。本步骤无操作，进入步骤 3 分支选择。
-
-3. **分支选择**——创建 change 目录之前完成，确保所有制品落在 feature 分支上：
+1. **change name + 分支决策 + 创建 + 验证**（🔴 USER_GATE 合并——一次确认 change name 与分支名；⛔ HARD_STOP 验证）：
 
    **① 主分支读取：** 主分支在 `alloy init` 阶段已确认并写入 `openspec/config.yaml`，此处直接读取：
    ```bash
@@ -193,55 +186,60 @@ EXPLORE_START=$(date "+%Y-%m-%d %H:%M:%S")
      exit 1
    fi
    ```
-   > alloy init 时已 USER_GATE 确认主分支并写入 config；若仓库无 commit 还会创建初始 commit 锁定 main 分支。start 阶段不再重复确认。
+   > alloy init 时已 USER_GATE 确认主分支并写入 config；若仓库无 commit 还会创建初始 commit 锁定 main 分支。start 阶段不再重复确认。git 仓库前置也已由 alloy init 保证（状态检测第零步已校验 `git rev-parse --git-dir` 通过）。
 
-   **② 分支决策（🔴 USER_GATE，开新/接续统一——按 spec L36-42）：** 检测当前分支位置,根据状态给选项：
-
+   **② 当前分支检测：**
    ```bash
    CURRENT_BRANCH=$(git branch --show-current)
-   MAIN_BRANCH=$(alloy _config read . main_branch)
    ```
 
-   - **当前分支 = main_branch** → 🔴 USER_GATE: 确认分支名（默认 `feature/<change-name>`,可自定义,过白名单校验）→ 新建
-   - **当前分支 ≠ main_branch** → 🔴 USER_GATE 选择：
-     - (a) 新建 `feature/<change-name>`（推荐,可自定义,过白名单校验）—— 从 main_branch 创建确保 commit 链干净
-     - (b) 用当前分支（`feature_branch` = `$CURRENT_BRANCH`,跳过新建）—— 适合用户已提前创建分支想在此开发
+   **③ change name + 分支决策 USER_GATE（🔴 AskUserQuestion，合并——一次确认 change name 与分支名）：**
+   - **当前分支 = main_branch** → 选项：
+     - (a) change name = `<建议名>`（kebab-case），分支 = `feature/<建议名>`（从 main 新建）← 默认
+     - (b) 自定义 change name / 分支名（过白名单校验）
+   - **当前分支 ≠ main_branch** → 选项：
+     - (a) change name = `<建议名>`，分支 = `feature/<建议名>`（从 main 新建）← 默认
+     - (b) 自定义 change name / 分支名（过白名单校验）
+     - (c) change name = `<建议名>`，用当前分支（`feature_branch` = `$CURRENT_BRANCH`，跳过新建）—— 适合用户已提前创建分支想在此开发
 
-   > **选定分支名记为 `$FEATURE_BRANCH`**（USER_GATE 结果）——步骤 5 `_state init` 用此变量写入 .alloy.yaml 的 feature_branch 字段,禁写死 `feature/<name>`。
-   > 选 (a) 新建：`$FEATURE_BRANCH` = 用户确认的新分支名（默认 `feature/<change-name>` 或自定义）
-   > 选 (b) 用当前：`$FEATURE_BRANCH` = `$CURRENT_BRANCH`（当前分支名）
+   > **选定 change name 记为 `$CHANGE_NAME`，分支名记为 `$FEATURE_BRANCH`**——步骤 4 `_state init` 用 `$FEATURE_BRANCH` 写入 .alloy.yaml 的 feature_branch 字段，禁写死 `feature/<name>`。
+   > 选 (a) 新建：`$CHANGE_NAME` = 建议名，`$FEATURE_BRANCH` = `feature/<建议名>`
+   > 选 (b) 自定义：`$CHANGE_NAME` = 用户输入，`$FEATURE_BRANCH` = 用户输入（默认 `feature/<change-name>`，可调整）
+   > 选 (c) 用当前：`$CHANGE_NAME` = 建议名，`$FEATURE_BRANCH` = `$CURRENT_BRANCH`
 
-   选 (a) 新建：
+   > [HARD_STOP] **未确认时禁止继续步骤 2-9。**
+   > 违反字面 = 违反精神：哪怕"name 大概就这个先建分支"，也算违反——name 是 directory + branch + records 主键。
+
+   **④ 分支创建（选 (a)/(b) 新建时）：**
    ```bash
-   git checkout -b <branch-name> "$MAIN_BRANCH"
+   git checkout -b "$FEATURE_BRANCH" "$MAIN_BRANCH"
    ```
-   选 (b) 用当前：跳过创建。
+   选 (c) 用当前：跳过创建。
 
-   新建分支命名：默认 `feature/<change-name>`,用户可自定义。
-
-   **⛔ PRECONDITION_FAIL 白名单校验**（读取 `commands/alloy/references/branch-naming.md`）：自定义分支名必须以 `feature/` `fix/` `docs/` `refactor/` `test/` `chore/` 之一开头,后缀 kebab-case,且不与主分支同名。校验失败 → USER_GATE 让用户重新输入合法名称,**禁 agent 自动改写后继续**。
+   **⛔ PRECONDITION_FAIL 白名单校验**（读取 `commands/alloy/references/branch-naming.md`）：自定义分支名必须以 `feature/` `fix/` `docs/` `refactor/` `test/` `chore/` 之一开头，后缀 kebab-case，且不与主分支同名。校验失败 → USER_GATE 让用户重新输入合法名称，**禁 agent 自动改写后继续**。
 
    ⛔ [HARD_STOP] **stash → 分支决策 → 才能继续后续步骤。不可逾越。**
    无例外：
    - 不要"先写 proposal 再建分支"
    - 不要"先生成制品再补分支"
-   - 不要"在当前分支上继续,分支后面再说"（除非用户在 USER_GATE 明确选 (b) 用当前分支）
+   - 不要"在当前分支上继续，分支后面再说"（除非用户在 USER_GATE 明确选 (c) 用当前分支）
    - 不要"分支已存在就跳过创建直接进入下一步"
-   违反字面 = 违反精神：哪怕"反正马上要生成 draft,先写了再切分支"——制品必须一诞生就在正确分支上。跳过分支决策 = 制品路径错位,后续 commit 污染错误分支。
+   违反字面 = 违反精神：哪怕"反正马上要生成 draft，先写了再切分支"——制品必须一诞生就在正确分支上。跳过分支决策 = 制品路径错位，后续 commit 污染错误分支。
 
-   开新 change 与接续场景统一走此分支决策 USER_GATE,不再跳过。
+   开新 change 与接续场景统一走此分支决策 USER_GATE，不再跳过。
 
-   **③ 分支验证（⛔ HARD_STOP）：** 创建/切换后必须验证才能继续：
+   **⑤ 分支验证（⛔ HARD_STOP，无 USER_GATE——技术校验通过继续，失败回退）：**
    ```bash
    CURRENT=$(git branch --show-current)
    echo "当前分支: $CURRENT | 主分支: $MAIN_BRANCH"
    ```
-   `$CURRENT` = `$MAIN_BRANCH` → ⛔ HARD_STOP，返回重新选择
-   `$CURRENT` ≠ `$MAIN_BRANCH` → 🔴 USER_GATE: 确认分支状态正确
+   `$CURRENT` = `$MAIN_BRANCH` → ⛔ HARD_STOP，回退到 ③ 重新 USER_GATE
+   `$CURRENT` ≠ `$MAIN_BRANCH` → 校验通过，继续步骤 2
 
-   > [HARD_STOP] **未通过验证或用户未确认时，禁止执行步骤 4-9。**
+   > 分支验证是技术校验，不是用户决策——验证通过直接继续，失败回退重新 USER_GATE，无 USER_GATE 确认。
+   > [HARD_STOP] **未通过验证时，禁止执行步骤 2-9。**
 
-3.5. **opsx:new 目录冲突预检**（⛔ PRECONDITION_FAIL，task #12）
+2. **opsx:new 目录冲突预检**（⛔ PRECONDITION_FAIL，task #12）
 
    ```bash
    if [ -d "openspec/changes/<name>" ]; then
@@ -259,9 +257,9 @@ EXPLORE_START=$(date "+%Y-%m-%d %H:%M:%S")
    > [HARD_STOP] agent 不得自动选 (a) / (b) / (c)——必须由用户明确决策。
    > 违反字面 = 违反精神：哪怕"目录看起来是空的"或"看起来是上次中断的"，也禁 agent 自动复用。
 
-4. **调用 `/opsx:new <name>`** 创建 change 目录（前置：步骤 3 ③ 验证已通过 + 步骤 3.5 目录冲突已解决）
+3. **调用 `/opsx:new <name>`** 创建 change 目录（前置：步骤 1 ⑤ 验证已通过 + 步骤 2 目录冲突已解决）
 
-   **捕获 opsx:new 开始时间（供步骤 8 补录技能使用）：**
+   **捕获 opsx:new 开始时间（供步骤 6 补录技能使用）：**
    ```bash
    OPSX_NEW_START=$(date "+%Y-%m-%d %H:%M:%S")
    ```
@@ -280,52 +278,52 @@ EXPLORE_START=$(date "+%Y-%m-%d %H:%M:%S")
    fi
    ```
 
-5. **初始化 state（先于 _phase start 和 _skill log，确保时间字段在最早时刻写入）：**
+4. **初始化 state（先于 _phase start 和 _skill log，确保时间字段在最早时刻写入）：**
    ```bash
    alloy _state init openspec/changes/<name> --at "$EXPLORE_START" --feature-branch "$FEATURE_BRANCH"
    ```
    > 顺序硬约束：`_state init` 必须在 `_phase start` / `_skill log` 之前——后两者在 .alloy.yaml 不存在时会隐式创建并用当前时间作为 created_at。`_state init` 先跑则字段写入受控。
    >
-   > **`--at "$EXPLORE_START"` 让顶层 `started_at` 回填为全周期开始时间**（`/alloy:start` 敲下时刻，= Step 1 捕获的 EXPLORE_START），与步骤 7 的 `_phase start --at "$EXPLORE_START"` 同源。`created_at` 仍是文件创建时间（opsx:new 后），两者语义不同：created_at 记文件诞生，started_at 记周期起点。
+   > **`--at "$EXPLORE_START"` 让顶层 `started_at` 回填为全周期开始时间**（`/alloy:start` 敲下时刻，= Step 1 捕获的 EXPLORE_START），与步骤 6 的 `_phase start --at "$EXPLORE_START"` 同源。`created_at` 仍是文件创建时间（opsx:new 后），两者语义不同：created_at 记文件诞生，started_at 记周期起点。
    >
-   > **`--feature-branch "$FEATURE_BRANCH"` 一次成型写入 feature_branch**——用步骤 3 分支决策选定的分支名（变量）,禁写死 `feature/<name>`。选 (b) 用当前分支时 `$FEATURE_BRANCH` = 当前分支名,写死会导致 .alloy.yaml 与实际分支不一致。前置：步骤 3 已完成分支决策。
+   > **`--feature-branch "$FEATURE_BRANCH"` 一次成型写入 feature_branch**——用步骤 1 分支决策选定的分支名（变量）,禁写死 `feature/<name>`。选 (c) 用当前分支时 `$FEATURE_BRANCH` = 当前分支名,写死会导致 .alloy.yaml 与实际分支不一致。前置：步骤 1 已完成分支决策。
 
-6. **基础设施 commit（幂等，已提交则跳过；§5.2.1 git add 限路径）——必须在阶段开始 commit 之前：**
+5. **基础设施 commit（幂等，已提交则跳过；§5.2.1 git add 限路径）——必须在阶段开始 commit 之前：**
    ```bash
    git add .claude/ .gitignore openspec/config.yaml openspec/schemas/ 2>/dev/null
    [ -f CLAUDE.md ] && git add CLAUDE.md 2>/dev/null
    git diff --cached --quiet || git commit -m "chore: 提交 alloy 基础设施文件"
    ```
 
-7. **补录技能使用（explore + new，带 --at 传入实际使用时间——这两个技能在 change 目录创建前/创建时执行，技能 log 只能补录）：**
+6. **补录技能使用（explore + new，带 --at 传入实际使用时间——这两个技能在 change 目录创建前/创建时执行，技能 log 只能补录）：**
 
    > **[HARD_STOP] 两个 `--at` 必须用各自步骤捕获的独立时间戳，禁用同一个值。**
    > 违反字面 = 违反精神：哪怕"时间差不多"、"先记一个后面改"——也禁止复用 `EXPLORE_START` 给 opsx:new。
    > called_at 语义是"技能实际调用时间"，两个技能在不同步骤调用，时间戳必须不同。
    >
-   > Step 1（opsx:explore）在 change 目录创建前执行，opsx:new 在步骤 4 创建 change 时执行。此处补录时**必须用各自执行时捕获的开始时间**（`--at`），不可用当前时间。
+   > Step 1（opsx:explore）在 change 目录创建前执行，opsx:new 在步骤 3 创建 change 时执行。此处补录时**必须用各自执行时捕获的开始时间**（`--at`），不可用当前时间。
    >
-   > brainstorming 在步骤 9（change 目录已存在后）执行，届时实时 `_skill log`，不用补录。
+   > brainstorming 在步骤 8（change 目录已存在后）执行，届时实时 `_skill log`，不用补录。
    >
    > **顺序：_skill log 在 _phase start 之前**——这样"记录 start 阶段开始时间"commit 时 skill_usage 已含 explore+new 记录。called_at 时间戳仍早于 phase start（用捕获的 EXPLORE_START/OPSX_NEW_START），阶段时间链语义正确。
 
    ```bash
-   # EXPLORE_START / OPSX_NEW_START 在 Step 1 / 步骤 4 执行时已捕获
+   # EXPLORE_START / OPSX_NEW_START 在 Step 1 / 步骤 3 执行时已捕获
    # ⛔ 禁止两个 --at 用同一个值——各自独立时间戳
    alloy _skill log openspec/changes/<name> start opsx:explore --at "$EXPLORE_START"
    alloy _skill log openspec/changes/<name> start opsx:new --at "$OPSX_NEW_START"
    ```
 
-8. **记录 worktree + 阶段开始 commit（原子命令，在 _skill log 之后——skill_usage 已含 explore+new）：**
+7. **记录 worktree + 阶段开始 commit（原子命令，在 _skill log 之后——skill_usage 已含 explore+new）：**
    ```bash
    alloy _state write openspec/changes/<name> worktree null
    alloy _phase start openspec/changes/<name> start --at "$EXPLORE_START"
    ```
    > `alloy _phase start` 原子完成：幂等写 `phase_timings.start.started_at` + git add 限路径 + commit。产生独立的"阶段开始"commit（仅 .alloy.yaml，含 started_at + feature_branch + worktree + skill_usage[explore+new]）。
    >
-   > **`--at "$EXPLORE_START"` 必传**——Step 1（opsx:explore）在 change 目录创建前执行，`_phase start` 在步骤 8 才能调用（需 change 目录存在）。若用当前时间，started_at 会晚于 explore/new 的技能使用时间，阶段时间链语义错乱。`EXPLORE_START` 是 start 阶段最早的动作，作为 started_at 补录时间最准确。
+   > **`--at "$EXPLORE_START"` 必传**——Step 1（opsx:explore）在 change 目录创建前执行，`_phase start` 在步骤 7 才能调用（需 change 目录存在）。若用当前时间，started_at 会晚于 explore/new 的技能使用时间，阶段时间链语义错乱。`EXPLORE_START` 是 start 阶段最早的动作，作为 started_at 补录时间最准确。
 
-9. **[Step 2] 需求设计——brainstorming（change 目录已存在，实时记录技能使用）：**
+8. **[Step 2] 需求设计——brainstorming（change 目录已存在，实时记录技能使用）：**
 
    **捕获 superpowers:brainstorming 开始时间（实时记录，不用补录）：**
    ```bash
@@ -380,15 +378,15 @@ EXPLORE_START=$(date "+%Y-%m-%d %H:%M:%S")
 
    > **交互风格恢复（HARD_STOP）：** brainstorming 已结束。从此刻起，所有 `🔴 USER_GATE` 首次呈现即必须调用平台原生交互工具——禁"先文本展示 (a)/(b) 再等待用户打字"。Claude Code 用 `AskUserQuestion`；其他平台按 `commands/alloy/references/interaction-style.md` §平台工具对照 降级。Agent 刚从 brainstorming 的"每次一个问题"模式出来，容易延续纯文本习惯——这是 Iron Law 违规。违反字面 = 违反精神：哪怕"就这一个确认用文本也行"、"先展示再问"，也算违反——首次即必须用平台交互工具。
 
-10. **生成 `draft.md` 审查窗口——start 阶段唯一的制品闸门：**
+9. **生成 `draft.md` 审查窗口——start 阶段唯一的制品闸门：**
 
     > 制品 draft ✓ 完成
     > [展示 draft.md 完整内容]
     > 🔴 USER_GATE: 确认锁定 draft（确认并继续提交 / 需要调整回 brainstorming）
 
-    选确认 → 步骤 11；选调整 → 回到步骤 9 brainstorming。
+    选确认 → 步骤 10；选调整 → 回到步骤 8 brainstorming。
 
-11. **提交——仅用户确认锁定后，执行以下步骤（基础设施与阶段开始已在前面独立 commit）：**
+10. **提交——仅用户确认锁定后，执行以下步骤（基础设施与阶段开始已在前面独立 commit）：**
 
     **commit 1/3——draft 制品 hash-lock + records（原子命令，内部完成 hash 计算 + records 写入 + git add 限路径 + commit；不含 phase_timings）：**
     ```bash

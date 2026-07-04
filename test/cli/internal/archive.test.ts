@@ -38,7 +38,7 @@ describe("alloy _archive", () => {
     await writeFile(join(changeDir, "specs/cli-greeting/spec.md"), "# spec", "utf-8");
 
     // 模拟 openspec archive CLI 已完成目录移动 + spec sync
-    const archiveDir = join(tmpDir, `openspec/changes/archive/2026-07-03-${changeName}`);
+    const archiveDir = join(tmpDir, `openspec/changes/archive/${new Date().toISOString().slice(0, 10)}-${changeName}`);
     await mkdir(archiveDir, { recursive: true });
     await mkdir(join(archiveDir, "specs/cli-greeting"), { recursive: true });
     await writeFile(join(archiveDir, "specs/cli-greeting/spec.md"), "# spec", "utf-8");
@@ -128,7 +128,7 @@ describe("alloy _archive", () => {
     await mkdir(join(changeDir, "specs/cli-greeting"), { recursive: true });
     await writeFile(join(changeDir, "specs/cli-greeting/spec.md"), "# spec", "utf-8");
 
-    const archiveDir = join(tmpDir, `openspec/changes/archive/2026-07-03-${changeName}`);
+    const archiveDir = join(tmpDir, `openspec/changes/archive/${new Date().toISOString().slice(0, 10)}-${changeName}`);
     await mkdir(join(archiveDir, "specs/cli-greeting"), { recursive: true });
     await writeFile(join(archiveDir, "specs/cli-greeting/spec.md"), "# spec", "utf-8");
     // 不创建 openspec/specs/cli-greeting/ —— 主 spec 缺失
@@ -158,7 +158,7 @@ describe("alloy _archive", () => {
 
   it("change 无 specs/ 目录时跳过 spec sync 校验（spec-less change）", async () => {
     // change 不含 specs/ 目录
-    const archiveDir = join(tmpDir, `openspec/changes/archive/2026-07-03-${changeName}`);
+    const archiveDir = join(tmpDir, `openspec/changes/archive/${new Date().toISOString().slice(0, 10)}-${changeName}`);
     await mkdir(archiveDir, { recursive: true });
     // archive 目录下也无 specs/（spec-less change）
 

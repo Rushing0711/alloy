@@ -254,6 +254,10 @@ alloy _state write "$ARCHIVE_DIR" worktree_merged_at "$WORKTREE_MERGED_AT"
 alloy _phase complete "$ARCHIVE_DIR" archive
 ```
 
+> ⛔ [HARD_STOP] `_phase complete` 只调一次——禁重复 start + complete。
+> 违反字面 = 违反精神：哪怕"归档后路径需要重新记录阶段开始",也算违反——`_phase complete` 原子完成 completed_at 写入 + phase 推进,重复调用会导致 phase_timings 数据错乱(completed_at 被覆盖,phase 状态混乱)。
+> 常见违规模式:第一次 `_phase complete` 后,agent 误以为"归档后路径需要重新 start",又 `_phase start` + `_phase complete`,产生重复 phase 记录。正确做法:一次 `_phase complete` 即完成,失败则按下方 HARD_STOP 处理,不重试。
+
 `_phase complete` 失败 → ⛔ `[HARD_STOP] archive 阶段完成失败。.alloy.yaml 变更未提交时 finish 状态不一致。检查 git 状态后重试，禁止在失败时继续执行后续步骤。`
 
 ### [Step 3/3] 完成

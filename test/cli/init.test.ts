@@ -118,7 +118,7 @@ describe("init", () => {
     });
     mockIsHeadUnborn.mockReturnValue(false);  // 默认有 commit
     mockDetectMainBranch.mockReturnValue("main");
-    mockReadProjectConfig.mockResolvedValue({ schema: "alloy", alloy: { main_branch: "main", inject_depth: "medium" } });
+    mockReadProjectConfig.mockResolvedValue({ schema: "alloy", alloy: { main_branch: "main" } });
     mockWriteProjectConfig.mockResolvedValue(undefined);
     mockPromptSelect.mockResolvedValue("main");
     mockPromptConfirm.mockResolvedValue(true);  // 默认确认执行
@@ -188,7 +188,6 @@ describe("init", () => {
   describe("initCommand", () => {
     let defaultOpts: {
       scope: "project";
-      injectDepth: "low" | "medium" | "high";
       projectPath: string;
       targetAgents: never[];
     };
@@ -196,7 +195,6 @@ describe("init", () => {
     beforeEach(() => {
       defaultOpts = {
         scope: "project" as const,
-        injectDepth: "medium",
         projectPath: tmpDir,
         targetAgents: [],
       };
@@ -254,7 +252,7 @@ describe("init", () => {
     it("选择 target agents 时部署 commands", async () => {
       const opts = {
         ...defaultOpts,
-        targetAgents: [{ id: "claude-code", label: "Claude Code", supportsColonCommands: true, commandsDir: ".claude/commands", instructionFile: "CLAUDE.md", instructionFormat: "md" as const }],
+        targetAgents: [{ id: "claude-code", label: "Claude Code", supportsColonCommands: true, commandsDir: ".claude/commands" }],
       };
       mockDeployCommands.mockResolvedValue(["/path/to/command.md"]);
 
@@ -267,21 +265,20 @@ describe("init", () => {
     it("选择 Claude Code 时调用注入器（worktree 配置由注入器处理）", async () => {
       const opts = {
         ...defaultOpts,
-        targetAgents: [{ id: "claude-code", label: "Claude Code", supportsColonCommands: true, commandsDir: ".claude/commands", instructionFile: "CLAUDE.md", instructionFormat: "md" as const }],
+        targetAgents: [{ id: "claude-code", label: "Claude Code", supportsColonCommands: true, commandsDir: ".claude/commands" }],
       };
 
       await initCommand(opts);
 
       expect(mockInjectAgentConfigs).toHaveBeenCalledWith(
-        expect.objectContaining({ projectPath: tmpDir }),
-        expect.any(String)
+        expect.objectContaining({ projectPath: tmpDir })
       );
     });
 
     it("未选择 Claude Code 时注入器仍被调用（内部跳过 settings）", async () => {
       const opts = {
         ...defaultOpts,
-        targetAgents: [{ id: "cursor", label: "Cursor", supportsColonCommands: false, commandsDir: ".cursor/commands", instructionFile: ".cursor/rules/alloy.mdc", instructionFormat: "mdc" as const }],
+        targetAgents: [{ id: "cursor", label: "Cursor", supportsColonCommands: false, commandsDir: ".cursor/commands" }],
       };
 
       await initCommand(opts);
@@ -292,7 +289,7 @@ describe("init", () => {
     it("command 部署失败时 exit 1", async () => {
       const opts = {
         ...defaultOpts,
-        targetAgents: [{ id: "claude-code", label: "Claude Code", supportsColonCommands: true, commandsDir: ".claude/commands", instructionFile: "CLAUDE.md", instructionFormat: "md" as const }],
+        targetAgents: [{ id: "claude-code", label: "Claude Code", supportsColonCommands: true, commandsDir: ".claude/commands" }],
       };
       mockDeployCommands.mockRejectedValue(new Error("部署失败"));
 
@@ -400,8 +397,8 @@ describe("init", () => {
       const opts = {
         ...defaultOpts,
         targetAgents: [
-          { id: "claude-code", label: "Claude Code", supportsColonCommands: true, commandsDir: ".claude/commands/", instructionFile: "CLAUDE.md", instructionFormat: "md" as const },
-          { id: "cursor", label: "Cursor", supportsColonCommands: false, commandsDir: ".cursor/commands/", instructionFile: ".cursor/rules/alloy.mdc", instructionFormat: "mdc" as const },
+          { id: "claude-code", label: "Claude Code", supportsColonCommands: true, commandsDir: ".claude/commands/" },
+          { id: "cursor", label: "Cursor", supportsColonCommands: false, commandsDir: ".cursor/commands/" },
         ],
       };
 
@@ -417,7 +414,6 @@ describe("init", () => {
   describe("initCommand 两阶段确认机制", () => {
     let defaultOpts: {
       scope: "project";
-      injectDepth: "low" | "medium" | "high";
       projectPath: string;
       targetAgents: never[];
     };
@@ -425,18 +421,17 @@ describe("init", () => {
     beforeEach(() => {
       defaultOpts = {
         scope: "project" as const,
-        injectDepth: "medium",
         projectPath: tmpDir,
         targetAgents: [],
       };
     });
 
     it("config 已有 main_branch 时跳过主分支确认（幂等）", async () => {
-      mockReadProjectConfig.mockResolvedValue({ schema: "alloy", alloy: { main_branch: "main", inject_depth: "medium" } });
+      mockReadProjectConfig.mockResolvedValue({ schema: "alloy", alloy: { main_branch: "main" } });
 
       await initCommand(defaultOpts);
 
-      // 不应调用 promptSelect（跳过主分支确认 + 注入深度选择）
+      // 不应调用 promptSelect（跳过主分支确认）
       expect(mockPromptSelect).not.toHaveBeenCalled();
       // 仍应调用 promptConfirm（执行清单确认）
       expect(mockPromptConfirm).toHaveBeenCalled();
@@ -511,8 +506,8 @@ describe("init", () => {
         if (cmd.includes("git commit")) { commitCalled = true; return Buffer.from(""); }
         if (cmd.includes("git add")) {
           addCallCount++;
-          // 模拟 CLAUDE.md 不存在：git add CLAUDE.md 抛错
-          if (cmd.includes("CLAUDE.md")) throw new Error("fatal: pathspec 'CLAUDE.md' did not match any files");
+          // 模拟 openspec/schemas/ 不存在：git add openspec/schemas/ 抛错
+          if (cmd.includes("openspec/schemas/")) throw new Error("fatal: pathspec 'openspec/schemas/' did not match any files");
           return Buffer.from("");
         }
         return Buffer.from("");
@@ -521,8 +516,8 @@ describe("init", () => {
       await initCommand(defaultOpts);
 
       // 应调用多次 git add（逐个文件）
-      expect(addCallCount).toBeGreaterThanOrEqual(5);
-      // commit 仍应执行（CLAUDE.md 不存在不阻断）
+      expect(addCallCount).toBeGreaterThanOrEqual(4);
+      // commit 仍应执行（某文件不存在不阻断）
       expect(commitCalled).toBe(true);
     });
 
@@ -649,38 +644,6 @@ describe("init", () => {
         tmpDir,
         expect.objectContaining({
           alloy: expect.objectContaining({ main_branch: "develop" }),
-        })
-      );
-    });
-
-    it("config 无 inject_depth 时交互式选择深度并写入 config", async () => {
-      mockReadProjectConfig.mockResolvedValue({ schema: "alloy", alloy: {} });
-      // promptSelect 调用序列：主分支确认 → 注入深度选择
-      mockPromptSelect.mockResolvedValueOnce("main");    // 主分支
-      mockPromptSelect.mockResolvedValueOnce("high");    // 注入深度
-
-      await initCommand(defaultOpts);
-
-      expect(mockWriteProjectConfig).toHaveBeenCalledWith(
-        tmpDir,
-        expect.objectContaining({
-          alloy: expect.objectContaining({ main_branch: "main", inject_depth: "high" }),
-        })
-      );
-    });
-
-    it("CLI 传入 injectDepthFromCli 时跳过交互式深度选择", async () => {
-      mockReadProjectConfig.mockResolvedValue({ schema: "alloy", alloy: {} });
-      mockPromptSelect.mockResolvedValueOnce("main");  // 只有主分支确认调用 promptSelect
-
-      await initCommand({ ...defaultOpts, injectDepth: "low", injectDepthFromCli: true });
-
-      // promptSelect 只被调用一次（主分支），深度选择被跳过
-      expect(mockPromptSelect).toHaveBeenCalledTimes(1);
-      expect(mockWriteProjectConfig).toHaveBeenCalledWith(
-        tmpDir,
-        expect.objectContaining({
-          alloy: expect.objectContaining({ inject_depth: "low" }),
         })
       );
     });

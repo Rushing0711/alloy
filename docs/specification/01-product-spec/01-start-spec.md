@@ -42,7 +42,7 @@ behaviors:
   → 选项：切换到已有非主分支 / 新建 feature 分支（默认 feature/<change-name>）
 → 分支确认后写入 `.alloy.yaml`（`phase=started`，`feature_branch`，`worktree=null`）
 → hash+commit（draft.md + .alloy.yaml），已有项目同步提交 alloy init 基础设施文件
-  （`.claude/` `.gitignore` `openspec/`，含 `CLAUDE.md` 如已注入），
+  （`.claude/` `.gitignore` `openspec/`），
   确保全部内容落在正确分支上。`.superpowers/` 已由 `.gitignore` 忽略
 → draft.md 存放在 change 目录内（openspec/changes/<name>/draft.md），非项目根目录
 ```

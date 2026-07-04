@@ -10,7 +10,6 @@ import { color } from "../../utils/format.js";
 import { section, check, success, info } from "../../utils/output.js";
 import type { DeployOptions } from "../../core/types.js";
 import { injectAgentConfigs } from "../../core/agent-config.js";
-import { readProjectConfig, writeProjectConfig } from "../utils/state.js";
 
 function isDevMode(): boolean {
   // npm link 下包根目录不是 symlink，但 .git 存在标记了开发环境
@@ -105,13 +104,8 @@ export async function updateCommand(projectPath: string): Promise<string[]> {
     return results;
   }
 
-  // 读取已记录的注入深度（缺失则兜底 medium）
-  const config = await readProjectConfig(projectPath);
-  const depth = config.alloy?.inject_depth ?? "medium";
-
   const deployOpts: DeployOptions = {
     scope,
-    injectDepth: depth,
     projectPath,
     targetAgents: deployedAgents,
   };
@@ -129,16 +123,10 @@ export async function updateCommand(projectPath: string): Promise<string[]> {
     results.push(`${color.yellow("⚠️")} schema 部署失败`);
   }
 
-  // 4. 重新注入 agent 配置（指令文件 + 专有配置）
+  // 4. 重新注入 agent 专有配置（如 .claude/settings.json 的 worktree.baseRef）
   try {
-    await injectAgentConfigs(deployOpts, depth);
-    results.push(`${color.green("✓")} agent 配置已重新注入（深度: ${depth}）`);
-    // 若 config 缺失 inject_depth，补写
-    if (!config.alloy?.inject_depth) {
-      if (!config.alloy) config.alloy = {};
-      config.alloy.inject_depth = depth;
-      await writeProjectConfig(projectPath, config);
-    }
+    await injectAgentConfigs(deployOpts);
+    results.push(`${color.green("✓")} agent 专有配置已重新注入`);
   } catch {
     results.push(`${color.yellow("⚠️")} agent 配置注入失败`);
   }

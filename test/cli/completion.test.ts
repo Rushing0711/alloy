@@ -43,7 +43,6 @@ describe("generateCompletion", () => {
     const output = generateCompletion("powershell");
     expect(output).toContain("--scope");
     expect(output).toContain("--json");
-    expect(output).toContain("--inject-depth");
     expect(output).toContain("--version");
     expect(output).toContain("--help");
   });

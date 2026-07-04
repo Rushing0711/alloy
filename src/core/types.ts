@@ -4,8 +4,6 @@ export interface AgentInfo {
   supportsColonCommands: boolean;
   commandsDir: string;
   globalOnly?: boolean;
-  instructionFile: string;
-  instructionFormat: "md" | "mdc";
   interactiveTool?: "askuserquestion" | "question" | "partial" | "none";
   settingsFile?: string;
   settingsContent?: Record<string, unknown>;
@@ -13,7 +11,6 @@ export interface AgentInfo {
 
 export interface DeployOptions {
   scope: "global" | "project";
-  injectDepth: "low" | "medium" | "high";
   projectPath: string;
   targetAgents: AgentInfo[];
 }
@@ -101,6 +98,5 @@ export interface ProjectConfig {
   schema: "alloy";
   alloy: {
     main_branch?: string;
-    inject_depth?: "low" | "medium" | "high";
   };
 }
