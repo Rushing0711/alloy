@@ -156,17 +156,13 @@ date "+%Y-%m-%d %H:%M:%S"
 
 > explore 的产出是"主题名 + 探查发现"，不深入需求设计。深入需求在步骤 8 的 brainstorming（change 目录已存在后）进行。
 >
-> ⛔ [HARD_STOP] opsx:explore 的"Curious, not prescriptive - Ask questions that emerge naturally"风格在 alloy 流程内不适用——alloy 要求 AskUserQuestion 工具调用,explore 阶段禁任何形式的提问(含开放式问题)。
-> 违反字面 = 违反精神:哪怕"explore 鼓励自然提问"、"explore 风格更灵活",也算违反——alloy 流程的 USER_GATE 规则优先级高于 explore 风格,explore 内禁提问,提问统一在主题确认 USER_GATE 用 AskUserQuestion。
-> 常见违规模式:agent 套用 explore"开放线程"风格,输出"选项 A/选项 B"表格 + 开放式问题"你觉得这个方向对吗?"——这是 explore 风格覆盖 alloy 规则,违规。
->
-> ⛔ [HARD_STOP] explore 阶段禁任何形式的问题输出——文字讨论 / 纯文本表格列举 / AskUserQuestion 询问 / 代码示例展示 / 开放式问题(如"你觉得这个方向对吗?"),通通禁止。
-> 违反字面 = 违反精神：哪怕"纯文本列表高效"、"聊聊设计不算问用户"、"给出代码示例让用户有参考",也算违反——explore 只验证 topic 可行性 + 补充上下文,任何设计细节输出都算违规。
+> ⛔ [HARD_STOP] opsx:explore 的"Curious, not prescriptive"风格在 alloy 流程内不适用——explore 阶段禁任何形式的问题输出(文字讨论 / 纯文本表格 / AskUserQuestion 询问 / 代码示例 / 开放式问题如"你觉得这个方向对吗?")。
+> 违反字面 = 违反精神:哪怕"explore 鼓励自然提问"、"纯文本列表高效"、"聊聊设计不算问用户",也算违反——alloy 流程的 USER_GATE 规则优先级高于 explore 风格,提问统一在主题确认 USER_GATE 用 AskUserQuestion。
 > 常见违规模式:
+> - agent 套用 explore"开放线程"风格,输出"选项 A/选项 B"表格 + 开放式问题——explore 风格覆盖 alloy 规则
 > - 纯文本表格列举"命令行参数 vs 环境变量"等设计选项——这是 design exploration,属于 Step 8 brainstorming
 > - 展示代码示例脚本("基本形态很简单:echo Hello \${name}!")
 > - 用文字讨论"参数缺失时怎么办?"——这是需求设计,不是可行性验证
-> - 输出"选项 A(简洁)/选项 B(稳健)"表格 + 开放式问题"你觉得这个方向对吗?"——这是 explore 风格覆盖,违规
 > - agent 认为"我没用 AskUserQuestion 问,只是用文字讨论"不算违规——文字讨论也是输出,同样违规
 > explore 结束后,不输出任何设计细节文字,直接进主题确认 USER_GATE。
 
@@ -175,15 +171,12 @@ date "+%Y-%m-%d %H:%M:%S"
 - 无 topic → 给 2-3 个建议方向让用户选，或用户自定义
 
 > ⛔ [HARD_STOP] 主题确认 USER_GATE 不可跳过——即使 topic 明确（用户 `/alloy:start <topic>` 带主题来），也必须用 AskUserQuestion 让用户确认 topic 或调整。
-> 违反字面 = 违反精神：哪怕"topic 已明确不用再确认"、"直接进 change name 效率高"、"设计已讨论完主题自然确认",也算违反——主题确认是 explore 与 change name 之间的必经闸门，跳过 = 用户失去调整 topic 的机会。
-> explore Skill 返回后,agent 必须立即调 AskUserQuestion 执行主题确认,不能做任何其他事情——包括输出分析文本、说"主题已确认"、或直接跳进 step 1。
-> ⛔ [HARD_STOP] thinking 决策"使用 AskUserQuestion"后,下一个动作必须是 AskUserQuestion 工具调用——禁 thinking 决策了但实际输出纯文本选项。
-> 违反字面 = 违反精神:哪怕"thinking 已决策,输出文本等价"、"纯文本选项也能让用户选",也算违反——决策→执行断裂 = 模型 compliance 不稳定,必须用更强约束:thinking 决策后立即调工具,中间不输出任何文本。
-> 常见违规模式:agent thinking 明确写"Let me use AskUserQuestion to confirm",next token 却降级为纯文本编号列表(1./2./3.)——这是决策→执行断裂,违规。
+> thinking 决策"使用 AskUserQuestion"后,下一个动作必须是 AskUserQuestion 工具调用——禁 thinking 决策了但实际输出纯文本选项(决策→执行断裂)。
+> 违反字面 = 违反精神:哪怕"topic 已明确不用再确认"、"thinking 已决策输出文本等价"、"直接进 change name 效率高",也算违反——主题确认是 explore 与 change name 之间的必经闸门,跳过 = 用户失去调整 topic 的机会。
+> explore Skill 返回后,agent 必须立即调 AskUserQuestion,不能做任何其他事情(包括输出分析文本、说"主题已确认"、或直接跳进 step 1)。
 > 常见违规模式:
-> - agent 判断"topic 已明确",跳过主题确认直接进 step 1 change name 确认
-> - agent 在 explore 阶段讨论了设计细节后,说"回到 Alloy 流程,主题已确认,现在进入 change name + 分支决策"——这是跳过主题确认 USER_GATE
-> - agent 输出一段分析文本(如"探查结论:话题可行,需求清晰")后直接进 change name,没有 AskUserQuestion
+> - agent 判断"topic 已明确",跳过主题确认直接进 step 1
+> - agent 在 explore 阶段讨论了设计细节后,说"回到 Alloy 流程,主题已确认"——跳过主题确认 USER_GATE
 > - agent thinking 决策"使用 AskUserQuestion"但实际输出纯文本编号列表(1./2./3.)——决策→执行断裂
 > 主题确认 USER_GATE 只确认 topic 本身——禁合并设计细节问题到本次 AskUserQuestion（详见上方 #X2 HARD_STOP）。
 
@@ -400,7 +393,7 @@ date "+%Y-%m-%d %H:%M:%S"
    > [HARD_STOP] brainstorming 讨论未完成前,不要生成 draft.md——但讨论完成不需要单独 USER_GATE 确认,直接生成 draft,由 step 9 审查。
    > 违反字面 = 违反精神:哪怕"讨论差不多了先生成 draft 节省时间",也算违反——设计要点未对齐就生成 draft,后续 step 9 审查会反复回 brainstorming,效率更低。
 
-   > **交互风格恢复（HARD_STOP）：** brainstorming 已结束。从此刻起，所有 `🔴 USER_GATE` 首次呈现即必须调用平台原生交互工具——禁"先文本展示 (a)/(b) 再等待用户打字"。Claude Code 用 `AskUserQuestion`；其他平台按 `commands/alloy/references/interaction-style.md` §平台工具对照 降级。Agent 刚从 brainstorming 的"每次一个问题"模式出来，容易延续纯文本习惯——这是 Iron Law 违规。违反字面 = 违反精神：哪怕"就这一个确认用文本也行"、"先展示再问"，也算违反——首次即必须用平台交互工具。
+   > **交互风格恢复:** brainstorming 已结束,恢复 §交互规则(L31)——所有 USER_GATE 首次呈现即调 AskUserQuestion。Agent 刚从 brainstorming 的"每次一个问题"模式出来,容易延续纯文本习惯。
 
 9. **生成 `draft.md` 审查窗口——start 阶段唯一确认点（brainstorming 内不单独确认方案,此处合并为 draft 锁定 USER_GATE）：**
 
@@ -454,21 +447,22 @@ date "+%Y-%m-%d %H:%M:%S"
 
 🔴 USER_GATE（必须 AskUserQuestion 工具调用）: start 阶段完成,下一步?
 
-> ⛔ [HARD_STOP] 必须用 `AskUserQuestion` 工具调用——禁纯文本列"(a)/(b)/(c)"选项,禁直接 `Skill` 加载下一阶段,禁纯文本"等待用户输入"。
-> 违反字面 = 违反精神：哪怕"纯文本列选项效果一样"、"用户看着选项选就行"、"直接 Skill 加载更流畅",也算违反——AskUserQuestion 强制结构化选项,避免 agent 用模糊措辞让用户回 yes 蒙混过关（§4.1）。
-> 非 Claude Code 平台按 `commands/alloy/references/interaction-style.md` §平台工具对照 降级为结构化文本选项。
+> ⛔ [HARD_STOP] 必须用 `AskUserQuestion` 工具调用——禁纯文本列选项 / 禁直接 `Skill` 加载下一阶段 / 禁纯文本"等待用户输入" / 禁提示用户手动输入命令。
+> 违反字面 = 违反精神:哪怕"纯文本效果一样"、"直接 Skill 更流畅"、"用户已授权提示一下也行",也算违反——AskUserQuestion 强制结构化选项,避免 agent 用模糊措辞让用户回 yes 蒙混过关（§4.1）。
+> 常见违规模式:
+> - 纯文本输出"等待用户输入下一个命令"——不是 AskUserQuestion
+> - 纯文本列"(a) 进入 plan / (b) 暂停 / (c) 其他"让用户回复
+> - 用户选 (a) 后提示"请运行 /alloy:plan <name>"让用户手动输入——应直接 Skill 加载
+> 非 Claude Code 平台按 `commands/alloy/references/interaction-style.md` §平台工具对照 降级。
 
 > 选项:
 > - (a) 进入 plan 阶段——加载 `alloy:plan` skill 推进制品生成
 > - (b) 暂停——查看状态(`alloy status`)或思考 draft 内容
 > - (c) 其他——用户自定义下一步
 
-> 用户选 (a) 后,agent **必须直接用 `Skill` 工具加载 `alloy:plan`**(传入 change name),进入 plan 阶段——禁提示"请运行 /alloy:plan"让用户手动输入。用户已在 USER_GATE 授权,阶段转换已触发,再让用户输入命令 = 多此一举 = 体验差。
+> 用户选 (a) 后,agent **必须直接用 `Skill` 工具加载 `alloy:plan`**(传入 change name),进入 plan 阶段——用户已在 USER_GATE 授权,阶段转换已触发,再让用户输入命令 = 多此一举。
 > 用户选 (b) 后,agent 停止,输出"已暂停。需要时运行 /alloy:plan <name> 继续。"
 > 用户选 (c) 后,agent 停止,等用户后续命令。
-> ⛔ 禁止：纯文本输出"等待用户输入下一个命令"——这不符合 §4.1 USER_GATE 必须用 AskUserQuestion 的规范。常见违规模式：agent 输出"start 阶段完成。你的唯一操作：等待用户输入下一个命令。"——这是纯文本,不是 AskUserQuestion。
-> ⛔ 禁止：纯文本列"(a) 进入 plan / (b) 暂停 / (c) 其他"让用户回复——必须用 AskUserQuestion 工具。常见违规模式:agent 输出"🔴 USER_GATE:下一步?(a) 进入 plan (b) 暂停 (c) 其他"纯文本,然后直接 Skill 加载。
-> ⛔ 禁止：用户选 (a) 后,agent 提示"请运行 /alloy:plan <name>"让用户手动输入——用户已授权,应直接加载 plan skill。常见违规模式:agent 输出"好的,请输入 /alloy:plan hello-script 进入规划阶段"。
 
 > **§5.2.3 路径 B 边界说明：** start 是 phase 推进起点（无前序 phase），phase=started 写入失败时降级路径只有"重跑 /alloy:start"——不存在 phase 回退场景。本阶段无 §5.2.3 适用空间。
 
