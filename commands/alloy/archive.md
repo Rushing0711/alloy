@@ -331,6 +331,8 @@ CLI 失败 → ⛔ `[HARD_STOP]` 按 CLI 输出的指引处理（冲突 / 未跟
 **记录完成时间并推进 phase——原子命令 `alloy _phase complete` 内部完成 completed_at 写入 + phase 推进 + git add 限路径 + commit：**
 
 ```bash
+# 校验本阶段完成状态(目录在 archive/ + state 字段)——失败则修复后重试,禁跳过
+alloy _verify phase-exit archive "$ARCHIVE_DIR"
 alloy _phase complete "$ARCHIVE_DIR" archive
 ```
 

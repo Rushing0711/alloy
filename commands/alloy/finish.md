@@ -234,6 +234,8 @@ CHANGE_DIR="${ARCHIVE_DIR:-openspec/changes/<name>}"
 #   - 禁止 agent 自动运行 git reset --hard / git checkout . 清场（详见 §3.5.1）。
 # 详见 docs/reference/alloy-skill-writing-guide.md §5.2.3 路径 B
 alloy _phase complete "$CHANGE_DIR" finish
+# 校验本阶段完成状态(phase=finished + completed_at + 目录在 archive/)——失败则修复后重试,禁跳过
+alloy _verify phase-exit finish "$CHANGE_DIR"
 
 # ⛔ [HARD_STOP] 以下 git checkout + remote 检查 + pull 是完整 bash 块,必须照此执行。
 # 禁 agent 自行简化（如省略 `git remote -v` 检查直接 `git pull`）——无 remote 时 git pull 会失败,agent 可能误判"无 remote 跳过"而实际是上游配置问题。
@@ -320,6 +322,8 @@ CHANGE_DIR="${ARCHIVE_DIR:-openspec/changes/<name>}"
 #   git reset HEAD~1                                  # 退回 phase commit
 # 禁止 agent 自动 git reset --hard / git checkout . 清场（§3.5.1）。
 alloy _phase complete "$CHANGE_DIR" finish
+# 校验本阶段完成状态(phase=finished + completed_at + 目录在 archive/)——失败则修复后重试,禁跳过
+alloy _verify phase-exit finish "$CHANGE_DIR"
 ```
 
 PR 审查反馈的处理规范：

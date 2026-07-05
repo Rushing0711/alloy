@@ -86,6 +86,21 @@ CLI 从以下数据源权威生成（不依赖 LLM 记忆，跨 session 中断�
 > 违反字面 = 违反精神：哪怕"这条规则本 cycle 执行得很好值得强化",也算违反——规则执行得好是应有之义,不是"值得推广的新模式"。把硬规则当新模式提取 = retrospective 失去"发现未知"的价值,还会让用户误以为 alloy 流程不专业（连自己的规则都不认识）。
 > 常见违规模式：把"单 commit 含代码+测试+tasks checkbox"（apply.md L298-305 硬规则）当新模式提取；把"TDD 先写测试再写代码"（TDD 技能固有规则）当新模式提取。这些都不是"新模式",是已有规则的执行。
 
+#### §7 偏差分类（Compliance Deviations）
+agent 回顾本次 session,勾选观察到的合规偏差类型。若无偏差,填"无"。
+
+偏差类型清单(勾选 + 详细描述):
+- AskUserQuestion 漏触发 / 纯文本列选项 / 跳过 USER_GATE
+- git 自救(reset --hard / checkout . / stash drop / merge --abort)
+- 路径错误(子 agent 主仓路径 / verify.md 位置 / git add -A 通配)
+- worktree 相关(ExitWorktree action / worktree 字段漏写)
+- 时间戳错误(START_TIME 重复捕获 / 接续路径重捕获)
+- memory 相关(批量写入 / 未区分项目用户 / 非选项回复主观推断)
+- 其他
+
+> 本段由 agent 定性填写(非 scaffold 生成)。下次 start 阶段读取最近 3 个 retrospective 的本段,针对性提示高频偏差。
+> 若本 cycle 无偏差,填"无"——不强制填写。
+
 ### Step 3: 跳过策略
 
 | 情况 | 处理 |

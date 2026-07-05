@@ -184,6 +184,25 @@
   > **How to apply**: <触发条件>
 -->
 
+## §7 偏差分类（Compliance Deviations）
+
+> agent 回顾本次 session,记录观察到的合规偏差(如有)。若无偏差,填"无"。
+> 下次 start 阶段会读取最近 3 个 retrospective 的本段,针对性提示。
+
+<!-- 勾选观察到的偏差类型,并在下方详细描述 -->
+- [ ] AskUserQuestion 漏触发(应触发但用纯文本列选项)
+- [ ] 纯文本列选项代替 AskUserQuestion
+- [ ] 跳过 USER_GATE(未让用户决策就推进)
+- [ ] git 自救(reset --hard / checkout . / stash drop / merge --abort 等)
+- [ ] 路径错误(子 agent 用主仓路径 / verify.md 创建位置错误 / git add -A 通配)
+- [ ] worktree 相关(ExitWorktree action 选错 / worktree 字段漏写)
+- [ ] 时间戳错误(START_TIME 重复捕获 / 接续路径重捕获 started_at)
+- [ ] memory 相关(批量写入 / 未区分项目/用户 / 非选项回复主观推断)
+- [ ] 其他:___
+
+详细描述(可选):
+<!-- 具体哪一步、什么偏差、如何修复 -->
+
 ---
 
 ## Forward-Pointer 策略

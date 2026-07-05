@@ -152,7 +152,9 @@ date "+%Y-%m-%d %H:%M:%S"
 
 **交互风格：** 使用 `AskUserQuestion` 工具。详见 `commands/alloy/references/interaction-style.md`。
 
-**额外上下文：** 扫描 `openspec/changes/archive/` 下最近 3 个 `retrospective.md`，提取 §5 意外发现、§6 值得推广、§4 技能跳过模式，作为后续 brainstorming 参考。
+**额外上下文：** 扫描 `openspec/changes/archive/` 下最近 3 个 `retrospective.md`，提取 §5 意外发现、§6 值得推广、§4 技能跳过模式、§7 偏差分类,作为后续 brainstorming 参考。
+
+> **§7 偏差分类反馈循环:** 若最近 retrospective §7 记录了高频偏差(如"AskUserQuestion 漏触发"、"纯文本列选项"),本次 session 特别注意这些偏差类型——历史偏差是未来偏差的最佳预测器。
 
 > explore 的产出是"主题名 + 探查发现"，不深入需求设计。深入需求在步骤 8 的 brainstorming（change 目录已存在后）进行。
 >
@@ -420,6 +422,8 @@ date "+%Y-%m-%d %H:%M:%S"
 
     **commit 2/3——start 阶段完成（原子命令，内部完成 completed_at 写入 + git add 限路径 + commit；start 不推进 phase，保持 started）：**
     ```bash
+    # 校验本阶段完成状态(draft + state 字段)——失败则修复后重试,禁跳过
+    alloy _verify phase-exit start openspec/changes/<name>
     alloy _phase complete openspec/changes/<name> start
     ```
 

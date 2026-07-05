@@ -581,6 +581,9 @@ echo "本 change 累计 commit 数: $COMMIT_COUNT"
 #    不含 retrospective 自身的审批栏（scaffold 生成的审批链只列 retrospective 之前的制品）。
 alloy _artifact commit openspec/changes/<name> retrospective
 
+# 校验本阶段完成状态(verify + retrospective + state 字段)——失败则修复后重试,禁跳过
+alloy _verify phase-exit apply openspec/changes/<name>
+
 # 2. 阶段完成 commit：completed_at + phase 推进 + git add 限路径 + commit（原子命令）
 alloy _phase complete openspec/changes/<name> apply
 ```

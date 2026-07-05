@@ -522,6 +522,8 @@ alloy _record scan "openspec/changes/<name>"
 
 **记录完成时间并推进 phase**——原子命令 `alloy _phase complete` 内部完成 completed_at 写入（自动刷新 updated_at）+ phase 推进 + git add 限路径 + commit。hash 尾扫通过后调用：
 ```bash
+# 校验本阶段完成状态(5 制品 + state 字段)——失败则修复后重试,禁跳过
+alloy _verify phase-exit plan openspec/changes/<name>
 alloy _phase complete openspec/changes/<name> plan
 ```
 

@@ -409,6 +409,11 @@ async function main() {
       await worktreeCleanupCommand(restArgs);
       break;
     }
+    case "_verify": {
+      const { verifyCommand } = await import("./commands/internal/verify.js");
+      await verifyCommand(restArgs);
+      break;
+    }
     default:
       console.error(`未知命令: ${command}`);
       console.log(USAGE);
