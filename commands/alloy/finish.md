@@ -6,7 +6,7 @@ tags: [alloy, workflow]
 spec: 01-product-spec/05-finish-spec.md
 behaviors:
   preconditions: 6
-  hard_stops:    8
+  hard_stops:    9
   user_gates:    5
   warns:         2
   artifacts: []
@@ -167,12 +167,16 @@ echo "✓ checkpoint tag 已全部清理"
 
 ### [Step 2/3] superpowers:finishing-a-development-branch
 
-```
-选择处理方式：
-1. 本地 merge —— 合入基础分支
-2. 创建 PR    —— 提交代码审查
-3. 保持分支   —— 暂不处理
-```
+🔴 USER_GATE（必须 AskUserQuestion 工具调用,首次呈现即调——禁先文本列选项）: 选择处理方式
+
+> ⛔ [HARD_STOP] 必须用 AskUserQuestion 工具调用——禁先文本输出"1. 本地 merge / 2. 创建 PR / 3. 保持分支"再调工具。
+> 违反字面 = 违反精神:哪怕"先展示选项让用户思考"、"文本+工具双保险",也算违反——首次呈现必须是 AskUserQuestion 工具调用,不是文本。
+> 常见违规模式:agent 先输出"1. 本地 merge / 2. 创建 PR / 3. 保持分支"文本,再调 AskUserQuestion——这是双重呈现,违反首次呈现原则。
+
+选项:
+- (a) 本地 merge —— 合入基础分支
+- (b) 创建 PR —— 提交代码审查
+- (c) 保持分支 —— 暂不处理
 
 > ⛔ [HARD_STOP] 禁增设第 4 选项"放弃工作"——放弃走 `/alloy:discard <name>` 独立命令,不在 finish 阶段。
 > 违反字面 = 违反精神：哪怕"用户想放弃,顺便在 finish 里给选项方便",也算违反——finish 是封存阶段（merge/PR/保持）,放弃是独立流程（删分支+删 change 目录）,混在一起 = 职责不清。引导用户运行 `/alloy:discard` 而非在 finish 增设选项。
@@ -332,6 +336,9 @@ PR 审查反馈的处理规范：
   >
   > 选 (b)：[HARD_STOP] 禁止 agent 直接修改已归档 spec。退出 skill。
 
+> ⛔ [HARD_STOP §3.5.1] PR 推送（`git push`）失败时禁自动 `git push --force` / `git push --force-with-lease` / `git reset --hard` / `git checkout .` 清场。
+> 违反字面 = 违反精神：哪怕"远端分歧了覆盖一下",也算违反——force push 会覆盖别人推送的提交,必须报告推送失败现场让用户决策（手动 pull rebase 或调整 commit）。PR 创建委托给 `superpowers:finishing-a-development-branch` 技能,但推送失败禁令在本 skill 同样适用。
+
 ### 选项 3：保持分支
 
 记录延期时间戳供后续 `alloy status` 统计：
@@ -340,6 +347,7 @@ ARCHIVE_DIR=$(ls -d openspec/changes/archive/*-<name> 2>/dev/null | sort -r | he
 CHANGE_DIR="${ARCHIVE_DIR:-openspec/changes/<name>}"
 DEFERRED_AT=$(date "+%Y-%m-%d %H:%M:%S")
 alloy _state merge "$CHANGE_DIR" phase_timings "{\"finish\":{\"deferred_at\":\"${DEFERRED_AT}\"}}"
+# ⛔ [HARD_STOP §5.2.1] git add 限路径——禁 -A/-a/.,只 add $CHANGE_DIR/.alloy.yaml
 git add "$CHANGE_DIR/.alloy.yaml"
 git commit -m "chore(<name>): finish 延期，分支已保留"
 ```

@@ -6,7 +6,7 @@ tags: [alloy, workflow]
 spec: 01-product-spec/03-apply-spec.md
 behaviors:
   preconditions: 12
-  hard_stops:    14
+  hard_stops:    17
   user_gates:    7
   warns:         3
   artifacts: [verify, retrospective]
@@ -243,7 +243,9 @@ git diff --cached --quiet || git commit -m "chore(<name>): 记录 worktree 决�
 **创建后状态记录 + worktree 内分支锁定**：读取 `commands/alloy/references/apply-worktree.md`：
 
 - 技能执行完毕后，**必须验证已在 worktree 内**（`GIT_DIR != GIT_COMMON`），否则 ⛔ PRECONDITION_FAIL——禁 fallback 到主仓写入（元信息写到 feature 分支会导致 worktree 内状态分裂）
-- 在 worktree 内写入 worktree / worktree_branch / worktree_created_at 三字段并 commit（断点恢复）
+- ⛔ [HARD_STOP] 在 worktree 内**必须**写入 worktree / worktree_branch / worktree_created_at **三字段**并 commit（断点恢复）。三字段缺一不可——worktree_created_at 漏写会导致 archive 阶段时间链断裂。
+  违反字面 = 违反精神：哪怕"worktree 路径已记录、created_at 可推断"、"先写两个字段后面补",也算违反——worktree_created_at 是 worktree 创建时间的唯一来源,archive 阶段清理 worktree 时需要这个字段计算 worktree 存活时长。
+  常见违规模式:agent 只写 worktree + worktree_branch 两字段,漏 worktree_created_at。
 - 进入后校验 HEAD == `worktree-<name>`（task #18）；不一致 ⛔ PRECONDITION_FAIL，**禁 agent 自动 git checkout 切换。**
 
 **Step 1/5 完成：**
@@ -301,7 +303,23 @@ alloy _skill log openspec/changes/<name> apply code-quality-review --via subagen
 
 加载 `superpowers:subagent-driven-development`，由其驱动分派子 agent → 每个独立 TDD + code review（transitive 激活）。
 
+**构造子 agent prompt 前,必须先读取 worktree 路径:**
+
+```bash
+WORKTREE_PATH=$(alloy _state read openspec/changes/<name> worktree 2>/dev/null)
+```
+
+> ⛔ [HARD_STOP] 子 agent prompt 必须传 `WORKTREE_PATH`(从 state 读取)作为工作目录,禁传主仓路径。
+> 子 agent 所有文件操作必须用 worktree 路径或相对路径(相对 worktree 根目录),禁用主仓绝对路径。
+> 违反字面 = 违反精神:哪怕"主仓路径也能写文件"、"绝对路径更清晰",也算违反——子 agent 在主仓写文件 = 文件不在 worktree 分支 = worktree commit 缺失 + 主仓 working tree 污染 + archive 阶段 merge 冲突。
+> 常见违规模式:
+> - 子 agent prompt 传"项目路径: /主仓/路径",子 agent 用主仓路径创建文件(scripts/ + tasks.md 落到主仓 working tree,worktree 分支 commit 缺失)
+> - 子 agent 用绝对路径 /主仓/scripts/hello.sh 创建文件,而非 worktree 路径 /主仓/.claude/worktrees/<name>/scripts/hello.sh
+> - 子 agent 默认 cwd 是主仓(不是 worktree),用相对路径创建文件落到主仓
+
 **构造子 agent 任务描述时，必须注入以下指令到任务描述末尾：**
+> 工作目录: `<WORKTREE_PATH>`(worktree 路径,从 state 读取)。所有文件操作必须用 worktree 路径或相对路径(相对 worktree 根目录),禁用主仓绝对路径。
+>
 > 实现完成时，在**同一个 commit** 中包含：实现代码 + 测试 + `openspec/changes/<name>/tasks.md` 中你负责的 task checkbox 从 `- [ ]` 改为 `- [x]`（含父级和子级）。不要分两个 commit。
 >
 > ⛔ [HARD_STOP] 禁用 `git commit --amend` 实现"同一个 commit"——"同一个 commit"指**一次性 `git add` 实现+测试+tasks.md 再单个新 `git commit`**,不是"先 commit 实现再 `--amend` 加 tasks.md"。amend 改写历史,违反"创建新 commit 而非 amend"全局规则。
@@ -338,6 +356,7 @@ alloy _skill log openspec/changes/<name> apply code-quality-review --via subagen
 1. **分支再校验**（⛔ PRECONDITION_FAIL，task #18）—— `git rev-parse --abbrev-ref HEAD` ≠ `worktree-<name>` 时退出，禁 agent 自动 `git checkout` 切回。
 2. **git add 限路径**（⛔ HARD_STOP §5.2.1）—— 精确路径，禁 `-A`/`-a`/`.`。违反字面 = 违反精神：哪怕"反正只有这一个文件"也禁 `-A`，副作用文件会被一并 commit。判断不准 🔴 USER_GATE。
 3. **stash 残留检查**（⚠️ WARN，task #19）—— commit 前 `git stash list`，非空播报让用户决策，禁 agent 自动 `git stash drop`（§3.5.1）。
+4. **commit 失败禁自救**（⛔ HARD_STOP §3.5.1）—— `git commit` 失败时禁自动 `git reset --hard` / `git checkout .` / `git restore .` / `git stash` / `git clean -fd` 清场。违反字面 = 违反精神：哪怕"清一下重试效率高",也算违反——破坏性命令会丢失用户已 stage 的工作,必须报告问题让用户决策。
 
 #### Step 2/5 完成前：skill_usage 校验（⛔ HARD_STOP）
 
@@ -447,6 +466,12 @@ check 失败 → ⛔ `[PRECONDITION_FAIL] plans 上游 hash 失效——plans.md
    alloy _skill log openspec/changes/<name> apply opsx:verify
    ```
 2. 输出必须重写为与 `instructions/verify.md` 和 `templates/verify.md` 一致的语言，不直接透传 CLI 输出。检查结果（PASS/FAIL/WARNING）保留作为事实依据。
+
+> ⛔ [HARD_STOP] verify.md 必须创建在 `openspec/changes/<name>/verify.md`——禁创建到 worktree 根目录或其他位置。
+> 违反字面 = 违反精神:哪怕"先创建到根目录后面 mv 过去"、"worktree 根目录方便临时查看",也算违反——verify.md 是 change 制品,必须一诞生就在 change 目录内,创建到外部 + mv 自救 = 制品路径错位 + git add 漏文件。
+> 常见违规模式:
+> - agent 在 worktree 根目录创建 verify.md,再用 mv 移到 openspec/changes/<name>/——创建位置错误 + mv 自救 = 制品路径错位
+> - agent 用相对路径 `verify.md` 而非 `openspec/changes/<name>/verify.md`——cwd 在 worktree 根目录时会创建到错误位置
 
 **opsx:verify 失败处理（⛔ HARD_STOP）：**
 
@@ -586,9 +611,31 @@ alloy _phase complete openspec/changes/<name> apply
 
 **phase 推进已在 Step 5 retrospective 审查通过后由 `alloy _phase complete openspec/changes/<name> apply` 原子完成**（completed_at + phase→applied + commit）。此处不再重复推进。
 
-**§5.2.3 路径 B 降级（HARD_STOP）：** 若 `_phase complete` 失败（commit 失败等不可恢复状态），降级路径详见 `commands/alloy/references/phase-downgrade-path.md`（apply 阶段降级 → `planned`）。**禁止 agent 自动 `git reset --hard` / `git checkout .` 清场（§3.5.1）。** 违反字面 = 违反精神：哪怕"清理一下让流程重启"也算违反——退出 skill 让用户决策是唯一合法路径。
+**§5.2.3 路径 B 降级（HARD_STOP）：** 若 `_phase complete` 失败（commit 失败等不可恢复状态），降级路径（apply 阶段降级 → `planned`）：
 
+```bash
+# 用户须手动回滚 phase：
+alloy _state set openspec/changes/<name> phase planned
+git checkout HEAD~1 -- "openspec/changes/<name>/.alloy.yaml"  # 撤销 phase commit 中的状态变更
+git reset HEAD~1                                              # 退回 phase commit
 ```
-💡 建议执行 QA 测试或浏览器测试，确认后再进入 archive。
-准备好后，运行 /alloy:archive 进入归档阶段。
-```
+
+> 禁止 agent 自动 `git reset --hard` / `git checkout .` 清场（§3.5.1）。违反字面 = 违反精神：哪怕"清理一下让流程重启"也算违反——退出 skill 让用户决策是唯一合法路径。详见 `commands/alloy/references/phase-downgrade-path.md`。
+
+🔴 USER_GATE（必须 AskUserQuestion 工具调用）: apply 阶段完成,下一步?
+
+> ⛔ [HARD_STOP] 必须用 `AskUserQuestion` 工具调用——禁纯文本列"(a)/(b)/(c)"选项,禁直接 `Skill` 加载下一阶段,禁纯文本"运行 /alloy:archive"提示。
+> 违反字面 = 违反精神：哪怕"纯文本列选项效果一样"、"用户看着选项选就行"、"直接 Skill 加载更流畅",也算违反——AskUserQuestion 强制结构化选项,避免 agent 用模糊措辞让用户回 yes 蒙混过关（§4.1）。
+> 非 Claude Code 平台按 `commands/alloy/references/interaction-style.md` §平台工具对照 降级为结构化文本选项。
+
+> 选项:
+> - (a) 进入 archive 阶段——加载 `alloy:archive` skill 推进归档
+> - (b) 暂停——执行 QA 测试 / 浏览器测试 / 查看状态(`alloy status`)
+> - (c) 其他——用户自定义下一步
+
+> 用户选 (a) 后,agent **必须直接用 `Skill` 工具加载 `alloy:archive`**(传入 change name),进入 archive 阶段——禁提示"请运行 /alloy:archive"让用户手动输入。
+> 用户选 (b) 后,agent 停止,输出"已暂停。建议执行 QA 测试或浏览器测试,确认后运行 /alloy:archive <name> 继续。"
+> 用户选 (c) 后,agent 停止,等用户后续命令。
+> ⛔ 禁止：纯文本输出"运行 /alloy:archive 进入归档阶段"让用户手动输入——用户已在 USER_GATE 授权,应直接加载 archive skill。
+> ⛔ 禁止：纯文本列"(a) 进入 archive / (b) 暂停 / (c) 其他"让用户回复——必须用 AskUserQuestion 工具。常见违规模式:agent 输出"🔴 USER_GATE:下一步?(a) 进入 archive (b) 暂停 (c) 其他"纯文本,然后直接 Skill 加载。
+> ⛔ 禁止：用户选 (a) 后,agent 提示"请运行 /alloy:archive"让用户手动输入。常见违规模式:agent 输出"好的,请输入 /alloy:archive hello-script 进入归档阶段"。

@@ -6,8 +6,8 @@ tags: [alloy, workflow]
 spec: 01-product-spec/01-start-spec.md
 behaviors:
   preconditions: 8
-  hard_stops:    13
-  user_gates:    9
+  hard_stops:    16
+  user_gates:    8
   warns:         2
   artifacts: [draft]
   transitions_to: started
@@ -22,14 +22,8 @@ behaviors:
 
 ```
 [HARD_STOP] ACTIVE CHANGE → ROUTE FIRST + NO WORK ON MAIN + NO SKIP BRANCH + NO AUTO ADVANCE
-检测到活跃 change 时，必须先经 USER_GATE 确认去向（接续/开新/中止），
-才能加载任何技能（包括 explore/brainstorming/opsx:new）。
-每个 change 必须在独立 feature 分支上。开新 change 时，stash 和分支创建是不可逾越的红线。
-start 完成后绝不自动进 plan。沉默 ≠ 授权。
-
-违反字面 = 违反精神：哪怕"用户说了新需求"、"用户明确知道要做什么"、
-"已经在分支上了"、"分支后面再建"，也禁跳过路由决策直接进入 brainstorm。
-路由决策是技能加载的前置闸门——先确认去向，再加载对应技能。
+有活跃 change 先 USER_GATE 路由；change 必须在独立 feature 分支；start 完成后绝不自动进 plan
+违反字面 = 违反精神：哪怕"用户说了新需求"/"已经在分支上"/"分支后面再建"，也禁跳过路由直接 brainstorm
 ```
 
 > **`<TIMESTAMP>`：** 每次渲染阶段头部时执行 `date "+%Y-%m-%d %H:%M:%S"` 获取本地时间。`<START_TIME>` 是"全新开始"路径中捕获的时间——agent 捕获后复用于 header 和 phase_timings。`<created_at>` 从 `.alloy.yaml` 读取。
@@ -115,11 +109,20 @@ dirty 时 → 🔴 USER_GATE：检测到未提交变更，如何处理？
 - 无活跃 change（无论有无 topic）
 - 有活跃 change 但用户在 USER_GATE 选了"开新 change"
 
-**捕获阶段启动时间：**
+**捕获阶段启动时间（同时作为 START_TIME 和 EXPLORE_START 复用——避免两次 date 调用产生时间差）：**
 ```bash
 date "+%Y-%m-%d %H:%M:%S"
 ```
-> 不要混用 bash 变量——bash 状态在两次工具调用间不持久。直接捕获 date 输出文本。
+> ⛔ [HARD_STOP] START_TIME 与 EXPLORE_START 必须是同一次捕获——禁两次 date 调用。
+> 原因:两次 date 调用差几秒,会导致 Phase 框显示的"启动时间"与 phase_timings.started_at 不一致(实测差可达 10+ 秒)。
+> START_TIME 复用于:Phase 框显示 + _state init --at + _phase start --at + _skill log opsx:explore --at。
+> 必须在调用 opsx:explore 之前捕获——否则会捕获成 explore 完成时间(实测偏移可达 5+ 秒)。
+> bash 变量在工具调用间不持久——将 START_TIME 输出值记在上下文中,后续步骤作为 `--at` 参数传入。
+> 违反字面 = 违反精神:哪怕"两次 date 差几秒无所谓"、"先捕获一个后面再补",也算违反——时间戳不一致 = retrospective 时间链失真,无法回溯真实流程。
+> 常见违规模式:
+> - 在阶段入口捕获 START_TIME,又在 Step 1 入口捕获 EXPLORE_START(两次 date)
+> - 在 opsx:explore 调用后才捕获(捕获成完成时间)
+> - 用当前时间作为 --at 参数(不复用 START_TIME)
 
 **进入阶段时，必须输出以下 Phase 框到终端**:
 ```
@@ -133,16 +136,16 @@ date "+%Y-%m-%d %H:%M:%S"
 
 ### [Step 1] explore 探测 + 确定主题
 
-**捕获 opsx:explore 开始时间（供步骤 6 补录技能使用）：**
-```bash
-EXPLORE_START=$(date "+%Y-%m-%d %H:%M:%S")
-```
-> bash 变量在工具调用间不持久——将 EXPLORE_START 输出值记在上下文中，步骤 6 补录时作为 `--at` 参数传入。
+> START_TIME 已在阶段入口捕获（同时作为 EXPLORE_START 复用），此处不重复捕获。
+> 加载 opsx:explore 之前确保 START_TIME 已记在上下文中——步骤 6 补录 _skill log 时作为 `--at` 参数传入。
 
 加载 `opsx:explore` 技能，按其指引探索项目上下文：
 
 > ⛔ [HARD_STOP] 必须用 `Skill` 工具加载 `opsx:explore`——禁手动 `ls`/`find`/`cat`/`grep` 替代探查。
-> 违反字面 = 违反精神：哪怕"手动 ls 也能探查项目结构",也算违反——skill_usage 必须反映真实技能加载,手动 bash 替代 = skill_usage 造假 = retrospective §4 审计失真。
+> Skill 调用的 args 必须传 topic:
+> - 有 topic（用户 `/alloy:start <topic>` 带主题来）: `args: "<topic>"`——禁传 "no-topic"(传 no-topic 会让 explore 不知道用户主题,产出的探查发现不聚焦)
+> - 无 topic: `args: "no-topic"` 或不传
+> 违反字面 = 违反精神：哪怕"主题会在后续 USER_GATE 确认,explore 不传也行",也算违反——explore 需要围绕 topic 探测,不传 topic = explore 不知道用户想做什么,产出的探查发现不聚焦。
 
 - **有 topic（用户 `/alloy:start <topic>` 带主题来）：** 围绕 topic + 当前项目情况探测，验证 topic 可行性、补充上下文
 - **无 topic（用户 `/alloy:start` 未带主题）：** 与用户沟通探测——扫描项目（README、代码、requirement.md 等），基于探查给 2-3 个建议方向，或问用户想做什么
@@ -153,16 +156,36 @@ EXPLORE_START=$(date "+%Y-%m-%d %H:%M:%S")
 
 > explore 的产出是"主题名 + 探查发现"，不深入需求设计。深入需求在步骤 8 的 brainstorming（change 目录已存在后）进行。
 >
-> ⛔ [HARD_STOP] explore 阶段禁问设计细节——文件名 / 参数方式 / 存放位置 / 行为逻辑等属于需求设计,在 Step 9 brainstorming 确认。
-> 违反字面 = 违反精神：哪怕"顺便问一下文件名效率高",也算违反——explore 只验证 topic 可行性 + 补充上下文,设计细节提前问 = 阶段错位 = 后续 brainstorming 无内容可做。
+> ⛔ [HARD_STOP] opsx:explore 的"Curious, not prescriptive - Ask questions that emerge naturally"风格在 alloy 流程内不适用——alloy 要求 AskUserQuestion 工具调用,explore 阶段禁任何形式的提问(含开放式问题)。
+> 违反字面 = 违反精神:哪怕"explore 鼓励自然提问"、"explore 风格更灵活",也算违反——alloy 流程的 USER_GATE 规则优先级高于 explore 风格,explore 内禁提问,提问统一在主题确认 USER_GATE 用 AskUserQuestion。
+> 常见违规模式:agent 套用 explore"开放线程"风格,输出"选项 A/选项 B"表格 + 开放式问题"你觉得这个方向对吗?"——这是 explore 风格覆盖 alloy 规则,违规。
+>
+> ⛔ [HARD_STOP] explore 阶段禁任何形式的问题输出——文字讨论 / 纯文本表格列举 / AskUserQuestion 询问 / 代码示例展示 / 开放式问题(如"你觉得这个方向对吗?"),通通禁止。
+> 违反字面 = 违反精神：哪怕"纯文本列表高效"、"聊聊设计不算问用户"、"给出代码示例让用户有参考",也算违反——explore 只验证 topic 可行性 + 补充上下文,任何设计细节输出都算违规。
+> 常见违规模式:
+> - 纯文本表格列举"命令行参数 vs 环境变量"等设计选项——这是 design exploration,属于 Step 8 brainstorming
+> - 展示代码示例脚本("基本形态很简单:echo Hello \${name}!")
+> - 用文字讨论"参数缺失时怎么办?"——这是需求设计,不是可行性验证
+> - 输出"选项 A(简洁)/选项 B(稳健)"表格 + 开放式问题"你觉得这个方向对吗?"——这是 explore 风格覆盖,违规
+> - agent 认为"我没用 AskUserQuestion 问,只是用文字讨论"不算违规——文字讨论也是输出,同样违规
+> explore 结束后,不输出任何设计细节文字,直接进主题确认 USER_GATE。
 
-**主题确认 USER_GATE（🔴 AskUserQuestion）：** explore 探测后，向用户确认主题：
+**主题确认 USER_GATE（🔴 AskUserQuestion）：** explore 探测后，**第一件事**必须是主题确认 AskUserQuestion，向用户确认主题：
 - 有 topic → 确认该 topic 或调整
 - 无 topic → 给 2-3 个建议方向让用户选，或用户自定义
 
-> ⛔ [HARD_STOP] 主题确认 USER_GATE 只确认 topic 本身——禁合并设计细节问题（参数方式 / 文件名 / 存放位置 / 行为逻辑）到本次 AskUserQuestion。
-> 违反字面 = 违反精神：哪怕"主题已明确顺便问参数方式效率高"，也算违反——设计细节属于 Step 9 brainstorming，提前问 = 阶段错位 = brainstorming 无内容可做。
-> AskUserQuestion 一次最多 4 个问题，但 4 个问题都必须围绕 topic 本身（确认 / 调整 / 方向选择），禁夹带设计细节。常见违规模式：把"脚本如何接收 name?""文件放哪个目录?""用什么参数格式?"等设计问题塞进主题确认 AskUserQuestion——这些都是 Step 9 brainstorming 的内容。
+> ⛔ [HARD_STOP] 主题确认 USER_GATE 不可跳过——即使 topic 明确（用户 `/alloy:start <topic>` 带主题来），也必须用 AskUserQuestion 让用户确认 topic 或调整。
+> 违反字面 = 违反精神：哪怕"topic 已明确不用再确认"、"直接进 change name 效率高"、"设计已讨论完主题自然确认",也算违反——主题确认是 explore 与 change name 之间的必经闸门，跳过 = 用户失去调整 topic 的机会。
+> explore Skill 返回后,agent 必须立即调 AskUserQuestion 执行主题确认,不能做任何其他事情——包括输出分析文本、说"主题已确认"、或直接跳进 step 1。
+> ⛔ [HARD_STOP] thinking 决策"使用 AskUserQuestion"后,下一个动作必须是 AskUserQuestion 工具调用——禁 thinking 决策了但实际输出纯文本选项。
+> 违反字面 = 违反精神:哪怕"thinking 已决策,输出文本等价"、"纯文本选项也能让用户选",也算违反——决策→执行断裂 = 模型 compliance 不稳定,必须用更强约束:thinking 决策后立即调工具,中间不输出任何文本。
+> 常见违规模式:agent thinking 明确写"Let me use AskUserQuestion to confirm",next token 却降级为纯文本编号列表(1./2./3.)——这是决策→执行断裂,违规。
+> 常见违规模式:
+> - agent 判断"topic 已明确",跳过主题确认直接进 step 1 change name 确认
+> - agent 在 explore 阶段讨论了设计细节后,说"回到 Alloy 流程,主题已确认,现在进入 change name + 分支决策"——这是跳过主题确认 USER_GATE
+> - agent 输出一段分析文本(如"探查结论:话题可行,需求清晰")后直接进 change name,没有 AskUserQuestion
+> - agent thinking 决策"使用 AskUserQuestion"但实际输出纯文本编号列表(1./2./3.)——决策→执行断裂
+> 主题确认 USER_GATE 只确认 topic 本身——禁合并设计细节问题到本次 AskUserQuestion（详见上方 #X2 HARD_STOP）。
 
 > 主题确认后**直接进入步骤 1（change name + 分支决策）**，不要求用户重新输入 `/alloy:start <topic>`——主题已在流程内确认。
 
@@ -280,11 +303,11 @@ EXPLORE_START=$(date "+%Y-%m-%d %H:%M:%S")
 
 4. **初始化 state（先于 _phase start 和 _skill log，确保时间字段在最早时刻写入）：**
    ```bash
-   alloy _state init openspec/changes/<name> --at "$EXPLORE_START" --feature-branch "$FEATURE_BRANCH"
+   alloy _state init openspec/changes/<name> --at "$START_TIME" --feature-branch "$FEATURE_BRANCH"
    ```
    > 顺序硬约束：`_state init` 必须在 `_phase start` / `_skill log` 之前——后两者在 .alloy.yaml 不存在时会隐式创建并用当前时间作为 created_at。`_state init` 先跑则字段写入受控。
    >
-   > **`--at "$EXPLORE_START"` 让顶层 `started_at` 回填为全周期开始时间**（`/alloy:start` 敲下时刻，= Step 1 捕获的 EXPLORE_START），与步骤 6 的 `_phase start --at "$EXPLORE_START"` 同源。`created_at` 仍是文件创建时间（opsx:new 后），两者语义不同：created_at 记文件诞生，started_at 记周期起点。
+   > **`--at "$START_TIME"` 让顶层 `started_at` 回填为全周期开始时间**（`/alloy:start` 敲下时刻，= 阶段入口捕获的 START_TIME），与步骤 6 的 `_phase start --at "$START_TIME"` 同源。`created_at` 仍是文件创建时间（opsx:new 后），两者语义不同：created_at 记文件诞生，started_at 记周期起点。
    >
    > **`--feature-branch "$FEATURE_BRANCH"` 一次成型写入 feature_branch**——用步骤 1 分支决策选定的分支名（变量）,禁写死 `feature/<name>`。选 (c) 用当前分支时 `$FEATURE_BRANCH` = 当前分支名,写死会导致 .alloy.yaml 与实际分支不一致。前置：步骤 1 已完成分支决策。
 
@@ -298,30 +321,30 @@ EXPLORE_START=$(date "+%Y-%m-%d %H:%M:%S")
 6. **补录技能使用（explore + new，带 --at 传入实际使用时间——这两个技能在 change 目录创建前/创建时执行，技能 log 只能补录）：**
 
    > **[HARD_STOP] 两个 `--at` 必须用各自步骤捕获的独立时间戳，禁用同一个值。**
-   > 违反字面 = 违反精神：哪怕"时间差不多"、"先记一个后面改"——也禁止复用 `EXPLORE_START` 给 opsx:new。
+   > 违反字面 = 违反精神：哪怕"时间差不多"、"先记一个后面改"——也禁止复用 `START_TIME` 给 opsx:new。
    > called_at 语义是"技能实际调用时间"，两个技能在不同步骤调用，时间戳必须不同。
    >
    > Step 1（opsx:explore）在 change 目录创建前执行，opsx:new 在步骤 3 创建 change 时执行。此处补录时**必须用各自执行时捕获的开始时间**（`--at`），不可用当前时间。
    >
    > brainstorming 在步骤 8（change 目录已存在后）执行，届时实时 `_skill log`，不用补录。
    >
-   > **顺序：_skill log 在 _phase start 之前**——这样"记录 start 阶段开始时间"commit 时 skill_usage 已含 explore+new 记录。called_at 时间戳仍早于 phase start（用捕获的 EXPLORE_START/OPSX_NEW_START），阶段时间链语义正确。
+   > **顺序：_skill log 在 _phase start 之前**——这样"记录 start 阶段开始时间"commit 时 skill_usage 已含 explore+new 记录。called_at 时间戳仍早于 phase start（用捕获的 START_TIME/OPSX_NEW_START），阶段时间链语义正确。
 
    ```bash
-   # EXPLORE_START / OPSX_NEW_START 在 Step 1 / 步骤 3 执行时已捕获
+   # START_TIME / OPSX_NEW_START 在阶段入口 / 步骤 3 执行时已捕获
    # ⛔ 禁止两个 --at 用同一个值——各自独立时间戳
-   alloy _skill log openspec/changes/<name> start opsx:explore --at "$EXPLORE_START"
+   alloy _skill log openspec/changes/<name> start opsx:explore --at "$START_TIME"
    alloy _skill log openspec/changes/<name> start opsx:new --at "$OPSX_NEW_START"
    ```
 
 7. **记录 worktree + 阶段开始 commit（原子命令，在 _skill log 之后——skill_usage 已含 explore+new）：**
    ```bash
    alloy _state write openspec/changes/<name> worktree null
-   alloy _phase start openspec/changes/<name> start --at "$EXPLORE_START"
+   alloy _phase start openspec/changes/<name> start --at "$START_TIME"
    ```
    > `alloy _phase start` 原子完成：幂等写 `phase_timings.start.started_at` + git add 限路径 + commit。产生独立的"阶段开始"commit（仅 .alloy.yaml，含 started_at + feature_branch + worktree + skill_usage[explore+new]）。
    >
-   > **`--at "$EXPLORE_START"` 必传**——Step 1（opsx:explore）在 change 目录创建前执行，`_phase start` 在步骤 7 才能调用（需 change 目录存在）。若用当前时间，started_at 会晚于 explore/new 的技能使用时间，阶段时间链语义错乱。`EXPLORE_START` 是 start 阶段最早的动作，作为 started_at 补录时间最准确。
+   > **`--at "$START_TIME"` 必传**——Step 1（opsx:explore）在 change 目录创建前执行，`_phase start` 在步骤 7 才能调用（需 change 目录存在）。若用当前时间，started_at 会晚于 explore/new 的技能使用时间，阶段时间链语义错乱。`START_TIME` 是 start 阶段最早的动作，作为 started_at 补录时间最准确。
 
 8. **[Step 2] 需求设计——brainstorming（change 目录已存在，实时记录技能使用）：**
 
@@ -340,7 +363,8 @@ EXPLORE_START=$(date "+%Y-%m-%d %H:%M:%S")
 
    **Alloy 流程覆盖：** 本调用在 Alloy start 流程内，brainstorming 完成后产出是 draft.md
    （openspec/changes/<name>/draft.md），不是 docs/superpowers/specs/ 文件。
-   请跳过 brainstorming checklist 中的"Write design doc"和"Invoke writing-plans"步骤。
+   请跳过 brainstorming checklist 中的“Write design doc”和“Invoke writing-plans”步骤。
+   **额外跳过 "User approves design" gate**——brainstorming 内不单独 USER_GATE 确认方案,讨论完设计要点后直接生成 draft.md,由 step 9 的 draft 审查 USER_GATE 作为唯一确认点(避免对 draft 重复确认 2 次)。
 
    **交互风格：** 使用 AskUserQuestion 组件，不用纯文本 (a)(b)(c)。
    单选用 radio，多选用 checkbox，代码方案对比用 preview。
@@ -355,7 +379,7 @@ EXPLORE_START=$(date "+%Y-%m-%d %H:%M:%S")
    仅当用户主题模糊（如"做个工具"无具体描述）时,才给方向让用户选。
    ```
 
-   **用户确认方案后，生成 draft.md**（不是 spec 文件）。用户要求调整时回到 brainstorming 继续。
+   **讨论完设计要点后,直接生成 draft.md**（不是 spec 文件）——brainstorming 内不单独 USER_GATE 确认方案,由 step 9 的 draft 审查 USER_GATE 作为唯一确认点。用户在讨论中提出调整时回到 brainstorming 继续。
 
    ```markdown
    # [功能名称]
@@ -373,12 +397,12 @@ EXPLORE_START=$(date "+%Y-%m-%d %H:%M:%S")
    <!-- 做什么、明确不做什么 -->
    ```
 
-   > [HARD_STOP] **用户明确确认方案之前，不要生成 draft.md。**
-   > 违反字面 = 违反精神：哪怕"内容已经基本明确再补审查"，也算违反——审查窗口是 USER_GATE，不可后置。
+   > [HARD_STOP] brainstorming 讨论未完成前,不要生成 draft.md——但讨论完成不需要单独 USER_GATE 确认,直接生成 draft,由 step 9 审查。
+   > 违反字面 = 违反精神:哪怕"讨论差不多了先生成 draft 节省时间",也算违反——设计要点未对齐就生成 draft,后续 step 9 审查会反复回 brainstorming,效率更低。
 
    > **交互风格恢复（HARD_STOP）：** brainstorming 已结束。从此刻起，所有 `🔴 USER_GATE` 首次呈现即必须调用平台原生交互工具——禁"先文本展示 (a)/(b) 再等待用户打字"。Claude Code 用 `AskUserQuestion`；其他平台按 `commands/alloy/references/interaction-style.md` §平台工具对照 降级。Agent 刚从 brainstorming 的"每次一个问题"模式出来，容易延续纯文本习惯——这是 Iron Law 违规。违反字面 = 违反精神：哪怕"就这一个确认用文本也行"、"先展示再问"，也算违反——首次即必须用平台交互工具。
 
-9. **生成 `draft.md` 审查窗口——start 阶段唯一的制品闸门：**
+9. **生成 `draft.md` 审查窗口——start 阶段唯一确认点（brainstorming 内不单独确认方案,此处合并为 draft 锁定 USER_GATE）：**
 
     > 制品 draft ✓ 完成
     > [展示 draft.md 完整内容]
@@ -426,7 +450,25 @@ EXPLORE_START=$(date "+%Y-%m-%d %H:%M:%S")
 > [HARD_STOP] **start 阶段到此结束。**
 > 不要自动运行 `/alloy:plan`，不要生成 plan 阶段制品，不要调用 `opsx:continue` 或 `writing-plans`。
 > 违反字面 = 违反精神：哪怕"用户上次也是接 plan 这次猜跳过 USER_GATE"或"draft 已锁定流程很顺"，也算违反 Iron Law（NO AUTO ADVANCE）。
-> **你的唯一操作：展示完成信息，等待用户输入下一个命令。**
+> **"不自动进 plan"指未经 USER_GATE 确认不能进——用户在下方 USER_GATE 明确选"进入 plan"后,agent 必须直接加载 plan skill 执行,不再要求用户手动输入命令。**
+
+🔴 USER_GATE（必须 AskUserQuestion 工具调用）: start 阶段完成,下一步?
+
+> ⛔ [HARD_STOP] 必须用 `AskUserQuestion` 工具调用——禁纯文本列"(a)/(b)/(c)"选项,禁直接 `Skill` 加载下一阶段,禁纯文本"等待用户输入"。
+> 违反字面 = 违反精神：哪怕"纯文本列选项效果一样"、"用户看着选项选就行"、"直接 Skill 加载更流畅",也算违反——AskUserQuestion 强制结构化选项,避免 agent 用模糊措辞让用户回 yes 蒙混过关（§4.1）。
+> 非 Claude Code 平台按 `commands/alloy/references/interaction-style.md` §平台工具对照 降级为结构化文本选项。
+
+> 选项:
+> - (a) 进入 plan 阶段——加载 `alloy:plan` skill 推进制品生成
+> - (b) 暂停——查看状态(`alloy status`)或思考 draft 内容
+> - (c) 其他——用户自定义下一步
+
+> 用户选 (a) 后,agent **必须直接用 `Skill` 工具加载 `alloy:plan`**(传入 change name),进入 plan 阶段——禁提示"请运行 /alloy:plan"让用户手动输入。用户已在 USER_GATE 授权,阶段转换已触发,再让用户输入命令 = 多此一举 = 体验差。
+> 用户选 (b) 后,agent 停止,输出"已暂停。需要时运行 /alloy:plan <name> 继续。"
+> 用户选 (c) 后,agent 停止,等用户后续命令。
+> ⛔ 禁止：纯文本输出"等待用户输入下一个命令"——这不符合 §4.1 USER_GATE 必须用 AskUserQuestion 的规范。常见违规模式：agent 输出"start 阶段完成。你的唯一操作：等待用户输入下一个命令。"——这是纯文本,不是 AskUserQuestion。
+> ⛔ 禁止：纯文本列"(a) 进入 plan / (b) 暂停 / (c) 其他"让用户回复——必须用 AskUserQuestion 工具。常见违规模式:agent 输出"🔴 USER_GATE:下一步?(a) 进入 plan (b) 暂停 (c) 其他"纯文本,然后直接 Skill 加载。
+> ⛔ 禁止：用户选 (a) 后,agent 提示"请运行 /alloy:plan <name>"让用户手动输入——用户已授权,应直接加载 plan skill。常见违规模式:agent 输出"好的,请输入 /alloy:plan hello-script 进入规划阶段"。
 
 > **§5.2.3 路径 B 边界说明：** start 是 phase 推进起点（无前序 phase），phase=started 写入失败时降级路径只有"重跑 /alloy:start"——不存在 phase 回退场景。本阶段无 §5.2.3 适用空间。
 
@@ -450,6 +492,13 @@ EXPLORE_START=$(date "+%Y-%m-%d %H:%M:%S")
 → 已完成制品：<列出>
 → 下一步：<建议操作>
 ```
+
+> ⛔ [HARD_STOP] 接续路径 Phase 框的"启动时间"必须读 state 现有 started_at(或 created_at),禁重新捕获 date。
+> 违反字面 = 违反精神:哪怕"重新捕获更准确"、"state 时间戳可能过期",也算违反——接续路径 state 已有 started_at,重新捕获 = 覆盖历史 = retrospective 时间链失真。
+> 常见违规模式:
+> - agent 在接续路径执行 `date "+%Y-%m-%d %H:%M:%S"` 用于 Phase 框显示(实测差可达 2+ 分钟)
+> - agent 用本次 session 时间作为 started_at(接续路径 state 已有 started_at,不应覆盖)
+> - agent 觉得"Phase 框只是显示,重捕获无所谓"——Phase 框显示的时间会被 retrospective §4 时间链审计用到,失真 = 审计失真
 
 读取 `.alloy.yaml` + 文件系统确认制品状态，按 phase 路由：
 

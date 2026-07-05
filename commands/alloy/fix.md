@@ -6,7 +6,7 @@ tags: [alloy, workflow]
 spec: 01-product-spec/06-fix-spec.md
 behaviors:
   preconditions: 1
-  hard_stops:    6
+  hard_stops:    8
   user_gates:    7
   warns:         0
   artifacts: []
@@ -121,7 +121,7 @@ HIT=$(echo "$USER_DESC $DIAGNOSIS" | grep -Eo "$KEYWORDS" | sort -u | tr '\n' ' 
 > (b) 这是新需求 / 重构 / 优化——退出 fix，运行 `/alloy:start` 开新 change
 > (c) 两者混合——退出 fix，先开 change 处理新需求，剩余 bug 再回 fix
 
-**[HARD_STOP]** agent 不得基于"用户用了 fix 命令所以一定是 bug"自动选 (a)——必须用户物理选择。命中关键词且未经 USER_GATE 直接进 Step 3 = 违反 Iron Law。
+**⛔ HARD_STOP** agent 不得基于"用户用了 fix 命令所以一定是 bug"自动选 (a)——必须用户物理选择。命中关键词且未经 USER_GATE 直接进 Step 3 = 违反 Iron Law。
 
 **违反字面 = 违反精神：** 哪怕"用户描述里说了 bug 字样"或"诊断结论看着像 bug"，只要命中关键词就必须 USER_GATE。fix 流程跳过新 change 闸门 = spec 与代码分叉的隐蔽路径。
 
@@ -135,7 +135,7 @@ HIT=$(echo "$USER_DESC $DIAGNOSIS" | grep -Eo "$KEYWORDS" | sort -u | tr '\n' ' 
 
 确认是代码 bug 后，根据场景编号走对应路径。**场景标记不可跳过。**
 
-**[HARD STOP] 主分支保护：** 当前在主分支且无活跃 change → **禁止直接修改代码**。任何主分支上的 commit 都污染历史。必须先创建分支。一行和千行保护等级完全一样。
+**⛔ HARD_STOP 主分支保护：** 当前在主分支且无活跃 change → **禁止直接修改代码**。任何主分支上的 commit 都污染历史。必须先创建分支。一行和千行保护等级完全一样。
 
 #### 场景 1：有归属 change + worktree 存在
 
@@ -149,6 +149,8 @@ HIT=$(echo "$USER_DESC $DIAGNOSIS" | grep -Eo "$KEYWORDS" | sort -u | tr '\n' ' 
 3. **⛔ HARD_STOP pre-commit 校验**（读取 `commands/alloy/references/fix-precommit-check.md`）：commit 前必须确认 skill_usage[] 包含 `fix/test-driven-development` + `fix/verification-before-completion` 两条 `action=log` 记录。缺失 → 返回步骤 1-2 重做，**禁 agent 自动补 `_skill log` 后继续**。
 4. 🔴 STOP: 确认修复内容（展示 `git diff --stat` 和关键变更摘要。确认提交 / 需要调整）
 5. 精确提交：`git add <路径> && git commit -m "fix: <描述>"`
+
+   > **git add 限路径（§5.2.1 HARD_STOP）：** 禁 `git add -A`/`-a`/`.`，必须明确路径。违反字面 = 违反精神：哪怕"反正只改了已知文件"，也禁通配——可能把测试残留或临时文件一并 commit。
 
 ```bash
 alloy _skill log openspec/changes/<name> fix superpowers:test-driven-development
@@ -167,6 +169,8 @@ alloy _skill log openspec/changes/<name> fix superpowers:verification-before-com
 3. **⛔ HARD_STOP pre-commit 校验**（读取 `commands/alloy/references/fix-precommit-check.md`）：与场景 1 相同——skill_usage[] 校验通过才能进入步骤 4。
 4. 🔴 STOP: 确认修复内容（展示 `git diff --stat` 和关键变更摘要。确认提交 / 需要调整）
 5. 精确提交到 feature 分支
+
+   > **git add 限路径（§5.2.1 HARD_STOP）：** 禁 `git add -A`/`-a`/`.`，必须明确路径。
 
 ```bash
 alloy _skill log openspec/changes/<name> fix superpowers:test-driven-development
@@ -189,17 +193,21 @@ alloy _skill log openspec/changes/<name> fix superpowers:verification-before-com
 1. 加载 `test-driven-development`
 2. 加载 `verification-before-completion`
 3. 精确提交（可追溯原 change 时注明 `fix-from: <change名>`）
+
+   > **git add 限路径（§5.2.1 HARD_STOP）：** 禁 `git add -A`/`-a`/`.`，必须明确路径。
 4. **⛔ HARD_STOP merge 前 USER_GATE 校验**（读取 `commands/alloy/references/fix-precommit-check.md` 场景 3 章节）：merge 精确字符串确认前必须追加 🔴 USER_GATE 让用户物理确认已加载 TDD + verification 两个 skill，禁 agent 基于 "diff 含测试代码" 自动跳过。
 5. 合并确认（阻塞点）：
 
    > 确认合并：源 `fix/<desc>` → 目标 `<MAIN_BRANCH>`
    > 输入 `merge fix/<desc> into <MAIN_BRANCH>` 确认，其他输入取消。
 
-   **必须等待精确输入。** "好"、"可以"、"y"不算确认。**[HARD_STOP] agent 不得在工具调用中预填或模拟此精确字符串**（见 interaction-style.md "沉默 ≠ 授权"通用禁令）。
+   **必须等待精确输入。** "好"、"可以"、"y"不算确认。**⛔ HARD_STOP agent 不得在工具调用中预填或模拟此精确字符串**（见 interaction-style.md "沉默 ≠ 授权"通用禁令）。
 
    确认后：
    ```bash
    git checkout <MAIN_BRANCH>
+   # ⛔ [HARD_STOP] merge 冲突时禁自动 git merge --abort / git reset --hard / git checkout . / git restore . / git stash（§3.5.1）
+   # 违反字面 = 违反精神：哪怕"冲突简单 abort 重来",也算违反——破坏性命令会丢失用户已 stage 的冲突解决方案,必须报告现场让用户决策。
    git merge fix/<desc> --no-ff
    git branch -d fix/<desc>
    ```

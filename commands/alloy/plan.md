@@ -539,10 +539,23 @@ alloy _state set openspec/changes/<name> phase started
 
 **plans 完成后不要自动进入 apply** — 给用户空间审视完整规划。
 
-```
-制品文件禁止手动修改。如需变更，回到 brainstorming 在当前 change 内重新讨论。
-准备好后，运行 /alloy:apply 进入执行阶段。
-```
+🔴 USER_GATE（必须 AskUserQuestion 工具调用）: plan 阶段完成,下一步?
+
+> ⛔ [HARD_STOP] 必须用 `AskUserQuestion` 工具调用——禁纯文本列"(a)/(b)/(c)"选项,禁直接 `Skill` 加载下一阶段,禁纯文本"运行 /alloy:apply"提示。
+> 违反字面 = 违反精神：哪怕"纯文本列选项效果一样"、"用户看着选项选就行"、"直接 Skill 加载更流畅",也算违反——AskUserQuestion 强制结构化选项,避免 agent 用模糊措辞让用户回 yes 蒙混过关（§4.1）。
+> 非 Claude Code 平台按 `commands/alloy/references/interaction-style.md` §平台工具对照 降级为结构化文本选项。
+
+> 选项:
+> - (a) 进入 apply 阶段——加载 `alloy:apply` skill 推进执行
+> - (b) 暂停——审视规划制品,或查看状态(`alloy status`)
+> - (c) 其他——用户自定义下一步
+
+> 用户选 (a) 后,agent **必须直接用 `Skill` 工具加载 `alloy:apply`**(传入 change name),进入 apply 阶段——禁提示"请运行 /alloy:apply"让用户手动输入。
+> 用户选 (b) 后,agent 停止,输出"已暂停。需要时运行 /alloy:apply <name> 继续。"
+> 用户选 (c) 后,agent 停止,等用户后续命令。
+> ⛔ 禁止：纯文本输出"运行 /alloy:apply 进入执行阶段"让用户手动输入——用户已在 USER_GATE 授权,应直接加载 apply skill。
+> ⛔ 禁止：纯文本列"(a) 进入 apply / (b) 暂停 / (c) 其他"让用户回复——必须用 AskUserQuestion 工具。常见违规模式:agent 输出"🔴 USER_GATE:下一步?(a) 进入 apply (b) 暂停 (c) 其他"纯文本,然后直接 Skill 加载。
+> ⛔ 禁止：用户选 (a) 后,agent 提示"请运行 /alloy:apply"让用户手动输入。常见违规模式:agent 输出"好的,请输入 /alloy:apply hello-script 进入执行阶段"。
 
 > **提示：apply 阶段早期的需求变更处理**
 > apply 阶段早期（worktree 未创建 + SDD/EP 未启动）仍可回退到 brainstorming 处理需求变更，走检查点回退流程。

@@ -1,7 +1,7 @@
 ---
 behaviors:
   preconditions: 7
-  hard_stops:    19
+  hard_stops:    20
   user_gates:    9
   warns:         1
   artifacts: [proposal, design, specs, tasks, plans]

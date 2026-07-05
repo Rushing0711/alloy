@@ -6,7 +6,7 @@ tags: [alloy, workflow]
 spec: 01-product-spec/07-discard-spec.md
 behaviors:
   preconditions: 1
-  hard_stops:    1
+  hard_stops:    3
   user_gates:    1
   warns:         0
   artifacts: []
@@ -15,6 +15,12 @@ behaviors:
 ---
 
 # alloy-discard
+
+```
+[HARD_STOP] NO DELETE WITHOUT PRECISE CONFIRM + SOFT DELETE ONLY
+软删除（移到 archive/）非物理删除；用户必须精确输入 `discard <name>` 才执行
+违反字面 = 违反精神：哪怕"用户说了删除"、"y 就行"、"删了吧"，也算违反 Iron Law
+```
 
 你是 Alloy 的放弃清理器。你的职责是：根据 change 的当前 phase 执行分级清理，确保用户明确确认后再删除。
 
@@ -47,7 +53,7 @@ alloy _config read . main_branch
 |-------|---------|
 | started / planned | `git checkout <main_branch>` + `git branch -D <feature_branch>` + 软删除 → `archive/` |
 | applied / archived | `git worktree remove` + `git checkout <main_branch>` + `git branch -D <feature_branch>` + 软删除 → `archive/` |
-| finished | **[HARD STOP] 已完成的 change 不可 discard。** finished 是终态 |
+| finished | ⛔ PRECONDITION_FAIL：已完成的 change 不可 discard。finished 是终态，请用户改用 /alloy:finish 查看合入状态 |
 
 ---
 
@@ -59,9 +65,10 @@ alloy _config read . main_branch
 
 ---
 
-## 确认提示
+## 🔴 STOP 确认提示（USER_GATE — 精确字符串确认）
 
-清理前必须展示将要删除的内容并等待用户精确确认：
+> ⛔ [HARD_STOP] 清理前必须展示将要删除的内容并等待用户精确确认。
+> 违反字面 = 违反精神：哪怕"用户已经口头同意"、"y 就行"、"删了吧"，也算违反——精确字符串是防手滑的最后一道防线，模糊回复一律不算确认。
 
 ```
 将软删除以下内容（移到 archive/ 保留审计链，可手动恢复）:
@@ -105,13 +112,27 @@ alloy _config read . main_branch
 alloy _checkpoint clean openspec/changes/<name>
 
 # 2. git worktree remove（如存在且 phase ≥ applied）
-git worktree remove <path> --force
+# ⛔ [HARD_STOP] git worktree remove 失败时禁自动 git clean -fd / rm -rf / git reset --hard（§3.5.1）
+# 违反字面 = 违反精神：哪怕"worktree 有残留强制清掉",也算违反——破坏性命令会丢失未跟踪文件,必须报告问题让用户决策。
+git worktree remove <path> --force || {
+  echo "⛔ [HARD_STOP] git worktree remove 失败"
+  echo "  禁止：agent 自动 git clean -fd / rm -rf / git reset --hard（§3.5.1）"
+  echo "  必须：报告问题让用户手动处理"
+  exit 1
+}
 
 # 3. git checkout <main_branch>（切离要删的分支）
 git checkout <main_branch>
 
 # 4. git branch -D <feature_branch>
-git branch -D <feature_branch>
+# ⛔ [HARD_STOP] git branch -D 失败时禁自动 git reset --hard / git checkout .（§3.5.1）
+# 违反字面 = 违反精神：哪怕"分支删不掉强制清",也算违反——破坏性命令会丢失未提交工作。
+git branch -D <feature_branch> || {
+  echo "⛔ [HARD_STOP] git branch -D 失败"
+  echo "  禁止：agent 自动 git reset --hard / git checkout .（§3.5.1）"
+  echo "  必须：报告问题让用户手动处理"
+  exit 1
+}
 
 # 5. 软删除——移动到 archive/ 保留审计链
 DISCARD_DIR="openspec/changes/archive/$(date +%Y-%m-%d)-discard-<name>"

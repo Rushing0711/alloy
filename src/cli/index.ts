@@ -404,6 +404,11 @@ async function main() {
       await archiveCommand(restArgs);
       break;
     }
+    case "_worktree-cleanup": {
+      const { worktreeCleanupCommand } = await import("./commands/internal/worktree-cleanup.js");
+      await worktreeCleanupCommand(restArgs);
+      break;
+    }
     default:
       console.error(`未知命令: ${command}`);
       console.log(USAGE);
