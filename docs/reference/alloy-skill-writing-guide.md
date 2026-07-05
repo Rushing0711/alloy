@@ -293,17 +293,17 @@ git add 限路径（如 openspec/specs/ openspec/changes/<name>/），
 
 > 本附录记录按本规范执行后的 frontmatter 对齐结果。代码是真相源——skill md 改动后必须重新审计节点并同步 frontmatter。
 
-### A.1 当前对齐状态（2026-06-27 审计）
+### A.1 当前对齐状态（2026-07-05 审计）
 
 | skill | preconditions | hard_stops | user_gates | warns |
 |-------|--------------|------------|------------|-------|
-| start.md | 8 | 13 | 9 | 2 |
-| plan.md | 7 | 19 | 9 | 1 |
-| apply.md | 12 | 14 | 7 | 3 |
-| archive.md | 6 | 10 | 3 | 1 |
-| finish.md | 5 | 8 | 5 | 2 |
-| fix.md | 1 | 6 | 7 | 0 |
-| discard.md | 1 | 1 | 1 | 0 |
+| start.md | 8 | 16 | 8 | 2 |
+| plan.md | 7 | 20 | 9 | 1 |
+| apply.md | 12 | 17 | 7 | 3 |
+| archive.md | 6 | 13 | 3 | 1 |
+| finish.md | 6 | 9 | 5 | 2 |
+| fix.md | 1 | 8 | 7 | 0 |
+| discard.md | 1 | 3 | 1 | 0 |
 
 ### A.2 审计方法
 

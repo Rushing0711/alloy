@@ -54,6 +54,38 @@ Alloy 不是靠"相信 Agent"来保证质量，而是靠三层防线：
 | 脚本层 | `alloy _guard` + `alloy _record check` | **不能**——TypeScript 硬阻断 |
 | 审查层 | 每制品人工确认（不提供"跳过"） | **不能**——必须你点头 |
 
+### 持续优化方向
+
+**核心目标:** 提高 agent 执行稳定性——让 5 阶段流水线在中大型模型上稳定运行,减少 agent 偏差。
+
+**已采用的优化方案:**
+
+| 方案 | 说明 | 状态 |
+|------|------|------|
+| skill md 强化 | HARD_STOP + 三层防御(显式否定 + 精神=字面 + Red Flags) | ✅ 已大量做 |
+| CLI 原子命令下沉 | 多步 bash 序列下沉为原子 CLI(`_worktree-cleanup` / `_archive` / `_phase` / `_artifact commit` 等) | ✅ 已做 |
+| references 模块化 | 主文件 + 子文件,按需加载(start-rationalizations / apply-worktree 等) | ✅ 已做 |
+| _guard 单点校验 | `precheck` / `branch-position` / `worktree-status` | ✅ 已做 |
+| 阶段间自动衔接 | 完成段 AskUserQuestion 问下一步,选"继续"直接 Skill 加载 | ✅ 已做 |
+| spec-audit 对账 | skill frontmatter 与 spec 对账,漂移检测 | ✅ 已做 |
+| memory 分类 | archive §6 候选区分项目/用户 memory,逐条 USER_GATE | ✅ 已做 |
+
+**新方案候选(按优先级):**
+
+| 优先级 | 方案 | 说明 |
+|--------|------|------|
+| 1 | 校验型 CLI(阶段前置/后置) | `alloy _verify phase-enter/exit <phase>` 校验阶段转换状态——CLI 确定性校验,不替代 agent 执行,只报告缺失项。比下沉轻量,比 HARD_STOP 可靠 |
+| 2 | retrospective 反馈循环加强 | retrospective.md 加偏差分类段,start 阶段读取历史偏差针对性提示——跨 session 经验累积 |
+
+**不采用的方向:**
+
+| 方案 | 原因 |
+|------|------|
+| hooks 拦截 | 平台依赖 + 维护成本,用户拒绝 |
+| 继续强化 skill md 措辞 | 已过度(MUST 堆砌反模式),边际收益递减 |
+| 更多 CLI 下沉 | 当前基本不发现问题,搁置 |
+| compliance-check CLI | 评估工具,不直接提升稳定性,降级为可选任务 |
+
 ---
 
 ## 二、关键决策指南
@@ -193,9 +225,12 @@ worktree 是 apply 的**本地实现细节**。apply 完成后代码已经合并
 | `alloy _record` | 制品 hash 记录管理（`compute\|write\|check\|approver`） |
 | `alloy _config` | 读写 `openspec/config.yaml` 项目级配置 |
 | `alloy _checkpoint` | 检查点管理（`create\|list\|switch\|clean`） |
+| `alloy _archive` | 归档原子命令:调用 openspec archive CLI + 校验 Delta Spec promote + 校验目录移动 |
+| `alloy _worktree-cleanup` | worktree 清理原子命令:merge + remove + branch -d + worktree_merged_at 记录(接受 state 字段参数) |
 | `alloy _retro` | retrospective 机械数据预生成（`scaffold`） |
 | `alloy _env` | 环境完整性检测（`check`） |
 | `alloy _progress` | 制品进度扫描（`artifacts`） |
+| `alloy _spec-audit` | skill frontmatter 与 spec 对账,检测漂移 |
 
 ### 4.3 Slash Command（AI Agent 内使用）
 

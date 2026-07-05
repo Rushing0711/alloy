@@ -49,10 +49,12 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 | `alloy _record` | 制品 hash 记录管理（`compute\|write\|check\|approver`） |
 | `alloy _config` | 读写 `openspec/config.yaml` 项目级配置（`read\|write`） |
 | `alloy _checkpoint` | 检查点管理（`create\|list\|switch\|clean`），支持 `--kind` + `--reason` |
+| `alloy _archive` | 归档原子命令:调用 openspec archive CLI + 校验 Delta Spec promote + 校验目录移动 |
+| `alloy _worktree-cleanup` | worktree 清理原子命令:merge + remove + branch -d + worktree_merged_at 记录(接受 state 字段参数) |
 | `alloy _retro` | retrospective 机械数据预生成（`scaffold`） |
 | `alloy _env` | 环境完整性检测（`check`），4 项基础设施任一缺失 exit(1) |
 | `alloy _progress` | 制品进度扫描（`artifacts`），输出 done/missing/hash-mismatch/pending |
-| `alloy _spec-audit` | spec 审计工具 |
+| `alloy _spec-audit` | spec 审计工具,检测 skill frontmatter 与 spec 的 behaviors 字段漂移 |
 
 ### Slash Command（Agent 内部执行）
 

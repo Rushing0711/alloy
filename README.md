@@ -11,6 +11,10 @@
 | 做到一半改需求？编码未开始就回溯修正，已开始开新 change | 规格和代码分叉 |
 | 每次 change 结束自动复盘，教训反哺下次 | 每次都从零开始 |
 | 每个制品 hash 锁定 + 独立 commit，完整可追溯 | 改了什么都记不住 |
+| 阶段完成自动衔接，选"继续"直接进下一阶段 | 每阶段手动输命令 |
+| 多步操作下沉原子 CLI（`_worktree-cleanup` / `_archive` / `_artifact commit`），确定性执行 | Agent 手写多步 bash 易出错 |
+| skill 与 spec 对账（`_spec-audit`），frontmatter 漂移检测 | 文档与代码漂移 |
+| memory 分类（项目级 / 用户级），教训精准反哺 | memory 混乱污染全局 |
 
 ---
 
