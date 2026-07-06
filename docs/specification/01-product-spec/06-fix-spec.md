@@ -19,7 +19,7 @@ behaviors:
 /alloy:fix
 ```
 
-核心原则：诊断先行——先判断是代码 bug 还是 spec 变更；分支后置——确认是代码 bug 后才选择分支策略。
+核心原则：诊断先行——先判断是代码 bug 还是 spec 变更；分支后置——确认是代码 bug 后才选择分支策略。每次调用 fix 都从 Step 1 开始（重复调用 ≠ 授权绕过）。
 
 ## 前置检查
 
@@ -38,7 +38,7 @@ behaviors:
 
 ## Step 2: 根因诊断 (superpowers:systematic-debugging)
 
-├── 诊断结论：需改 spec → 引导 /alloy:start <建议名称>，结束 fix
+├── 诊断结论：需改 spec / 命中关键词 → USER_GATE 选 (b)/(c) → 自动接续 /alloy:start <原始描述>（agent invoke Skill 工具，不让用户手动输）
 └── 诊断结论：代码 bug → 用户确认后进入 Step 3
 
 ## Step 3: 分支选择 + 修复（确认是代码 bug 后）
@@ -63,4 +63,4 @@ behaviors:
 
 ## spec 变更兜底
 
-修复中发现 spec 问题 → 完成后提示开新 change；正常修复 → 不提示
+修复中发现 spec 问题 → 完成后 USER_GATE 是否开新 change；选"开新 change"自动接续 /alloy:start；正常修复 → 不提示

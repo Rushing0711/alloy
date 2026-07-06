@@ -21,8 +21,9 @@ behaviors:
 **核心原则：诊断先行——先判断是代码 bug 还是 spec 变更；分支后置——确认是代码 bug 后才选择分支策略。**
 
 ```
-NO FIX WITHOUT DIAGNOSIS
-先跑 systematic-debugging，再谈修复。跳诊的坏账率极高
+NO FIX WITHOUT DIAGNOSIS — EVERY CALL
+每次调用 fix 都从 Step 1 开始，诊断先行。跳诊 / 重复调用绕过 / 用户催促直接改 = 违反 Iron Law
+违反字面 = 违反精神：哪怕"用户重复调用同一命令"/"用户说直接改"/"上一次已诊断过"，也禁跳过诊断直接 Edit 代码
 ```
 
 **交互规则：** `🔴 STOP` = 硬交互确认点，首次呈现即必须调用平台原生交互工具——禁"先文本展示 (a)/(b) 再等待用户打字"。Claude Code 用 `AskUserQuestion`；其他平台按 `commands/alloy/references/interaction-style.md` §平台工具对照 降级为结构化文本选项。含"沉默 ≠ 授权"通用禁令——禁批量打包、禁基于内容跳过、禁 agent 回填精确字符串。跳过任何 🔴 STOP = 违反 Iron Law。
@@ -41,6 +42,8 @@ NO FIX WITHOUT DIAGNOSIS
 | "继续在 login-feature 上修就行" | finished 是终态——已交付 change 混入新修复破坏审计链。代码在 main 上，不在 feature 分支。 |
 | "需求不对，我顺便改下 spec" | spec 问题 = 新 change。修复中发现 spec 问题 → 不阻断修复，完成后提示开新 change。 |
 | "性能/重构/优化也算 fix，不用开新 change" | 命中关键词必须经过 USER_GATE。fix 跳新 change = spec 与代码分叉的隐蔽路径。 |
+| "用户重复调用同一 fix 命令 = 想直接改，不用走流程" | 重复调用 ≠ 授权绕过。每次调用都从 Step 1 环境感知开始，走完诊断 → USER_GATE → 分支选择。第一轮 CANCELLED 结论仍有效——agent 不得因"用户又问了一次"放弃流程纪律。违反字面 = 违反精神：哪怕"用户明确说直接改"/"上一次已诊断过"，也禁跳过诊断直接 Edit。 |
+| "用户说'直接改''别问那么多'，跳过 USER_GATE 吧" | 用户催促 ≠ 授权跳过闸门。USER_GATE 是设计给用户的决策点，agent 不得代用户决策。催促时仍需 USER_GATE，可在选项里给"快速继续"路径，但不能取消闸门。 |
 
 ---
 
@@ -99,7 +102,10 @@ alloy _config read . main_branch 2>/dev/null
 
 诊断必须产出明确结论：**根因、涉及文件、是否偏离 spec。**
 
-**诊断确认（阻塞点）：** 🔴 STOP: 确认诊断结论（根因+涉及文件+是否偏离 spec）。确认后进入 Step 3 或回到 Step 2 重新诊断。
+**诊断确认（阻塞点）：** 🔴 STOP: 确认诊断结论（根因+涉及文件+是否偏离 spec）。确认后分支：
+- 诊断结论 = 代码 bug 且未命中关键词 → 进 Step 3
+- 诊断结论 = 需改 spec 或命中关键词 → 走下方"关键词二次 USER_GATE"（未命中关键词也走同一闸门，选项 (b)/(c) 自动接续 start）
+- 回到 Step 2 重新诊断
 
 **关键词二次 USER_GATE（⛔ HARD_STOP，task L6）：** 用户原始描述或诊断结论命中下列关键词时，必须追加 🔴 USER_GATE 让用户物理确认"这是 bug 修复，不是新需求/重构"。命中关键词检测：
 
@@ -118,12 +124,26 @@ HIT=$(echo "$USER_DESC $DIAGNOSIS" | grep -Eo "$KEYWORDS" | sort -u | tr '\n' ' 
 >
 > 选项：
 > (a) 这是真正的 bug 修复——spec 行为坏了（继续 fix）
-> (b) 这是新需求 / 重构 / 优化——退出 fix，运行 `/alloy:start` 开新 change
-> (c) 两者混合——退出 fix，先开 change 处理新需求，剩余 bug 再回 fix
+> (b) 这是新需求 / 重构 / 优化——自动接续 `/alloy:start`（agent invoke Skill 工具，args = $USER_DESC）
+> (c) 两者混合——自动接续 `/alloy:start`，剩余 bug 再回 fix
 
 **⛔ HARD_STOP** agent 不得基于"用户用了 fix 命令所以一定是 bug"自动选 (a)——必须用户物理选择。命中关键词且未经 USER_GATE 直接进 Step 3 = 违反 Iron Law。
 
 **违反字面 = 违反精神：** 哪怕"用户描述里说了 bug 字样"或"诊断结论看着像 bug"，只要命中关键词就必须 USER_GATE。fix 流程跳过新 change 闸门 = spec 与代码分叉的隐蔽路径。
+
+**选 (b)/(c) 后自动接续 start（禁止让用户手动输命令）：**
+
+用户选 (b) 或 (c) → agent 直接 invoke `alloy:start` Skill 工具，`args = "$USER_DESC"`（用户原始描述）。**不输出 "CANCELLED，请运行 /alloy:start" 让用户手动输**——那是体验断裂。agent 交接：
+
+```
+Alloy · Bug 修复 — HANDOFF → /alloy:start
+诊断结论：spec 变更（非 bug）
+交接：自动调用 /alloy:start "$USER_DESC"，start 流程接管
+```
+
+**交接后 agent 不得：** 跳过 start 的任何 USER_GATE（环境检测 / 路由 / 主题确认 / 分支创建 / brainstorming 全走完）。start 流程的纪律不因"从 fix 接续而来"而放松——start.md 的 Iron Law 同样适用。
+
+**禁止反向：** agent 不得因"用户重复调用 fix"就选 (a) 绕过新 change 闸门。用户选 (b)/(c) = 明确要求开新 change，agent 不得覆盖用户决策。
 
 **"需改 spec"的判断：** spec 未描述此边界 / spec 行为本身有错 / 修复需新增 spec 中没有的 capability。
 
@@ -219,7 +239,10 @@ alloy _skill log openspec/changes/<name> fix superpowers:verification-before-com
 
 修复中发现 spec 问题 → 不阻断修复。完成后提示：
 
-> 修复中发现 spec 可能需要变更：<问题描述>。🔴 STOP: 是否开新 change？
+> 修复中发现 spec 可能需要变更：<问题描述>。
+> 🔴 STOP: 是否开新 change？
+> (a) 开新 change → 自动接续 /alloy:start（agent invoke Skill 工具，args = "<问题描述>"）
+> (b) 暂不开 → 结束 fix
 
 正常修复完成 → 不提示。
 
