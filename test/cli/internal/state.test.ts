@@ -210,7 +210,7 @@ describe("alloy _state", () => {
       await stateCommand(["init", changeDir]);
 
       const state = await readState(changeDir);
-      expect(state.phase).toBe("started");
+      expect(state.phase).toBe("starting");
       expect(state.schema_version).toBe(1);
       expect(typeof state.schema_version).toBe("number");
       expect(state.worktree).toBeNull();

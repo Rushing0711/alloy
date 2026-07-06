@@ -90,7 +90,7 @@ describe("alloy _verify", () => {
   it("start-exit 校验通过(draft + state 字段齐全)", async () => {
     await writeFile(join(changeDir, "draft.md"), "# draft\n", "utf-8");
     readStateMock.mockResolvedValue({
-      phase: "started",
+      phase: "starting",
       feature_branch: "feature/test",
       worktree: null,
       started_at: "2026-07-05 10:00:00",
@@ -106,7 +106,7 @@ describe("alloy _verify", () => {
 
   it("start-exit 校验失败(缺 draft.md)", async () => {
     readStateMock.mockResolvedValue({
-      phase: "started",
+      phase: "starting",
       feature_branch: "feature/test",
       worktree: null,
       started_at: "2026-07-05 10:00:00",
@@ -125,7 +125,7 @@ describe("alloy _verify", () => {
   it("start-exit 校验失败(phase 不匹配)", async () => {
     await writeFile(join(changeDir, "draft.md"), "# draft\n", "utf-8");
     readStateMock.mockResolvedValue({
-      phase: "planned", // 期望 started
+      phase: "planned", // 期望 starting
       feature_branch: "feature/test",
       worktree: null,
       started_at: "2026-07-05 10:00:00",
@@ -144,7 +144,7 @@ describe("alloy _verify", () => {
   it("start-exit 校验失败(state 字段缺失)", async () => {
     await writeFile(join(changeDir, "draft.md"), "# draft\n", "utf-8");
     readStateMock.mockResolvedValue({
-      phase: "started",
+      phase: "starting",
       feature_branch: null, // 缺失
       worktree: null,
       started_at: "2026-07-05 10:00:00",
@@ -163,9 +163,9 @@ describe("alloy _verify", () => {
   it("archive-exit 校验失败(目录位置错误)", async () => {
     // changeDir 不在 archive/ 下
     readStateMock.mockResolvedValue({
-      phase: "archived",
+      phase: "archiving",
       phase_timings: {
-        archive: { started_at: "2026-07-05 10:00:00", completed_at: "2026-07-05 11:00:00" },
+        archive: { started_at: "2026-07-05 10:00:00", completed_at: null },
       },
     });
     const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
@@ -184,9 +184,9 @@ describe("alloy _verify", () => {
     const archiveChangeDir = join(tmpDir, "archive", "2026-07-05-test");
     await mkdir(archiveChangeDir, { recursive: true });
     readStateMock.mockResolvedValue({
-      phase: "archived",
+      phase: "archiving",
       phase_timings: {
-        archive: { started_at: "2026-07-05 10:00:00", completed_at: "2026-07-05 11:00:00" },
+        archive: { started_at: "2026-07-05 10:00:00", completed_at: null },
       },
     });
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -197,14 +197,13 @@ describe("alloy _verify", () => {
     logSpy.mockRestore();
   });
 
-  it("finish-exit 校验通过(phase=finished + completed_at + 目录在 archive/)", async () => {
+  it("finish-exit 校验通过(phase=finishing + 目录在 archive/)", async () => {
     const archiveChangeDir = join(tmpDir, "archive", "2026-07-05-test");
     await mkdir(archiveChangeDir, { recursive: true });
     readStateMock.mockResolvedValue({
-      phase: "finished",
-      completed_at: "2026-07-05 12:00:00",
+      phase: "finishing",
       phase_timings: {
-        finish: { started_at: "2026-07-05 11:00:00", completed_at: "2026-07-05 12:00:00" },
+        finish: { started_at: "2026-07-05 11:00:00", completed_at: null },
       },
     });
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});

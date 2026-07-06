@@ -51,6 +51,7 @@ behaviors:
 | "rollback 失败了，git reset --hard 清场重来" | ⛔ HARD_STOP：rollback 失败时禁 reset --hard / checkout . / stash drop（§3.5.1 git 自救禁令）。退出 skill 让用户处理。 |
 | "phase 推进失败但 plans 已生成，git reset 回退一下" | ⛔ HARD_STOP：phase 推进路径 B 降级——手动 `alloy _state set` 回退 phase，禁 git reset 清场（§5.2.3）。 |
 | "用户在等，分类先按轻量修正走，错了再说" | 分类不清 = 默认需求变更（plan-rollback.md 已写）。USER_GATE 必须用户明确选择。 |
+| "先文本列 (a)/(b) 选项让用户思考，再调 AskUserQuestion 双保险" | ⛔ HARD_STOP：双重呈现违规——首次呈现必须是 AskUserQuestion 工具调用,不是文本。哪怕"先展示选项让用户思考"、"文本+工具双保险",也算违反。常见模式:thinking 决策"用 AskUserQuestion"但执行时先输出纯文本选项(决策→执行断裂)。 |
 | "这个项目很小，不需要那么正式" | 小项目和大项目的闸门完全一样。不存在"规模分级的保护等级"。 |
 | "想确保 skill_usage 落地，_skill log 后单独 commit 一下" | ⛔ HARD_STOP：`_artifact commit` 的 git add 含 .alloy.yaml，会一起 commit。单独 commit 产生冗余的"记录技能使用"commit，与制品 commit 分离。 |
 | "plans 锁定后的提示用户已知，省了吧" | ⛔ HARD_STOP：回退后上下文已变，用户需重新知道 apply 阶段的变更边界。提示必须输出，禁省略。 |
@@ -75,8 +76,8 @@ alloy _phase start openspec/changes/<name> plan
    - change 不存在 → 引导 `/alloy:start <name>` 创建
    - draft.md 缺失 → 异常状态，引导重新运行 `/alloy:start`
 
-2. **phase 校验**（⛔ PRECONDITION_FAIL）：`alloy _guard precheck openspec/changes/<name> started`
-   - phase ≠ started 时读取 `commands/alloy/references/phase-routing.md` 自动跳转
+2. **phase 校验**（⛔ PRECONDITION_FAIL）：`alloy _guard precheck openspec/changes/<name> planning`
+   - phase ≠ planning 时读取 `commands/alloy/references/phase-routing.md` 自动跳转
    - 路由不到合法状态 → ⛔ PRECONDITION_FAIL
 
 3. **git 仓库检查**（⛔ PRECONDITION_FAIL）：`git rev-parse --git-dir`，失败 → 引导初始化或退出。
@@ -123,7 +124,7 @@ alloy _phase start openspec/changes/<name> plan
 
    **禁止 agent 自动 `git checkout` 切换——可能丢弃用户未提交工作（§3.5.1）。**
 
-前置检查通过：draft.md ✓ phase=started ✓ git ✓ 技能 ✓ draft hash ✓ 分支位置 ✓
+前置检查通过：draft.md ✓ phase=planning ✓ git ✓ 技能 ✓ draft hash ✓ 分支位置 ✓
 
 ---
 
@@ -139,11 +140,11 @@ alloy _phase start openspec/changes/<name> plan
 
 draft.md 来源已在 Step 0 完成 hash 验证（task #16）。本步聚焦 phase 校验和路由：
 
-1. 阶段校验：`alloy _guard precheck openspec/changes/<name> started`（已在 Step 0 通过，本步幂等重检）
+1. 阶段校验：`alloy _guard precheck openspec/changes/<name> planning`（已在 Step 0 通过，本步幂等重检）
 2. **若 phase 不匹配：** 读取 `commands/alloy/references/phase-routing.md` 自动跳转到对应 skill。
 3. **若 change 不存在或 draft.md 缺失：** 引导 `/alloy:start <name>`——前序阶段完全没做时保留 ⛔ PRECONDITION_FAIL。
 
-前置检查通过：draft.md ✓ phase=started ✓ git ✓ 技能 ✓ draft hash ✓
+前置检查通过：draft.md ✓ phase=planning ✓ git ✓ 技能 ✓ draft hash ✓
 
 ---
 
@@ -523,8 +524,9 @@ alloy _record scan "openspec/changes/<name>"
 **记录完成时间并推进 phase**——原子命令 `alloy _phase complete` 内部完成 completed_at 写入（自动刷新 updated_at）+ phase 推进 + git add 限路径 + commit。hash 尾扫通过后调用：
 ```bash
 # 校验本阶段完成状态(5 制品 + state 字段)——失败则修复后重试,禁跳过
-alloy _verify phase-exit plan openspec/changes/<name>
-alloy _phase complete openspec/changes/<name> plan
+# ⛔ [HARD_STOP] _verify 和 _phase complete 必须同一 Bash 命令 && 连接,禁拆成两个命令
+# 拆开(如 _verify && echo OK || echo FAIL 后单独 _phase complete)绕过短路保护,_verify 失败时 agent 可能仍继续
+alloy _verify phase-exit plan openspec/changes/<name> && alloy _phase complete openspec/changes/<name> plan
 ```
 
 `_phase complete` 不做 hash 校验——尾扫是 skill 层的独立防线（见上方），CLI 只负责原子写入。返回非零时检查 git 状态。

@@ -49,17 +49,16 @@ describe("alloy _phase complete", () => {
     }
   }
 
-  it("start：写 completed_at，不推进 phase（保持 started）", async () => {
+  it("start：写 completed_at，推进到 started", async () => {
     await phaseCommand(["complete", changeDir, "start"]);
 
     const state = await readState(changeDir);
-    expect(state.phase).toBe("started"); // start 完成不推进
+    expect(state.phase).toBe("started"); // start 完成推进到 started
     expect(state.phase_timings?.start?.completed_at).toBeTruthy();
     expect(state.updated_at).not.toBe("2020-01-01 00:00:00");
 
     const log = gitLog();
-    expect(log).toContain("chore(test-change): 记录 start 阶段完成时间");
-    expect(log).not.toContain("推进到");
+    expect(log).toContain("记录 start 阶段完成时间，推进到 started");
   });
 
   it("plan→planned：推进到 planned", async () => {

@@ -164,14 +164,24 @@ function getNextStepSimple(
   name: string
 ): string {
   switch (state.phase) {
+    case "starting":
+      return `${name} 继续 /alloy-start`;
     case "started":
       return `${name} 等待 /alloy-plan`;
+    case "planning":
+      return `${name} 继续 /alloy-plan`;
     case "planned":
       return `${name} 等待 /alloy-apply`;
+    case "applying":
+      return `${name} 继续 /alloy-apply`;
     case "applied":
       return `${name} 等待 /alloy-archive`;
+    case "archiving":
+      return `${name} 继续 /alloy-archive`;
     case "archived":
       return `${name} 等待 /alloy-finish`;
+    case "finishing":
+      return `${name} 继续 /alloy-finish`;
     case "finished":
       return `${name} 已完成`;
     default:
@@ -184,14 +194,24 @@ function getNextStepDetail(
   artifacts: Record<string, boolean>
 ): string {
   switch (state.phase) {
+    case "starting":
+      return "继续 /alloy-start";
     case "started":
       return artifacts.plans ? "等待 /alloy-apply" : "继续 /alloy-plan，等待下一个制品生成";
+    case "planning":
+      return "继续 /alloy-plan，等待下一个制品生成";
     case "planned":
       return "等待 /alloy-apply";
+    case "applying":
+      return "继续 /alloy-apply";
     case "applied":
       return "等待 /alloy-archive";
+    case "archiving":
+      return "继续 /alloy-archive";
     case "archived":
       return "等待 /alloy-finish";
+    case "finishing":
+      return "继续 /alloy-finish";
     case "finished":
       return "已完成";
     default:

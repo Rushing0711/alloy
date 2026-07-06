@@ -1,6 +1,6 @@
 # start Red Flags 完整表（第三层防御——任一借口出现即 STOP）
 
-主文件保留 5 条核心，完整 12 条在此。
+主文件保留 7 条核心，完整 14 条在此。
 
 | 借口 | 现实 |
 |------|------|
@@ -8,6 +8,8 @@
 | "分支创建是可选步骤" / "用户没提分支" | 分支创建是硬性闸门——没有验证，后续步骤全部禁止。闸门默认生效，不需要用户主动请求。 |
 | "项目简单/一个人开发，不需要分支" | 分支保护的是 discard 安全性，不是团队协作。简单项目一样需要——否则 discard 丢失主分支无关变更。 |
 | "不用 brainstorming，直接写代码" | brainstorming 不可跳过。跳过需求设计 = 规格和代码分叉的起点。 |
+| "先文本列 (a)/(b) 选项让用户思考，再调 AskUserQuestion 双保险" | ⛔ HARD_STOP：双重呈现违规——首次呈现必须是 AskUserQuestion 工具调用,不是文本。哪怕"先展示选项让用户思考"、"文本+工具双保险",也算违反。常见模式:thinking 决策"用 AskUserQuestion"但执行时先输出纯文本选项(决策→执行断裂)。 |
+| "需求很明确，explore 后直接写代码省时间" | ⛔ HARD_STOP：需求明确不等于可以跳过流程。explore 是探测,不是实现——explore 阶段禁 Write/Edit/运行实现代码。流程存在的意义就是防止"看似简单"的需求失控。哪怕用户描述了完整的脚本逻辑,也必须走完 explore → 主题确认 → change name → 分支 → opsx:new → brainstorming → draft → plan → apply,代码在 apply 阶段才写。 |
 | "brainstorming 完成了，写 spec 文件吧" | Alloy start 的产出是 draft.md，不是 docs/superpowers/specs/。brainstorming 完成后直接输出方案，由 Alloy 流程生成 draft.md。 |
 | "start 完成了，直接进 plan" / "用户没回复，我先继续" | ⛔ HARD_STOP：start 完成后绝不自动进入 plan。沉默 ≠ 授权（Iron Law 第二层）。替用户做阶段转换 = 剥夺审查机会。 |
 | "draft.md 讨论过了，直接 commit" | brainstorming 讨论的是概念，draft.md 是最终文本。必须展示完整内容，等用户 USER_GATE 确认。 |

@@ -52,7 +52,12 @@ vi.mock("../../src/core/skills.js", () => ({
   deployCommands: mockDeployCommands,
   deploySchema: mockDeploySchema,
 }));
-vi.mock("../../src/core/agent-config.js", () => ({ injectAgentConfigs: mockInjectAgentConfigs }));
+vi.mock("../../src/core/agent-config.js", () => ({
+  injectAgentConfigs: mockInjectAgentConfigs,
+  hasPermissionsConfig: vi.fn().mockResolvedValue(false),
+  writePermissionsConfig: vi.fn().mockResolvedValue(true),
+  getPermissionSupportedAgents: vi.fn().mockReturnValue(["claude-code", "codebuddy", "pi"]),
+}));
 vi.mock("../../src/utils/prompt.js", () => ({
   promptSelect: mockPromptSelect,
   promptMultiSelect: mockPromptMultiSelect,
@@ -71,7 +76,7 @@ vi.mock("../../src/utils/format.js", async (importOriginal) => {
   return { ...orig, spinner: mockSpinner };
 });
 
-import { selectScope, selectTargetAgents, initCommand } from "../../src/cli/commands/init.js";
+import { selectScope, selectTargetAgents, initCommand, ensureGitattributes } from "../../src/cli/commands/init.js";
 import { KNOWN_AGENTS } from "../../src/core/agents.js";
 import { writeFile, mkdir, rm, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -663,5 +668,44 @@ describe("init", () => {
         })
       );
     });
+  });
+});
+
+describe("ensureGitattributes", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = join(tmpdir(), `alloy-gitattributes-${Date.now()}`);
+    await mkdir(tmpDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("文件不存在时创建并写入 LF 规则", async () => {
+    await ensureGitattributes(tmpDir);
+
+    const content = await readFile(join(tmpDir, ".gitattributes"), "utf-8");
+    expect(content).toContain("* text=auto eol=lf");
+  });
+
+  it("已有 LF 规则时跳过(幂等)", async () => {
+    await writeFile(join(tmpDir, ".gitattributes"), "* text=auto eol=lf\n", "utf-8");
+
+    await ensureGitattributes(tmpDir);
+
+    const content = await readFile(join(tmpDir, ".gitattributes"), "utf-8");
+    expect(content).toBe("* text=auto eol=lf\n");
+  });
+
+  it("已有其他规则但无 LF 规则时追加", async () => {
+    await writeFile(join(tmpDir, ".gitattributes"), "*.txt text\n", "utf-8");
+
+    await ensureGitattributes(tmpDir);
+
+    const content = await readFile(join(tmpDir, ".gitattributes"), "utf-8");
+    expect(content).toContain("*.txt text");
+    expect(content).toContain("* text=auto eol=lf");
   });
 });

@@ -52,6 +52,7 @@ export async function guardCommand(args: string[]): Promise<void> {
   if (!allowed || !allowed.includes(targetPhase)) {
     console.error(`[HARD STOP] 不允许的 phase 转换: ${currentPhase} → ${targetPhase}`);
     console.error("  允许的转换: started→planned, planned→applied, applied→archived, archived→finished");
+    console.error("  (-ing 进行中态由 _phase start/complete 推进,不通过 _guard --apply)");
     process.exit(1);
   }
 

@@ -5,8 +5,16 @@ import { execSync } from "node:child_process";
 import { readState, writeState } from "../../utils/state.js";
 import type { AlloyState, PhaseTimings } from "../../../core/types.js";
 
-const PHASE_TARGETS: Record<string, string | null> = {
-  start: null, // start 完成 phase 保持 started，plan 完成才推进到 planned
+const PHASE_START_TARGETS: Record<string, string> = {
+  start: "starting",
+  plan: "planning",
+  apply: "applying",
+  archive: "archiving",
+  finish: "finishing",
+};
+
+const PHASE_COMPLETE_TARGETS: Record<string, string> = {
+  start: "started",
   plan: "planned",
   apply: "applied",
   archive: "archived",
@@ -171,8 +179,8 @@ async function phaseStart(args: string[]): Promise<void> {
     return process.exit(1);
   }
 
-  if (!(phase in PHASE_TARGETS)) {
-    console.error(`无效的 phase: ${phase} (支持: ${Object.keys(PHASE_TARGETS).join(", ")})`);
+  if (!(phase in PHASE_START_TARGETS)) {
+    console.error(`无效的 phase: ${phase} (支持: ${Object.keys(PHASE_START_TARGETS).join(", ")})`);
     return process.exit(1);
   }
 
@@ -193,10 +201,14 @@ async function phaseStart(args: string[]): Promise<void> {
   // 幂等写 started_at（已存在不覆盖）
   const startedAt = await ensureStartedAt(changeDir, phase, at);
 
+  // 推进 phase 到 -ing（进行中态）
+  const target = PHASE_START_TARGETS[phase];
+  await advancePhase(changeDir, target);
+
   // git add 限路径 + commit
   const changeName = basename(changeDir);
   const addPath = gitRoot.relPath === "." ? "." : `${gitRoot.relPath}/.alloy.yaml`;
-  gitAddAndCommit(gitRoot, addPath, `chore(${changeName}): 记录 ${phase} 阶段开始时间`, `${phase}: started_at=${startedAt}`);
+  gitAddAndCommit(gitRoot, addPath, `chore(${changeName}): 记录 ${phase} 阶段开始时间，推进到 ${target}`, `${phase}: started_at=${startedAt} → ${target}`);
 }
 
 async function phaseComplete(args: string[]): Promise<void> {
@@ -208,8 +220,8 @@ async function phaseComplete(args: string[]): Promise<void> {
     return process.exit(1);
   }
 
-  if (!(phase in PHASE_TARGETS)) {
-    console.error(`无效的 phase: ${phase} (支持: ${Object.keys(PHASE_TARGETS).join(", ")})`);
+  if (!(phase in PHASE_COMPLETE_TARGETS)) {
+    console.error(`无效的 phase: ${phase} (支持: ${Object.keys(PHASE_COMPLETE_TARGETS).join(", ")})`);
     return process.exit(1);
   }
 
@@ -220,7 +232,7 @@ async function phaseComplete(args: string[]): Promise<void> {
   }
 
   const completedAt = formatTimestamp();
-  const target = PHASE_TARGETS[phase];
+  const target = PHASE_COMPLETE_TARGETS[phase];
 
   // 1. 写 completed_at（writeState 自动刷新 updated_at）
   await writeCompletedAt(changeDir, phase, completedAt);
@@ -230,18 +242,13 @@ async function phaseComplete(args: string[]): Promise<void> {
     await writeTopLevelCompletedAt(changeDir, completedAt);
   }
 
-  // 2. 推进 phase（start 除外——start 完成 phase 保持 started）
-  if (target) {
-    await advancePhase(changeDir, target);
-  }
+  // 2. 推进 phase 到 -ed（已完成态）
+  await advancePhase(changeDir, target);
 
   // 3. git add 限路径 + commit
   const changeName = basename(changeDir);
   const addPath = gitRoot.relPath === "." ? "." : `${gitRoot.relPath}/.alloy.yaml`;
-  const commitMsg = target
-    ? `chore(${changeName}): 记录 ${phase} 阶段完成时间，推进到 ${target}`
-    : `chore(${changeName}): 记录 ${phase} 阶段完成时间`;
-  gitAddAndCommit(gitRoot, addPath, commitMsg, `${phase}: completed_at=${completedAt}${target ? ` → ${target}` : ""}`);
+  gitAddAndCommit(gitRoot, addPath, `chore(${changeName}): 记录 ${phase} 阶段完成时间，推进到 ${target}`, `${phase}: completed_at=${completedAt} → ${target}`);
 }
 
 /** 删除 phase_timings.<phase> 整个 key（回溯清理专用，writeState 自动刷新 updated_at）。返回是否实际删除。 */
@@ -267,8 +274,8 @@ async function phaseReset(args: string[]): Promise<void> {
     return process.exit(1);
   }
 
-  if (!(phase in PHASE_TARGETS)) {
-    console.error(`无效的 phase: ${phase} (支持: ${Object.keys(PHASE_TARGETS).join(", ")})`);
+  if (!(phase in PHASE_START_TARGETS)) {
+    console.error(`无效的 phase: ${phase} (支持: ${Object.keys(PHASE_START_TARGETS).join(", ")})`);
     return process.exit(1);
   }
 

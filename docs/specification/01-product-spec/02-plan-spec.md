@@ -67,7 +67,7 @@ plan 阶段处理"构建什么"，任何需求/设计层面的调整统一回到
 
 plan 阶段允许在制品审查过程中打检查点（tag），用户可在变更触发时选择回到任意检查点继续 plan。
 
-**限制：** `alloy _checkpoint create` / `_checkpoint switch` 命令硬校验 `phase === "started"`——plan 完成后（phase=planned 及之后）一律拒绝，需求变更必须走 discard 重开。
+**限制：** `alloy _checkpoint create` / `_checkpoint switch` 命令硬校验 phase ∈ {starting, started, planning, planned}——start/plan 阶段允许检查点操作；apply 阶段(applying/applied)仅早期(worktree 未创建 + SDD/EP 未启动)允许；archive 及之后一律拒绝，需求变更必须走 discard 重开。
 
 **清理：** finish / discard 时调用 `alloy _checkpoint clean` 删除该 change 所有 checkpoint tag，避免堆积。archive 阶段不清理——此时 change 目录已移到 `openspec/changes/archive/`，原路径失效；finish 阶段 change 封存，且已有 `$CHANGE_DIR` 解析 archive 路径，是更合适的清理时机。
 

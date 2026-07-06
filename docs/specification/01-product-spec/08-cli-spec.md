@@ -73,7 +73,8 @@ alloy doctor [path] [--json]
 | `alloy _state` | `read\|write\|init\|merge\|check\|timestamp` | 读写 `.alloy.yaml` 状态文件。`init` 支持 `--at <timestamp>` 回填顶层 `started_at` + `--feature-branch <name>` 一次成型写入 feature_branch |
 | `alloy _skill` | `log\|skip` | 技能使用记录管理，持久化到 `skill_usage[]`。字段 `called_at`（调用时间，多次调用更新为最新）+ `count`（累加）。`log` 同一 skill+stage 已存在时 count++ |
 | `alloy _guard` | `precheck\|verify-passed\|branch-position\|worktree-status` + `<name> <phase> --apply` | 阶段转换校验 + phase 推进 |
-| `alloy _phase` | `start\|complete\|reset` | 阶段时间记录。`complete finish` 额外写顶层 `completed_at`（全周期完成时间） |
+| `alloy _phase` | `start\|complete\|reset` | 阶段时间记录 + phase 推进。`start` 推进到 -ing（进行中）+ 写 started_at，`complete` 推进到 -ed（已完成）+ 写 completed_at，`complete finish` 额外写顶层 `completed_at`（全周期完成时间） |
+| `alloy _verify` | `phase-enter\|phase-exit <phase> <change-dir>` | 阶段转换状态校验——CLI 确定性校验制品 + state 字段 + 目录位置,不替代 agent 执行,只报告缺失项。`phase-enter` 期望 phase=-ing(进入阶段后),`phase-exit` 期望 phase=-ing(_phase complete 之前,尚未推进到 -ed)。比 `_guard precheck`(单点 phase 路由)更全面 |
 | `alloy _record` | `compute\|write\|check\|approver` | 制品 hash 记录管理 |
 | `alloy _config` | `read\|write` | 读写 `openspec/config.yaml` 项目级配置 |
 | `alloy _checkpoint` | `create\|list\|switch\|clean` | 检查点管理。`create` 支持 `--kind brainstorming\|progress`（brainstorming-N 发起变更锚点 / progress-<ts> 放弃变更进度快照）+ `--reason <原因>`。tag message 含原因/制品/phase/commit数/时间。phase 限制：start/plan 全程允许，apply 早期（worktree 未创建 + SDD/EP 未启动）允许，apply 中后期 + archive/finish 禁止。`create` 校验 working tree clean（dirty 拒绝）；`switch` 用 `git checkout -B` 原子回退，输出 tag 指向的 records 状态（已锁定/缺失制品） |

@@ -200,10 +200,11 @@ worktree 是 apply 的**本地实现细节**。apply 完成后代码已经合并
 
 | 命令 | 参数 | 说明 |
 |------|------|------|
-| `alloy init` | `[path]` | 项目初始化：HOME 拦截 → 确保 git 仓库 → 安装依赖 → 部署 schema + skill |
+| `alloy init` | `[path]` | 项目初始化：HOME 拦截 → 确保 git 仓库 → 安装依赖 → 部署 schema + skill → 配置权限白名单 + `.gitattributes` |
 | | `--scope <global\|project>` | 安装范围，默认 project |
 | | `--inject-claude-md` | 注入 CLAUDE.md（默认关闭） |
 | | `--agents <id,id,...>` | 非交互式模式，指定 AI 工具 |
+| | | init 交互步骤：主分支确认 → 权限白名单(allow alloy/git/openspec 等,deny force/reset/rm,支持 Claude Code/CodeBuddy/Pi) → `.gitattributes`(`* text=auto eol=lf`,避免 Windows CRLF) |
 | `alloy status` | `[path\|name] [--json]` | 查看活跃 change 总览或指定 change 详情 |
 | | `--json` | JSON 格式输出 |
 | `alloy doctor` | `[path]` | 诊断：版本兼容性、文件一致性 |
@@ -220,7 +221,8 @@ worktree 是 apply 的**本地实现细节**。apply 完成后代码已经合并
 | `alloy _state` | 读写 `.alloy.yaml` 状态文件（`read\|write\|init\|merge\|check\|timestamp`） |
 | `alloy _skill` | 技能使用记录管理（`log\|skip`），持久化到 `skill_usage[]` |
 | `alloy _guard` | 阶段转换校验 + phase 推进（`precheck\|verify-passed\|branch-position\|worktree-status`） |
-| `alloy _phase` | 阶段时间记录（`start\|complete\|reset`） |
+| `alloy _phase` | 阶段时间记录 + phase 推进（`start` 推进到 -ing，`complete` 推进到 -ed + 写 completed_at，`reset` 清理 timing） |
+| `alloy _verify` | 阶段转换状态校验（`phase-enter\|phase-exit <phase> <change-dir>`），校验制品 + state 字段 + 目录位置 |
 | `alloy _artifact` | 制品 hash-lock + commit（`commit\|reset`），原子命令 |
 | `alloy _record` | 制品 hash 记录管理（`compute\|write\|check\|approver`） |
 | `alloy _config` | 读写 `openspec/config.yaml` 项目级配置 |
@@ -387,7 +389,7 @@ function altoggle {
 每个 change 目录下的 `.alloy.yaml` 记录该 change 的状态：
 
 ```yaml
-phase: started              # started / planned / applied / archived / finished
+phase: starting             # starting/started | planning/planned | applying/applied | archiving/archived | finishing/finished（-ing=进行中，-ed=已完成）
 worktree: null              # null=未创建，"skipped"=跳过，路径=已创建
 schema_version: 1           # schema 版本号
 feature_branch: "feature/login"  # feature 分支名（start 阶段写入）

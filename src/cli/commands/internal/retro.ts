@@ -338,6 +338,27 @@ export async function retroCommand(args: string[]): Promise<void> {
     "## §6 值得推广",
     "<!-- - [ ] checklist，含 Promote to / Why / How to apply -->",
     "",
+    "## §7 偏差分类（Compliance Deviations）",
+    "",
+    "> **勾选语义:勾选 [x] = 本次 session 观察到该偏差(违规);未勾选 [ ] = 未观察到。**",
+    "> **无偏差时全部保持 [ ] 未勾选,在下方填\"无偏差\"。**",
+    "> **常见误解:[x] 不是\"已检查\"是\"有此问题\"。**",
+    ">",
+    "> **自检(必做):回顾本次 session 每个 USER_GATE——你是否都用 AskUserQuestion 工具调用?有没有输出过\"(a) X (b) Y\"让用户打字回复?有没有在 main 分支直接改代码?只要命中 1 处,对应项必勾 [x]。**",
+    "",
+    "- [ ] AskUserQuestion 漏触发(应触发但没调工具——如只输出\"是否继续?\"等用户回复,或输出选项后没调工具)",
+    "- [ ] 纯文本列选项代替 AskUserQuestion(输出 \"(a) X (b) Y\" 让用户打 a/b——哪怕只 1 处也算,哪怕后续调了工具也算双重呈现)",
+    "- [ ] 跳过 USER_GATE(未让用户决策就推进——如 agent 自行选默认 / 用户重复调用命令就顺从绕过流程)",
+    "- [ ] git 自救(reset --hard / checkout . / stash drop / merge --abort 等破坏性命令)",
+    "- [ ] 路径错误(子 agent 用主仓路径 / verify.md 创建位置错误 / git add -A 通配无路径限定)",
+    "- [ ] worktree 相关(ExitWorktree action 选错 / worktree 字段漏写 / 手动 git worktree add 代替 EnterWorktree)",
+    "- [ ] 时间戳错误(START_TIME 重复捕获 / 接续路径重捕获 started_at)",
+    "- [ ] memory 相关(批量写入 / 未区分项目/用户 / 非选项回复主观推断)",
+    "- [ ] 其他:___",
+    "",
+    "详细描述(必填):",
+    "<!-- 若上方勾选了任何偏差,在此描述具体哪一步、什么偏差、如何修复。无偏差则填\"无偏差\"。漏勾+写\"无偏差\"是常见错误——勾选前务必完成上方自检 -->",
+    "",
     "---",
     "",
     "> **Forward-Pointer 策略**：后续 cycle 发现本 retrospective 结论有误时，不重写，追加 `> **Update YYYY-MM-DD**: section X superseded by <链接>`。",
@@ -347,6 +368,6 @@ export async function retroCommand(args: string[]): Promise<void> {
   const outPath = join(changeDir, "retrospective.md");
   await writeFile(outPath, out, "utf-8");
   console.log(`✓ retrospective.md 骨架已生成: ${outPath}`);
-  console.log(`  §0/§4 机械数据已填充，agent 需补 §1/§2/§3/§5/§6 定性分析`);
+  console.log(`  §0/§4 机械数据已填充，agent 需补 §1/§2/§3/§5/§6/§7 定性分析`);
   if (baseNote) console.log(`  ⚠️ ${baseNote}`);
 }

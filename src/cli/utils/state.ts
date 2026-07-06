@@ -15,7 +15,7 @@ export function formatTimestamp(): string {
 export function createInitialState(startedAt?: string, featureBranch?: string): AlloyState {
   const now = formatTimestamp();
   return {
-    phase: "started",
+    phase: "starting",
     worktree: null,
     feature_branch: featureBranch ?? null,
     worktree_branch: null,

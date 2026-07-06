@@ -141,7 +141,7 @@ HIT=$(echo "$USER_DESC $DIAGNOSIS" | grep -Eo "$KEYWORDS" | sort -u | tr '\n' ' 
 
 ```
 [Step 3/3] 修复 · worktree 内修复
-归属 change: <name>（phase: applied）Worktree: <path>
+归属 change: <name>（phase: applying）Worktree: <path>
 ```
 
 1. 加载 `test-driven-development` → 写失败测试 → 修代码

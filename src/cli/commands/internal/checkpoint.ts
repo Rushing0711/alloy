@@ -42,11 +42,11 @@ async function assertCheckpointPhase(changeDir: string): Promise<boolean> {
   const state = await readState(changeDir);
   const phase = state.phase;
 
-  if (phase === "started" || phase === "planned") {
+  if (phase === "starting" || phase === "started" || phase === "planning" || phase === "planned") {
     return true;
   }
 
-  if (phase === "applied") {
+  if (phase === "applying" || phase === "applied") {
     // apply 早期判断：worktree 未创建 + SDD/EP 未启动
     const worktreeCreated = state.worktree && state.worktree !== "skipped" && state.worktree !== "null";
     const sddEpStarted = (state.skill_usage ?? []).some(

@@ -23,9 +23,9 @@ describe("state utils", () => {
     await rm(tmpDir, { recursive: true, force: true });
   });
 
-  it("createInitialState 返回 started phase 的状态", () => {
+  it("createInitialState 返回 starting phase 的状态", () => {
     const state = createInitialState();
-    expect(state.phase).toBe("started");
+    expect(state.phase).toBe("starting");
     expect(state.worktree).toBeNull();
     expect(state.schema_version).toBe(1);
     // 格式: YYYY-MM-DD HH:MM:SS（本地时间，人类可读）

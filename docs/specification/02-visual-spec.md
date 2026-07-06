@@ -185,7 +185,7 @@ Alloy 终端输出使用四种基础格式，覆盖所有阶段的进度提示�
 > 选择处理方式
 > ──────────────────────────────────────
 >
-> phase=archived 已确认 ✓
+> phase=finishing 已确认 ✓
 >
 > 1. 本地 merge —— 合入基础分支
 > 2. 创建 PR    —— 提交代码审查
@@ -260,7 +260,7 @@ draft 不走审查窗口——审批嵌入 brainstorming 交互式对话流程�
 阶段入口的 Step 0 前置检查结果，纯文本一行：
 
 ```
-前置检查通过：draft.md ✓  phase=started ✓  git ✓
+前置检查通过：draft.md ✓  phase=planning ✓  git ✓
 ```
 
 ---
@@ -507,7 +507,7 @@ Alloy · Bug 修复
 
 > 当前分支: feature/login-fix
 > Worktree: 否
-> 活跃 change: login-fix（phase: applied）
+> 活跃 change: login-fix（phase: applying）
 > 主分支: main
 
 [Step 2/3] 根因诊断 · superpowers:systematic-debugging
@@ -549,7 +549,7 @@ AskUserQuestion: {
 ──────────────────────────────────────
 
 > 场景 2：feature 分支修复
-> 归属 change: login-fix（phase: applied）
+> 归属 change: login-fix（phase: applying）
 > Feature 分支: feature/login-fix
 
 → 修复路径：TDD → verification → commit

@@ -6,7 +6,7 @@ tags: [alloy, workflow]
 spec: 01-product-spec/01-start-spec.md
 behaviors:
   preconditions: 8
-  hard_stops:    16
+  hard_stops:    17
   user_gates:    8
   warns:         2
   artifacts: [draft]
@@ -38,7 +38,7 @@ behaviors:
 
 ### Red Flags（第三层防御——任一借口出现即 STOP）
 
-主文件保留 5 条核心借口，完整 12 条见 `commands/alloy/references/start-rationalizations.md`。
+主文件保留 7 条核心借口，完整 14 条见 `commands/alloy/references/start-rationalizations.md`。
 
 | 借口 | 现实 |
 |------|------|
@@ -46,7 +46,9 @@ behaviors:
 | "用户说了新需求，直接 brainstorm" / "需求很明确了，不用先路由" | ⛔ HARD_STOP：有活跃 change 时，**必须先 USER_GATE 确认去向，才能加载任何技能**。哪怕用户明确描述了新需求，也要先路由。路由决策是技能加载的前置闸门。 |
 | "先跳过分支创建，把 proposal 写了，后面再建" / "分支不建也能生成制品，后面补" | ⛔ HARD_STOP：跳过分支创建=制品落在错误分支。**stash + 开新分支完成后才能进行后续步骤。** 违反字面 = 违反精神：哪怕"proposal 内容已确定，先写了再建分支"也算——制品必须一诞生就在正确分支上。 |
 | "不用 brainstorming，直接写代码" | brainstorming 不可跳过。跳过需求设计 = 规格和代码分叉的起点。 |
+| "需求很明确，explore 后直接写代码省时间" | ⛔ HARD_STOP：需求明确不等于可以跳过流程。explore 是探测,不是实现——explore 阶段禁 Write/Edit/运行实现代码。流程存在的意义就是防止"看似简单"的需求失控。哪怕用户描述了完整的脚本逻辑,也必须走完 explore → 主题确认 → change name → 分支 → opsx:new → brainstorming → draft → plan → apply,代码在 apply 阶段才写。 |
 | "start 完成了，直接进 plan" / "用户没回复，我先继续" | ⛔ HARD_STOP：start 完成后绝不自动进入 plan。沉默 ≠ 授权（Iron Law 第二层）。替用户做阶段转换 = 剥夺审查机会。 |
+| "先文本列 (a)/(b) 选项让用户思考，再调 AskUserQuestion 双保险" | ⛔ HARD_STOP：双重呈现违规——首次呈现必须是 AskUserQuestion 工具调用,不是文本。哪怕"先展示选项让用户思考"、"文本+工具双保险",也算违反。常见模式:thinking 决策"用 AskUserQuestion"但执行时先输出纯文本选项(决策→执行断裂)。 |
 | "openspec/changes/<name>/ 已经有了，直接复用" | ⛔ PRECONDITION_FAIL：目录已存在 = #12 冲突。USER_GATE 让用户决策（改名 / 接续 / 中止），禁 agent 自动复用——可能覆盖用户既有工作。 |
 | "git init 后 reset --hard 一下，把环境清干净" | ⛔ HARD_STOP：git 操作失败禁 reset --hard / clean -fd / checkout .（§3.5.1 git 自救禁令）。退出 skill 让用户处理。 |
 
@@ -167,6 +169,17 @@ date "+%Y-%m-%d %H:%M:%S"
 > - 用文字讨论"参数缺失时怎么办?"——这是需求设计,不是可行性验证
 > - agent 认为"我没用 AskUserQuestion 问,只是用文字讨论"不算违规——文字讨论也是输出,同样违规
 > explore 结束后,不输出任何设计细节文字,直接进主题确认 USER_GATE。
+>
+> ⛔ [HARD_STOP] explore 阶段禁任何实现动作——explore 是探测,不是实现。
+> 禁止动作(任一触发 = 严重违规):
+> - Write / Edit / NotebookEdit 创建或修改任何文件(代码 / 脚本 / 配置 / 文档)
+> - 运行实现代码(chmod +x / 执行脚本 / 编译 / 运行测试 / 安装依赖)
+> - mkdir 创建实现目录(如 scripts/ src/ 等,change 目录创建是 Step 1 之后的事)
+> 违反字面 = 违反精神:哪怕"需求很简单先写个 demo 验证可行性"、"用户描述很明确直接实现省时间"、"explore 鼓励 visualize freely",也算违反——explore 的"visualize freely"指思考可视化(心智模型 / 架构图),不是写代码。需求再明确,也必须走完 explore → 主题确认 → change name → 分支 → opsx:new → brainstorming → draft → plan → apply 完整流程,代码在 apply 阶段才写。
+> 常见违规模式:
+> - agent 在 explore 阶段 Write 脚本文件 + chmod +x + 执行验证——直接跳过 8 个阶段,实现动作覆盖编排控制
+> - agent 认为"用户需求明确,explore 探测后直接实现更高效"——需求明确不等于可以跳过流程,流程的存在就是为了防止"看似简单"的需求失控
+> - agent 把 explore 的"thinking partner"风格当成"可以自由实现"的授权——explore 是探测伙伴,不是实现伙伴
 
 **主题确认 USER_GATE（🔴 AskUserQuestion）：** explore 探测后，**第一件事**必须是主题确认 AskUserQuestion，向用户确认主题：
 - 有 topic → 确认该 topic 或调整
@@ -420,11 +433,12 @@ date "+%Y-%m-%d %H:%M:%S"
     > 每次回退后重新生成 draft 会打 brainstorming-2/3/...，保留需求累加历史。
     > **顺序约束:必须在 `_artifact commit draft` 之后、`_phase complete start` 之前。** 若放在 `_phase complete` 之后，tag 会指向阶段完成 commit（含 phase_timings 变更），回退后 phase_timings 状态错乱。
 
-    **commit 2/3——start 阶段完成（原子命令，内部完成 completed_at 写入 + git add 限路径 + commit；start 不推进 phase，保持 started）：**
+    **commit 2/3——start 阶段完成（原子命令，内部完成 completed_at 写入 + phase 推进到 started + git add 限路径 + commit）：**
     ```bash
     # 校验本阶段完成状态(draft + state 字段)——失败则修复后重试,禁跳过
-    alloy _verify phase-exit start openspec/changes/<name>
-    alloy _phase complete openspec/changes/<name> start
+    # ⛔ [HARD_STOP] _verify 和 _phase complete 必须同一 Bash 命令 && 连接,禁拆成两个命令
+    # 拆开(如 _verify && echo OK || echo FAIL 后单独 _phase complete)绕过短路保护,_verify 失败时 agent 可能仍继续
+    alloy _verify phase-exit start openspec/changes/<name> && alloy _phase complete openspec/changes/<name> start
     ```
 
 ---

@@ -1,7 +1,7 @@
 ---
 behaviors:
   preconditions: 6
-  hard_stops: 13
+  hard_stops: 12
   user_gates: 3
   warns: 1
   artifacts: [delta-spec, archive]
@@ -29,20 +29,21 @@ behaviors:
 
 ## 执行
 
-1. /opsx:archive → sync delta spec + 归档到 archive/YYYY-MM-DD-<name>/
-2. 归档变更提交（必须在 worktree 清理之前——如果在 worktree 中，变更必须先 commit 到 worktree 分支，否则 merge 会丢失归档操作）：
-   git add -A openspec/specs/ openspec/changes/
+**流程顺序：worktree 清理必须在 /opsx:archive 之前——archive 操作会移动目录,若在 worktree 分支执行,merge 到 feature 时目录移动 + tasks.md 勾选导致三方合并冲突。先 merge worktree 到 feature(只有 apply 的代码/制品 commit,无目录移动),再在 feature 分支做 archive,冲突消除。**
+
+1. Worktree 清理（如果 apply 期间使用了 worktree,先 merge worktree → feature）：
+   - 在 worktree 里读 state(worktree / feature_branch / worktree_branch 三字段)
+   - USER_GATE 确认清理
+   - ExitWorktree 回主仓(action: keep)
+   - `alloy _worktree-cleanup` 原子完成:merge worktree 分支到 feature + remove worktree + branch -d + 写 worktree_merged_at
+   - 未使用 worktree（null 或 skipped）则跳过
+2. /opsx:archive（在 feature 分支执行）→ sync delta spec + 归档到 archive/YYYY-MM-DD-<name>/
+3. Delta Spec 合并审查（USER_GATE,展示 git diff openspec/specs/）
+4. 归档变更提交：
+   git add openspec/specs/ openspec/changes/
    git diff --cached --quiet || git commit -m "chore(<name>): 归档目录移动"
-3. 跨周期反馈：读取 retrospective.md §6 Promote Candidates，将 Promote to: memory 的条目写入 ~/.claude/memory/
-4. Worktree 清理（如果 apply 期间使用了 worktree）：
-   读取 worktree_path / feature_branch / worktree_branch → 向下兼容检测（遗留 change 无 feature_branch/worktree_branch 时自动推断）
-   → cd 主仓库 → git merge worktree_branch → git worktree remove → git branch -d
-   → 写入 worktree_merged_at
-   未使用 worktree（null 或 skipped）则跳过
-5. 记录完成时间 + 提交（所有 .alloy.yaml 变更在 commit 之前完成）：
-   git add -A openspec/specs/ openspec/changes/
-   git commit -m "chore(<name>): 归档阶段完成"
-6. phase → archived（通过 `alloy _guard ... --apply` + guard 后补 commit）
+5. 解析归档后路径 $ARCHIVE_DIR = openspec/changes/archive/<YYYY-MM-DD>-<name>/
+6. `alloy _verify phase-exit archive "$ARCHIVE_DIR" && alloy _phase complete "$ARCHIVE_DIR" archive`（同命令 && 连接,校验 + 推进 phase 到 archived）
 
 ## git add 规则
 

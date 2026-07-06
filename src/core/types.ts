@@ -78,7 +78,7 @@ export interface PhaseTimings {
 }
 
 export interface AlloyState {
-  phase: "started" | "planned" | "applied" | "archived" | "finished";
+  phase: "starting" | "started" | "planning" | "planned" | "applying" | "applied" | "archiving" | "archived" | "finishing" | "finished";
   worktree: string | null;
   worktree_branch?: string | null;
   worktree_created_at?: string | null;

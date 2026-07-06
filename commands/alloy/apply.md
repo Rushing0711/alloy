@@ -6,7 +6,7 @@ tags: [alloy, workflow]
 spec: 01-product-spec/03-apply-spec.md
 behaviors:
   preconditions: 12
-  hard_stops:    17
+  hard_stops:    18
   user_gates:    7
   warns:         3
   artifacts: [verify, retrospective]
@@ -38,7 +38,7 @@ behaviors:
 
 ### Red Flags（第三层防御——任一借口出现即 STOP）
 
-主文件保留 5 条核心借口，完整 12 条见 `commands/alloy/references/apply-rationalizations.md`。
+主文件保留 7 条核心借口，完整 14 条见 `commands/alloy/references/apply-rationalizations.md`。
 
 | 借口 | 现实 |
 |------|------|
@@ -47,6 +47,8 @@ behaviors:
 | "verify.md 措辞不太顺，直接编辑改一下" | 制品禁直接编辑——任何变更必须重新生成 + 重新 hash-lock。违反字面 = 违反精神。 |
 | "verify FAIL 是小问题，retro 写'已知 FAIL'继续" | FAIL 必须修复回到 Step 2。带 FAIL 进 archive 阶段 = spec 与代码偏差永久封存。 |
 | "single-commit 修复不需要 retrospective，自动跳过" | retrospective 跳过判定必须 USER_GATE，agent 不得自动选"跳过"（task #17）。 |
+| "先文本列 (a)/(b) 选项让用户思考，再调 AskUserQuestion 双保险" | ⛔ HARD_STOP：双重呈现违规——首次呈现必须是 AskUserQuestion 工具调用,不是文本。哪怕"先展示选项让用户思考"、"文本+工具双保险",也算违反。常见模式:thinking 决策"用 AskUserQuestion"但执行时先输出纯文本选项(决策→执行断裂)。 |
+| "手动 git worktree add 更可控，不用 EnterWorktree" | ⛔ HARD_STOP：Claude Code agent 必须用 EnterWorktree 工具创建 worktree,路径 `.claude/worktrees/<name>`。手动 git worktree add 不解绑 session cwd,后续命令需 cd 切换(易错)。EnterWorktree 的 session 解绑是关键,cd 替代不了。 |
 
 ## 前置检查
 
@@ -75,10 +77,10 @@ alloy _phase start openspec/changes/<name> apply
 **2. phase 路由（PRECONDITION_FAIL）：**
 
 ```bash
-alloy _guard precheck openspec/changes/<name> planned,applied
+alloy _guard precheck openspec/changes/<name> applying,applied
 ```
 
-phase=planned 或 applied 时通过（applied 为断点重入）。不匹配 → ⛔ `[PRECONDITION_FAIL]`，读取 `commands/alloy/references/phase-routing.md` 自动跳转。
+phase=applying 或 applied 时通过（applied 为断点重入）。不匹配 → ⛔ `[PRECONDITION_FAIL]`，读取 `commands/alloy/references/phase-routing.md` 自动跳转。
 
 **3. git 仓库（PRECONDITION_FAIL）：**
 
@@ -193,6 +195,16 @@ alloy _guard branch-position openspec/changes/<name>
 - **完整执行技能 Step 0-4**（检测 + consent + 创建 + 项目设置 + 基线测试），不再限制仅 Step 0
 - **前置条件（alloy init 已配置）：** Claude Code agent 的 `.claude/settings.json` 含 `worktree.baseRef: head`，EnterWorktree 从当前 feature 分支分出（非 origin/main），base ref 正确。其他 agent 无 EnterWorktree，技能走 Step 1b git worktree fallback。
 - **传入 name=`<name>`**（change 名）：EnterWorktree(name) → 路径 `.claude/worktrees/<name>`，分支 `worktree-<name>`，可预测；git fallback 同样用此 name 作为分支名
+
+> ⛔ [HARD_STOP] Claude Code agent 必须用 `EnterWorktree` 工具创建 worktree——禁手动 `git worktree add`。
+> 路径必须 `.claude/worktrees/<name>`,禁 `.worktrees/` 或其他自定义路径。
+> 违反字面 = 违反精神：哪怕"手动 git worktree 更可控"、"路径换一下无影响"、"superpowers 技能引导手动创建",也算违反——
+>   - `EnterWorktree` 解绑 session cwd,后续 CLI 命令自动在 worktree 执行;手动 `git worktree add` 不解绑,agent 需 `cd` 切换(易错,且 cd 不解绑 session)
+>   - `.claude/worktrees/` 是 alloy 约定(与 `.claude/settings.json` / `.claude/commands/` 一致),`.worktrees/` 散落项目根不统一
+>   - 手动创建的 worktree 路径记录到 state,archive 阶段 `_worktree-cleanup` 用 state 路径清理,路径不一致虽不致命但偏离约定
+> 常见违规模式:
+> - agent 手动 `mkdir -p .worktrees && git worktree add .worktrees/<name>`——应该用 `EnterWorktree(name)` 工具
+> - agent 认为"手动更可控"绕过 EnterWorktree——EnterWorktree 的 session 解绑是关键,手动 cd 替代不了
 - **必须等用户明确选择（创建/跳过）后才继续。模糊回复（"嗯"、"好吧"）不算同意。**
 
 🔴 USER_GATE（必须 AskUserQuestion）: 确认 worktree 选择。**选项描述必须如实映射任务规模,禁说反：**
@@ -582,10 +594,10 @@ echo "本 change 累计 commit 数: $COMMIT_COUNT"
 alloy _artifact commit openspec/changes/<name> retrospective
 
 # 校验本阶段完成状态(verify + retrospective + state 字段)——失败则修复后重试,禁跳过
-alloy _verify phase-exit apply openspec/changes/<name>
-
-# 2. 阶段完成 commit：completed_at + phase 推进 + git add 限路径 + commit（原子命令）
-alloy _phase complete openspec/changes/<name> apply
+# _verify 失败时 && 短路,禁继续推进 phase
+# ⛔ [HARD_STOP] _verify 和 _phase complete 必须同一 Bash 命令 && 连接,禁拆成两个命令
+# 拆开(如 _verify && echo OK || echo FAIL 后单独 _phase complete)绕过短路保护,_verify 失败时 agent 可能仍继续
+alloy _verify phase-exit apply openspec/changes/<name> && alloy _phase complete openspec/changes/<name> apply
 ```
 
 > 注意：步骤 1 和 2 是两个独立 commit。步骤 1 仅含 retrospective.md + records，步骤 2 仅含 .alloy.yaml 的 phase_timings + phase 字段。

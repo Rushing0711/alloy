@@ -44,7 +44,7 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 | `alloy _state` | 读写 `.alloy.yaml` 状态文件（`read\|write\|init\|merge\|check\|timestamp`）。`init` 支持 `--at` 回填 `started_at` + `--feature-branch` 一次成型 |
 | `alloy _skill` | 技能使用记录管理（`log\|skip`），持久化到 `skill_usage[]`，字段 `called_at` + `count` |
 | `alloy _guard` | 阶段转换校验 + phase 推进（`precheck\|verify-passed\|branch-position\|worktree-status` + `<name> <phase> --apply`） |
-| `alloy _phase` | 阶段时间记录（`start\|complete\|reset`），`complete finish` 写顶层 `completed_at` |
+| `alloy _phase` | 阶段时间记录 + phase 推进（`start\|complete\|reset`），`start` 推进到 -ing（进行中），`complete` 推进到 -ed（已完成）+ 写 completed_at，`complete finish` 额外写顶层 `completed_at` |
 | `alloy _artifact` | 制品 hash-lock + commit（`commit\|reset`），原子命令 |
 | `alloy _record` | 制品 hash 记录管理（`compute\|write\|check\|approver`） |
 | `alloy _config` | 读写 `openspec/config.yaml` 项目级配置（`read\|write`） |
@@ -100,7 +100,7 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 
 ```yaml
 # openspec/changes/<name>/.alloy.yaml
-phase: started | planned | applied | archived | finished
+phase: starting | started | planning | planned | applying | applied | archiving | archived | finishing | finished
 worktree: null | ".claude/worktrees/<name>" | "skipped"
 worktree_branch: null | "worktree-<name>"   # worktree 分支名
 worktree_created_at: null | "2026-05-28 09:10:00"

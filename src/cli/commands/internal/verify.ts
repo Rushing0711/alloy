@@ -2,8 +2,7 @@
 import { existsSync } from "node:fs";
 import { join, basename, dirname } from "node:path";
 import { readState } from "../../utils/state.js";
-import { ARTIFACT_FILES, computeHash } from "../../../core/artifacts.js";
-import { readFile } from "node:fs/promises";
+import { ARTIFACT_FILES, computeArtifactHash } from "../../../core/artifacts.js";
 
 interface VerifyRule {
   phase: string;
@@ -15,57 +14,57 @@ interface VerifyRule {
 
 const VERIFY_RULES: Record<string, VerifyRule> = {
   "start-enter": {
-    phase: "started",
+    phase: "starting",
     artifacts: [],
     stateFields: [],
   },
   "start-exit": {
-    phase: "started",
+    phase: "starting",
     artifacts: ["draft"],
     stateFields: ["feature_branch", "started_at"],
     nullableFields: ["worktree"],
   },
   "plan-enter": {
-    phase: "started",
+    phase: "planning",
     artifacts: ["draft"],
     stateFields: ["feature_branch"],
   },
   "plan-exit": {
-    phase: "planned",
+    phase: "planning",
     artifacts: ["proposal", "design", "specs", "tasks", "plans"],
-    stateFields: ["phase_timings.plan.started_at", "phase_timings.plan.completed_at"],
+    stateFields: ["phase_timings.plan.started_at"],
   },
   "apply-enter": {
-    phase: "planned",
+    phase: "applying",
     artifacts: ["plans"],
     stateFields: ["feature_branch"],
   },
   "apply-exit": {
-    phase: "applied",
+    phase: "applying",
     artifacts: ["verify", "retrospective"],
-    stateFields: ["phase_timings.apply.started_at", "phase_timings.apply.completed_at"],
+    stateFields: ["phase_timings.apply.started_at"],
   },
   "archive-enter": {
-    phase: "applied",
+    phase: "archiving",
     artifacts: ["verify"],
     stateFields: [],
   },
   "archive-exit": {
-    phase: "archived",
+    phase: "archiving",
     artifacts: [],
-    stateFields: ["phase_timings.archive.started_at", "phase_timings.archive.completed_at"],
+    stateFields: ["phase_timings.archive.started_at"],
     dirLocation: "archive",
   },
   "finish-enter": {
-    phase: "archived",
+    phase: "finishing",
     artifacts: [],
     stateFields: [],
     dirLocation: "archive",
   },
   "finish-exit": {
-    phase: "finished",
+    phase: "finishing",
     artifacts: [],
-    stateFields: ["phase_timings.finish.started_at", "phase_timings.finish.completed_at", "completed_at"],
+    stateFields: ["phase_timings.finish.started_at"],
     dirLocation: "archive",
   },
 };
@@ -88,14 +87,12 @@ async function checkArtifactHash(changeDir: string, artifactId: string): Promise
   if (!existsSync(fullPath)) {
     return { ok: false, reason: `文件不存在: ${fileName}` };
   }
-  // 计算 hash(specs 是目录,computeHash 内部处理)
-  try {
-    const content = await readFile(fullPath);
-    const actualHash = computeHash(content);
-    return { ok: true };
-  } catch {
+  // computeArtifactHash 支持文件和目录(specs 是目录)
+  const actualHash = await computeArtifactHash(changeDir, artifactId);
+  if (actualHash === null) {
     return { ok: false, reason: `无法读取: ${fileName}` };
   }
+  return { ok: true };
 }
 
 /**

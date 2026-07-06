@@ -8,7 +8,7 @@ import { runHealthCheck } from "../../core/health.js";
 import { installOpenSpecCli, initOpenSpecProject } from "../../core/openspec.js";
 import { installSuperpowers } from "../../core/superpowers.js";
 import { deployCommands, deploySchema } from "../../core/skills.js";
-import { injectAgentConfigs } from "../../core/agent-config.js";
+import { injectAgentConfigs, hasPermissionsConfig, writePermissionsConfig, getPermissionSupportedAgents } from "../../core/agent-config.js";
 import { KNOWN_AGENTS } from "../../core/agents.js";
 import type { AgentInfo, DeployOptions } from "../../core/types.js";
 import { getPackageRoot } from "../../utils/fs.js";
@@ -83,6 +83,24 @@ export async function ensureGitignore(projectPath: string): Promise<void> {
   await writeFile(gitignorePath, content + block, "utf-8");
   const total = missingRuntime.length + (needAiBlock ? GITIGNORE_AI_TOOLS_BLOCK.split("\n").length : 0);
   success(`.gitignore → 已追加 ${total} 条规则`);
+}
+
+/** 确保 .gitattributes 含 LF 强制规则——避免 Windows 上 git autocrlf 把 LF 转 CRLF */
+export async function ensureGitattributes(projectPath: string): Promise<void> {
+  const gitattributesPath = join(projectPath, ".gitattributes");
+  const lfRule = "* text=auto eol=lf";
+  let content = "";
+  try {
+    content = await readFile(gitattributesPath, "utf-8");
+    if (content.includes(lfRule)) return; // 已有规则,跳过
+    if (!content.endsWith("\n")) content += "\n";
+  } catch {
+    // 文件不存在,稍后创建
+  }
+
+  const block = `\n### Alloy: 强制 LF 换行(避免 Windows CRLF 混入) ###\n${lfRule}\n`;
+  await writeFile(gitattributesPath, content + block, "utf-8");
+  success(".gitattributes → * text=auto eol=lf");
 }
 
 export async function initCommand(opts: InitOptions): Promise<void> {
@@ -204,6 +222,44 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   const willGitInit = !gitExists;
   const willCommit = headUnborn;  // unborn 时才 commit
 
+  // 1.9.3 权限白名单配置(可选,减少执行确认)——支持项目级 permissions 的 agent
+  // 支持:Claude Code / CodeBuddy / Pi(语法一致,Bash(cmd *))
+  // 不支持:Trae(配置文件路径待确认)/ OpenCode(工具级,不精确)/ Qoder(待验证)/ Cursor(仅网络)/ Codex / Gemini CLI(全局)
+  let configurePermissions = false;
+  const supportedAgents = opts.targetAgents
+    .map(a => a.id)
+    .filter(id => getPermissionSupportedAgents().includes(id));
+  const permissionAgentLabels = opts.targetAgents
+    .filter(a => supportedAgents.includes(a.id))
+    .map(a => a.label);
+
+  if (supportedAgents.length > 0) {
+    // 检测是否有 agent 已有 permissions 配置
+    const existingChecks = await Promise.all(
+      supportedAgents.map(id => hasPermissionsConfig(opts.projectPath, id))
+    );
+    const hasAnyExisting = existingChecks.some(Boolean);
+    const agentListStr = permissionAgentLabels.join(" / ");
+
+    if (hasAnyExisting) {
+      // 重复执行:已有配置,问是否更新(幂等合并)
+      const choice = await promptSelect(
+        `检测到 ${agentListStr} 已有 permissions 配置。是否更新(幂等合并 alloy 推荐条目,不覆盖自定义)?`,
+        [
+          { name: "更新(合并 alloy 推荐的 allow/deny)", value: "update" },
+          { name: "跳过(保留现有配置)", value: "skip" },
+        ]
+      );
+      configurePermissions = (choice === "update");
+    } else {
+      // 首次配置
+      configurePermissions = await promptConfirm(
+        `\n是否配置 ${agentListStr} 权限白名单(allow alloy/git/openspec 等命令,deny 危险命令,减少执行确认)?`,
+        true
+      );
+    }
+  }
+
   // USER_GATE 2：确认执行清单
   section("即将执行以下操作");
   info("文件部署：");
@@ -214,14 +270,18 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   if (hasClaudeCode) {
     info("  + .claude/settings.json           （新建/更新，worktree.baseRef: head）");
   }
+  if (configurePermissions && supportedAgents.length > 0) {
+    info(`  + 权限白名单                         （${permissionAgentLabels.join(" / ")} 的 permissions.allow/deny）`);
+  }
   info("  + .gitignore                      （新建/追加 Alloy 运行时规则）");
+  info("  + .gitattributes                  （新建/追加 * text=auto eol=lf，避免 Windows CRLF）");
   info("");
   info("Git 操作：");
   if (willGitInit) {
     info("  + git init                        （当前不是 git 仓库）");
   }
   if (willCommit) {
-    info(`  + git add .claude/ .gitignore openspec/config.yaml openspec/schemas/`);
+    info(`  + git add .claude/ .gitignore .gitattributes openspec/config.yaml openspec/schemas/`);
     info(`  + git commit -m "chore: alloy init 项目初始化"`);
     info(`    （仓库无任何 commit，将在 ${confirmedMainBranch} 分支创建初始 commit，锁定 main 分支）`);
   } else {
@@ -308,8 +368,9 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   const schemaPath = await deploySchema(opts);
   success(`项目 schema → ${schemaPath}`);
 
-  // 7. 确保 .gitignore 包含 Alloy 运行时目录
+  // 7. 确保 .gitignore 包含 Alloy 运行时目录 + .gitattributes 强制 LF
   await ensureGitignore(opts.projectPath);
+  await ensureGitattributes(opts.projectPath);
 
   // 7.5 注入 agent 专有配置（如 .claude/settings.json 的 worktree.baseRef）
   section("注入 agent 专有配置...");
@@ -318,6 +379,22 @@ export async function initCommand(opts: InitOptions): Promise<void> {
     if (hasClaudeCode) success(".claude/settings.json → worktree.baseRef: head");
   } catch (e) {
     warn(`agent 配置注入失败: ${(e as Error).message}`);
+  }
+
+  // 7.6 写入权限白名单(如果用户选了)——对每个支持且已安装的 agent 写配置
+  if (configurePermissions && supportedAgents.length > 0) {
+    section("写入权限白名单...");
+    for (const agentId of supportedAgents) {
+      const agentLabel = opts.targetAgents.find(a => a.id === agentId)?.label ?? agentId;
+      try {
+        const written = await writePermissionsConfig(opts.projectPath, agentId);
+        if (written) {
+          success(`${agentLabel} → permissions.allow/deny`);
+        }
+      } catch (e) {
+        warn(`${agentLabel} 权限白名单写入失败: ${(e as Error).message}`);
+      }
+    }
   }
 
   // 8.5 写入 openspec/config.yaml 的 main_branch
@@ -362,7 +439,7 @@ export async function initCommand(opts: InitOptions): Promise<void> {
         }
       }
       // 逐个 add，避免某个文件不存在导致整条 git add 失败
-      const addTargets = [".claude/", ".gitignore", "openspec/config.yaml", "openspec/schemas/"];
+      const addTargets = [".claude/", ".gitignore", ".gitattributes", "openspec/config.yaml", "openspec/schemas/"];
       for (const target of addTargets) {
         try {
           execSync(`git add ${target}`, { cwd: opts.projectPath, stdio: "pipe" });

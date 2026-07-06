@@ -104,6 +104,7 @@ behaviors:
 - ❌ 输出一段说明 + "是否继续？"，等用户回"是" — agent 用自由文本规避了选项化
 - ❌ "请确认 merge 结果" — 没列出"确认 / 重新检查 / 调整"的具体动作
 - ❌ "我打算这样做：[计划]，OK 吗？" — 用户隐式同意 ≠ USER_GATE 通过
+- ❌ **先文本列 "(a) ... (b) ..." 选项,再调 AskUserQuestion** — 双重呈现,违反首次呈现原则。哪怕"先展示选项让用户思考"、"文本+工具双保险",也算违规——首次呈现必须是 AskUserQuestion 工具调用,不是文本。常见模式:agent thinking 决策"用 AskUserQuestion",但执行时先输出纯文本选项,再调工具(决策→执行断裂)
 
 ### 4.2 上下文打包要求
 
@@ -185,27 +186,11 @@ git add 限路径（如 openspec/specs/ openspec/changes/<name>/），
 
 **嵌入位置：** 所有 5 个 skill 的 git commit 步骤前。
 
-#### 5.2.2 Memory 批量写入禁令
+#### 5.2.2 Memory 批量写入禁令（已摘除）
 
-**禁令：** retrospective.md §6 Promote Candidates 写入 `~/.claude/memory/` 必须**逐条 USER_GATE**，禁止"全部写入"作为单次确认。
+**历史背景：** archive 阶段曾写入 retrospective.md §6 Promote Candidates 到 memory,但导致破坏 hash-lock + worktree 未 commit 修改阻碍清理。已摘除——`/alloy:start` 阶段扫描最近 3 个归档 retrospective 学习经验,archive/finish 不再操作 retrospective.md。
 
-**WHY：**
-
-- memory 影响所有未来会话的 agent 行为，是全局污染源
-- retrospective 条目质量参差，逐条审查可拦截"乍看合理但实际过拟合"的条目
-- 批量确认违背 4.3"沉默 ≠ 授权"——一次 yes 等于全部沉默通过
-
-**标准措辞：**
-
-```
-[HARD_STOP] retrospective Promote Candidates 禁止批量写入 memory。
-每条候选条目必须独立 AskUserQuestion 确认（写入 / 跳过 / 修改后写入）。
-
-违反字面 = 违反精神：哪怕看似"全部都对"，也算违反禁令——
-单次确认无法承担全局污染风险。
-```
-
-**嵌入位置：** `archive.md` 读取 retrospective.md §6 之后、写入 memory 之前。
+**当前规范：** archive/finish 阶段不写入 memory,不修改 retrospective.md。retrospective.md 作为 apply 阶段产物 hash-lock 后归档,供 start 阶段扫描学习。
 
 #### 5.2.3 Phase 推进早于操作的回滚要求
 
@@ -258,7 +243,7 @@ git add 限路径（如 openspec/specs/ openspec/changes/<name>/），
 
 - [ ] git 操作步骤前嵌入了通用指南 §3.5.1 的 git 自救命令禁令
 - [ ] git commit 步骤前嵌入了 §5.2.1 的 git add 限路径禁令
-- [ ] archive.md 的 memory 写入位置嵌入了 §5.2.2 的批量写入禁令
+- [ ] archive/finish 不写入 memory,不修改 retrospective.md(§5.2.2 已摘除,start 阶段扫描学习)
 - [ ] phase 推进步骤注释了降级路径（§5.2.3）
 
 #### 三层防御
@@ -293,15 +278,15 @@ git add 限路径（如 openspec/specs/ openspec/changes/<name>/），
 
 > 本附录记录按本规范执行后的 frontmatter 对齐结果。代码是真相源——skill md 改动后必须重新审计节点并同步 frontmatter。
 
-### A.1 当前对齐状态（2026-07-05 审计）
+### A.1 当前对齐状态（2026-07-06 审计）
 
 | skill | preconditions | hard_stops | user_gates | warns |
 |-------|--------------|------------|------------|-------|
-| start.md | 8 | 16 | 8 | 2 |
+| start.md | 8 | 17 | 8 | 2 |
 | plan.md | 7 | 20 | 9 | 1 |
-| apply.md | 12 | 17 | 7 | 3 |
-| archive.md | 6 | 13 | 3 | 1 |
-| finish.md | 6 | 9 | 5 | 2 |
+| apply.md | 12 | 18 | 7 | 3 |
+| archive.md | 6 | 12 | 3 | 1 |
+| finish.md | 6 | 8 | 4 | 2 |
 | fix.md | 1 | 8 | 7 | 0 |
 | discard.md | 1 | 3 | 1 | 0 |
 

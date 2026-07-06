@@ -14,7 +14,7 @@
 | 阶段完成自动衔接，选"继续"直接进下一阶段 | 每阶段手动输命令 |
 | 多步操作下沉原子 CLI（`_worktree-cleanup` / `_archive` / `_artifact commit`），确定性执行 | Agent 手写多步 bash 易出错 |
 | skill 与 spec 对账（`_spec-audit`），frontmatter 漂移检测 | 文档与代码漂移 |
-| memory 分类（项目级 / 用户级），教训精准反哺 | memory 混乱污染全局 |
+| init 配置权限白名单（allow alloy/git/openspec，deny force/reset/rm）+ `.gitattributes` 强制 LF | Windows CRLF 警告 / 反复确认命令 |
 
 ---
 

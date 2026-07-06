@@ -2,6 +2,49 @@
 
 本文件记录 @flyin-ai/alloy 的所有版本变更。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.3.0] - 2026-07-06
+
+本版本聚焦 phase 语义清晰化 + agent 执行稳定性强化 + init 体验优化。
+
+**BREAKING:** phase 期望值变更(见下方 Changed),旧 .alloy.yaml(0.2.0)进行中的 change 不兼容新版 skill md。升级前请完成或废弃进行中的 change,然后重新运行 `alloy init`。
+
+**模型适配表现:**
+- **强模型(GLM 5.1+ / DeepSeek V4 Pro):** 流程执行接近完美,_verify 同命令 && 连接 / AskUserQuestion 合规 / §7 正确填写全通过
+- **中模型(step-3.7-flash / deepseek-v4-flash):** 偶有 _verify 拆开 / 双重呈现违规,通过 HARD_STOP + Red Flag 强化后改善
+- **phase 双值语义:** 消除"phase=started 表示进行中还是已完成"的歧义,跨模型理解一致
+
+### Added
+
+- **phase 双值语义:** phase 从 5 值扩展到 10 值(starting/started, planning/planned, applying/applied, archiving/archived, finishing/finished),与 _phase start/complete 双 commit 语义对齐——-ing 表示进行中,-ed 表示已完成
+- **`alloy _verify phase-enter/phase-exit <phase> <change-dir>` 校验型 CLI:** 阶段转换状态校验(制品 + state 字段 + 目录位置),比 `_guard precheck`(单点 phase 路由)更全面
+- **`alloy init` 权限白名单交互步骤:** 支持 Claude Code / CodeBuddy / Pi 项目级 permissions(allow alloy/git/openspec 等,deny force/reset/rm),减少执行确认。幂等合并,重复执行不覆盖自定义
+- **`.gitattributes` 强制 LF:** `alloy init` 创建 `.gitattributes` 含 `* text=auto eol=lf`,避免 Windows CRLF 警告
+- **retrospective §7 偏差分类 scaffold 模板:** 8 类偏差 checkbox(AskUserQuestion 漏触发 / 纯文本列选项 / 跳过 USER_GATE / git 自救 / 路径错误 / worktree 相关 / 时间戳错误 / memory 相关)
+- **start.md explore 阶段禁实现动作 HARD_STOP:** 禁 Write/Edit/创建文件/运行实现代码,防止 agent 在 explore 阶段直接写代码跳过流程
+- **alloy-skill-writing-guide.md §4.1 "双重呈现"反例:** 先文本列 (a)/(b) 再调 AskUserQuestion 是违规,5 skill Red Flags 表加对应借口
+- **apply.md worktree 创建方式 HARD_STOP:** Claude Code agent 必须用 EnterWorktree 工具,路径 `.claude/worktrees/<name>`,禁手动 git worktree add
+- **agent-instruction-files.md 权限机制调研:** 官网验证 5 个 agent(Claude Code / OpenCode / CodeBuddy / Trae / Pi)支持项目级 permissions
+
+### Changed
+
+- **[BREAKING] phase 期望值变更:** `_guard precheck` / `_verify phase-enter` / `_verify phase-exit` 期望值从 -ed 改为 -ing(因为 _phase start 推进到 -ing)。旧 .alloy.yaml phase=started 在新版 skill md 期望 planning,不兼容
+- **_phase start 推进到 -ing:** 原 _phase start 只写 started_at 不推进 phase(保持 started),改后推进到 -ing(starting/planning/applying/archiving/finishing)
+- **_verify phase-exit 期望值 -ed → -ing:** 校验在 _phase complete 之前调用,phase 还是 -ing(尚未推进到 -ed)
+- **_verify + _phase complete 必须同命令 && 连接:** 禁拆成两个 Bash 命令(如 `_verify && echo OK || echo FAIL` 后单独 `_phase complete`),防绕过短路保护
+- **§7 checkbox 语义明确:** 勾选 [x] = 观察到该偏差(违规);无偏差时全部 [ ]。加"常见误解:[x] 不是'已检查'是'有此问题'"
+
+### Removed
+
+- **archive 阶段 memory 写入逻辑:** 读取 retrospective §6 Promote Candidates + 逐条 USER_GATE 写入 memory——破坏 hash-lock + worktree 未 commit 修改阻碍清理。retrospective 由 `/alloy:start` 阶段扫描最近 3 个归档学习
+- **finish 阶段 retrospective 离场审查(USER_GATE):** archive/finish 不再管 retrospective.md,做好自己的归档/合入即可
+
+### Fixed
+
+- `verify.ts` checkArtifactHash 用 computeArtifactHash(支持 specs 目录,原 readFile 失败)
+- `_verify phase-exit` stateFields 去 completed_at(_phase complete 还没执行,completed_at 未写)
+- retro.ts §7 scaffold 模板缺失(原模板只有 §1-§6,agent 不知道填 §7)
+- retro.ts §7 checkbox 语义歧义(agent 误勾选全部 [x] 但写"无偏差")
+
 ## [0.2.0] - 2026-06-17
 
 本版本聚焦工作流 skill 的系统化加固——5 阶段 skill 全量重写，三层防御机制（Iron Law + Red Flags + Step 内 HARD_STOP）规模化覆盖。

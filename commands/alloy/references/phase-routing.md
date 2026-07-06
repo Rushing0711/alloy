@@ -2,14 +2,25 @@
 
 所有 alloy 阶段命令共享的 phase 自动路由规则。当 `alloy _guard` 检测到 phase 不匹配时，按此表自动跳转到正确阶段。
 
+## phase 语义
+
+每个阶段有两个 phase 值:
+- `-ing`(如 starting/planning/applying):阶段进行中(_phase start 后,_phase complete 前)
+- `-ed`(如 started/planned/applied):阶段已完成(_phase complete 后)
+
 ## 路由表
 
 | 当前 phase | 行为 |
 |-----------|------|
-| started | 尚未 plan → 加载 alloy-plan 指令 |
-| planned | 尚未 apply → 加载 alloy-apply 指令 |
-| applied | 尚未 archive → 加载 alloy-archive 指令 |
-| archived | 尚未 finish → 加载 alloy-finish 指令 |
+| starting | start 进行中 → 加载 alloy-start |
+| started | start 已完成 → 加载 alloy-plan |
+| planning | plan 进行中 → 加载 alloy-plan |
+| planned | plan 已完成 → 加载 alloy-apply |
+| applying | apply 进行中 → 加载 alloy-apply |
+| applied | apply 已完成 → 加载 alloy-archive |
+| archiving | archive 进行中 → 加载 alloy-archive |
+| archived | archive 已完成 → 加载 alloy-finish |
+| finishing | finish 进行中 → 加载 alloy-finish |
 | finished | 工作流已完成 → STOP |
 
 ## 实现方式

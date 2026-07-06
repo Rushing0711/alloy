@@ -6,8 +6,8 @@ tags: [alloy, workflow]
 spec: 01-product-spec/05-finish-spec.md
 behaviors:
   preconditions: 6
-  hard_stops:    9
-  user_gates:    5
+  hard_stops:    8
+  user_gates:    4
   warns:         2
   artifacts: []
   transitions_to: finished
@@ -50,6 +50,7 @@ phase != archived / 分支不存在 / merge 精确确认未通过 / spec 已归�
 | "feature_branch 看起来像 main，应该没事" | branch -D 变量未替换或与主分支同名 = 强删主分支引用，灾难性。必须 PRECONDITION_FAIL（task #25）。 |
 | "另一个 change 也在 finish，并行做完更快" | 多 change 并行 finish = squash 顺序与 archive 顺序错配，主分支提交历史错乱。必须串行（task #14）。 |
 | "phase 已经推进到 finished 了，merge 失败让用户自己回退太麻烦" | 推进早于不可逆操作 + 失败 → 用户手动按 §5.2.3 路径 B 回退 phase。agent 不得自动 reset --hard 清场（§3.5.1）。 |
+| "先文本列 (a)/(b) 选项让用户思考，再调 AskUserQuestion 双保险" | ⛔ HARD_STOP：双重呈现违规——首次呈现必须是 AskUserQuestion 工具调用,不是文本。哪怕"先展示选项让用户思考"、"文本+工具双保险",也算违反。常见模式:thinking 决策"用 AskUserQuestion"但执行时先输出纯文本选项(决策→执行断裂)。 |
 
 ---
 
@@ -88,9 +89,9 @@ alloy _phase start "$CHANGE_DIR" finish
 
 **1. phase 检查（PRECONDITION_FAIL）：**
 ```bash
-alloy _guard precheck openspec/changes/<name> archived
+alloy _guard precheck openspec/changes/<name> finishing
 ```
-不匹配时读取 `commands/alloy/references/phase-routing.md` 自动跳转。phase 必须 = archived，否则 `⛔ PRECONDITION_FAIL`。
+不匹配时读取 `commands/alloy/references/phase-routing.md` 自动跳转。phase 必须 = finishing，否则 `⛔ PRECONDITION_FAIL`。
 
 **2. 分支存在检查（PRECONDITION_FAIL）：**
 ```bash
@@ -110,34 +111,7 @@ alloy status --json 2>/dev/null | grep -c '"phase":"archived"' || true
 
 WARN 不阻断流程，但提醒用户人工确认顺序后再继续。
 
-**5. Retrospective 离场审查（🔴 USER_GATE，task L7）：** merge 前最后一道审查窗口——retrospective 中的 §5 意外发现可能包含"应开新 change 的技术债"或"边界 case 发现"等影响合入决策的信息。
-
-读取 retrospective.md（路径与 phase 推进取 CHANGE_DIR 一致）：
-
-```bash
-ARCHIVE_DIR=$(ls -d openspec/changes/archive/*-<name> 2>/dev/null | sort -r | head -1)
-CHANGE_DIR="${ARCHIVE_DIR:-openspec/changes/<name>}"
-RETRO_FILE="${CHANGE_DIR}/retrospective.md"
-```
-
-`$RETRO_FILE` 存在 → 🔴 USER_GATE（必须 AskUserQuestion）：
-
-> 离场审查：retrospective 关键发现
->
-> [展示 retrospective.md §5 意外发现全文，以及 §4 技能跳过模式（如有）]
->
-> §6 Promote Candidates 已在 archive 阶段处理（写入 memory / 跳过记录）。
->
-> 以上发现是否影响合入决策？
-> (a) 不影响——确认合入，进入 Step 2
-> (b) 有影响——记录待处理项后继续（不影响本次合入，但标注后续 new change）
-> (c) 需要讨论——退出 finish，先处理 retrospective 发现再决定
-
-**[HARD_STOP]** agent 不得基于 "retrospective 已在 archive 审过" 跳过此 USER_GATE——archive 审查的是"是否写入 memory"，finish 审查的是"是否影响合入决策"，两件事不同。
-
-`$RETRO_FILE` 不存在 → 跳过本步骤（无 retrospective = 无离场审查内容）。
-
-**6. Checkpoint tag 清理（PRECONDITION_FAIL，change 封存）：** finish 是 change 终态（merge/PR/保持分支都意味着封存），此时清理 checkpoint tag 时机最合适。archive 阶段不清理是因为 `/opsx:archive` 已把 change 目录移到 `openspec/changes/archive/`，原路径 `openspec/changes/<name>` 不存在导致 `_checkpoint clean` 失败。finish 阶段已有 `$CHANGE_DIR` 解析 archive 路径，直接复用。
+**5. Checkpoint tag 清理（PRECONDITION_FAIL，change 封存）：** finish 是 change 终态（merge/PR/保持分支都意味着封存），此时清理 checkpoint tag 时机最合适。archive 阶段不清理是因为 `/opsx:archive` 已把 change 目录移到 `openspec/changes/archive/`，原路径 `openspec/changes/<name>` 不存在导致 `_checkpoint clean` 失败。finish 阶段已有 `$CHANGE_DIR` 解析 archive 路径，直接复用。
 
 **[PRECONDITION_FAIL] 本步骤为强制步骤，不可跳过。** change 封存后 checkpoint tag 无恢复价值，残留 tag 会污染后续 change 的 `_checkpoint list` 输出与 retrospective 检查点统计。清理后必须校验无残留——有残留说明清理未生效，禁止继续推进 phase。
 
@@ -184,7 +158,7 @@ echo "✓ checkpoint tag 已全部清理"
 加载 `superpowers:finishing-a-development-branch` 技能，传入：
 ```
 Change: <name>
-状态：phase=archived（spec 已归档，代码待合入）
+状态：phase=finishing（spec 已归档，代码待合入）
 当前分支：<feature_branch>
 基础分支：<main_branch>
 ```

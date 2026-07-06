@@ -6,7 +6,7 @@ tags: [alloy, workflow]
 spec: 01-product-spec/04-archive-spec.md
 behaviors:
   preconditions: 6
-  hard_stops:    13
+  hard_stops:    12
   user_gates:    3
   warns:         1
   artifacts: [delta-spec, archive]
@@ -20,8 +20,8 @@ behaviors:
 
 ```
 [HARD_STOP] NO ARCHIVE WITH FAIL
-verify.md FAIL / merge 冲突 / memory 批量 / git status dirty 任一存在 = 拒绝归档
-违反字面 = 违反精神：哪怕看似"小问题"、"先归档再补"、或用户主动说"一次过吧"要求批量打包 memory，也算违反 Iron Law。逐条 = 逐条——用户要求合并不算授权。
+verify.md FAIL / merge 冲突 / git status dirty 任一存在 = 拒绝归档
+违反字面 = 违反精神：哪怕看似"小问题"、"先归档再补"，也算违反 Iron Law。
 ```
 
 **核心原则：先锁定文档证据链，再合入代码。** archive 只负责 spec 归档，代码合入由 `/alloy:finish` 完成。
@@ -41,8 +41,8 @@ verify.md FAIL / merge 冲突 / memory 批量 / git status dirty 任一存在 = 
 | "verify.md FAIL 是小问题，先归档再说" | FAIL = 阻塞问题。归档不可逆——带着 FAIL 归档意味着 spec 与代码偏差被永久封存。 |
 | "spec 合并看起来没问题，直接继续" | 没看过的 spec 变更 = 代码与规格可能已分叉。审查只需 1 分钟，修复分叉需要 1 小时。 |
 | "merge 冲突了，git merge --abort 一下让流程继续" | 冲突 = 代码状态未达预期，自动 abort = 隐藏真问题。退出 skill 让用户处理是唯一合法路径（§3.5.1）。 |
-| "memory 候选都对，全部写入吧" | 单次确认承担不了全局污染风险。每条独立 USER_GATE，无例外（§5.2.2）。即使用户说"一次过吧"，逐条规则不可合并——用户要求打包不算授权。 |
 | "另一个 change 也在 archive，等一下吧" | 多 change 并行 archive = Delta Spec 合并顺序敏感。先归档晚开始的 = 主 spec 状态错乱。必须串行。 |
+| "先文本列 (a)/(b) 选项让用户思考，再调 AskUserQuestion 双保险" | ⛔ HARD_STOP：双重呈现违规——首次呈现必须是 AskUserQuestion 工具调用,不是文本。哪怕"先展示选项让用户思考"、"文本+工具双保险",也算违反。常见模式:thinking 决策"用 AskUserQuestion"但执行时先输出纯文本选项(决策→执行断裂)。 |
 
 ---
 
@@ -91,7 +91,7 @@ fi
 **2. phase 检查（PRECONDITION_FAIL）：**
 
 ```bash
-alloy _guard precheck openspec/changes/<name> applied
+alloy _guard precheck openspec/changes/<name> archiving
 ```
 
 不匹配时读取 `commands/alloy/references/phase-routing.md` 自动跳转。change 目录不存在 → 引导 `/alloy:start`。
@@ -108,12 +108,12 @@ FAIL → "verify.md 有阻塞问题。请先修复。" PASS/WARNING → 继续�
 
 ```bash
 PARALLEL=$(find openspec/changes -maxdepth 2 -name .alloy.yaml \
-  -exec grep -l "phase: applied\|phase: archive" {} \; 2>/dev/null \
+  -exec grep -l "phase: archiving\|phase: archived" {} \; 2>/dev/null \
   | grep -v "/<name>/" | wc -l)
 if [ "$PARALLEL" -gt 0 ]; then
-  echo "⚠️ [WARN] 检测到 $PARALLEL 个其他 change 处于 applied/archive 状态："
+  echo "⚠️ [WARN] 检测到 $PARALLEL 个其他 change 处于 archiving/archived 状态："
   find openspec/changes -maxdepth 2 -name .alloy.yaml \
-    -exec grep -l "phase: applied\|phase: archive" {} \; 2>/dev/null | grep -v "/<name>/"
+    -exec grep -l "phase: archiving\|phase: archived" {} \; 2>/dev/null | grep -v "/<name>/"
   echo ""
   echo "  Delta Spec 合并顺序敏感，建议按 archive 启动时间串行处理。"
   echo "  继续当前 archive 前请确认其他 change 不会同时归档。"
@@ -124,12 +124,109 @@ fi
 
 ---
 
-### [Step 2/3] /opsx:archive
+### [Step 2/3] Worktree 清理 + /opsx:archive
 
 ```
-[Step 2/3] /opsx:archive
-正在归档——Delta Spec 合并到主 spec → 移入 archive/...
+[Step 2/3] Worktree 清理(先 merge worktree → feature)→ /opsx:archive(在 feature 分支)
+先退出 worktree 并合并到 feature,再在 feature 分支执行归档——避免 archive 目录移动导致 merge 冲突
 ```
+
+**流程顺序调整说明：** worktree 清理必须在 /opsx:archive 之前——archive 操作会移动 `openspec/changes/<name>/` 到 `archive/`,若在 worktree 分支执行,merge 到 feature 时目录移动 + tasks.md 勾选导致三方合并冲突。先 merge worktree 到 feature(只有 apply 的代码/制品 commit,无目录移动),再在 feature 分支做 archive,冲突消除。
+
+**Worktree 清理（如果 apply 期间使用了 worktree）：**
+
+> ⛔ [HARD_STOP] worktree 清理流程的环境切换:
+> 1. **在 worktree 里**：读 state(worktree / feature_branch / worktree_branch 三字段) + 展示 worktree 分支 commit 列表（.alloy.yaml 在 worktree 里,ExitWorktree 后主仓读不到——此时 archive 尚未执行,change 目录还在原路径 openspec/changes/<name>/）
+> 2. **USER_GATE**：确认清理 worktree
+> 3. **ExitWorktree**：回主仓（merge/remove/branch-d 必须在主仓执行,worktree 里 HEAD 是 worktree 分支,merge 自己没意义;worktree remove 删自己 cwd 会失败）
+> 4. **`alloy _worktree-cleanup` 传入 state 字段**：原子完成 merge + remove + branch -d + worktree_mergedat 记录（用原路径 openspec/changes/<name> 作为 archive-dir,此时 archive 尚未执行）
+>
+> 违反字面 = 违反精神：哪怕"在 worktree 里 merge 效率高"、"cd 主仓替代 ExitWorktree",也算违反——worktree 里 merge 自己到自己没意义,cd 不解绑 session,后续命令仍可能在 worktree 执行。
+> 常见违规模式:
+> - 在 worktree 里执行 `git merge worktree-<name>`（HEAD 是 worktree 分支,merge 自己）
+> - 在 worktree 里执行 `git worktree remove`（删除自己 cwd,后续命令失败）
+> - 用 `cd /主仓` 替代 ExitWorktree（cd 不解绑 session）
+> - 跳过 USER_GATE 直接清理（merge 结果用户有权审查）
+
+**① 在 worktree 里读 state + 展示 commit 列表：**
+
+```bash
+CHANGE_DIR="openspec/changes/<name>"
+WORKTREE_PATH=$(alloy _state read "$CHANGE_DIR" worktree 2>/dev/null)
+FEATURE_BRANCH=$(alloy _state read "$CHANGE_DIR" feature_branch 2>/dev/null)
+WORKTREE_BRANCH=$(alloy _state read "$CHANGE_DIR" worktree_branch 2>/dev/null)
+```
+
+`WORKTREE_PATH` 为空 / null / skipped → 未使用 worktree,跳过整个 worktree 清理段,直接进 /opsx:archive。
+
+> ⛔ [HARD_STOP] agent 必须在 worktree 里读取这三个字段并记住——ExitWorktree 后主仓的 change 目录还没 merge,读不到 state。
+> 这三个字段将作为参数传给 `alloy _worktree-cleanup`,不能让 CLI 自己从 change-dir 读（change-dir 在 worktree 分支 commit,主仓 feature 分支未 merge 时不存在,CLI 读 state 会失败 → agent 被迫自救手动 git merge 违规）。
+
+```bash
+# 展示 worktree 分支的 commit 列表（供 USER_GATE 审查将合入的内容）
+echo "worktree 分支 $WORKTREE_BRANCH 的 commit 列表（将合入 feature 分支）："
+git log --oneline -10 "$WORKTREE_BRANCH" 2>/dev/null
+```
+
+**② USER_GATE 确认清理：**
+
+🔴 USER_GATE（必须 AskUserQuestion）: 确认清理 worktree?
+
+> 选项:
+> - (a) 确认并清理——merge worktree 分支到 feature + remove worktree + branch -d
+> - (b) 需要检查——退出 skill 让用户审查
+
+> 用户选 (a) 后继续步骤 ③;选 (b) 退出 skill。
+
+**③ ExitWorktree 回主仓：**
+
+调用 `ExitWorktree` 工具,**必须用 `action: "keep"`**——禁用 `action: "remove"`。
+
+> ⛔ [HARD_STOP] ExitWorktree action 必须是 `keep`,不能是 `remove`。
+> 原因:`remove` 会直接销毁 worktree + 丢弃 worktree 分支的 commit,跳过 `alloy _worktree-cleanup` 的 merge 步骤,worktree 工作永久丢失。
+> 上方 USER_GATE "确认清理 worktree" 是授权 `alloy _worktree-cleanup` 执行 merge+remove+branch-d,**不是授权 ExitWorktree 直接 remove**。
+> 违反字面 = 违反精神:哪怕"反正要清理,直接 remove 省事"、"用户已确认清理,remove 等价",也算违反——
+>   - remove 跳过 merge,worktree 分支 commit 不会被合入 feature
+>   - remove 后 _worktree-cleanup 无法执行(worktree 已销毁,CLI 校验失败)
+>   - discard_changes: true 更是绕过新 USER_GATE 强制销毁,等同 §3.5.1 破坏性操作
+> 常见违规模式:
+> - agent 选 action: "remove" 觉得"省一步"——结果丢 8 个 commit,_worktree-cleanup 无法执行
+> - agent 看到 ExitWorktree 安全闸门提示"未合并 commit 将丢失"后,选 discard_changes: true 强制丢弃——这是绕过 USER_GATE,违规
+> - agent 把 USER_GATE "确认清理 worktree" 等同于 "授权 ExitWorktree remove"——语义错位,USER_GATE 授权的是 _worktree-cleanup 流程
+
+> ⛔ [HARD_STOP] 必须调 `ExitWorktree` 工具——禁用 `cd /主仓` / `git -C /主仓` 绕过。
+> ExitWorktree 解绑 session cwd,后续 CLI 命令在主仓执行。
+
+**④ 调用原子 CLI 完成清理（传入 state 字段,用原路径作为 archive-dir）:**
+
+```bash
+CHANGE_DIR="openspec/changes/<name>"
+alloy _worktree-cleanup \
+  --archive-dir "$CHANGE_DIR" \
+  --worktree-path "$WORKTREE_PATH" \
+  --feature-branch "$FEATURE_BRANCH" \
+  --worktree-branch "$WORKTREE_BRANCH"
+```
+
+> `alloy _worktree-cleanup` 原子完成:
+> 1. 解析参数（archive-dir / worktree-path / feature-branch / worktree-branch）
+> 2. 校验当前在主仓（不在 worktree）
+> 3. 校验当前分支 = feature_branch
+> 4. git merge worktree_branch 到 feature（失败报告冲突现场,禁 agent 自动 abort）
+> 5. git worktree remove（有未跟踪文件时 HARD_STOP,禁 agent 自动 clean -fd）
+> 6. git branch -d worktree_branch（失败禁自动 -D,报告问题让用户决策）
+> 7. 记录 worktree_merged_at + commit（merge 后 change-dir 在 feature 分支存在,可写）
+>
+> agent 禁自行 git merge / worktree remove / branch -d 模拟——本 CLI 是唯一合法路径。
+> state 字段必须由 agent 在 worktree 里读取后传入——CLI 不从 change-dir 读 state（change-dir 在 worktree 分支,主仓 feature 分支未 merge 时不存在,CLI 读 state 会失败 → agent 被迫自救手动 git merge 违规）。
+
+CLI 失败 → ⛔ `[HARD_STOP]` 按 CLI 输出的指引处理（冲突 / 未跟踪文件 / branch -d 失败）,禁 agent 自动 git 自救（§3.5.1）。
+
+未使用 worktree 时跳过步骤 ①-④,直接进 /opsx:archive。
+
+---
+
+**/opsx:archive（在 feature 分支执行）:**
 
 **[HARD_STOP] 禁止 agent 跳过 `alloy _archive` 自行归档。**
 **违反字面 = 违反精神：哪怕"openspec/specs/ 为空（新项目首 change）"、"看起来没有主 spec 可 sync"、"change 的 specs/ 内容简单直接 mv 过去"——也必须调用 `alloy _archive` 让 openspec archive CLI 执行。**
@@ -175,7 +272,7 @@ SPEC_DIFF_FULL=$(git diff openspec/specs/ | head -200)  # 截 200 行防爆量
 
 **违反字面 = 违反精神：** 哪怕 diff 看似"明显合理"或"diff 为空"，没经过用户明确选择 (a) = 不算授权。禁止 agent 基于"diff 短"、"无 conflict"或"specs/ 原本为空"自动跳过此 USER_GATE。
 
-**归档变更提交（HARD_STOP §5.2.1 git add 限路径）：** 必须在 worktree 清理之前 commit，否则清理时 merge 会丢失归档操作。**禁止 `git add -A` 无路径——只 add `openspec/specs/ openspec/changes/` 两个明确路径，避免把无关 working tree 变更卷入归档 commit（§5.2.1）。**
+**归档变更提交（HARD_STOP §5.2.1 git add 限路径）：** **禁止 `git add -A` 无路径——只 add `openspec/specs/ openspec/changes/` 两个明确路径，避免把无关 working tree 变更卷入归档 commit（§5.2.1）。**
 
 ```bash
 git add openspec/specs/ openspec/changes/
@@ -183,48 +280,6 @@ git diff --cached --quiet || git commit -m "chore(<name>): 归档目录移动"
 ```
 
 `git commit` 失败 → ⛔ `[HARD_STOP] 归档 commit 失败，archive 中止。检查 git 状态后重试。`
-
-**读取 retrospective.md §6 Promote Candidates：** 标记 `→ Promote to: memory` 的条目,按内容性质分类:
-- **项目级 memory**(仅本项目有意义):项目架构/约定/陷阱/特定命令——写入 `<project>/.claude/memory/`(agent 自身已知项目 memory 路径)
-- **用户级 memory**(跨多个项目有效):用户偏好/工作方式/通用反馈——写入 `~/.claude/memory/`
-
-这是 retrospective 从"死文档"变"活反馈"的关键。
-
-**memory 写入逐条确认（USER_GATE + HARD_STOP §5.2.2）：**
-
-详细禁令见 `commands/alloy/references/interaction-style.md` "沉默 ≠ 授权"章节——批量打包是首条反模式。本阶段适用：retrospective Promote Candidates 必须**每条独立** AskUserQuestion，无论候选数量、相似度或"看起来都对"。**[HARD_STOP] 即使用户主动说"一次过吧"或"都挺合理的"，也不可合并——用户要求打包不算授权，agent 必须拒绝并逐条展示。**
-
-> ⛔ [HARD_STOP] USER_GATE 首次呈现即必须调 AskUserQuestion——禁先文本列 (a)/(b)/(c)/(d) 再调工具。
-> 违反字面 = 违反精神:哪怕"先展示选项让用户思考"、"文本+工具双保险",也算违反——首次呈现必须是 AskUserQuestion 工具调用,不是文本。
-
-> ⛔ [HARD_STOP] 用户回复不在选项内时,禁 agent 主观推断,必须重问同一个 USER_GATE。
-> 违反字面 = 违反精神:哪怕"用户回复接近 (a)"、"用户意图明显"、"回复内容可推断为某个选项",也算违反——用户没明确选 = 没选,agent 替用户选 = 违反"沉默 ≠ 授权"。
-> 常见违规模式:
-> - agent thinking "this is not one of the expected options... I'll treat this as (a)" 然后执行——这是把非选项回复当授权,违规
-> - agent 把用户的反问(如"是写入项目memory还是用户memory")当成"用户想写入"——反问是澄清,不是授权
-> - agent 跳过重问直接执行,因为"重问显得啰嗦"——重问是合规要求,不是啰嗦
-
-逐条流程：
-
-1. 解析 retrospective.md §6，提取每条 `→ Promote to: memory` 候选,判断内容性质(项目级 vs 用户级)
-2. 对每条候选**单独** AskUserQuestion(首次呈现即调工具):
-
-   > 候选 [N/M]:[内容性质判断]
-   > 内容：[Why + How to apply 摘要]
-   > 🔴 AskUserQuestion 选项(4 个):
-   > - (a) 写入项目 memory——仅本项目有意义(架构/约定/陷阱/特定命令)
-   > - (b) 写入用户 memory——跨多个项目有效(用户偏好/工作方式/通用反馈)
-   > - (c) 跳过
-   > - (d) 修改后写入
-
-3. (a) → 写入项目 memory(`<project>/.claude/memory/`)
-4. (b) → 写入用户 memory(`~/.claude/memory/`)
-5. (c) → 跳过，记录到 retrospective.md 末尾"Skipped from memory promotion"章节
-6. (d) → 用户提供调整后的 Why/How 文本 + 选择写入项目/用户 memory,写入修改版
-7. 用户回复不在选项内 → 重问同一个 USER_GATE(禁主观推断)
-8. 全部条目处理后输出汇总：N 条写入项目 memory、M 条写入用户 memory、K 条跳过、L 条修改后写入
-
-无 Promote Candidates → 跳过本步骤。
 
 **解析归档后路径（后续命令统一用 `$ARCHIVE_DIR`）：** change 目录在 archive 阶段已移到 `openspec/changes/archive/<YYYY-MM-DD>-<name>/`,后续 `_state write` / `_phase complete` 都必须用归档后路径,用原路径 `openspec/changes/<name>` 会因目录已移走而失败。
 
@@ -238,102 +293,13 @@ if [ -z "$ARCHIVE_DIR" ]; then
 fi
 ```
 
-**Worktree 清理（如果 apply 期间使用了 worktree）：**
-
-> ⛔ [HARD_STOP] worktree 清理流程的环境切换:
-> 1. **在 worktree 里**：读 state(worktree / feature_branch / worktree_branch 三字段) + 展示 worktree 分支 commit 列表（.alloy.yaml 在 worktree 里,ExitWorktree 后主仓读不到——archive-dir 在 worktree 分支 commit,主仓 feature 分支未 merge 时不存在）
-> 2. **USER_GATE**：确认清理 worktree
-> 3. **ExitWorktree**：回主仓（merge/remove/branch-d 必须在主仓执行,worktree 里 HEAD 是 worktree 分支,merge 自己没意义;worktree remove 删自己 cwd 会失败）
-> 4. **`alloy _worktree-cleanup` 传入 state 字段**：原子完成 merge + remove + branch -d + worktree_mergedat 记录
->
-> 违反字面 = 违反精神：哪怕"在 worktree 里 merge 效率高"、"cd 主仓替代 ExitWorktree",也算违反——worktree 里 merge 自己到自己没意义,cd 不解绑 session,后续命令仍可能在 worktree 执行。
-> 常见违规模式:
-> - 在 worktree 里执行 `git merge worktree-<name>`（HEAD 是 worktree 分支,merge 自己）
-> - 在 worktree 里执行 `git worktree remove`（删除自己 cwd,后续命令失败）
-> - 用 `cd /主仓` 替代 ExitWorktree（cd 不解绑 session）
-> - 跳过 USER_GATE 直接清理（merge 结果用户有权审查）
-> - ExitWorktree 后只传 archive-dir 给 _worktree-cleanup（archive-dir 在 worktree 分支,主仓 feature 分支未 merge 时读不到 state,CLI 失败 → agent 自救手动 git merge 违规）
-
-**① 在 worktree 里读 state + 展示 commit 列表：**
-
-```bash
-WORKTREE_PATH=$(alloy _state read "$ARCHIVE_DIR" worktree 2>/dev/null)
-FEATURE_BRANCH=$(alloy _state read "$ARCHIVE_DIR" feature_branch 2>/dev/null)
-WORKTREE_BRANCH=$(alloy _state read "$ARCHIVE_DIR" worktree_branch 2>/dev/null)
-```
-
-`WORKTREE_PATH` 为空 / null / skipped → 未使用 worktree,跳过整个 worktree 清理段。
-
-> ⛔ [HARD_STOP] agent 必须在 worktree 里读取这三个字段并记住——ExitWorktree 后主仓的 archive-dir 还没 merge,读不到 state。
-> 这三个字段将作为参数传给 `alloy _worktree-cleanup`,不能让 CLI 自己从 archive-dir 读（archive-dir 在 worktree 分支 commit,主仓 feature 分支未 merge 时不存在,CLI 读 state 会失败 → agent 被迫自救手动 git merge 违规）。
-
-```bash
-# 展示 worktree 分支的 commit 列表（供 USER_GATE 审查将合入的内容）
-echo "worktree 分支 $WORKTREE_BRANCH 的 commit 列表（将合入 feature 分支）："
-git log --oneline -10 "$WORKTREE_BRANCH" 2>/dev/null
-```
-
-**② USER_GATE 确认清理：**
-
-🔴 USER_GATE（必须 AskUserQuestion）: 确认清理 worktree?
-
-> 选项:
-> - (a) 确认并清理——merge worktree 分支到 feature + remove worktree + branch -d
-> - (b) 需要检查——退出 skill 让用户审查
-
-> 用户选 (a) 后继续步骤 ③;选 (b) 退出 skill。
-
-**③ ExitWorktree 回主仓：**
-
-调用 `ExitWorktree` 工具,**必须用 `action: "keep"`**——禁用 `action: "remove"`。
-
-> ⛔ [HARD_STOP] ExitWorktree action 必须是 `keep`,不能是 `remove`。
-> 原因:`remove` 会直接销毁 worktree + 丢弃 worktree 分支的 commit,跳过 `alloy _worktree-cleanup` 的 merge 步骤,worktree 工作永久丢失。
-> 上方 USER_GATE "确认清理 worktree" 是授权 `alloy _worktree-cleanup` 执行 merge+remove+branch-d,**不是授权 ExitWorktree 直接 remove**。
-> 违反字面 = 违反精神:哪怕"反正要清理,直接 remove 省事"、"用户已确认清理,remove 等价",也算违反——
->   - remove 跳过 merge,worktree 分支 commit 不会被合入 feature
->   - remove 后 _worktree-cleanup 无法执行(worktree 已销毁,CLI 校验失败)
->   - discard_changes: true 更是绕过新 USER_GATE 强制销毁,等同 §3.5.1 破坏性操作
-> 常见违规模式:
-> - agent 选 action: "remove" 觉得"省一步"——结果丢 8 个 commit,_worktree-cleanup 无法执行
-> - agent 看到 ExitWorktree 安全闸门提示"未合并 commit 将丢失"后,选 discard_changes: true 强制丢弃——这是绕过 USER_GATE,违规
-> - agent 把 USER_GATE "确认清理 worktree" 等同于 "授权 ExitWorktree remove"——语义错位,USER_GATE 授权的是 _worktree-cleanup 流程
-
-> ⛔ [HARD_STOP] 必须调 `ExitWorktree` 工具——禁用 `cd /主仓` / `git -C /主仓` 绕过。
-> ExitWorktree 解绑 session cwd,后续 CLI 命令在主仓执行。
-
-**④ 调用原子 CLI 完成清理（传入 state 字段,不依赖 archive-dir 读 state）：**
-
-```bash
-alloy _worktree-cleanup \
-  --archive-dir "$ARCHIVE_DIR" \
-  --worktree-path "$WORKTREE_PATH" \
-  --feature-branch "$FEATURE_BRANCH" \
-  --worktree-branch "$WORKTREE_BRANCH"
-```
-
-> `alloy _worktree-cleanup` 原子完成:
-> 1. 解析参数（archive-dir / worktree-path / feature-branch / worktree-branch）
-> 2. 校验当前在主仓（不在 worktree）
-> 3. 校验当前分支 = feature_branch
-> 4. git merge worktree_branch 到 feature（失败报告冲突现场,禁 agent 自动 abort）
-> 5. git worktree remove（有未跟踪文件时 HARD_STOP,禁 agent 自动 clean -fd）
-> 6. git branch -d worktree_branch（失败禁自动 -D,报告问题让用户决策）
-> 7. 记录 worktree_merged_at + commit（merge 后 archive-dir 在 feature 分支存在,可写）
->
-> agent 禁自行 git merge / worktree remove / branch -d 模拟——本 CLI 是唯一合法路径。
-> state 字段必须由 agent 在 worktree 里读取后传入——CLI 不从 archive-dir 读 state（archive-dir 在 worktree 分支,主仓 feature 分支未 merge 时读不到）。
-
-CLI 失败 → ⛔ `[HARD_STOP]` 按 CLI 输出的指引处理（冲突 / 未跟踪文件 / branch -d 失败）,禁 agent 自动 git 自救（§3.5.1）。
-
-未使用 worktree 时跳过步骤 ①-④。
-
 **记录完成时间并推进 phase——原子命令 `alloy _phase complete` 内部完成 completed_at 写入 + phase 推进 + git add 限路径 + commit：**
 
 ```bash
 # 校验本阶段完成状态(目录在 archive/ + state 字段)——失败则修复后重试,禁跳过
-alloy _verify phase-exit archive "$ARCHIVE_DIR"
-alloy _phase complete "$ARCHIVE_DIR" archive
+# ⛔ [HARD_STOP] _verify 和 _phase complete 必须同一 Bash 命令 && 连接,禁拆成两个命令
+# 拆开(如 _verify && echo OK || echo FAIL 后单独 _phase complete)绕过短路保护,_verify 失败时 agent 可能仍继续
+alloy _verify phase-exit archive "$ARCHIVE_DIR" && alloy _phase complete "$ARCHIVE_DIR" archive
 ```
 
 > ⛔ [HARD_STOP] `_phase complete` 只调一次——禁重复 start + complete。

@@ -85,13 +85,15 @@ describe("alloy _retro scaffold", () => {
     await rm(tmpDir, { recursive: true, force: true });
   });
 
-  it("生成 retrospective.md 含 §0 和 §4", async () => {
+  it("生成 retrospective.md 含 §0、§4、§7", async () => {
     const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     await retroCommand(["scaffold", changeDir]);
     const content = await readFile(join(changeDir, "retrospective.md"), "utf-8");
     expect(content).toContain("## §0 量化全景");
     expect(content).toContain("## §4 全周期技能审计");
+    expect(content).toContain("## §7 偏差分类");
+    expect(content).toContain("AskUserQuestion 漏触发");
     exitSpy.mockRestore();
     logSpy.mockRestore();
   });
