@@ -539,9 +539,9 @@ alloy _record check openspec/changes/<name> verify
    ```
    > CLI 从 `.alloy.yaml` + `git log` + `git tag` 权威生成 §0 量化全景（含全周期时间线、制品审批链、commit 汇总、阶段耗时 + 阶段间隔、检查点使用、任务完成比、变更规模、验证状态、完整提交链）和 §4 技能审计（全部 skill_usage 不漏）。跨 session 中断也能完整生成——不依赖会话记忆。
 
-2. 读 `instructions/retrospective.md` 的"Step 2 定性分析"，用 Edit 补充定性章节：§1 Wins（evidence 格式）、§2 Misses（🔴 blocking / 🟡 painful / 📌 nit）、§3 Plan Deviations、§5 Surprises、§6 Promote Candidates（`→ Promote to: memory` 的条目在 archive 阶段写入 memory），以及 §4 的 Deliberately Skipped Skills 三问。
+2. 读 `instructions/retrospective.md` 的"Step 2 定性分析"，用 Edit 补充定性章节：§1 Wins（evidence 格式）、§2 Misses（🔴 blocking / 🟡 painful / 📌 nit）、§3 Plan Deviations、§5 Surprises、§6 Promote Candidates（`→ Promote to: memory` 的条目在 archive 阶段写入 memory）、§7 偏差分类（compliance deviations,勾选本 cycle 观察到的偏差类型）,以及 §4 的 Deliberately Skipped Skills 三问。
 
-   > **§0/§4 机械数据由 CLI 填好，agent 只读不改。** agent 职责仅限定性章节（§1/§2/§3/§5/§6 + §4 Skipped 三问）。
+   > **§0/§4 机械数据由 CLI 填好，agent 只读不改。** agent 职责仅限定性章节（§1/§2/§3/§5/§6/§7 + §4 Skipped 三问）。
 
 **Retrospective 跳过判定（🔴 USER_GATE + ⛔ HARD_STOP，task #17）：**
 
