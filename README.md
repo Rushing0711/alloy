@@ -13,8 +13,8 @@
 | 每次 change 结束自动复盘，教训反哺下次 | 每次都从零开始 |
 | 每个制品 hash 锁定 + 独立 commit，完整可追溯 | 改了什么都记不住 |
 | 阶段完成自动衔接，选"继续"直接进下一阶段 | 每阶段手动输命令 |
-| 多步操作下沉原子 CLI（`_worktree-cleanup` / `_archive` / `_artifact commit`），确定性执行 | Agent 手写多步 bash 易出错 |
-| skill 与 spec 对账（`_spec-audit`），frontmatter 漂移检测 | 文档与代码漂移 |
+| 多步操作下沉原子 CLI，确定性执行 | Agent 手写多步 bash 易出错 |
+| skill 与 spec 对账，frontmatter 漂移检测 | 文档与代码漂移 |
 | init 配置权限白名单（allow alloy/git/openspec，deny force/reset/rm）+ `.gitattributes` 强制 LF | Windows CRLF 警告 / 反复确认命令 |
 
 ---
