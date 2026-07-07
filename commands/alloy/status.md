@@ -70,10 +70,6 @@ Worktree: .worktrees/login-feature/
 
 ---
 
-## 一致性检查（自动附带）
+## 一致性检查
 
-每次 status 运行时自动检查：
-
-1. `.alloy.yaml` 中 `worktree` 字段有值但磁盘路径不存在 → "worktree 残留"
-2. `.alloy.yaml` 中 `worktree` 字段为 null 但 `.claude/worktrees/<name>/` 或 `.worktrees/<name>/` 目录存在 → "worktree 孤儿"（状态写入缺失，apply 阶段可能未正确记录 worktree 路径；前者为 Claude Code EnterWorktree 路径，后者为其他 agent git fallback 路径）
-3. `git worktree list` 中存在孤立 worktree（`.claude/worktrees/` 或 `.worktrees/` 下存在目录但没有对应的 `.alloy.yaml`）→ 提示可能存在可清理的残留
+一致性检查（worktree 残留 / 孤儿 / git worktree list 孤立）由 `alloy doctor` 提供,不在 status 中自动附带。运行 `alloy doctor` 查看完整诊断。

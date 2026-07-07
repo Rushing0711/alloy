@@ -34,10 +34,7 @@ behaviors:
     plans     ✗
   下一步:   等待 /alloy:apply
 
-每次 status 运行时自动附带一致性检查:
-  1. worktree 字段有值但磁盘路径不存在 → "worktree 残留"
-  2. worktree 字段为 null 但 .claude/worktrees/<name>/ 或 .worktrees/<name>/ 目录存在 → "worktree 孤儿"
-  3. git worktree list 中孤立 worktree → 提示清理
+一致性检查（worktree 残留 / 孤儿 / git worktree list 孤立）由 `alloy doctor` 提供,不在 status 中自动附带。运行 `alloy doctor` 查看完整诊断。
 ```
 
 ## alloy doctor
