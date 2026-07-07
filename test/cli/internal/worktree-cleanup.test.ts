@@ -199,4 +199,69 @@ describe("alloy _worktree-cleanup", () => {
     expect(logSpy.mock.calls.some(c => String(c[0]).includes("✓ worktree 清理完成"))).toBe(true);
     logSpy.mockRestore();
   });
+
+  it("git worktree remove 失败 + 仅 .alloy.yaml 未提交 → 自动 --force,流程继续", async () => {
+    execSyncMock.mockImplementation((cmd: string) => {
+      if (cmd.includes("git worktree list")) return "/path/to/wt\n";
+      if (cmd === "git rev-parse --git-dir") return "/main/.git\n";
+      if (cmd === "git rev-parse --git-common-dir") return "/main/.git\n";
+      if (cmd === "git branch --show-current") return "feature/test\n";
+      if (cmd === "git merge worktree-test --no-edit") return "Merge made by the 'ort' strategy.\n";
+      if (cmd === "git worktree remove \"/path/to/wt\"") {
+        throw Object.assign(new Error("remove failed"), {
+          stdout: Buffer.from(""), stderr: Buffer.from("contains modified files"),
+        });
+      }
+      if (cmd === "cd \"/path/to/wt\" && git status --porcelain") return " M /tmp/archive-test/.alloy.yaml\n";
+      if (cmd === "git worktree remove --force \"/path/to/wt\"") return "";
+      if (cmd === "git branch -d worktree-test") return "Deleted branch worktree-test\n";
+      return "";
+    });
+    readStateMock.mockResolvedValue({ worktree: "/path/to/wt", feature_branch: "feature/test" });
+    writeStateMock.mockResolvedValue(undefined);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(require("node:fs"), "existsSync").mockReturnValue(true);
+
+    await worktreeCleanupCommand(FULL_ARGS);
+
+    // 应调用 --force
+    expect(execSyncMock.mock.calls.some(c => String(c[0]).includes("git worktree remove --force"))).toBe(true);
+    // 应继续完成 branch -d
+    expect(execSyncMock.mock.calls.some(c => String(c[0]).includes("git branch -d"))).toBe(true);
+    // 应记录 merged_at
+    expect(writeStateMock).toHaveBeenCalled();
+    expect(logSpy.mock.calls.some(c => String(c[0]).includes("✓ worktree 清理完成"))).toBe(true);
+    logSpy.mockRestore();
+  });
+
+  it("git worktree remove 失败 + 有其他文件未提交 → HARD_STOP,不自动 --force", async () => {
+    execSyncMock.mockImplementation((cmd: string) => {
+      if (cmd.includes("git worktree list")) return "/path/to/wt\n";
+      if (cmd === "git rev-parse --git-dir") return "/main/.git\n";
+      if (cmd === "git rev-parse --git-common-dir") return "/main/.git\n";
+      if (cmd === "git branch --show-current") return "feature/test\n";
+      if (cmd === "git merge worktree-test --no-edit") return "Merge made by the 'ort' strategy.\n";
+      if (cmd === "git worktree remove \"/path/to/wt\"") {
+        throw Object.assign(new Error("remove failed"), {
+          stdout: Buffer.from(""), stderr: Buffer.from("contains modified files"),
+        });
+      }
+      if (cmd === "cd \"/path/to/wt\" && git status --porcelain") return " M src/some-file.ts\n";
+      return "";
+    });
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(require("node:fs"), "existsSync").mockReturnValue(true);
+
+    await worktreeCleanupCommand(FULL_ARGS);
+
+    expect(errSpy.mock.calls.some(c => String(c[0]).includes("worktree 目录有未提交修改"))).toBe(true);
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    // 不应调用 --force
+    expect(execSyncMock.mock.calls.some(c => String(c[0]).includes("git worktree remove --force"))).toBe(false);
+    // 不应继续 branch -d
+    expect(execSyncMock.mock.calls.some(c => String(c[0]).includes("git branch -d"))).toBe(false);
+    exitSpy.mockRestore();
+    errSpy.mockRestore();
+  });
 });

@@ -10,6 +10,7 @@ import {
   COMMAND_IDS,
   detectDeployedAgents,
   getCommandTargetDir,
+  CLAUDE_CODE_AGENT,
 } from "../../src/core/agents.js";
 
 describe("KNOWN_AGENTS", () => {
@@ -132,5 +133,13 @@ describe("getCommandTargetDir", () => {
     const agent = KNOWN_AGENTS.find((a) => a.id === "claude-code")!;
     const dir = getCommandTargetDir(agent, "global", "/fake/project");
     expect(dir).toBe(`${home}/.claude/commands/alloy`);
+  });
+});
+
+describe("CLAUDE_CODE_AGENT", () => {
+  it("应是 KNOWN_AGENTS 中 id=claude-code 的对象", () => {
+    expect(CLAUDE_CODE_AGENT).toBeDefined();
+    expect(CLAUDE_CODE_AGENT.id).toBe("claude-code");
+    expect(CLAUDE_CODE_AGENT.commandsDir).toBe(".claude/commands/");
   });
 });

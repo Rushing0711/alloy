@@ -113,7 +113,14 @@ export async function verifyCommand(args: string[]): Promise<void> {
   const phase = args[1];
   const changeDir = args[2];
   if (!phase || !changeDir) {
-    console.error("用法: alloy _verify phase-enter|phase-exit <phase> <change-dir>");
+    console.error("⛔ [PRECONDITION_FAIL] _verify 参数缺失");
+    if (!phase) {
+      console.error("  phase 参数为空");
+    }
+    if (!changeDir) {
+      console.error("  change-dir 参数为空（检查 bash 变量是否设置,如 $ARCHIVE_DIR 需在同一 bash 会话内赋值）");
+    }
+    console.error("  用法: alloy _verify phase-enter|phase-exit <phase> <change-dir>");
     process.exit(1);
     return;
   }

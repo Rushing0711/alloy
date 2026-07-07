@@ -109,3 +109,13 @@ export function getCommandTargetDir(
 }
 
 export { COMMAND_IDS };
+
+/**
+ * Claude Code agent 单例引用(供 health.ts 等模块复用,避免重复定义)。
+ * 直接引用 KNOWN_AGENTS 中的对象,agents.ts 配置变化时自动同步。
+ */
+const claudeCodeAgent = KNOWN_AGENTS.find((a) => a.id === "claude-code");
+if (!claudeCodeAgent) {
+  throw new Error("KNOWN_AGENTS 中未找到 claude-code agent,请检查 agents.ts 配置");
+}
+export const CLAUDE_CODE_AGENT = claudeCodeAgent;

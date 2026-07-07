@@ -50,6 +50,52 @@ describe("alloy _verify", () => {
     errSpy.mockRestore();
   });
 
+  it("change-dir 为空字符串时 exit 1 并提示 bash 变量作用域", async () => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    // 模拟 $ARCHIVE_DIR 在新 bash 会话未设置,实际传空字符串
+    await verifyCommand(["phase-exit", "archive", ""]);
+
+    const combined = errSpy.mock.calls.map(c => String(c[0])).join("\n");
+    expect(combined).toContain("change-dir 参数为空");
+    expect(combined).toContain("$ARCHIVE_DIR");
+    expect(combined).toContain("用法");
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    exitSpy.mockRestore();
+    errSpy.mockRestore();
+  });
+
+  it("phase 为空字符串时 exit 1 并指明 phase 参数为空", async () => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await verifyCommand(["phase-exit", "", "openspec/changes/x"]);
+
+    const combined = errSpy.mock.calls.map(c => String(c[0])).join("\n");
+    expect(combined).toContain("phase 参数为空");
+    expect(combined).toContain("用法");
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    exitSpy.mockRestore();
+    errSpy.mockRestore();
+  });
+
+  it("仅传子命令(缺 phase 和 change-dir)时 exit 1 并输出用法", async () => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await verifyCommand(["phase-exit"]);
+
+    const combined = errSpy.mock.calls.map(c => String(c[0])).join("\n");
+    expect(combined).toContain("参数缺失");
+    expect(combined).toContain("phase 参数为空");
+    expect(combined).toContain("change-dir 参数为空");
+    expect(combined).toContain("用法");
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    exitSpy.mockRestore();
+    errSpy.mockRestore();
+  });
+
   it("未知阶段时 exit 1", async () => {
     const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});

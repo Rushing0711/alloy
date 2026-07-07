@@ -121,22 +121,43 @@ export async function worktreeCleanupCommand(args: string[]): Promise<void> {
   console.log(`ℹ️ 删除 worktree 目录: ${worktreePath}`);
   const removeResult = gitExec(`git worktree remove "${worktreePath}"`);
   if (!removeResult.ok) {
-    const untracked = gitExec(`cd "${worktreePath}" && git status --porcelain --untracked-files=all`).stdout;
-    if (untracked) {
-      console.error("⛔ [HARD_STOP] worktree 目录有未跟踪文件，git worktree remove 拒绝执行");
-      console.error("  未跟踪文件：");
-      console.error(untracked);
-      console.error("");
+    const status = gitExec(`cd "${worktreePath}" && git status --porcelain`).stdout;
+    const lines = status.split("\n").filter((l) => l.trim());
+
+    if (lines.length > 0) {
+      // 检查未提交修改是否仅含 archive-dir/.alloy.yaml
+      const alloyYamlPath = `${archiveDir}/.alloy.yaml`;
+      const onlyAlloyYaml = lines.every((l) => l.endsWith(alloyYamlPath));
+
+      if (onlyAlloyYaml) {
+        // 仅 .alloy.yaml 未提交修改——merge 已合入 commit 版本,worktree 内的修改冗余,强制 remove
+        console.log(`ℹ️ worktree 内仅 ${alloyYamlPath} 有未提交修改(merge 已合入 commit 版本),强制 remove`);
+        const forceRemove = gitExec(`git worktree remove --force "${worktreePath}"`);
+        if (!forceRemove.ok) {
+          console.error("⛔ [HARD_STOP] git worktree remove --force 失败");
+          console.error(`  ${forceRemove.stderr}`);
+          console.error("  禁止：agent 自动 git clean -fd / rm -rf（§3.5.1）");
+          process.exit(1);
+          return;
+        }
+      } else {
+        // 有其他未提交修改——HARD_STOP(可能是用户代码,不能强制删)
+        console.error("⛔ [HARD_STOP] worktree 目录有未提交修改,git worktree remove 拒绝执行");
+        console.error("  未提交修改:");
+        console.error(status);
+        console.error("");
+        console.error("  禁止：agent 自动 git clean -fd / rm -rf（§3.5.1）");
+        console.error("  必须：用户确认后手动 git worktree remove --force,或退出 skill 处理");
+        process.exit(1);
+        return;
+      }
+    } else {
+      console.error("⛔ [HARD_STOP] git worktree remove 失败");
+      console.error(`  ${removeResult.stderr}`);
       console.error("  禁止：agent 自动 git clean -fd / rm -rf（§3.5.1）");
-      console.error("  必须：用户确认后手动 git worktree remove --force，或退出 skill 处理");
       process.exit(1);
       return;
     }
-    console.error("⛔ [HARD_STOP] git worktree remove 失败");
-    console.error(`  ${removeResult.stderr}`);
-    console.error("  禁止：agent 自动 git clean -fd / rm -rf（§3.5.1）");
-    process.exit(1);
-    return;
   }
 
   // 5. git branch -d worktree 分支（失败不强制 -D）

@@ -6,6 +6,8 @@ import semver from "semver";
 import type { DepCheckResult, HealthCheckResult } from "./types.js";
 import { loadCompat } from "./compat.js";
 import { detectEnv } from "./detect.js";
+import { detectSkill } from "./detect-installations.js";
+import { CLAUDE_CODE_AGENT } from "./agents.js";
 
 const EXPECTED_COMMAND_IDS = [
   "start", "plan", "apply", "archive",
@@ -33,18 +35,38 @@ export function checkOpenSpec(requiredRange: string): DepCheckResult {
 
 /**
  * 检测 Superpowers 是否安装且版本兼容。
- * 优先检查 Claude Code 插件（~/.claude/plugins/installed_plugins.json），
- * fallback 到 npx skills list。
+ * 检测顺序:项目 skill → 用户 skill → 用户级 plugin → installed_plugins.json → npx skills list。
+ * 复用 detectSkill 的项目/用户/插件三级检测,覆盖手动安装到 ~/.claude/skills/ 的场景。
  * 供 doctor 诊断和 init 安装前检测复用。
  */
-export async function checkSuperpowers(requiredRange: string): Promise<DepCheckResult> {
-  // 1. 检查 Claude Code 插件
+export async function checkSuperpowers(
+  requiredRange: string,
+  projectPath?: string
+): Promise<DepCheckResult> {
+  // 1. 用 detectSkill 检测(项目 skill → 用户 skill → 用户级 plugin)
+  if (projectPath) {
+    const detected = detectSkill("brainstorming", CLAUDE_CODE_AGENT, projectPath);
+    if (detected.found) {
+      if (detected.version) {
+        // 插件安装(用户级 plugin 路径),有版本号
+        return {
+          installed: true,
+          version: detected.version,
+          compatible: semver.satisfies(detected.version, requiredRange),
+        };
+      } else {
+        // 项目级或用户级 skill(手动安装),无版本号 — 不报不兼容
+        return { installed: true, compatible: true };
+      }
+    }
+  }
+
+  // 2. fallback: 读 installed_plugins.json(兼容旧逻辑,作为 plugin cache 未命中的兜底)
   try {
     const home = process.env.HOME || process.env.USERPROFILE || "~";
     const pluginsJsonPath = join(home, ".claude", "plugins", "installed_plugins.json");
     const pluginsRaw = await readFile(pluginsJsonPath, "utf-8");
     const plugins = JSON.parse(pluginsRaw);
-    // 扫描所有 superpowers@<marketplace> 条目，兼容任意 marketplace
     const pluginsMap = (plugins?.plugins ?? {}) as Record<string, Array<{ version?: string }>>;
     for (const [key, entries] of Object.entries(pluginsMap)) {
       if (!key.startsWith("superpowers@")) continue;
@@ -61,7 +83,7 @@ export async function checkSuperpowers(requiredRange: string): Promise<DepCheckR
     // 插件文件不存在或无 superpowers 条目，继续 fallback
   }
 
-  // 2. fallback: npx skills list
+  // 3. fallback: npx skills list
   try {
     const output = execSync("npx skills list", { stdio: "pipe" }).toString();
     if (output.includes("brainstorming") && output.includes("using-git-worktrees")) {
@@ -118,12 +140,12 @@ export async function runHealthCheck(
   }
 
   // 3. Superpowers
-  const spCheck = await checkSuperpowers(config.compatible.superpowers);
+  const spCheck = await checkSuperpowers(config.compatible.superpowers, projectPath);
   if (spCheck.installed) {
-    const versionInfo = spCheck.version ? ` v${spCheck.version}` : "";
+    const current = spCheck.version ? `已安装 v${spCheck.version}` : `已安装(版本未知)`;
     results.push({
       name: "Superpowers",
-      current: `已安装${versionInfo}`,
+      current,
       required: config.compatible.superpowers,
       status: spCheck.compatible ? "pass" : "warn",
     });

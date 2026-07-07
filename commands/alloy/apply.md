@@ -197,8 +197,10 @@ alloy _guard branch-position openspec/changes/<name>
 - **传入 name=`<name>`**（change 名）：EnterWorktree(name) → 路径 `.claude/worktrees/<name>`，分支 `worktree-<name>`，可预测；git fallback 同样用此 name 作为分支名
 
 > ⛔ [HARD_STOP] Claude Code agent 必须用 `EnterWorktree` 工具创建 worktree——禁手动 `git worktree add`。
-> 路径必须 `.claude/worktrees/<name>`,禁 `.worktrees/` 或其他自定义路径。
-> 违反字面 = 违反精神：哪怕"手动 git worktree 更可控"、"路径换一下无影响"、"superpowers 技能引导手动创建",也算违反——
+> 路径约定(按 agent 平台):
+> - **Claude Code agent:** 路径 `.claude/worktrees/<name>`(EnterWorktree 硬编码,不可改),禁手动 git worktree add
+> - **其他 agent(无 EnterWorktree):** 走 skill 的 git fallback,路径 `.worktrees/<name>`(skill 默认)
+> 对 Claude Code agent 而言,违反字面 = 违反精神：哪怕"手动 git worktree 更可控"、"路径换一下无影响"、"superpowers 技能引导手动创建",也算违反——
 >   - `EnterWorktree` 解绑 session cwd,后续 CLI 命令自动在 worktree 执行;手动 `git worktree add` 不解绑,agent 需 `cd` 切换(易错,且 cd 不解绑 session)
 >   - `.claude/worktrees/` 是 alloy 约定(与 `.claude/settings.json` / `.claude/commands/` 一致),`.worktrees/` 散落项目根不统一
 >   - 手动创建的 worktree 路径记录到 state,archive 阶段 `_worktree-cleanup` 用 state 路径清理,路径不一致虽不致命但偏离约定

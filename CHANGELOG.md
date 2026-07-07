@@ -2,6 +2,26 @@
 
 本文件记录 @flyin-ai/alloy 的所有版本变更。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.3.1] - 2026-07-07
+
+本版本修复两个与 Superpowers v6 升级无关的现有 bug,为 0.4.0(v6 升级)做准备。
+
+### Fixed
+
+- **`checkSuperpowers` 漏查 `~/.claude/skills/` 手动安装**:`health.ts` 的 `checkSuperpowers` 只查插件 `installed_plugins.json` + `npx skills list`,漏查项目级和用户级 skill 目录。调整为 项目 skill → 用户 skill → 用户级 plugin → `installed_plugins.json` → `npx skills list` 五级检测,复用 `detectSkill`。修复手动安装到 `~/.claude/skills/` 时 `alloy doctor` 误报"未安装"的 bug。
+- **`doctor` worktree 孤儿检测漏查 `.claude/worktrees/`**:`doctor.ts` 的孤儿检测只查 `.worktrees/<name>/`,漏查 Claude Code agent 用 `EnterWorktree` 创建的 `.claude/worktrees/<name>/`。提取 `checkWorktreeConsistency` 独立函数,同时检测两个路径。修复 Claude Code agent 的 worktree 孤儿检测失效 bug。
+- **`_worktree-cleanup` 因 worktree 内 `.alloy.yaml` 未提交修改而失败**:archive 流程在 ExitWorktree 前没确保 `.alloy.yaml` 已 commit,导致 `git worktree remove` 拒绝执行。修复:`archive.md` 加 ExitWorktree 前 commit `.alloy.yaml` 步骤(治本);`worktree-cleanup.ts` remove 失败时若仅 `.alloy.yaml` 修改则自动 `--force`(兜底,因 merge 已合入 commit 版本);错误消息"未跟踪文件"改"未提交修改"(`M` 是 modified 非 untracked)。
+- **`opsx not found` 预检无安装提示**:`skill-precheck.md` 只检测 command 文件,没检测 openspec CLI 二进制,agent 遇 `opsx not found` 需摸索安装。修复:增加 `command -v openspec` 检测,失败时给 `npm install -g @fission-ai/openspec@1` 安装提示。
+- **`_verify` 空参数错误不清晰**:agent 调 `_verify` 传空 bash 变量(如 `$ARCHIVE_DIR` 未设置)时,alloy 只报用法,不知哪个参数空。修复:空参数错误改为 `⛔ [PRECONDITION_FAIL] _verify 参数缺失` + 分别指明 `phase 参数为空` / `change-dir 参数为空(检查 bash 变量)` + 用法,帮 agent 定位根因。
+
+### Changed
+
+- **`commands/alloy/apply.md` worktree 路径约定措辞澄清:** "禁 `.worktrees/`"明确为按 agent 平台分场景(Claude Code 用 `.claude/worktrees/`,其他 agent 用 `.worktrees/`)
+- **`commands/alloy/apply.md` "违反精神"段落限定 Claude Code 语境:** 避免与非 Claude Code agent 用 `.worktrees/` 的约定矛盾
+- **`commands/alloy/status.md` + `start.md` + `docs/specification/01-product-spec/08-cli-spec.md` 孤儿检测说明同步:** 覆盖 `.claude/worktrees/` 和 `.worktrees/` 两个路径
+- **`docs/specification/01-product-spec/00-overview.md` worktree 字段类型补 `.worktrees/<name>`:** 与两路径检测实现一致
+- **`src/core/agents.ts` 导出 `CLAUDE_CODE_AGENT`**:消除 `health.ts` 的重复定义,配置变化时自动同步
+
 ## [0.3.0] - 2026-07-06
 
 本版本聚焦 phase 语义清晰化 + agent 执行稳定性强化 + init 体验优化。

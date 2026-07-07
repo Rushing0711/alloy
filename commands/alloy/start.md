@@ -545,7 +545,7 @@ alloy _guard branch-position openspec/changes/<name>
 
 一致性检查：
 - worktree 字段有值但路径不存在 → ⚠️ WARN 残留
-- worktree 为 null 但 `.worktrees/<name>/` 存在 → ⚠️ WARN 孤儿，询问是否修复
+- worktree 为 null 但 `.claude/worktrees/<name>/` 或 `.worktrees/<name>/` 存在 → ⚠️ WARN 孤儿，询问是否修复
 
 ---
 

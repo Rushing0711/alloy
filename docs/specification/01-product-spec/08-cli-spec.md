@@ -36,7 +36,7 @@ behaviors:
 
 每次 status 运行时自动附带一致性检查:
   1. worktree 字段有值但磁盘路径不存在 → "worktree 残留"
-  2. worktree 字段为 null 但 .worktrees/<name>/ 目录存在 → "worktree 孤儿"
+  2. worktree 字段为 null 但 .claude/worktrees/<name>/ 或 .worktrees/<name>/ 目录存在 → "worktree 孤儿"
   3. git worktree list 中孤立 worktree → 提示清理
 ```
 
@@ -52,7 +52,7 @@ alloy doctor [path] [--json]
 
   2. 文件一致性（双向检查）:
      ├── worktree 字段有值但磁盘路径不存在 → ⚠️ "worktree 残留"
-     ├── worktree 字段为 null 但 .worktrees/<name>/ 目录存在 → ⚠️ "worktree 孤儿"（状态写入缺失）
+     ├── worktree 字段为 null 但 .claude/worktrees/<name>/ 或 .worktrees/<name>/ 目录存在 → ⚠️ "worktree 孤儿"（状态写入缺失）
      └── git worktree list 中有孤立 worktree → ⚠️ 提示清理
 
 --json: 以 JSON 格式输出 healthResults + consistencyWarnings

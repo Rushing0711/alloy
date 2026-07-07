@@ -152,6 +152,12 @@ fi
 
 ```bash
 CHANGE_DIR="openspec/changes/<name>"
+
+# 前置:确保 worktree 内的 .alloy.yaml 已 commit
+# (apply 阶段或 archive 早期可能写入 .alloy.yaml 未 commit,会导致 _worktree-cleanup 的 worktree remove 失败)
+git add "$CHANGE_DIR/.alloy.yaml"
+git diff --cached --quiet || git commit -m "chore(<name>): 同步 .alloy.yaml 状态(archive 前置)"
+
 WORKTREE_PATH=$(alloy _state read "$CHANGE_DIR" worktree 2>/dev/null)
 FEATURE_BRANCH=$(alloy _state read "$CHANGE_DIR" feature_branch 2>/dev/null)
 WORKTREE_BRANCH=$(alloy _state read "$CHANGE_DIR" worktree_branch 2>/dev/null)

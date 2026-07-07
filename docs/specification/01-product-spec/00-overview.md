@@ -101,7 +101,7 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 ```yaml
 # openspec/changes/<name>/.alloy.yaml
 phase: starting | started | planning | planned | applying | applied | archiving | archived | finishing | finished
-worktree: null | ".claude/worktrees/<name>" | "skipped"
+worktree: null | ".claude/worktrees/<name>" | ".worktrees/<name>" | "skipped"
 worktree_branch: null | "worktree-<name>"   # worktree 分支名
 worktree_created_at: null | "2026-05-28 09:10:00"
 worktree_merged_at: null | "2026-05-28 12:00:00"  # archive 阶段合并后写入

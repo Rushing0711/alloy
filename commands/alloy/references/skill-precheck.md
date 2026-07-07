@@ -19,6 +19,15 @@ Skill 预检——确认以下可用：
 ```bash
 MISSING=0
 
+# 检测 openspec CLI（alloy 核心依赖,opsx 命令需调用 openspec 二进制）
+if command -v openspec >/dev/null 2>&1; then
+  echo "  ✓ openspec CLI"
+else
+  echo "  ✗ openspec CLI — 未安装"
+  echo "    安装: npm install -g @fission-ai/openspec@1"
+  MISSING=$((MISSING+1))
+fi
+
 # 检测 command（project → user）
 for cmd in <cmd列表>; do
   if test -f ".claude/commands/$cmd.md"; then echo "  ✓ ${cmd//\//:}（项目级 command）"

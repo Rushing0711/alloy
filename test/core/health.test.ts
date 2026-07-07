@@ -17,12 +17,16 @@ vi.mock("../../src/core/compat.js", () => ({
 vi.mock("../../src/core/detect.js", () => ({
   detectEnv: vi.fn(),
 }));
+vi.mock("../../src/core/detect-installations.js", () => ({
+  detectSkill: vi.fn(),
+}));
 
 import { execSync } from "node:child_process";
 import { readFile, readdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { loadCompat } from "../../src/core/compat.js";
 import { detectEnv } from "../../src/core/detect.js";
+import { detectSkill } from "../../src/core/detect-installations.js";
 import { runHealthCheck, checkOpenSpec, checkSuperpowers } from "../../src/core/health.js";
 
 const MOCK_CONFIG = {
@@ -42,6 +46,13 @@ const MOCK_CONFIG = {
 describe("runHealthCheck", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // detectSkill 默认返回未找到,让 checkSuperpowers 走 fallback 逻辑
+    vi.mocked(detectSkill).mockReturnValue({
+      found: false,
+      location: null,
+      path: null,
+      version: null,
+    });
   });
 
   it("应返回 7 项检查结果", async () => {
@@ -391,6 +402,32 @@ describe("runHealthCheck", () => {
     expect(spResult!.current).toBe("未安装");
   });
 
+  it("Superpowers 手动安装(version=null)时应显示'已安装(版本未知)'", async () => {
+    vi.mocked(loadCompat).mockResolvedValue(MOCK_CONFIG);
+    vi.mocked(execSync).mockReturnValue(Buffer.from("1.3.1\n") as any);
+    vi.mocked(readFile).mockResolvedValue(
+      JSON.stringify({ version: "0.1.0" })
+    );
+    vi.mocked(detectEnv).mockReturnValue({
+      nodeVersion: "20.0.0",
+      gitInstalled: true,
+    });
+    vi.mocked(existsSync).mockReturnValue(true);
+    // detectSkill 返回 found=true, version=null(手动安装到 ~/.claude/skills/)
+    vi.mocked(detectSkill).mockReturnValue({
+      found: true,
+      location: "user-skill",
+      path: "/home/user/.claude/skills/brainstorming",
+      version: null,
+    });
+
+    const results = await runHealthCheck("/fake/packagedir", "/fake/project");
+    const spResult = results.find((r) => r.name === "Superpowers");
+    expect(spResult).toBeDefined();
+    expect(spResult!.status).toBe("pass");
+    expect(spResult!.current).toContain("已安装(版本未知)");
+  });
+
   describe("checkOpenSpec", () => {
     beforeEach(() => {
       vi.clearAllMocks();
@@ -477,6 +514,75 @@ describe("runHealthCheck", () => {
 
       const result = await checkSuperpowers(">=5.0.0 <6.0.0");
       expect(result.installed).toBe(false);
+      expect(result.compatible).toBe(false);
+    });
+
+    it("手动安装到 ~/.claude/skills/ 时应返回 installed=true(项目级)", async () => {
+      // detectSkill 优先检测到项目级 skill
+      vi.mocked(detectSkill).mockReturnValue({
+        found: true,
+        location: "project-skill",
+        path: "/fake/project/.claude/skills/brainstorming",
+        version: null,
+      });
+
+      const result = await checkSuperpowers(">=5.0.0 <6.0.0", "/fake/project");
+      expect(result.installed).toBe(true);
+      expect(result.compatible).toBe(true);
+      expect(detectSkill).toHaveBeenCalledWith("brainstorming", expect.any(Object), "/fake/project");
+    });
+
+    it("手动安装到 ~/.claude/skills/ 时应返回 installed=true(用户级)", async () => {
+      // detectSkill 检测到用户级 skill(非插件)
+      vi.mocked(detectSkill).mockReturnValue({
+        found: true,
+        location: "user-skill",
+        path: "/home/user/.claude/skills/brainstorming",
+        version: null,
+      });
+
+      const result = await checkSuperpowers(">=5.0.0 <6.0.0", "/fake/project");
+      expect(result.installed).toBe(true);
+      expect(result.compatible).toBe(true);
+    });
+
+    it("projectPath 未传时回退到旧逻辑(插件检测 + npx)", async () => {
+      vi.mocked(readFile).mockRejectedValue(new Error("ENOENT"));
+      vi.mocked(execSync).mockReturnValue(
+        Buffer.from("brainstorming\nusing-git-worktrees\n") as any
+      );
+
+      const result = await checkSuperpowers(">=5.0.0 <6.0.0");
+      expect(result.installed).toBe(true);
+      expect(result.compatible).toBe(true);
+      expect(detectSkill).not.toHaveBeenCalled();
+    });
+
+    it("detectSkill 检测到插件 cache 时应返回版本号并校验兼容性(兼容)", async () => {
+      vi.mocked(detectSkill).mockReturnValue({
+        found: true,
+        location: "user-plugin",
+        path: "/home/user/.claude/plugins/cache/superpowers-marketplace/superpowers/5.1.0/skills/brainstorming",
+        version: "5.1.0",
+      });
+
+      const result = await checkSuperpowers(">=5.0.0 <6.0.0", "/fake/project");
+      expect(result.installed).toBe(true);
+      expect(result.version).toBe("5.1.0");
+      expect(result.compatible).toBe(true);
+    });
+
+    it("detectSkill 检测到插件 cache 时应返回版本号并校验兼容性(不兼容)", async () => {
+      vi.mocked(detectSkill).mockReturnValue({
+        found: true,
+        location: "user-plugin",
+        path: "/home/user/.claude/plugins/cache/superpowers-marketplace/superpowers/4.0.0/skills/brainstorming",
+        version: "4.0.0",
+      });
+
+      const result = await checkSuperpowers(">=5.0.0 <6.0.0", "/fake/project");
+      expect(result.installed).toBe(true);
+      expect(result.version).toBe("4.0.0");
       expect(result.compatible).toBe(false);
     });
   });
