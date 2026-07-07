@@ -49,6 +49,8 @@ alloy doctor [path] [--json]
   1. 版本兼容性（7 项健康检查）:
      Node.js / OpenSpec / Superpowers / Alloy / Schema / Commands / Environment
      每项返回 pass / warn / fail，依据 compat.yaml 中的版本约束判断
+     
+     Superpowers 检测顺序:项目 skill → 用户 skill → 用户级 plugin → installed_plugins.json → npx skills list(覆盖手动安装到 ~/.claude/skills/ 的场景;手动安装无版本号时 compatible=true 不误报)
 
   2. 文件一致性（双向检查）:
      ├── worktree 字段有值但磁盘路径不存在 → ⚠️ "worktree 残留"
@@ -74,7 +76,7 @@ alloy doctor [path] [--json]
 | `alloy _skill` | `log\|skip` | 技能使用记录管理，持久化到 `skill_usage[]`。字段 `called_at`（调用时间，多次调用更新为最新）+ `count`（累加）。`log` 同一 skill+stage 已存在时 count++ |
 | `alloy _guard` | `precheck\|verify-passed\|branch-position\|worktree-status` + `<name> <phase> --apply` | 阶段转换校验 + phase 推进 |
 | `alloy _phase` | `start\|complete\|reset` | 阶段时间记录 + phase 推进。`start` 推进到 -ing（进行中）+ 写 started_at，`complete` 推进到 -ed（已完成）+ 写 completed_at，`complete finish` 额外写顶层 `completed_at`（全周期完成时间） |
-| `alloy _verify` | `phase-enter\|phase-exit <phase> <change-dir>` | 阶段转换状态校验——CLI 确定性校验制品 + state 字段 + 目录位置,不替代 agent 执行,只报告缺失项。`phase-enter` 期望 phase=-ing(进入阶段后),`phase-exit` 期望 phase=-ing(_phase complete 之前,尚未推进到 -ed)。比 `_guard precheck`(单点 phase 路由)更全面 |
+| `alloy _verify` | `phase-enter\|phase-exit <phase> <change-dir>` | 阶段转换状态校验——CLI 确定性校验制品 + state 字段 + 目录位置,不替代 agent 执行,只报告缺失项。`phase-enter` 期望 phase=-ing(进入阶段后),`phase-exit` 期望 phase=-ing(_phase complete 之前,尚未推进到 -ed)。比 `_guard precheck`(单点 phase 路由)更全面。空参数(如 bash 变量未设置)报 `⛔ [PRECONDITION_FAIL] 参数缺失` + 指明哪个参数空 + bash 变量提示 |
 | `alloy _record` | `compute\|write\|check\|approver` | 制品 hash 记录管理 |
 | `alloy _config` | `read\|write` | 读写 `openspec/config.yaml` 项目级配置 |
 | `alloy _checkpoint` | `create\|list\|switch\|clean` | 检查点管理。`create` 支持 `--kind brainstorming\|progress`（brainstorming-N 发起变更锚点 / progress-<ts> 放弃变更进度快照）+ `--reason <原因>`。tag message 含原因/制品/phase/commit数/时间。phase 限制：start/plan 全程允许，apply 早期（worktree 未创建 + SDD/EP 未启动）允许，apply 中后期 + archive/finish 禁止。`create` 校验 working tree clean（dirty 拒绝）；`switch` 用 `git checkout -B` 原子回退，输出 tag 指向的 records 状态（已锁定/缺失制品） |
@@ -83,5 +85,5 @@ alloy doctor [path] [--json]
 | `alloy _progress` | `artifacts` | 制品进度扫描，输出每个制品状态（done/missing/hash-mismatch/pending），供 plan/apply 决定从哪个制品开始 |
 | `alloy _artifact` | `commit\|reset` | `commit` 原子完成 hash 计算 + records 写入 + git add 限路径 + commit（重复锁定且 hash 未变时跳过）；`reset` 清掉指定制品的 record |
 | `alloy _archive` | `<change-dir>` | 归档原子命令:调用 openspec archive CLI + 校验 Delta Spec promote + 校验目录移动。agent 禁自行 mkdir/cp/mv 模拟 |
-| `alloy _worktree-cleanup` | `--archive-dir <path> --worktree-path <path> --feature-branch <branch> --worktree-branch <branch>` | worktree 清理原子命令:merge worktree 分支到 feature + remove worktree + branch -d + worktree_merged_at 记录。state 字段由 agent 在 worktree 里读取后传入(不从 archive-dir 读 state)。agent 禁自行 git merge / worktree remove / branch -d 模拟 |
+| `alloy _worktree-cleanup` | `--archive-dir <path> --worktree-path <path> --feature-branch <branch> --worktree-branch <branch>` | worktree 清理原子命令:merge worktree 分支到 feature + remove worktree + branch -d + worktree_merged_at 记录。state 字段由 agent 在 worktree 里读取后传入(不从 archive-dir 读 state)。agent 禁自行 git merge / worktree remove / branch -d 模拟。worktree remove 失败时,若未提交修改仅含 archive-dir/.alloy.yaml 则自动 `--force`(merge 已合入 commit 版本,worktree 内修改冗余);有其他文件修改 HARD_STOP 保护用户代码 |
 | `alloy _spec-audit` | — | spec 审计工具,检测 skill frontmatter 与 spec 的 behaviors 字段漂移。详见 `alloy _spec-audit --help` |

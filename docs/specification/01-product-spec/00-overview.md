@@ -212,7 +212,7 @@ Schema DAG（8 个制品）:
 
 Apply:
   apply  ← 依赖 plans
-    ├── precheck      ← git 仓库检测（有感选择）+ 6 个 Superpowers 技能可用性检查
+    ├── precheck      ← git 仓库检测（有感选择）+ openspec CLI 检测（未装给安装提示）+ 6 个 Superpowers 技能可用性检查
     ├── 隔离环境设置   ← 隐含 superpowers:using-git-worktrees（用户可选，非强制）
     ├── 任务实现       ← 用户选择执行策略:
     │                      superpowers:subagent-driven-development（并行，任务独立时，内部含 TDD + code-review）

@@ -32,6 +32,7 @@ behaviors:
 **流程顺序：worktree 清理必须在 /opsx:archive 之前——archive 操作会移动目录,若在 worktree 分支执行,merge 到 feature 时目录移动 + tasks.md 勾选导致三方合并冲突。先 merge worktree 到 feature(只有 apply 的代码/制品 commit,无目录移动),再在 feature 分支做 archive,冲突消除。**
 
 1. Worktree 清理（如果 apply 期间使用了 worktree,先 merge worktree → feature）：
+   - 在 worktree 里 commit .alloy.yaml 未提交修改(避免 worktree remove 阻塞;apply 阶段或 archive 早期可能写入未 commit)
    - 在 worktree 里读 state(worktree / feature_branch / worktree_branch 三字段)
    - USER_GATE 确认清理
    - ExitWorktree 回主仓(action: keep)
