@@ -1,7 +1,6 @@
 ---
 name: alloy-plan
 description: 设计计划阶段--创建实现 plan。手动调用 /alloy-plan。
-disable-model-invocation: true
 spec: 01-product-spec/02-plan-spec.md
 behaviors:
   preconditions: 7

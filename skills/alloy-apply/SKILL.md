@@ -1,7 +1,6 @@
 ---
 name: alloy-apply
 description: 执行应用阶段--将 plan 落地为代码。手动调用 /alloy-apply。
-disable-model-invocation: true
 spec: 01-product-spec/03-apply-spec.md
 behaviors:
   preconditions: 12

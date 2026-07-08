@@ -1,7 +1,6 @@
 ---
 name: alloy-archive
 description: 归档阶段--将 change 归档。手动调用 /alloy-archive。
-disable-model-invocation: true
 spec: 01-product-spec/04-archive-spec.md
 behaviors:
   preconditions: 6
