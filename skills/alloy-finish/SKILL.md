@@ -1,6 +1,7 @@
 ---
 name: alloy-finish
 description: 完成分支--merge 或 PR。手动调用 /alloy-finish。
+disable-model-invocation: true
 spec: 01-product-spec/05-finish-spec.md
 behaviors:
   preconditions: 6
