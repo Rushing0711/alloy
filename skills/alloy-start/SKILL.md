@@ -2,6 +2,15 @@
 name: alloy-start
 description: 开始 Alloy 流程--需求澄清，创建 change。手动调用 /alloy-start。
 disable-model-invocation: true
+spec: 01-product-spec/01-start-spec.md
+behaviors:
+  preconditions: 8
+  hard_stops:    17
+  user_gates:    8
+  warns:         2
+  artifacts: [draft]
+  transitions_to: started
+  external_calls: [opsx:explore, opsx:new, superpowers:brainstorming]
 ---
 
 # alloy-start

@@ -2,6 +2,15 @@
 name: alloy-finish
 description: 完成分支--merge 或 PR。手动调用 /alloy-finish。
 disable-model-invocation: true
+spec: 01-product-spec/05-finish-spec.md
+behaviors:
+  preconditions: 6
+  hard_stops:    8
+  user_gates:    4
+  warns:         2
+  artifacts: []
+  transitions_to: finished
+  external_calls: [superpowers:finishing-a-development-branch]
 ---
 
 # alloy-finish

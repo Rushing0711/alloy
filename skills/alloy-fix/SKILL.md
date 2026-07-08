@@ -2,6 +2,15 @@
 name: alloy-fix
 description: 修复问题--遇 bug 或审查问题时调用。手动调用 /alloy-fix。
 disable-model-invocation: true
+spec: 01-product-spec/06-fix-spec.md
+behaviors:
+  preconditions: 1
+  hard_stops:    8
+  user_gates:    7
+  warns:         0
+  artifacts: []
+  transitions_to: ""
+  external_calls: [superpowers:systematic-debugging, superpowers:test-driven-development, superpowers:verification-before-completion]
 ---
 
 # alloy-fix

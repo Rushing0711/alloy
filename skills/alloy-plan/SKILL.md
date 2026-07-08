@@ -2,6 +2,15 @@
 name: alloy-plan
 description: 设计计划阶段--创建实现 plan。手动调用 /alloy-plan。
 disable-model-invocation: true
+spec: 01-product-spec/02-plan-spec.md
+behaviors:
+  preconditions: 7
+  hard_stops:    20
+  user_gates:    9
+  warns:         1
+  artifacts: [proposal, design, specs, tasks, plans]
+  transitions_to: planned
+  external_calls: [opsx:continue, superpowers:writing-plans]
 ---
 
 # alloy-plan

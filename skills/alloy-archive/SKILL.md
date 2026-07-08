@@ -2,6 +2,15 @@
 name: alloy-archive
 description: 归档阶段--将 change 归档。手动调用 /alloy-archive。
 disable-model-invocation: true
+spec: 01-product-spec/04-archive-spec.md
+behaviors:
+  preconditions: 6
+  hard_stops:    12
+  user_gates:    3
+  warns:         1
+  artifacts: [delta-spec, archive]
+  transitions_to: archived
+  external_calls: [opsx:archive]
 ---
 
 # alloy-archive

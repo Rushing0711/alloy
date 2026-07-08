@@ -2,6 +2,15 @@
 name: alloy-apply
 description: 执行应用阶段--将 plan 落地为代码。手动调用 /alloy-apply。
 disable-model-invocation: true
+spec: 01-product-spec/03-apply-spec.md
+behaviors:
+  preconditions: 12
+  hard_stops:    18
+  user_gates:    7
+  warns:         3
+  artifacts: [verify, retrospective]
+  transitions_to: applied
+  external_calls: [opsx:verify, superpowers:using-git-worktrees, superpowers:subagent-driven-development, superpowers:executing-plans, superpowers:test-driven-development, superpowers:verification-before-completion, superpowers:requesting-code-review]
 ---
 
 # alloy-apply

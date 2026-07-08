@@ -2,6 +2,15 @@
 name: alloy-discard
 description: 丢弃 change--放弃当前流程。手动调用 /alloy-discard。
 disable-model-invocation: true
+spec: 01-product-spec/07-discard-spec.md
+behaviors:
+  preconditions: 1
+  hard_stops:    3
+  user_gates:    1
+  warns:         0
+  artifacts: []
+  transitions_to: ""
+  external_calls: []
 ---
 
 # alloy-discard
