@@ -301,4 +301,21 @@ describe("detectSkill — plugin 检测", () => {
       version: null,
     });
   });
+
+  it("多版本并存时选最新版本(semver 比较)", async () => {
+    // 模拟 ~/.claude/plugins/cache/<mk>/superpowers/ 下有 5.1.0 和 6.1.1 两个版本
+    // 防御 5.1.0 + 6.1.1 并存时检测到旧版而 Claude Code 注册新版的不一致
+    const pluginBase = join(tmpHome, ".claude", "plugins", "cache", "claude-plugins-official", "superpowers");
+    const skillDir5 = join(pluginBase, "5.1.0", "skills", "brainstorming");
+    const skillDir6 = join(pluginBase, "6.1.1", "skills", "brainstorming");
+    await mkdir(skillDir5, { recursive: true });
+    await mkdir(skillDir6, { recursive: true });
+
+    const result = detectSkill("brainstorming", claudeAgent, PROJECT);
+
+    expect(result.found).toBe(true);
+    expect(result.location).toBe("user-plugin");
+    expect(result.version).toBe("6.1.1");  // 选最新,不是 5.1.0
+    expect(result.path).toBe(skillDir6);
+  });
 });

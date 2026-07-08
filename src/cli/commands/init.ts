@@ -26,22 +26,28 @@ export async function selectScope(passedScope?: string): Promise<"global" | "pro
 }
 
 export async function selectTargetAgents(): Promise<AgentInfo[]> {
-  const choices = KNOWN_AGENTS.map((a) => ({ name: a.label, value: a.id }));
+  // 全部 agent 一次性多选展示,选项后备注 tier(stable/experimental)
+  // 8 个一屏显示完,无需分级翻页;备注即告知风险,不再额外确认
   const ids = await promptMultiSelect(
-    "请选择要安装的 AI 工具（可多选，至少选一项）：",
-    choices,
+    "选择目标 Agent(空格勾选可多选,回车确认;实验性未充分测试,可能遇到兼容性问题):",
+    KNOWN_AGENTS.map((a) => ({
+      name: `${a.label}(${a.tier === "stable" ? "stable" : "实验性"})`,
+      value: a.id,
+    })),
     {
+      pageSize: 10,
       validate: (ids: string[]) =>
         ids.length > 0 ? true : "请至少选择一个 AI 工具",
     }
   );
+
   return KNOWN_AGENTS.filter((a) => ids.includes(a.id));
 }
 
 export interface InitOptions extends DeployOptions {}
 
 // Alloy + Superpowers 运行时目录（每次逐条检测缺失并补齐）
-const GITIGNORE_RUNTIME_RULES = ["docs/superpowers/", ".claude/worktrees/", ".worktrees/", "worktrees/", ".superpowers/", "*.local.*"];
+const GITIGNORE_RUNTIME_RULES = ["docs/superpowers/", ".claude/worktrees/", ".worktrees/", "worktrees/", ".superpowers/", "skills-lock.json", "*.local.*"];
 
 // AI 开发工具产物（整组追加，以标记检测是否已写入）
 const GITIGNORE_AI_TOOLS_BLOCK = `### AI 开发工具产物 ###

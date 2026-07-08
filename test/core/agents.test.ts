@@ -143,3 +143,18 @@ describe("CLAUDE_CODE_AGENT", () => {
     expect(CLAUDE_CODE_AGENT.commandsDir).toBe(".claude/commands/");
   });
 });
+
+describe("agent tier", () => {
+  it("claude-code 应为 stable", () => {
+    const claudeCode = KNOWN_AGENTS.find((a) => a.id === "claude-code");
+    expect(claudeCode?.tier).toBe("stable");
+  });
+
+  it("其他 7 个 agent 应为 experimental", () => {
+    const experimental = KNOWN_AGENTS.filter((a) => a.id !== "claude-code");
+    expect(experimental).toHaveLength(7);
+    for (const a of experimental) {
+      expect(a.tier).toBe("experimental");
+    }
+  });
+});

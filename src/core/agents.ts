@@ -11,6 +11,7 @@ export const KNOWN_AGENTS: AgentInfo[] = [
     interactiveTool: "askuserquestion",
     settingsFile: ".claude/settings.json",
     settingsContent: { worktree: { baseRef: "head" } },
+    tier: "stable",
   },
   {
     id: "codebuddy",
@@ -18,6 +19,7 @@ export const KNOWN_AGENTS: AgentInfo[] = [
     supportsColonCommands: true,
     commandsDir: ".codebuddy/commands/",
     interactiveTool: "none",
+    tier: "experimental",
   },
   {
     id: "qoder",
@@ -25,6 +27,7 @@ export const KNOWN_AGENTS: AgentInfo[] = [
     supportsColonCommands: true,
     commandsDir: ".qoder/commands/",
     interactiveTool: "none",
+    tier: "experimental",
   },
   {
     id: "cursor",
@@ -32,6 +35,7 @@ export const KNOWN_AGENTS: AgentInfo[] = [
     supportsColonCommands: false,
     commandsDir: ".cursor/commands/",
     interactiveTool: "partial",
+    tier: "experimental",
   },
   {
     id: "opencode",
@@ -39,6 +43,7 @@ export const KNOWN_AGENTS: AgentInfo[] = [
     supportsColonCommands: false,
     commandsDir: ".opencode/commands/",
     interactiveTool: "question",
+    tier: "experimental",
   },
   {
     id: "codex",
@@ -47,6 +52,7 @@ export const KNOWN_AGENTS: AgentInfo[] = [
     commandsDir: ".codex/prompts/",
     globalOnly: true,
     interactiveTool: "none",
+    tier: "experimental",
   },
   {
     id: "trae",
@@ -54,6 +60,7 @@ export const KNOWN_AGENTS: AgentInfo[] = [
     supportsColonCommands: false,
     commandsDir: ".trae/commands/",
     interactiveTool: "none",
+    tier: "experimental",
   },
   {
     id: "pi",
@@ -61,6 +68,7 @@ export const KNOWN_AGENTS: AgentInfo[] = [
     supportsColonCommands: false,
     commandsDir: ".pi/prompts/",
     interactiveTool: "none",
+    tier: "experimental",
   },
 ];
 

@@ -28,6 +28,7 @@ describe("ensureGitignore", () => {
     expect(content).toContain("### Alloy + Superpowers 运行时 ###");
     expect(content).toContain("docs/superpowers/");
     expect(content).toContain(".claude/worktrees/");
+    expect(content).toContain("skills-lock.json");
     expect(content).toContain("*.local.*");
 
     expect(content).toContain("### AI 开发工具产物 ###");

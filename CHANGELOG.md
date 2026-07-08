@@ -2,6 +2,22 @@
 
 本文件记录 @flyin-ai/alloy 的所有版本变更。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.4.0] - 2026-07-08
+
+本版本扩展 Superpowers 兼容范围至 v5+v6 双版本(非 BREAKING),升级 vendor 快照为 v6.1.1,并改进检测逻辑与 init 交互。
+
+### Changed
+
+- **compat `superpowers` 扩展为 `>=5.0.0 <7.0.0`**:v5+v6 双版本兼容(非 BREAKING,不放弃 v5)
+- **vendor 快照升级为 v6.1.1**:14 个 skill,using-superpowers 压缩 117→62 行(v6.1.0 bootstrap 压缩)
+- **`install.superpowers` `@5` → `@6`**:默认推荐 v6
+
+### Added
+
+- **`detectSkill` 多版本并存选最新版本**:semver 比较选最新,防御 5.1.0+6.1.1 并存导致检测与 Claude Code 注册不一致
+- **`alloy init` 交互式 superpowers 版本选择**:检测到 v5 问是否升 v6 / 手动安装(version=null)问是否重装为 v6 / v6 现有覆盖逻辑 / 未安装直接装 v6
+- **agent 分级 stable/experimental**:`AgentInfo` 加 `tier` 字段,`alloy init` 单级多选一次性展示全部 8 个 agent,选项后备注 (stable)/(实验性),`--agents` 非交互式不受限
+
 ## [0.3.1] - 2026-07-07
 
 本版本修复两个与 Superpowers v6 升级无关的现有 bug,为 0.4.0(v6 升级)做准备。

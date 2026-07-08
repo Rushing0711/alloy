@@ -12,12 +12,19 @@ export async function promptSelect(message: string, choices: Choice[]): Promise<
 export async function promptMultiSelect(
   message: string,
   choices: Choice[],
-  opts?: { validate?: (ids: string[]) => true | string }
+  opts?: { validate?: (ids: string[]) => true | string; pageSize?: number }
 ): Promise<string[]> {
   const rawValidate = opts?.validate;
   return checkbox({
     message,
     choices: choices.map((c) => ({ name: c.name, value: c.value })),
+    pageSize: opts?.pageSize,
+    theme: {
+      icon: {
+        checked: "☑",
+        unchecked: "☐",
+      },
+    },
     validate: rawValidate
       ? (vals: readonly { name: string; value: string }[]) =>
           rawValidate(vals.map((v) => v.value))

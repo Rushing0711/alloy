@@ -160,33 +160,59 @@ describe("init", () => {
     });
   });
 
-  describe("selectTargetAgents", () => {
-    it("返回选中的 agents", async () => {
-      const selectedIds = ["claude-code", "cursor"];
-      mockPromptMultiSelect.mockResolvedValue(selectedIds);
+  describe("selectTargetAgents 单级多选", () => {
+    it("多选返回选中的 agent(含 stable + experimental)", async () => {
+      mockPromptMultiSelect.mockResolvedValue(["claude-code", "cursor"]);
 
       const result = await selectTargetAgents();
 
-      expect(result).toHaveLength(2);
-      expect(result[0].id).toBe("claude-code");
-      expect(result[1].id).toBe("cursor");
-      expect(mockPromptMultiSelect).toHaveBeenCalledWith(
-        "请选择要安装的 AI 工具（可多选，至少选一项）：",
-        expect.any(Array),
-        expect.objectContaining({
-          validate: expect.any(Function),
-        })
-      );
+      expect(result.map((a) => a.id)).toEqual(["claude-code", "cursor"]);
+      // 单级多选不再调用 promptSelect / promptConfirm
+      expect(mockPromptSelect).not.toHaveBeenCalled();
+      expect(mockPromptConfirm).not.toHaveBeenCalled();
     });
 
-    it("验证函数要求至少选择一项", async () => {
-      mockPromptMultiSelect.mockResolvedValue([]);
+    it("选 experimental agent 无需额外确认(备注即告知)", async () => {
+      mockPromptMultiSelect.mockResolvedValue(["cursor"]);
+
+      const result = await selectTargetAgents();
+
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe("cursor");
+      expect(mockPromptConfirm).not.toHaveBeenCalled();
+    });
+
+    it("validate 要求至少选一项", async () => {
+      mockPromptMultiSelect.mockResolvedValue(["claude-code"]);
+
       await selectTargetAgents();
 
-      // 获取验证函数并测试
       const validateFn = mockPromptMultiSelect.mock.calls[0][2].validate;
       expect(validateFn([])).toBe("请至少选择一个 AI 工具");
       expect(validateFn(["claude-code"])).toBe(true);
+    });
+
+    it("选项含 tier 备注(stable/experimental)", async () => {
+      mockPromptMultiSelect.mockResolvedValue(["claude-code"]);
+
+      await selectTargetAgents();
+
+      const choices = mockPromptMultiSelect.mock.calls[0][1] as Array<{ value: string; name: string }>;
+      const claudeCode = choices.find((c) => c.value === "claude-code");
+      const cursor = choices.find((c) => c.value === "cursor");
+      expect(claudeCode.name).toContain("stable");
+      expect(cursor.name).toContain("实验性");
+    });
+
+    it("一屏展示全部 agent(无分级翻页,pageSize=10)", async () => {
+      mockPromptMultiSelect.mockResolvedValue(["claude-code"]);
+
+      await selectTargetAgents();
+
+      const opts = mockPromptMultiSelect.mock.calls[0][2] as { pageSize?: number };
+      expect(opts.pageSize).toBe(10);
+      const choices = mockPromptMultiSelect.mock.calls[0][1] as Array<{ value: string }>;
+      expect(choices).toHaveLength(KNOWN_AGENTS.length);
     });
   });
 

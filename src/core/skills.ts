@@ -99,7 +99,13 @@ export async function deploySchema(opts: DeployOptions): Promise<string> {
   const configPath = join(openspecDir, "config.yaml");
   try {
     let existing = await readFile(configPath, "utf-8");
-    if (!existing.includes("schema: alloy")) {
+    // 检查是否已有 schema: key(任意值,如 OpenSpec 原生的 schema: spec-driven)
+    if (/^schema:\s*\S+/m.test(existing)) {
+      // 已有 schema: key,替换其值为 alloy(避免重复 key)
+      existing = existing.replace(/^schema:\s*\S+/m, "schema: alloy");
+      await writeFile(configPath, existing, "utf-8");
+    } else if (!existing.includes("schema: alloy")) {
+      // 没有 schema: key,追加
       existing = existing.trimEnd() + "\nschema: alloy\n";
       await writeFile(configPath, existing, "utf-8");
     }

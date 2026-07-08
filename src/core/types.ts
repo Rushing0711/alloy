@@ -7,6 +7,7 @@ export interface AgentInfo {
   interactiveTool?: "askuserquestion" | "question" | "partial" | "none";
   settingsFile?: string;
   settingsContent?: Record<string, unknown>;
+  tier?: "stable" | "experimental";
 }
 
 export interface DeployOptions {

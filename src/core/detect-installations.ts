@@ -1,6 +1,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import semver from "semver";
 import type { AgentInfo } from "./types.js";
 
 export type InstallLocation = "project-command" | "project-skill" | "user-command" | "user-skill" | "user-plugin";
@@ -65,6 +66,7 @@ export function detectSkill(name: string, agent: AgentInfo, projectPath: string)
   // 用户级 plugin（superpowers 插件）
   // 扫描 ~/.claude/plugins/cache/<marketplace>/superpowers/<version>/skills/<name>
   // 兼容任意 marketplace（obra/superpowers-marketplace、anthropics/claude-plugins-official 等）
+  // 多版本并存时用 semver 比较选最新(防御 5.1.0 + 6.1.1 并存导致检测与 Claude Code 注册不一致)
   const cacheBase = join(home, ".claude", "plugins", "cache");
   if (existsSync(cacheBase)) {
     try {
@@ -73,12 +75,15 @@ export function detectSkill(name: string, agent: AgentInfo, projectPath: string)
         if (!mk.isDirectory()) continue;
         const pluginBase = join(cacheBase, mk.name, "superpowers");
         if (!existsSync(pluginBase)) continue;
-        const versions = readdirSync(pluginBase, { withFileTypes: true });
+        const versions = readdirSync(pluginBase, { withFileTypes: true })
+          .filter((v) => v.isDirectory())
+          .map((v) => v.name)
+          .filter((v) => semver.valid(v))
+          .sort((a, b) => semver.rcompare(a, b));  // 降序,最新在前
         for (const v of versions) {
-          if (!v.isDirectory()) continue;
-          const skillPath = join(pluginBase, v.name, "skills", name);
+          const skillPath = join(pluginBase, v, "skills", name);
           if (existsSync(skillPath)) {
-            return { found: true, location: "user-plugin", path: skillPath, version: v.name };
+            return { found: true, location: "user-plugin", path: skillPath, version: v };
           }
         }
       }

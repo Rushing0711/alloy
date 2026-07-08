@@ -340,13 +340,13 @@ CLI（终端）
 compatible:
   node: ">=18.0.0"
   openspec: ">=1.3.0 <2.0.0"
-  superpowers: ">=5.0.0 <6.0.0"
+  superpowers: ">=5.0.0 <7.0.0"
   alloy: ">=0.1.0"
   schema: 1
 
 install:
   openspec: "@fission-ai/openspec@1"
-  superpowers: "obra/superpowers@5"
+  superpowers: "obra/superpowers@6"
 ```
 
 - `compatible` — `alloy doctor` 诊断用，超出范围警告但不阻断
@@ -407,7 +407,7 @@ $ alloy init
   **兼容性检查...**
      ✓ Node.js v22.0.0（要求 >=18.0.0）
      ✓ OpenSpec v1.5.0（要求 >=1.3.0 <2.0.0）
-     ✓ Superpowers v5.1.0（要求 >=5.0.0 <6.0.0）
+     ✓ Superpowers v6.1.1（要求 >=5.0.0 <7.0.0）
 
   **注册 shell 补全...**
      ✓ shell 补全已注册 → ~/.zshrc
