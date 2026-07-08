@@ -44,31 +44,23 @@ function captureOutput(fn: () => Promise<void> | void): Promise<string> {
   });
 }
 
-/** 创建临时 skill 文件 */
+/** 创建临时 skill 文件（skills/alloy-<name>/SKILL.md） */
 async function writeSkill(
   tmpDir: string,
-  fileName: string,
+  skillDir: string,
   opts: {
     spec?: string;
     behaviors?: Behaviors;
   }
 ): Promise<void> {
-  const dir = join(tmpDir, "commands", "alloy");
+  const dir = join(tmpDir, "skills", skillDir);
   await mkdir(dir, { recursive: true });
 
-  const frontmatter: Record<string, unknown> = {
-    name: `Alloy: ${fileName.replace(/\.md$/, "")}`,
-  };
-  if (opts.spec !== undefined) {
-    frontmatter.spec = opts.spec;
-  }
-  if (opts.behaviors !== undefined) {
-    frontmatter.behaviors = opts.behaviors;
-  }
-
-  // 手动构建 frontmatter 字符串，确保 YAML 格式正确
+  // skill frontmatter: name / description / disable-model-invocation（+ 可选 spec / behaviors）
   const lines: string[] = ["---"];
-  lines.push(`name: "Alloy: ${fileName.replace(/\.md$/, "")}"`);
+  lines.push(`name: ${skillDir}`);
+  lines.push(`description: "Test skill ${skillDir}"`);
+  lines.push(`disable-model-invocation: true`);
   if (opts.spec !== undefined) {
     lines.push(`spec: ${opts.spec}`);
   }
@@ -78,9 +70,9 @@ async function writeSkill(
   }
   lines.push("---");
   lines.push("");
-  lines.push(`# ${fileName.replace(/\.md$/, "")}`);
+  lines.push(`# ${skillDir}`);
 
-  await writeFile(join(dir, fileName), lines.join("\n"), "utf-8");
+  await writeFile(join(dir, "SKILL.md"), lines.join("\n"), "utf-8");
 }
 
 /** 将 Behaviors 对象按"仅写出已定义字段"的方式输出为 YAML 缩进行 */
@@ -146,19 +138,19 @@ describe("scanSkills", () => {
 
   beforeEach(async () => {
     tmpDir = join(tmpdir(), `alloy-spec-audit-test-${Date.now()}`);
-    await mkdir(join(tmpDir, "commands", "alloy"), { recursive: true });
+    await mkdir(join(tmpDir, "skills"), { recursive: true });
   });
 
   afterEach(async () => {
     await rm(tmpDir, { recursive: true, force: true });
   });
 
-  it("扫描 commands/alloy/*.md 并提取 frontmatter（含 spec 路径和 behaviors）", async () => {
-    await writeSkill(tmpDir, "start.md", {
+  it("扫描 skills/alloy-*/SKILL.md 并提取 frontmatter（含 spec 路径和 behaviors）", async () => {
+    await writeSkill(tmpDir, "alloy-start", {
       spec: "01-product-spec/01-start-spec.md",
       behaviors: defaultBehaviors,
     });
-    await writeSkill(tmpDir, "plan.md", {
+    await writeSkill(tmpDir, "alloy-plan", {
       spec: "01-product-spec/02-plan-spec.md",
       behaviors: { ...defaultBehaviors, stops: 10, transitions_to: "planned" },
     });
@@ -166,15 +158,15 @@ describe("scanSkills", () => {
     const skills = await scanSkills(tmpDir);
 
     expect(skills).toHaveLength(2);
-    expect(skills[0].skillName).toBe("plan");
+    expect(skills[0].skillName).toBe("alloy-plan");
     expect(skills[0].spec).toBe("01-product-spec/02-plan-spec.md");
     expect(skills[0].behaviors?.stops).toBe(10);
-    expect(skills[1].skillName).toBe("start");
+    expect(skills[1].skillName).toBe("alloy-start");
     expect(skills[1].spec).toBe("01-product-spec/01-start-spec.md");
     expect(skills[1].behaviors?.stops).toBe(15);
   });
 
-  it("目录中无 .md 文件时返回空数组", async () => {
+  it("目录中无 alloy-* skill 时返回空数组", async () => {
     const skills = await scanSkills(tmpDir);
     expect(skills).toEqual([]);
   });
@@ -359,7 +351,7 @@ describe("audit", () => {
 
   beforeEach(async () => {
     tmpDir = join(tmpdir(), `alloy-spec-audit-test-${Date.now()}`);
-    await mkdir(join(tmpDir, "commands", "alloy"), { recursive: true });
+    await mkdir(join(tmpDir, "skills"), { recursive: true });
   });
 
   afterEach(async () => {
@@ -367,7 +359,7 @@ describe("audit", () => {
   });
 
   it("spec 与 skill 一致 → status='ok'", async () => {
-    await writeSkill(tmpDir, "start.md", {
+    await writeSkill(tmpDir, "alloy-start", {
       spec: "01-product-spec/01-start-spec.md",
       behaviors: defaultBehaviors,
     });
@@ -378,13 +370,13 @@ describe("audit", () => {
     const results = await audit(tmpDir);
 
     expect(results).toHaveLength(1);
-    expect(results[0].skillName).toBe("start");
+    expect(results[0].skillName).toBe("alloy-start");
     expect(results[0].status).toBe("ok");
     expect(results[0].diffs).toEqual([]);
   });
 
   it("数字字段差异 → status='diff'，diffs 有内容", async () => {
-    await writeSkill(tmpDir, "start.md", {
+    await writeSkill(tmpDir, "alloy-start", {
       spec: "01-product-spec/01-start-spec.md",
       behaviors: defaultBehaviors,
     });
@@ -402,7 +394,7 @@ describe("audit", () => {
   });
 
   it("无 spec 锚点 → status='no-spec-field'", async () => {
-    await writeSkill(tmpDir, "start.md", {
+    await writeSkill(tmpDir, "alloy-start", {
       behaviors: defaultBehaviors,
       // 不传 spec
     });
@@ -414,7 +406,7 @@ describe("audit", () => {
   });
 
   it("spec 文件不存在 → status='spec-not-found'，specPath 有值", async () => {
-    await writeSkill(tmpDir, "start.md", {
+    await writeSkill(tmpDir, "alloy-start", {
       spec: "01-product-spec/01-start-spec.md",
       behaviors: defaultBehaviors,
     });
@@ -427,7 +419,7 @@ describe("audit", () => {
   });
 
   it("spec 无 behaviors frontmatter → status='diff'，type='missing-block'", async () => {
-    await writeSkill(tmpDir, "start.md", {
+    await writeSkill(tmpDir, "alloy-start", {
       spec: "01-product-spec/01-start-spec.md",
       behaviors: defaultBehaviors,
     });
@@ -505,7 +497,7 @@ describe("specAuditCommand", () => {
 
   beforeEach(async () => {
     tmpDir = join(tmpdir(), `alloy-spec-audit-test-${Date.now()}`);
-    await mkdir(join(tmpDir, "commands", "alloy"), { recursive: true });
+    await mkdir(join(tmpDir, "skills"), { recursive: true });
     originalCwd = process.cwd();
     process.chdir(tmpDir);
   });
@@ -516,7 +508,7 @@ describe("specAuditCommand", () => {
   });
 
   it("全部一致时退出码 0", async () => {
-    await writeSkill(tmpDir, "start.md", {
+    await writeSkill(tmpDir, "alloy-start", {
       spec: "01-product-spec/01-start-spec.md",
       behaviors: defaultBehaviors,
     });
@@ -535,7 +527,7 @@ describe("specAuditCommand", () => {
   });
 
   it("有差异时退出码 1", async () => {
-    await writeSkill(tmpDir, "start.md", {
+    await writeSkill(tmpDir, "alloy-start", {
       spec: "01-product-spec/01-start-spec.md",
       behaviors: defaultBehaviors,
     });

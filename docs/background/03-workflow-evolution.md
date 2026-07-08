@@ -361,7 +361,7 @@ OpenSpec 执行阶段（8 个制品，后 2 个在 apply 中产出）:
 | verification-before-completion + /opsx:verify 双层验证 | 代码层验证（测试、行为）→ 制品层验证（7 项结构化检查） | 先确保代码正确，再确保制品完整；任意 FAIL 回到 SDD 修复 |
 | apply 不含 archive/finish | archive + finish 独立为收尾阶段 | 不给未验证代码建 PR，不假设 AI 实现正确 |
 | archive 先于 finish | 归档（sync delta spec）→ 自动 finish（merge/PR/keep） | 先锁定文档证据链，再合入代码；避免"代码合入了但 spec 没跟上" |
-| `/alloy:finish` 可独立调用 | archive 时选 keep 后，后续可手动调 finish | 分支还在，spec 已归档，随时可以合入 |
+| `/alloy-finish` 可独立调用 | archive 时选 keep 后，后续可手动调 finish | 分支还在，spec 已归档，随时可以合入 |
 | verify/retrospective 是 schema 制品 | artifacts 从 6 个扩展到 8 个，DAG 完整 | 有模板、有指令、有依赖——具备制品的所有特征 |
 | bug 修复二向分流 | 不改 spec → 直接修；需改 spec → 以代码是否已落地为分水岭 | 无代码（phase < applied）：并入当前 change；有代码（phase ≥ applied）：开新 change |
 | 人工测试失败处理 | apply 内部验证失败 → 循环修复直到通过；人工测试失败 → 看是 spec 还是代码问题 | 不和 spec 变更混入同一 change，代码修复在 apply 内部闭环 |

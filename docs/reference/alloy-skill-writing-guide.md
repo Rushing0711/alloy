@@ -6,7 +6,7 @@
 
 ## 一、目的与读者
 
-**读者：** 编写或维护 `commands/alloy/*.md` 的开发者和 Claude Code agent。
+**读者：** 编写或维护 `skills/alloy-*/SKILL.md` 的开发者和 Claude Code agent。
 
 **与通用指南的关系：**
 
@@ -188,7 +188,7 @@ git add 限路径（如 openspec/specs/ openspec/changes/<name>/），
 
 #### 5.2.2 Memory 批量写入禁令（已摘除）
 
-**历史背景：** archive 阶段曾写入 retrospective.md §6 Promote Candidates 到 memory,但导致破坏 hash-lock + worktree 未 commit 修改阻碍清理。已摘除——`/alloy:start` 阶段扫描最近 3 个归档 retrospective 学习经验,archive/finish 不再操作 retrospective.md。
+**历史背景：** archive 阶段曾写入 retrospective.md §6 Promote Candidates 到 memory,但导致破坏 hash-lock + worktree 未 commit 修改阻碍清理。已摘除——`/alloy-start` 阶段扫描最近 3 个归档 retrospective 学习经验,archive/finish 不再操作 retrospective.md。
 
 **当前规范：** archive/finish 阶段不写入 memory,不修改 retrospective.md。retrospective.md 作为 apply 阶段产物 hash-lock 后归档,供 start 阶段扫描学习。
 
@@ -258,7 +258,7 @@ git add 限路径（如 openspec/specs/ openspec/changes/<name>/），
 - [ ] 复杂分支用 dot 流程图（通用指南 §9）
 - [ ] 跨 skill 重现的隐患升级到通用指南 §3.5 通用禁令模式（手段 3）
 - [ ] phase_timings 字段的 started_at / completed_at 写入逻辑符合 02-visual-spec §1.1
-- [ ] 错误处理分支引用 `commands/alloy/references/phase-routing.md` 等共享文档，不重复内联逻辑
+- [ ] 错误处理分支引用 `alloy-shared/references/phase-routing.md` 等共享文档，不重复内联逻辑
 - [ ] 行数控制在 300 以内（阶段命令）/ 200 以内（fix/discard/status，通用指南 §6.1）
 
 ---

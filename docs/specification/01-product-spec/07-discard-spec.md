@@ -11,12 +11,12 @@ behaviors:
 
 # alloy discard 行为规格
 
-详见 skill 文件：`commands/alloy/discard.md`
+详见 skill 文件：`skills/alloy-discard/SKILL.md`
 
 ## 命令格式
 
 ```
-/alloy:discard [name]（省略时从当前活跃 change 推断）
+/alloy-discard [name]（省略时从当前活跃 change 推断）
 ```
 
 ## Phase 分级行为

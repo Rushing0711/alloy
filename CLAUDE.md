@@ -15,7 +15,7 @@
 
 | 要修改的文件 | 先读 | 分支规则 | 对账 |
 |-------------|------|---------|------|
-| `commands/alloy/*.md`（Skill 文件） | `docs/reference/skill-writing-guide.md` | 默认问分支。用户说"直接改"、纯读取、测试验证时不触发 | 提醒同步 spec |
+| `skills/alloy-*/SKILL.md`（Skill 文件） | `docs/reference/skill-writing-guide.md` | 默认问分支。用户说"直接改"、纯读取、测试验证时不触发 | 提醒同步 spec |
 | `openspec/schemas/`（Schema） | — | 同上 | — |
 | `src/`（TypeScript 源码） | — | 同上 | 提醒同步 01-product-spec/08-cli-spec.md |
 | `docs/specification/`（产品规格） | — | 同上 | — |
@@ -45,7 +45,7 @@
 src/cli/          # CLI 命令（init/status/doctor/update/completion）
 src/core/         # 核心模块（检测/安装/部署/健康检查/agents/artifacts/skills/openspec/superpowers/claude-md）
 src/utils/        # 工具函数（文件系统/提示）
-commands/alloy/   # Skill 文件（start/plan/apply/archive/finish/fix/discard/status）
+skills/alloy-*/   # Skill 文件（start/plan/apply/archive/finish/fix/discard/status）
 openspec/schemas/ # 制品 schema 定义
 ```
 

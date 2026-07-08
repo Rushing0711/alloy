@@ -24,4 +24,4 @@ git reset HEAD~1                                 # 退回 phase commit
 
 ## 边界
 
-- start 是 phase 推进起点（无前序 phase），phase=started 写入失败时降级路径只有"重跑 /alloy:start"——不存在 phase 回退场景。本阶段无 §5.2.3 适用空间。
+- start 是 phase 推进起点（无前序 phase），phase=started 写入失败时降级路径只有"重跑 /alloy-start"——不存在 phase 回退场景。本阶段无 §5.2.3 适用空间。

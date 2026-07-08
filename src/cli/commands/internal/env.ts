@@ -9,7 +9,7 @@ import { KNOWN_AGENTS } from "../../../core/agents.js";
  *
  * 4 项基础设施任一缺失即 exit(1)，输出缺失项列表。
  * 供 start.md 等 skill 调用，避免 agent 自由实现检测导致误判
- *（如检测 .claude/commands/ 顶层文件数而非 alloy/ 子目录）。
+ *（如检测 .claude/skills/ 顶层文件数而非 alloy/ 子目录）。
  *
  * agent 命名规则真相源在 agents.ts 的 KNOWN_AGENTS，此处复用，消除漂移。
  */
@@ -44,25 +44,19 @@ export async function envCheckCommand(): Promise<void> {
     missing.push("openspec/schemas/alloy/schema.yaml");
   }
 
-  // 4. Alloy commands——按 agent 命名规则检测 start.md
+  // 4. Alloy skills--按 agent 命名规则检测 alloy-start/SKILL.md
   //    复用 KNOWN_AGENTS，避免与 agents.ts 漂移
   let cmdFound = false;
   for (const agent of KNOWN_AGENTS) {
-    const dir = join(projectPath, agent.commandsDir);
-    if (agent.supportsColonCommands) {
-      if (existsSync(join(dir, "alloy", "start.md"))) {
-        cmdFound = true;
-        break;
-      }
-    } else {
-      if (existsSync(join(dir, "alloy-start.md"))) {
-        cmdFound = true;
-        break;
-      }
+    const agentBase = agent.commandsDir.split("/")[0];
+    const skillFile = join(projectPath, agentBase, "skills", "alloy-start", "SKILL.md");
+    if (existsSync(skillFile)) {
+      cmdFound = true;
+      break;
     }
   }
   if (!cmdFound) {
-    missing.push("Alloy commands（未找到 alloy start.md，init 未为当前 agent 部署）");
+    missing.push("Alloy skills（未找到 alloy-start/SKILL.md，init 未为当前 agent 部署）");
   }
 
   if (missing.length > 0) {
@@ -78,5 +72,5 @@ export async function envCheckCommand(): Promise<void> {
     process.exit(1);
   }
 
-  console.log("✓ Alloy 环境完整（git ✓ config.yaml ✓ schema.yaml ✓ commands ✓）");
+  console.log("✓ Alloy 环境完整（git ✓ config.yaml ✓ schema.yaml ✓ skills ✓）");
 }

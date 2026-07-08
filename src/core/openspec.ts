@@ -6,7 +6,7 @@ import { execSync } from "node:child_process";
 import { checkOpenSpec } from "./health.js";
 import { loadCompat } from "./compat.js";
 import { getPackageRoot } from "../utils/fs.js";
-import { detectCommand, detectSkill } from "./detect-installations.js";
+import { detectSkill } from "./detect-installations.js";
 import { promptConfirm } from "../utils/prompt.js";
 import type { AgentInfo } from "./types.js";
 
@@ -76,18 +76,14 @@ export async function initOpenSpecProject(
   const targetPath = scope === "global" ? home : projectPath;
   const label = scope === "global" ? "全局" : "项目";
 
-  // 检测已有 OpenSpec 安装（按每个 agent 独立检测）
+  // 检测已有 OpenSpec 安装（按每个 agent 独立检测，仅检测 skill）
   if (agents && agents.length > 0) {
     let hasExisting = false;
     for (const agent of agents) {
-      const cmdDetected = detectCommand("opsx/continue", agent, projectPath);
       const skillDetected = detectSkill("openspec-explore", agent, projectPath);
-      if (cmdDetected.found || skillDetected.found) {
+      if (skillDetected.found) {
         hasExisting = true;
-        const parts: string[] = [];
-        if (cmdDetected.found) parts.push(`commands: ✓（${cmdDetected.path}）`);
-        if (skillDetected.found) parts.push(`skills: ✓（${skillDetected.path}）`);
-        console.log(`     ℹ OpenSpec 已安装（${agent.label}：${parts.join(", ")}）`);
+        console.log(`     ℹ OpenSpec 已安装（${agent.label}：skills: ✓（${skillDetected.path}））`);
       }
     }
     if (hasExisting) {

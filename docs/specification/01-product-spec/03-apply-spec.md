@@ -11,22 +11,22 @@ behaviors:
 
 # alloy apply 行为规格
 
-详见 skill 文件：`commands/alloy/apply.md`
+详见 skill 文件：`skills/alloy-apply/SKILL.md`
 
 ## 命令格式
 
 ```
-/alloy:apply [name]（省略时从当前活跃 change 推断）
+/alloy-apply [name]（省略时从当前活跃 change 推断）
 ```
 
 ## 前置检查（3 项 + phase 路由）
 
 1. plans.md 存在
 2. alloy _guard 确认 phase：
-   ├── started → 自动路由到 /alloy:plan
+   ├── started → 自动路由到 /alloy-plan
    ├── planned → 通过，继续执行
    ├── applied → 通过（重入），步骤幂等处理断点
-   └── archived → 自动路由到 /alloy:finish
+   └── archived → 自动路由到 /alloy-finish
 3. git 仓库检测 — 不是仓库时，展示选项让用户选择立即初始化还是稍后自行处理
 
 技能预检（6 个 Superpowers 技能可用性，缺一 STOP）
@@ -37,7 +37,7 @@ apply 阶段不允许任何需求变更——plan 已锁定，统一走 discard 
 
 用户提出需求/设计变更时：
 1. AskUserQuestion 展示选项：
-   - (a) 放弃当前 change，开新 change 处理变更（执行 `/alloy:discard` + `/alloy:start`）
+   - (a) 放弃当前 change，开新 change 处理变更（执行 `/alloy-discard` + `/alloy-start`）
    - (b) 取消变更，继续当前 apply
 2. 选 (a) 引导用户运行 discard 命令；选 (b) 继续 apply。
 
@@ -108,4 +108,4 @@ alloy _guard openspec/changes/<name> applied --apply
 git add openspec/changes/<name>/.alloy.yaml
 git commit -m "chore(<name>): phase → applied"
 ```
-worktree 清理已移至 `/alloy:archive` 阶段。
+worktree 清理已移至 `/alloy-archive` 阶段。

@@ -8,48 +8,55 @@ vi.mock("../../src/utils/fs.js", () => ({
   getPackageRoot: vi.fn(),
 }));
 vi.mock("../../src/core/detect-installations.js", () => ({
-  detectCommand: vi.fn(),
+  detectAlloySkill: vi.fn(),
 }));
 vi.mock("../../src/utils/prompt.js", () => ({
   promptConfirm: vi.fn(),
 }));
 
 import { getPackageRoot } from "../../src/utils/fs.js";
-import { detectCommand } from "../../src/core/detect-installations.js";
+import { detectAlloySkill } from "../../src/core/detect-installations.js";
 import { promptConfirm } from "../../src/utils/prompt.js";
-import { deployCommands, deploySchema } from "../../src/core/skills.js";
+import { deploySkills, deploySchema } from "../../src/core/skills.js";
 import type { DeployOptions } from "../../src/core/types.js";
 
-describe("deployCommands", () => {
+describe("deploySkills", () => {
   let tmpDir: string;
-  let sourceDir: string;
+  let sourceDir: string; // skills/ 源目录
   let projectPath: string;
+
+  const skillNames = [
+    "alloy-start", "alloy-plan", "alloy-apply", "alloy-archive",
+    "alloy-finish", "alloy-fix", "alloy-discard", "alloy-status",
+    "alloy-shared",
+  ];
 
   beforeEach(async () => {
     tmpDir = join(tmpdir(), `alloy-skills-test-${Date.now()}`);
-    sourceDir = join(tmpDir, "package", "commands", "alloy");
+    sourceDir = join(tmpDir, "package", "skills");
     projectPath = join(tmpDir, "project");
     await mkdir(sourceDir, { recursive: true });
     await mkdir(projectPath, { recursive: true });
 
-    // 创建冒号版源文件
-    const commandIds = ["start", "plan", "apply", "archive", "finish", "fix", "discard", "status"];
-    for (const id of commandIds) {
+    // 创建 9 个 skill 目录，每个含 SKILL.md
+    for (const name of skillNames) {
+      const skillDir = join(sourceDir, name);
+      await mkdir(skillDir, { recursive: true });
       await writeFile(
-        join(sourceDir, `${id}.md`),
-        `---\nname: "Alloy: ${id.charAt(0).toUpperCase() + id.slice(1)}"\ndescription: test\n---\n# alloy-${id}`,
+        join(skillDir, "SKILL.md"),
+        `---\nname: ${name}\ndescription: test\n---\n# ${name}`,
         "utf-8"
       );
     }
 
-    // 创建 references/ 子目录源文件（skill md 运行时按相对路径读取）
-    const referencesDir = join(sourceDir, "references");
-    await mkdir(referencesDir, { recursive: true });
-    await writeFile(join(referencesDir, "skill-precheck.md"), "# skill precheck\n", "utf-8");
-    await writeFile(join(referencesDir, "apply-worktree.md"), "# apply worktree\n", "utf-8");
+    // alloy-start 含 references/ 子目录（随 skill 目录整体拷贝）
+    const startReferencesDir = join(sourceDir, "alloy-start", "references");
+    await mkdir(startReferencesDir, { recursive: true });
+    await writeFile(join(startReferencesDir, "skill-precheck.md"), "# skill precheck\n", "utf-8");
+    await writeFile(join(startReferencesDir, "apply-worktree.md"), "# apply worktree\n", "utf-8");
 
     vi.mocked(getPackageRoot).mockReturnValue(join(tmpDir, "package"));
-    vi.mocked(detectCommand).mockReturnValue({ found: false, location: null, path: null, version: null });
+    vi.mocked(detectAlloySkill).mockReturnValue({ found: false, location: null, path: null, version: null });
   });
 
   afterEach(async () => {
@@ -57,36 +64,36 @@ describe("deployCommands", () => {
     vi.clearAllMocks();
   });
 
-  it("冒号版 agent 部署到 alloy/ 子目录", async () => {
+  it("部署 skill 目录到 .claude/skills/", async () => {
     const opts: DeployOptions = {
       scope: "project",
       projectPath,
       targetAgents: [{ id: "claude-code", label: "CC", supportsColonCommands: true, commandsDir: ".claude/commands/" }],
     };
-    const deployed = await deployCommands(opts);
-    // 8 个 skill md + 1 个 references 目录
+    const deployed = await deploySkills(opts);
+    // 9 个 skill 目录
     expect(deployed.length).toBe(9);
-    // 冒号版路径：.claude/commands/alloy/start.md
-    expect(deployed.some(p => p.includes(".claude/commands/alloy/start.md"))).toBe(true);
-    const startFile = deployed.find(p => p.includes("start.md"))!;
-    const content = await readFile(startFile, "utf-8");
-    expect(content).toContain('name: "Alloy: Start"');
+    // 路径：.claude/skills/alloy-start/
+    expect(deployed.some(p => p.includes(join(".claude", "skills", "alloy-start")))).toBe(true);
+    // SKILL.md 已复制
+    const startSkillPath = join(projectPath, ".claude", "skills", "alloy-start", "SKILL.md");
+    const content = await readFile(startSkillPath, "utf-8");
+    expect(content).toContain("name: alloy-start");
   });
 
-  it("横线版 agent 部署到根 commands 目录", async () => {
+  it("不同 agent 部署到各自 skills 目录", async () => {
     const opts: DeployOptions = {
       scope: "project",
       projectPath,
       targetAgents: [{ id: "cursor", label: "Cursor", supportsColonCommands: false, commandsDir: ".cursor/commands/" }],
     };
-    const deployed = await deployCommands(opts);
-    // 8 个横线 skill md + 1 个 references 目录
+    const deployed = await deploySkills(opts);
     expect(deployed.length).toBe(9);
-    // 横线版路径：.cursor/commands/alloy-start.md
-    expect(deployed.some(p => p.includes(".cursor/commands/alloy-start.md"))).toBe(true);
-    const startFile = deployed.find(p => p.includes("alloy-start.md"))!;
-    const content = await readFile(startFile, "utf-8");
-    expect(content).toContain('name: "Alloy-Start"');
+    // cursor 部署到 .cursor/skills/
+    expect(deployed.some(p => p.includes(join(".cursor", "skills", "alloy-start")))).toBe(true);
+    const startSkillPath = join(projectPath, ".cursor", "skills", "alloy-start", "SKILL.md");
+    const content = await readFile(startSkillPath, "utf-8");
+    expect(content).toContain("name: alloy-start");
   });
 
   it("Codex project 模式跳过部署", async () => {
@@ -95,7 +102,7 @@ describe("deployCommands", () => {
       projectPath,
       targetAgents: [{ id: "codex", label: "Codex", supportsColonCommands: false, commandsDir: ".codex/prompts/", globalOnly: true }],
     };
-    const deployed = await deployCommands(opts);
+    const deployed = await deploySkills(opts);
     expect(deployed.length).toBe(0);
   });
 
@@ -108,18 +115,18 @@ describe("deployCommands", () => {
         { id: "cursor", label: "Cursor", supportsColonCommands: false, commandsDir: ".cursor/commands/" },
       ],
     };
-    const deployed = await deployCommands(opts);
-    // (8 冒号 + 1 references) + (8 横线 + 1 references) = 18
+    const deployed = await deploySkills(opts);
+    // 9 (claude-code) + 9 (cursor) = 18
     expect(deployed.length).toBe(18);
-    const colonFiles = deployed.filter(p => p.includes(".claude/commands/alloy/") && !p.includes("references"));
-    const dashFiles = deployed.filter(p => p.includes(".cursor/commands/") && !p.includes("references"));
-    expect(colonFiles.length).toBe(8);
-    expect(dashFiles.length).toBe(8);
+    const claudeFiles = deployed.filter(p => p.includes(join(".claude", "skills")));
+    const cursorFiles = deployed.filter(p => p.includes(join(".cursor", "skills")));
+    expect(claudeFiles.length).toBe(9);
+    expect(cursorFiles.length).toBe(9);
   });
 
   it("检测到已有安装且用户拒绝覆盖时跳过该 agent", async () => {
-    vi.mocked(detectCommand).mockReturnValue({
-      found: true, location: "project-command", path: `${projectPath}/.claude/commands/alloy/start.md`, version: null,
+    vi.mocked(detectAlloySkill).mockReturnValue({
+      found: true, location: "project-skill", path: `${projectPath}/.claude/skills/alloy-start/SKILL.md`, version: null,
     });
     vi.mocked(promptConfirm).mockResolvedValue(false);
 
@@ -128,14 +135,14 @@ describe("deployCommands", () => {
       projectPath,
       targetAgents: [{ id: "claude-code", label: "CC", supportsColonCommands: true, commandsDir: ".claude/commands/" }],
     };
-    const deployed = await deployCommands(opts);
+    const deployed = await deploySkills(opts);
     expect(deployed.length).toBe(0);
-    expect(promptConfirm).toHaveBeenCalledWith("     是否覆盖 CC 的 Alloy commands？", false);
+    expect(promptConfirm).toHaveBeenCalledWith("     是否覆盖 CC 的 Alloy skills？", false);
   });
 
   it("检测到已有安装且用户确认覆盖时继续部署", async () => {
-    vi.mocked(detectCommand).mockReturnValue({
-      found: true, location: "user-command", path: "/home/.claude/commands/alloy/start.md", version: null,
+    vi.mocked(detectAlloySkill).mockReturnValue({
+      found: true, location: "user-skill", path: "/home/.claude/skills/alloy-start/SKILL.md", version: null,
     });
     vi.mocked(promptConfirm).mockResolvedValue(true);
 
@@ -144,60 +151,49 @@ describe("deployCommands", () => {
       projectPath,
       targetAgents: [{ id: "claude-code", label: "CC", supportsColonCommands: true, commandsDir: ".claude/commands/" }],
     };
-    const deployed = await deployCommands(opts);
+    const deployed = await deploySkills(opts);
     expect(deployed.length).toBe(9);
   });
 
   it("未检测到已有安装时正常部署", async () => {
-    vi.mocked(detectCommand).mockReturnValue({ found: false, location: null, path: null, version: null });
+    vi.mocked(detectAlloySkill).mockReturnValue({ found: false, location: null, path: null, version: null });
 
     const opts: DeployOptions = {
       scope: "project",
       projectPath,
       targetAgents: [{ id: "claude-code", label: "CC", supportsColonCommands: true, commandsDir: ".claude/commands/" }],
     };
-    const deployed = await deployCommands(opts);
+    const deployed = await deploySkills(opts);
     expect(deployed.length).toBe(9);
     expect(promptConfirm).not.toHaveBeenCalled();
   });
 
-  it("冒号版部署 references/ 子目录到 alloy/references/", async () => {
+  it("skill 目录含 references/ 整体拷贝", async () => {
     const opts: DeployOptions = {
       scope: "project",
       projectPath,
       targetAgents: [{ id: "claude-code", label: "CC", supportsColonCommands: true, commandsDir: ".claude/commands/" }],
     };
-    await deployCommands(opts);
-    const precheck = await readFile(join(projectPath, ".claude", "commands", "alloy", "references", "skill-precheck.md"), "utf-8");
+    await deploySkills(opts);
+    // references/ 随 alloy-start 目录整体拷贝到 .claude/skills/alloy-start/references/
+    const precheck = await readFile(join(projectPath, ".claude", "skills", "alloy-start", "references", "skill-precheck.md"), "utf-8");
     expect(precheck).toContain("skill precheck");
-    const worktree = await readFile(join(projectPath, ".claude", "commands", "alloy", "references", "apply-worktree.md"), "utf-8");
+    const worktree = await readFile(join(projectPath, ".claude", "skills", "alloy-start", "references", "apply-worktree.md"), "utf-8");
     expect(worktree).toContain("apply worktree");
   });
 
-  it("横线版部署 references/ 子目录到 commands/references/", async () => {
-    const opts: DeployOptions = {
-      scope: "project",
-      projectPath,
-      targetAgents: [{ id: "cursor", label: "Cursor", supportsColonCommands: false, commandsDir: ".cursor/commands/" }],
-    };
-    await deployCommands(opts);
-    // 横线版 targetDir 是 .cursor/commands/（无 alloy/ 子目录），references 部署到 .cursor/commands/references/
-    // 注意：横线版 skill md 内的 references 路径转换是后续适配项，此处只验证部署动作
-    const precheck = await readFile(join(projectPath, ".cursor", "commands", "references", "skill-precheck.md"), "utf-8");
-    expect(precheck).toContain("skill precheck");
-  });
-
-  it("源目录无 references/ 时不报错（向后兼容）", async () => {
-    // 删除 references 源目录模拟旧版包
-    await rm(join(sourceDir, "references"), { recursive: true, force: true });
+  it("无 references/ 的 skill 正常部署", async () => {
+    // alloy-status 无 references/，应正常部署
     const opts: DeployOptions = {
       scope: "project",
       projectPath,
       targetAgents: [{ id: "claude-code", label: "CC", supportsColonCommands: true, commandsDir: ".claude/commands/" }],
     };
-    const deployed = await deployCommands(opts);
-    // 只部署 8 个 skill md，无 references
-    expect(deployed.length).toBe(8);
+    const deployed = await deploySkills(opts);
+    expect(deployed.length).toBe(9);
+    const statusSkillPath = join(projectPath, ".claude", "skills", "alloy-status", "SKILL.md");
+    const content = await readFile(statusSkillPath, "utf-8");
+    expect(content).toContain("name: alloy-status");
   });
 });
 

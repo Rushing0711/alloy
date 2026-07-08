@@ -1,6 +1,6 @@
 # Spec-Sync：Spec/Skill 对账工作流
 
-所有 alloy 阶段命令共享的 spec-skill 对账工作流。修改 `commands/alloy/*.md` 或 `src/` 后触发。
+所有 alloy 阶段 skill 共享的 spec-skill 对账工作流。修改 `skills/alloy-*/SKILL.md` 或 `src/` 后触发。
 
 ## 1. 自动检测
 
@@ -50,7 +50,7 @@ alloy _spec-audit
 
 skill 变更和 spec 变更在同一 commit 中：
 ```bash
-git add commands/alloy/<skill>.md docs/specification/01-product-spec/<spec>.md
+git add skills/alloy-<skill>/SKILL.md docs/specification/01-product-spec/<spec>.md
 git commit -m "docs(<name>): 同步 spec 与 skill behaviors"
 ```
 

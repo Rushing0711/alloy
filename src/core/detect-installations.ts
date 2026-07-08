@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import semver from "semver";
 import type { AgentInfo } from "./types.js";
 
-export type InstallLocation = "project-command" | "project-skill" | "user-command" | "user-skill" | "user-plugin";
+export type InstallLocation = "project-skill" | "user-skill" | "user-plugin";
 
 export interface InstallationInfo {
   found: boolean;
@@ -16,23 +16,24 @@ export interface InstallationInfo {
 const NOT_FOUND: InstallationInfo = { found: false, location: null, path: null, version: null };
 
 /**
- * 检测某 agent 的命令是否存在。
- * 优先级：项目级 command → 用户级 command
+ * 检测 Alloy skill 是否已部署。
+ * 检测路径：<agentBase>/skills/alloy-start/SKILL.md
+ * 优先级：项目级 skill -> 用户级 skill
  */
-export function detectCommand(name: string, agent: AgentInfo, projectPath: string): InstallationInfo {
-  const cmdFile = `${name}.md`;
+export function detectAlloySkill(agent: AgentInfo, projectPath: string): InstallationInfo {
+  const agentBase = agent.commandsDir.split("/")[0];
 
-  // 项目级 command
-  const projectCmd = join(projectPath, agent.commandsDir, cmdFile);
-  if (existsSync(projectCmd)) {
-    return { found: true, location: "project-command", path: projectCmd, version: null };
+  // 项目级 skill
+  const projectSkill = join(projectPath, agentBase, "skills", "alloy-start", "SKILL.md");
+  if (existsSync(projectSkill)) {
+    return { found: true, location: "project-skill", path: projectSkill, version: null };
   }
 
-  // 用户级 command
+  // 用户级 skill
   const home = homedir();
-  const userCmd = join(home, agent.commandsDir, cmdFile);
-  if (existsSync(userCmd)) {
-    return { found: true, location: "user-command", path: userCmd, version: null };
+  const userSkill = join(home, agentBase, "skills", "alloy-start", "SKILL.md");
+  if (existsSync(userSkill)) {
+    return { found: true, location: "user-skill", path: userSkill, version: null };
   }
 
   return NOT_FOUND;
@@ -40,7 +41,7 @@ export function detectCommand(name: string, agent: AgentInfo, projectPath: strin
 
 /**
  * 检测某 agent 的技能是否存在。
- * 优先级：项目级 skill → 用户级 skill → 用户级 plugin
+ * 优先级：项目级 skill -> 用户级 skill -> 用户级 plugin
  * 注意：只有 Claude Code 有 skills/plugins，其他 agent 直接返回 NOT_FOUND。
  */
 export function detectSkill(name: string, agent: AgentInfo, projectPath: string): InstallationInfo {

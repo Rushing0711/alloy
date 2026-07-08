@@ -11,12 +11,12 @@ behaviors:
 
 # alloy start 行为规格
 
-详见 skill 文件：`commands/alloy/start.md`
+详见 skill 文件：`skills/alloy-start/SKILL.md`
 
 ## 命令格式
 
 ```
-/alloy:start [topic]
+/alloy-start [topic]
 ```
 
 ## 状态检测

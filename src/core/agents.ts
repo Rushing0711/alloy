@@ -84,7 +84,7 @@ function basePath(scope: "global" | "project", projectPath: string): string {
   return projectPath;
 }
 
-/** 反向推导：检查哪些 agent 已有 alloy command 部署 */
+/** 反向推导：检查哪些 agent 已有 alloy skill 部署 */
 export function detectDeployedAgents(
   scope: "global" | "project",
   projectPath: string
@@ -92,28 +92,23 @@ export function detectDeployedAgents(
   const base = basePath(scope, projectPath);
 
   return KNOWN_AGENTS.filter((agent) => {
-    const dir = join(base, agent.commandsDir);
-
-    if (agent.supportsColonCommands) {
-      const alloyDir = join(dir, "alloy");
-      return existsSync(alloyDir) && existsSync(join(alloyDir, "start.md"));
-    }
-
-    return existsSync(join(dir, "alloy-start.md"));
+    // 从 commandsDir 提取 agent 基目录（如 .claude/ from .claude/commands/）
+    const agentBase = agent.commandsDir.split("/")[0];
+    const skillFile = join(base, agentBase, "skills", "alloy-start", "SKILL.md");
+    return existsSync(skillFile);
   });
 }
 
-/** 获取 agent command 部署的目标路径 */
-export function getCommandTargetDir(
+/** 获取 agent skill 部署的目标路径（<agentBase>/skills/） */
+export function getSkillTargetDir(
   agent: AgentInfo,
   scope: "global" | "project",
   projectPath: string
 ): string {
   const base = basePath(scope, projectPath);
-  if (agent.supportsColonCommands) {
-    return join(base, agent.commandsDir, "alloy");
-  }
-  return join(base, agent.commandsDir);
+  // 从 commandsDir 提取 agent 基目录（如 .claude/ from .claude/commands/）
+  const agentBase = agent.commandsDir.split("/")[0];
+  return join(base, agentBase, "skills");
 }
 
 export { COMMAND_IDS };

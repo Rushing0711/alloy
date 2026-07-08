@@ -16,7 +16,7 @@ vi.mock("node:child_process", () => ({
 }));
 
 vi.mock("../../src/core/skills.js", () => ({
-  deployCommands: vi.fn(),
+  deploySkills: vi.fn(),
   deploySchema: vi.fn(),
 }));
 
@@ -48,7 +48,7 @@ vi.mock("../../src/cli/utils/state.js", () => ({
 import { readFile, writeFile } from "node:fs/promises";
 import { readFileSync, existsSync } from "node:fs";
 import { execSync } from "node:child_process";
-import { deployCommands, deploySchema } from "../../src/core/skills.js";
+import { deploySkills, deploySchema } from "../../src/core/skills.js";
 import { detectDeployedAgents } from "../../src/core/agents.js";
 import { runHealthCheck } from "../../src/core/health.js";
 import { getPackageRoot } from "../../src/utils/fs.js";
@@ -78,7 +78,7 @@ describe("updateCommand", () => {
 
     // mock scope 检测：项目级存在
     vi.mocked(existsSync).mockImplementation((path) => {
-      if (path.toString().includes(".claude/commands/alloy")) return true;
+      if (path.toString().includes(".claude/skills/alloy-start")) return true;
       if (path.toString().includes(".git")) return true; // 开发模式
       return false;
     });
@@ -94,18 +94,18 @@ describe("updateCommand", () => {
     ]);
 
     // mock deploy
-    vi.mocked(deployCommands).mockResolvedValue(["/path/to/command.md"]);
+    vi.mocked(deploySkills).mockResolvedValue(["/path/to/skill.md"]);
     vi.mocked(deploySchema).mockResolvedValue("/path/to/schema");
 
     const results = await updateCommand("/fake/project");
-    expect(results).toContain("✓ commands/ → 部署 1 个文件到 1 个 agent");
+    expect(results).toContain("✓ skills/ → 部署 1 个文件到 1 个 agent");
     expect(results).toContain("✓ schema/ → 已部署");
   });
 
   it("用户模式且已是最新版本时应提示", async () => {
     // mock scope 检测：项目级存在
     vi.mocked(existsSync).mockImplementation((path) => {
-      if (path.toString().includes(".claude/commands/alloy")) return true;
+      if (path.toString().includes(".claude/skills/alloy-start")) return true;
       if (path.toString().includes(".git")) return false; // 用户模式
       return false;
     });
@@ -128,7 +128,7 @@ describe("updateCommand", () => {
     ]);
 
     // mock deploy
-    vi.mocked(deployCommands).mockResolvedValue(["/path/to/command.md"]);
+    vi.mocked(deploySkills).mockResolvedValue(["/path/to/skill.md"]);
     vi.mocked(deploySchema).mockResolvedValue("/path/to/schema");
 
     const results = await updateCommand("/fake/project");
@@ -138,7 +138,7 @@ describe("updateCommand", () => {
   it("用户模式有新版本且用户确认升级时应执行升级", async () => {
     // mock scope 检测：项目级存在
     vi.mocked(existsSync).mockImplementation((path) => {
-      if (path.toString().includes(".claude/commands/alloy")) return true;
+      if (path.toString().includes(".claude/skills/alloy-start")) return true;
       if (path.toString().includes(".git")) return false; // 用户模式
       return false;
     });
@@ -169,7 +169,7 @@ describe("updateCommand", () => {
     ]);
 
     // mock deploy
-    vi.mocked(deployCommands).mockResolvedValue(["/path/to/command.md"]);
+    vi.mocked(deploySkills).mockResolvedValue(["/path/to/skill.md"]);
     vi.mocked(deploySchema).mockResolvedValue("/path/to/schema");
 
     const results = await updateCommand("/fake/project");
@@ -179,7 +179,7 @@ describe("updateCommand", () => {
   it("用户模式有新版本但用户拒绝升级时应跳过", async () => {
     // mock scope 检测：项目级存在
     vi.mocked(existsSync).mockImplementation((path) => {
-      if (path.toString().includes(".claude/commands/alloy")) return true;
+      if (path.toString().includes(".claude/skills/alloy-start")) return true;
       if (path.toString().includes(".git")) return false; // 用户模式
       return false;
     });
@@ -208,7 +208,7 @@ describe("updateCommand", () => {
     ]);
 
     // mock deploy
-    vi.mocked(deployCommands).mockResolvedValue(["/path/to/command.md"]);
+    vi.mocked(deploySkills).mockResolvedValue(["/path/to/skill.md"]);
     vi.mocked(deploySchema).mockResolvedValue("/path/to/schema");
 
     const results = await updateCommand("/fake/project");
@@ -218,7 +218,7 @@ describe("updateCommand", () => {
   it("未检测到已部署的 agent 时应提示先运行 init", async () => {
     // mock scope 检测：项目级存在
     vi.mocked(existsSync).mockImplementation((path) => {
-      if (path.toString().includes(".claude/commands/alloy")) return true;
+      if (path.toString().includes(".claude/skills/alloy-start")) return true;
       if (path.toString().includes(".git")) return true; // 开发模式
       return false;
     });
@@ -227,13 +227,13 @@ describe("updateCommand", () => {
     vi.mocked(detectDeployedAgents).mockReturnValue([]);
 
     const results = await updateCommand("/fake/project");
-    expect(results).toContain("⚠️ 未检测到已部署的 Alloy commands，请先运行 alloy init");
+    expect(results).toContain("⚠️ 未检测到已部署的 Alloy skills，请先运行 alloy init");
   });
 
   it("应调用注入器重新注入 agent 配置", async () => {
     // mock scope 检测：项目级存在
     vi.mocked(existsSync).mockImplementation((path) => {
-      if (path.toString().includes(".claude/commands/alloy")) return true;
+      if (path.toString().includes(".claude/skills/alloy-start")) return true;
       if (path.toString().includes(".git")) return true; // 开发模式
       return false;
     });
@@ -249,7 +249,7 @@ describe("updateCommand", () => {
     ]);
 
     // mock deploy
-    vi.mocked(deployCommands).mockResolvedValue(["/path/to/command.md"]);
+    vi.mocked(deploySkills).mockResolvedValue(["/path/to/skill.md"]);
     vi.mocked(deploySchema).mockResolvedValue("/path/to/schema");
 
     // mock config

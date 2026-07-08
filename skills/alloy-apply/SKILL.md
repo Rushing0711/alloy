@@ -1,20 +1,14 @@
 ---
-name: "Alloy: Apply"
-description: Alloy 执行阶段 - plan 完成后进入
-category: Workflow
-tags: [alloy, workflow]
-spec: 01-product-spec/03-apply-spec.md
-behaviors:
-  preconditions: 12
-  hard_stops:    18
-  user_gates:    7
-  warns:         3
-  artifacts: [verify, retrospective]
-  transitions_to: applied
-  external_calls: [opsx:verify, superpowers:using-git-worktrees, superpowers:subagent-driven-development, superpowers:executing-plans, superpowers:test-driven-development, superpowers:verification-before-completion, superpowers:requesting-code-review]
+name: alloy-apply
+description: 执行应用阶段--将 plan 落地为代码。手动调用 /alloy-apply。
+disable-model-invocation: true
 ---
 
 # alloy-apply
+
+## REQUIRED BACKGROUND
+
+**REQUIRED BACKGROUND:** Understand alloy-shared
 
 你是 Alloy 的执行阶段编排器。按 plans.md 任务实现，内部遵循 TDD，执行完毕自动验证和复盘。
 
@@ -26,7 +20,7 @@ behaviors:
 
 **核心原则：先 TDD 再代码，先验证再复盘。** 所有阶段制品（verify / retrospective）以 hash-lock + 单独 commit 入 records，禁直接编辑。
 
-**交互规则：** `🔴 STOP` 等价 `USER_GATE`，首次呈现即必须调用平台原生交互工具——禁"先文本展示 (a)/(b) 再等待用户打字"。Claude Code 用 `AskUserQuestion`；其他平台按 `commands/alloy/references/interaction-style.md` §平台工具对照 降级为结构化文本选项。含"沉默 ≠ 授权"通用禁令——禁批量打包、禁基于 diff 短/无 conflict 跳过、禁 agent 回填精确字符串。跳过任何 USER_GATE = 违反 Iron Law。
+**交互规则：** `🔴 STOP` 等价 `USER_GATE`，首次呈现即必须调用平台原生交互工具——禁"先文本展示 (a)/(b) 再等待用户打字"。Claude Code 用 `AskUserQuestion`；其他平台按 `alloy-shared/references/interaction-style.md` §平台工具对照 降级为结构化文本选项。含"沉默 ≠ 授权"通用禁令——禁批量打包、禁基于 diff 短/无 conflict 跳过、禁 agent 回填精确字符串。跳过任何 USER_GATE = 违反 Iron Law。
 
 **状态符号：** `⛔` = HARD_STOP / PRECONDITION_FAIL，`🔴` = USER_GATE，`⚠️` = WARN（视觉规范 §七）。
 
@@ -38,7 +32,7 @@ behaviors:
 
 ### Red Flags（第三层防御——任一借口出现即 STOP）
 
-主文件保留 7 条核心借口，完整 14 条见 `commands/alloy/references/apply-rationalizations.md`。
+主文件保留 7 条核心借口，完整 14 条见 `references/rationalizations.md`。
 
 | 借口 | 现实 |
 |------|------|
@@ -72,7 +66,7 @@ alloy _phase start openspec/changes/<name> apply
 >
 > `alloy _phase start` 原子完成：幂等写 `phase_timings.apply.started_at` + git add 限路径 + commit。产生独立的"阶段开始"commit（仅 .alloy.yaml），不并入后续制品 commit。
 
-**1. plans.md 存在（PRECONDITION_FAIL）：** 文件不存在 → ⛔ `[PRECONDITION_FAIL] plans.md 不存在，apply 拒绝执行。请先运行 /alloy:plan 完成 plan 阶段。` 然后退出 skill。
+**1. plans.md 存在（PRECONDITION_FAIL）：** 文件不存在 → ⛔ `[PRECONDITION_FAIL] plans.md 不存在，apply 拒绝执行。请先运行 /alloy-plan 完成 plan 阶段。` 然后退出 skill。
 
 **2. phase 路由（PRECONDITION_FAIL）：**
 
@@ -80,7 +74,7 @@ alloy _phase start openspec/changes/<name> apply
 alloy _guard precheck openspec/changes/<name> applying,applied
 ```
 
-phase=applying 或 applied 时通过（applied 为断点重入）。不匹配 → ⛔ `[PRECONDITION_FAIL]`，读取 `commands/alloy/references/phase-routing.md` 自动跳转。
+phase=applying 或 applied 时通过（applied 为断点重入）。不匹配 → ⛔ `[PRECONDITION_FAIL]`，读取 `alloy-shared/references/phase-routing.md` 自动跳转。
 
 **3. git 仓库（PRECONDITION_FAIL）：**
 
@@ -88,15 +82,15 @@ phase=applying 或 applied 时通过（applied 为断点重入）。不匹配 �
 git rev-parse --git-dir
 ```
 
-失败 → ⛔ `[PRECONDITION_FAIL] 项目还不是 git 仓库。请先运行 /alloy:start 完成初始化。`
+失败 → ⛔ `[PRECONDITION_FAIL] 项目还不是 git 仓库。请先运行 /alloy-start 完成初始化。`
 
 **4. Skill 预检（PRECONDITION_FAIL）：** cmd: opsx/verify, skill: using-git-worktrees subagent-driven-development executing-plans test-driven-development requesting-code-review verification-before-completion
 
-读取 `commands/alloy/references/skill-precheck.md` 检测。任一缺失 → ⛔ `[PRECONDITION_FAIL] skill 缺失，引导 alloy init，不存在降级处理`。agent 不得自行模拟缺失 skill 的行为。
+读取 `alloy-shared/references/skill-precheck.md` 检测。任一缺失 → ⛔ `[PRECONDITION_FAIL] skill 缺失，引导 alloy init，不存在降级处理`。agent 不得自行模拟缺失 skill 的行为。
 
 **5. 多 change 并行 apply 检测（WARN，task #14）：** apply 单 change 串行（subagent 内部并行 OK）——同期多个 change 同时 apply 会导致 git 操作竞争（branch 切换、worktree 创建、commit 写入相互干扰）。
 
-读取 `commands/alloy/references/apply-precheck.md` 执行检测。WARN 不阻断——仅提示。
+读取 `references/precheck.md` 执行检测。WARN 不阻断——仅提示。
 
 提交前置状态（worktree 创建前确保 .alloy.yaml 变更已落地；若 `_phase start` 之后无新变更则自动跳过）：
 ```bash
@@ -152,7 +146,7 @@ SKILL_USAGE=$(alloy _state read openspec/changes/<name> skill_usage)
 
 **档位 B（apply 中后期）选项：**
 > 检测到需求变更。apply 中后期（worktree 已创建 或 代码已生成），回退会破坏一致性。
-> (a) 放弃当前 change，开新 change——执行 `/alloy:discard <name>` 后 `/alloy:start <new-name>`
+> (a) 放弃当前 change，开新 change——执行 `/alloy-discard <name>` 后 `/alloy-start <new-name>`
 > (b) 取消变更，继续当前 apply
 
 > ⛔ [HARD_STOP] 禁直接编辑 plans.md/specs 制品承载需求变更。无论档位 A 还是 B，制品修改都必须通过"重新生成"（reset + 重新走流程）或"discard 重开"实现，不可直接 Edit。
@@ -187,9 +181,9 @@ alloy _guard branch-position openspec/changes/<name>
   - feature-missing / feature-lost：feature_branch 状态记录与实际不符
   - on-other：当前位于第三分支
 
-  详细分类与修复选项见 `commands/alloy/references/branch-validation.md`。**禁止 agent 自动 `git checkout` 切换或 `git branch -m` 重命名——可能丢弃用户未提交工作（§3.5.1）。**
+  详细分类与修复选项见 `alloy-shared/references/branch-validation.md`。**禁止 agent 自动 `git checkout` 切换或 `git branch -m` 重命名——可能丢弃用户未提交工作（§3.5.1）。**
 
-**主分支确认：** 读取 `commands/alloy/references/main-branch-detection.md`。若 `openspec/config.yaml` 已有 `alloy.main_branch`，直接用，跳过确认。
+**主分支确认：** 读取 `alloy-shared/references/main-branch-detection.md`。若 `openspec/config.yaml` 已有 `alloy.main_branch`，直接用，跳过确认。
 
 分支验证通过后，加载 `superpowers:using-git-worktrees` 技能：
 - **完整执行技能 Step 0-4**（检测 + consent + 创建 + 项目设置 + 基线测试），不再限制仅 Step 0
@@ -254,7 +248,7 @@ git diff --cached --quiet || git commit -m "chore(<name>): 记录 worktree 决�
 
 **用户选择创建：** 由 using-git-worktrees 技能驱动创建（EnterWorktree 优先，git worktree fallback），agent 不手动 `git worktree add`。
 
-**创建后状态记录 + worktree 内分支锁定**：读取 `commands/alloy/references/apply-worktree.md`：
+**创建后状态记录 + worktree 内分支锁定**：读取 `references/worktree.md`：
 
 - 技能执行完毕后，**必须验证已在 worktree 内**（`GIT_DIR != GIT_COMMON`），否则 ⛔ PRECONDITION_FAIL——禁 fallback 到主仓写入（元信息写到 feature 分支会导致 worktree 内状态分裂）
 - ⛔ [HARD_STOP] 在 worktree 内**必须**写入 worktree / worktree_branch / worktree_created_at **三字段**并 commit（断点恢复）。三字段缺一不可——worktree_created_at 漏写会导致 archive 阶段时间链断裂。
@@ -270,6 +264,10 @@ git diff --cached --quiet || git commit -m "chore(<name>): 记录 worktree 决�
 ```
 
 ### [Step 2/5] 任务实现
+
+**REQUIRED SUB-SKILL:** Use superpowers:subagent-driven-development 或 superpowers:executing-plans（USER_GATE 二选一）
+
+**REQUIRED SUB-SKILL:** Use superpowers:test-driven-development
 
 ```
 [HARD_STOP] TDD 次序不可颠倒——RED → GREEN → REFACTOR
@@ -365,7 +363,7 @@ WORKTREE_PATH=$(alloy _state read openspec/changes/<name> worktree 2>/dev/null)
 
 #### Step 2/5 子 agent commit 通用规则（SDD/EP 共享）
 
-每个子 agent 任务的 commit 必须满足以下三条硬规则——任一违反即拒绝合入。读取 `commands/alloy/references/apply-subagent-commit.md` 获取完整 bash 与措辞，要点：
+每个子 agent 任务的 commit 必须满足以下三条硬规则——任一违反即拒绝合入。读取 `references/subagent-commit.md` 获取完整 bash 与措辞，要点：
 
 1. **分支再校验**（⛔ PRECONDITION_FAIL，task #18）—— `git rev-parse --abbrev-ref HEAD` ≠ `worktree-<name>` 时退出，禁 agent 自动 `git checkout` 切回。
 2. **git add 限路径**（⛔ HARD_STOP §5.2.1）—— 精确路径，禁 `-A`/`-a`/`.`。违反字面 = 违反精神：哪怕"反正只有这一个文件"也禁 `-A`，副作用文件会被一并 commit。判断不准 🔴 USER_GATE。
@@ -422,7 +420,7 @@ echo "✓ skill_usage 校验通过：apply 阶段必需技能 + 审查技能已�
 
 #### Step 2/5 完成前：主仓清洁度校验（worktree 模式，⛔ PRECONDITION_FAIL）
 
-worktree 模式下，所有子 agent 变更应落在 worktree 分支。主仓工作目录若 dirty，说明子 agent 误用主仓绝对路径 Edit，变更"游离"在 feature 工作目录——破坏 worktree 隔离。读取 `commands/alloy/references/apply-subagent-commit.md` 规则 4-5 执行完整校验：
+worktree 模式下，所有子 agent 变更应落在 worktree 分支。主仓工作目录若 dirty，说明子 agent 误用主仓绝对路径 Edit，变更"游离"在 feature 工作目录——破坏 worktree 隔离。读取 `references/subagent-commit.md` 规则 4-5 执行完整校验：
 
 ```bash
 WORKTREE=$(alloy _state read openspec/changes/<name> worktree)
@@ -445,6 +443,8 @@ fi
 跳过 worktree 模式（`worktree=skipped`）不跑此校验——主仓 dirty 是正常的。
 
 ### [Step 3/5] 代码层验证
+
+**REQUIRED SUB-SKILL:** Use superpowers:verification-before-completion
 
 加载 `superpowers:verification-before-completion` 技能——代码行为验证。
 
@@ -637,23 +637,23 @@ git checkout HEAD~1 -- "openspec/changes/<name>/.alloy.yaml"  # 撤销 phase com
 git reset HEAD~1                                              # 退回 phase commit
 ```
 
-> 禁止 agent 自动 `git reset --hard` / `git checkout .` 清场（§3.5.1）。违反字面 = 违反精神：哪怕"清理一下让流程重启"也算违反——退出 skill 让用户决策是唯一合法路径。详见 `commands/alloy/references/phase-downgrade-path.md`。
+> 禁止 agent 自动 `git reset --hard` / `git checkout .` 清场（§3.5.1）。违反字面 = 违反精神：哪怕"清理一下让流程重启"也算违反——退出 skill 让用户决策是唯一合法路径。详见 `alloy-shared/references/phase-downgrade-path.md`。
 
 🔴 USER_GATE（必须 AskUserQuestion 工具调用）: apply 阶段完成,下一步?
 
-> ⛔ [HARD_STOP] 必须用 `AskUserQuestion` 工具调用——禁纯文本列选项 / 禁直接 `Skill` 加载下一阶段 / 禁纯文本"运行 /alloy:archive"提示 / 禁提示用户手动输入命令。
+> ⛔ [HARD_STOP] 必须用 `AskUserQuestion` 工具调用——禁纯文本列选项 / 禁直接 `Skill` 加载下一阶段 / 禁纯文本"运行 /alloy-archive"提示 / 禁提示用户手动输入命令。
 > 违反字面 = 违反精神:哪怕"纯文本效果一样"、"直接 Skill 更流畅"、"用户已授权提示一下也行",也算违反——AskUserQuestion 强制结构化选项,避免 agent 用模糊措辞让用户回 yes 蒙混过关（§4.1）。
 > 常见违规模式:
-> - 纯文本输出"运行 /alloy:archive 进入归档阶段"让用户手动输入
+> - 纯文本输出"运行 /alloy-archive 进入归档阶段"让用户手动输入
 > - 纯文本列"(a) 进入 archive / (b) 暂停 / (c) 其他"让用户回复
-> - 用户选 (a) 后提示"请运行 /alloy:archive"让用户手动输入——应直接 Skill 加载
-> 非 Claude Code 平台按 `commands/alloy/references/interaction-style.md` §平台工具对照 降级。
+> - 用户选 (a) 后提示"请运行 /alloy-archive"让用户手动输入——应直接 Skill 加载
+> 非 Claude Code 平台按 `alloy-shared/references/interaction-style.md` §平台工具对照 降级。
 
 > 选项:
-> - (a) 进入 archive 阶段——加载 `alloy:archive` skill 推进归档
+> - (a) 进入 archive 阶段——加载 `alloy-archive` skill 推进归档
 > - (b) 暂停——执行 QA 测试 / 浏览器测试 / 查看状态(`alloy status`)
 > - (c) 其他——用户自定义下一步
 
-> 用户选 (a) 后,agent **必须直接用 `Skill` 工具加载 `alloy:archive`**(传入 change name),进入 archive 阶段——用户已在 USER_GATE 授权,再让用户输入命令 = 多此一举。
-> 用户选 (b) 后,agent 停止,输出"已暂停。建议执行 QA 测试或浏览器测试,确认后运行 /alloy:archive <name> 继续。"
+> 用户选 (a) 后,agent **必须直接用 `Skill` 工具加载 `alloy-archive`**(传入 change name),进入 archive 阶段——用户已在 USER_GATE 授权,再让用户输入命令 = 多此一举。
+> 用户选 (b) 后,agent 停止,输出"已暂停。建议执行 QA 测试或浏览器测试,确认后运行 /alloy-archive <name> 继续。"
 > 用户选 (c) 后,agent 停止,等用户后续命令。

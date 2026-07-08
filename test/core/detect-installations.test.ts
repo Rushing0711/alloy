@@ -22,7 +22,7 @@ vi.mock("node:os", async () => {
 
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { detectCommand, detectSkill } from "../../src/core/detect-installations.js";
+import { detectAlloySkill, detectSkill } from "../../src/core/detect-installations.js";
 import type { AgentInfo } from "../../src/core/types.js";
 
 const claudeAgent: AgentInfo = {
@@ -48,55 +48,55 @@ beforeEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// detectCommand
+// detectAlloySkill（检测 <agent>/skills/alloy-start/SKILL.md）
 // ---------------------------------------------------------------------------
-describe("detectCommand", () => {
-  it("找到项目级 command 时返回 project-command", () => {
+describe("detectAlloySkill", () => {
+  it("找到项目级 alloy skill 时返回 project-skill", () => {
     vi.mocked(existsSync).mockImplementation((p) =>
-      p === `${PROJECT}/.claude/commands/start.md`
+      p === `${PROJECT}/.claude/skills/alloy-start/SKILL.md`
     );
 
-    const result = detectCommand("start", claudeAgent, PROJECT);
+    const result = detectAlloySkill(claudeAgent, PROJECT);
 
     expect(result).toEqual({
       found: true,
-      location: "project-command",
-      path: `${PROJECT}/.claude/commands/start.md`,
+      location: "project-skill",
+      path: `${PROJECT}/.claude/skills/alloy-start/SKILL.md`,
       version: null,
     });
-    expect(existsSync).toHaveBeenCalledWith(`${PROJECT}/.claude/commands/start.md`);
+    expect(existsSync).toHaveBeenCalledWith(`${PROJECT}/.claude/skills/alloy-start/SKILL.md`);
   });
 
-  it("找到用户级 command 时返回 user-command", () => {
+  it("找到用户级 alloy skill 时返回 user-skill", () => {
     vi.mocked(existsSync).mockImplementation((p) =>
-      p === `${HOME}/.claude/commands/start.md`
+      p === `${HOME}/.claude/skills/alloy-start/SKILL.md`
     );
 
-    const result = detectCommand("start", claudeAgent, PROJECT);
+    const result = detectAlloySkill(claudeAgent, PROJECT);
 
     expect(result).toEqual({
       found: true,
-      location: "user-command",
-      path: `${HOME}/.claude/commands/start.md`,
+      location: "user-skill",
+      path: `${HOME}/.claude/skills/alloy-start/SKILL.md`,
       version: null,
     });
-    expect(existsSync).toHaveBeenCalledWith(`${HOME}/.claude/commands/start.md`);
+    expect(existsSync).toHaveBeenCalledWith(`${HOME}/.claude/skills/alloy-start/SKILL.md`);
   });
 
   it("项目级和用户级都存在时，优先返回项目级", () => {
     vi.mocked(existsSync).mockReturnValue(true);
 
-    const result = detectCommand("start", claudeAgent, PROJECT);
+    const result = detectAlloySkill(claudeAgent, PROJECT);
 
     expect(result.found).toBe(true);
-    expect(result.location).toBe("project-command");
-    expect(result.path).toBe(`${PROJECT}/.claude/commands/start.md`);
+    expect(result.location).toBe("project-skill");
+    expect(result.path).toBe(`${PROJECT}/.claude/skills/alloy-start/SKILL.md`);
   });
 
   it("都不存在时返回 NOT_FOUND", () => {
     vi.mocked(existsSync).mockReturnValue(false);
 
-    const result = detectCommand("start", claudeAgent, PROJECT);
+    const result = detectAlloySkill(claudeAgent, PROJECT);
 
     expect(result).toEqual({
       found: false,
@@ -106,33 +106,33 @@ describe("detectCommand", () => {
     });
   });
 
-  it("Cursor agent 使用 .cursor/commands/ 路径", () => {
+  it("Cursor agent 使用 .cursor/skills/ 路径", () => {
     vi.mocked(existsSync).mockImplementation((p) =>
-      p === `${PROJECT}/.cursor/commands/plan.md`
+      p === `${PROJECT}/.cursor/skills/alloy-start/SKILL.md`
     );
 
-    const result = detectCommand("plan", cursorAgent, PROJECT);
+    const result = detectAlloySkill(cursorAgent, PROJECT);
 
     expect(result).toEqual({
       found: true,
-      location: "project-command",
-      path: `${PROJECT}/.cursor/commands/plan.md`,
+      location: "project-skill",
+      path: `${PROJECT}/.cursor/skills/alloy-start/SKILL.md`,
       version: null,
     });
-    expect(existsSync).toHaveBeenCalledWith(`${PROJECT}/.cursor/commands/plan.md`);
+    expect(existsSync).toHaveBeenCalledWith(`${PROJECT}/.cursor/skills/alloy-start/SKILL.md`);
   });
 
   it("Cursor agent 未找到时检查用户级路径", () => {
     vi.mocked(existsSync).mockImplementation((p) =>
-      p === `${HOME}/.cursor/commands/plan.md`
+      p === `${HOME}/.cursor/skills/alloy-start/SKILL.md`
     );
 
-    const result = detectCommand("plan", cursorAgent, PROJECT);
+    const result = detectAlloySkill(cursorAgent, PROJECT);
 
     expect(result).toEqual({
       found: true,
-      location: "user-command",
-      path: `${HOME}/.cursor/commands/plan.md`,
+      location: "user-skill",
+      path: `${HOME}/.cursor/skills/alloy-start/SKILL.md`,
       version: null,
     });
   });

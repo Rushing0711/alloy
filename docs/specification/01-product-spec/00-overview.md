@@ -60,14 +60,14 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 
 | 命令 | 参数 | 说明 |
 |------|------|------|
-| `/alloy:start` | `[topic]` | 智能入口：自动检测状态，接续或新建 |
-| `/alloy:plan` | `[name]` | 制品生成设计文档，始终分步，每步可审查 |
-| `/alloy:apply` | `[name]` | 执行：隔离 worktree → SDD → 代码验证 → 制品验证 → 复盘 |
-| `/alloy:archive` | `[name]` | 归档：sync delta spec → 合并主 spec → 移入 archive/ |
-| `/alloy:finish` | `[name]` | 收尾：代码合入 + 现场清理（merge / PR / keep） |
-| `/alloy:fix` | — | Bug 修复入口：环境感知 → 根因诊断（含 spec 拦截） → 三分支修复 |
-| `/alloy:discard` | `[name]` | 放弃当前 change，清理 worktree + 分支 + 目录 |
-| `/alloy:status` | `[name]` | 查看指定 change 的阶段、制品状态、下一步 |
+| `/alloy-start` | `[topic]` | 智能入口：自动检测状态，接续或新建 |
+| `/alloy-plan` | `[name]` | 制品生成设计文档，始终分步，每步可审查 |
+| `/alloy-apply` | `[name]` | 执行：隔离 worktree → SDD → 代码验证 → 制品验证 → 复盘 |
+| `/alloy-archive` | `[name]` | 归档：sync delta spec → 合并主 spec → 移入 archive/ |
+| `/alloy-finish` | `[name]` | 收尾：代码合入 + 现场清理（merge / PR / keep） |
+| `/alloy-fix` | — | Bug 修复入口：环境感知 → 根因诊断（含 spec 拦截） → 三分支修复 |
+| `/alloy-discard` | `[name]` | 放弃当前 change，清理 worktree + 分支 + 目录 |
+| `/alloy-status` | `[name]` | 查看指定 change 的阶段、制品状态、下一步 |
 
 带 `[name]` 的命令省略时从当前活跃 change 的上下文推断。
 
@@ -77,13 +77,13 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 
 | 阶段 | spec 文件 | skill 文件 |
 |------|----------|-----------|
-| start | [01-start-spec.md](01-start-spec.md) | commands/alloy/start.md |
-| plan | [02-plan-spec.md](02-plan-spec.md) | commands/alloy/plan.md |
-| apply | [03-apply-spec.md](03-apply-spec.md) | commands/alloy/apply.md |
-| archive | [04-archive-spec.md](04-archive-spec.md) | commands/alloy/archive.md |
-| finish | [05-finish-spec.md](05-finish-spec.md) | commands/alloy/finish.md |
-| fix | [06-fix-spec.md](06-fix-spec.md) | commands/alloy/fix.md |
-| discard | [07-discard-spec.md](07-discard-spec.md) | commands/alloy/discard.md |
+| start | [01-start-spec.md](01-start-spec.md) | skills/alloy-start/SKILL.md |
+| plan | [02-plan-spec.md](02-plan-spec.md) | skills/alloy-plan/SKILL.md |
+| apply | [03-apply-spec.md](03-apply-spec.md) | skills/alloy-apply/SKILL.md |
+| archive | [04-archive-spec.md](04-archive-spec.md) | skills/alloy-archive/SKILL.md |
+| finish | [05-finish-spec.md](05-finish-spec.md) | skills/alloy-finish/SKILL.md |
+| fix | [06-fix-spec.md](06-fix-spec.md) | skills/alloy-fix/SKILL.md |
+| discard | [07-discard-spec.md](07-discard-spec.md) | skills/alloy-discard/SKILL.md |
 | CLI | [08-cli-spec.md](08-cli-spec.md) | src/cli/commands/ |
 
 ---
@@ -96,7 +96,7 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 
 ## 四、状态文件
 
-每个 change 目录内包含 `.alloy.yaml`，CLI 和 Agent 读写，用户通过 `/alloy:status` 查看：
+每个 change 目录内包含 `.alloy.yaml`，CLI 和 Agent 读写，用户通过 `/alloy-status` 查看：
 
 ```yaml
 # openspec/changes/<name>/.alloy.yaml
@@ -141,7 +141,7 @@ skill_usage:
 
 | 字段 | 读写 | 含义 |
 |------|------|------|
-| `phase` | CLI + Agent | 当前阶段，决定 `/alloy:start` 的恢复路径 |
+| `phase` | CLI + Agent | 当前阶段，决定 `/alloy-start` 的恢复路径 |
 | `worktree` | apply 阶段写入 | null=尚未决定；skipped=用户选择不创建；路径=已创建，恢复时跳过 |
 | `worktree_branch` | apply 阶段写入 | worktree 分支名（如 `worktree-<name>`），archive 清理时用于 merge |
 | `worktree_created_at` | apply 阶段写入 | worktree 创建时间 |
@@ -154,7 +154,7 @@ skill_usage:
 | `records` | plan/apply 阶段写入 | 每个制品提交后的 hash 记录，格式 `ArtifactRecord[]`，含 artifact/hash/committed_at/approver |
 | `skill_usage` | 各阶段写入 | 技能使用记录数组，格式 `SkillUsageEntry[]`，含 skill/stage/used/count/via/reason/called_at。retrospective §4 全周期技能审计的数据源 |
 
-断点恢复：`/alloy:start` 检测到活跃 change → 读 phase + worktree + 文件系统 → 自动加载对应阶段命令。不设子步骤状态——Agent 通过文件存在性自判断。
+断点恢复：`/alloy-start` 检测到活跃 change → 读 phase + worktree + 文件系统 → 自动加载对应阶段命令。不设子步骤状态——Agent 通过文件存在性自判断。
 
 ### 项目级配置
 
@@ -360,14 +360,14 @@ Claude Code 的 skill 加载合并全局和项目两个来源，同名 skill **�
 
 ```
 alloy init --scope project（默认）:
-  Alloy commands   → .claude/commands/alloy/（冒号版）+ alloy-*.md（横线版）
+  Alloy skills     → .claude/skills/alloy-*/
   Superpowers      → .claude/skills/（项目级）
   OpenSpec CLI     → npm install -g（始终全局）
   openspec init    → <项目路径>
   openspec/ 目录   → <项目路径>/openspec/（始终项目级）
 
 alloy init --scope global:
-  Alloy commands   → ~/.claude/commands/alloy/（冒号版）+ alloy-*.md（横线版）
+  Alloy skills     → ~/.claude/skills/alloy-*/
   Superpowers      → ~/.claude/plugins/（全局级，带 -g flag）
   OpenSpec CLI     → npm install -g（始终全局）
   openspec init    → ~/（全局 OpenSpec 命令）
@@ -400,8 +400,8 @@ $ alloy init
      ✓ Superpowers 已安装
 
   **部署 Alloy commands...**
-     ✓ /path/.claude/commands/alloy/start.md（project）
-     ✓ /path/.cursor/commands/alloy-start.md 等（自动生成横线版）
+     ✓ /path/.claude/skills/alloy-start/SKILL.md（project）
+     ✓ /path/.cursor/skills/alloy-start/SKILL.md 等
      ✓ 项目 schema → openspec/schemas/alloy/
 
   **兼容性检查...**
@@ -413,7 +413,7 @@ $ alloy init
      ✓ shell 补全已注册 → ~/.zshrc
 
   ✅ Alloy 就绪！
-   在 Claude Code / Cursor 中输入 /alloy:start <topic> 开始工作
+   在 Claude Code / Cursor 中输入 /alloy-start <topic> 开始工作
 ```
 
 关键步骤：
@@ -429,15 +429,15 @@ $ alloy init
 9. **安装 OpenSpec CLI** — `npm install -g @fission-ai/openspec@1`
 10. **初始化 OpenSpec 项目结构** — `openspec init <path> --tools claude --profile custom`。传入临时 custom profile 确保全部 11 个 workflow 启用
 11. **安装 Superpowers** — `npx skills add obra/superpowers -y --agent claude-code`（project scope 不加 `-g`）
-12. **部署 Alloy command + schema** — 从包复制 `commands/alloy/`，自动生成冒号版和横线版到各平台目录，写入 `openspec/schemas/alloy/`
+12. **部署 Alloy skill + schema** — 从包复制 `skills/alloy-*/` 到各平台目录，写入 `openspec/schemas/alloy/`
 13. **更新 .gitignore** — 追加 6 条规则（`docs/superpowers/` `.claude/worktrees/` `.worktrees/` `worktrees/` `.superpowers/` `*.local.*`）
 14. **注入 agent 专有配置** — 写入 Claude Code 的 `.claude/settings.json`（`worktree.baseRef: head`）等专有配置。不再注入指令文件（CLAUDE.md / AGENTS.md / .cursor/rules/alloy.mdc）——alloy 规则通过 skill md 自我承载
 15. **写入 main_branch 配置** — `openspec/config.yaml` 写入 `alloy.main_branch: <确认值>`
-16. **若 HEAD unborn：创建初始 commit 锁定 main 分支** — `git add .claude/ .gitignore openspec/config.yaml openspec/schemas/` + `git commit -m "chore: alloy init 项目初始化"`。在 main 分支创建第一个 commit，让 main 引用文件诞生，后续 `/alloy:start` 切到 feature 分支后 main 保留。若 HEAD 已有 commit 则不自动提交，文件留工作目录，提示用户自行 commit
+16. **若 HEAD unborn：创建初始 commit 锁定 main 分支** — `git add .claude/ .gitignore openspec/config.yaml openspec/schemas/` + `git commit -m "chore: alloy init 项目初始化"`。在 main 分支创建第一个 commit，让 main 引用文件诞生，后续 `/alloy-start` 切到 feature 分支后 main 保留。若 HEAD 已有 commit 则不自动提交，文件留工作目录，提示用户自行 commit
 17. **兼容性检查** — 根据 `compat.yaml` 校验版本
 18. **注册 shell 补全** — 自动检测 shell 类型，注册 `alloy completion` 到 rc 文件。失败不阻断 init
 
-> **main 分支锁定（关键设计）：** `git init` 后 HEAD 指向 `refs/heads/main` 但引用文件不存在（unborn 状态）。若此时直接切到 feature 分支，main 永久缺失——`/alloy:finish` 阶段 `git checkout main` 会失败。alloy init 在 unborn 时创建初始 commit，让 main 分支真正诞生，从源头避免此问题。
+> **main 分支锁定（关键设计）：** `git init` 后 HEAD 指向 `refs/heads/main` 但引用文件不存在（unborn 状态）。若此时直接切到 feature 分支，main 永久缺失——`/alloy-finish` 阶段 `git checkout main` 会失败。alloy init 在 unborn 时创建初始 commit，让 main 分支真正诞生，从源头避免此问题。
 
 ### alloy update
 
@@ -456,7 +456,7 @@ alloy update [path]
 
 | # | 决策 | 理由 |
 |----|------|------|
-| 1 | `/alloy:start` 作为唯一入口，默认接续 | 用户只需记住一个命令，降低心智负担 |
+| 1 | `/alloy-start` 作为唯一入口，默认接续 | 用户只需记住一个命令，降低心智负担 |
 | 2 | plan 始终分步，不提供一键生成 | 每步审查的价值大于省下的几秒 |
 | 3 | `.alloy.yaml` per-change，非全局 | 天然支持多 change 并行，discard 只需删目录 |
 | 4 | Agent 内流程 + CLI 辅助 | 核心工作流依赖 AI 编排能力，CLI 只做确定性操作 |
@@ -474,7 +474,7 @@ alloy update [path]
 | 16 | scope 只控制 skill 安装位置 | Alloy + Superpowers skill 受 scope 控制；OpenSpec `openspec/` 目录始终在项目内；默认 project 级别 |
 | 17 | 项目就绪标记 = `openspec/config.yaml` | `alloy-start` 检查此文件判断项目是否已初始化，与 OpenSpec 自身的检测方式一致 |
 | 18 | openspec init 启用 custom profile | 参考 Comet，使用临时 custom profile 确保全部 11 个 workflow 可用，避免 core profile 缺少 new/continue 等命令 |
-| 19 | /alloy:finish 保留为独立命令 | archive 时选 keep 后，后续可手动调 finish 合入；无需重跑 archive |
+| 19 | /alloy-finish 保留为独立命令 | archive 时选 keep 后，后续可手动调 finish 合入；无需重跑 archive |
 | 20 | 制品上下文一致性决定输出语言 | 不硬编码语言要求也不绑定特定平台机制。指令/模板写什么语言，Agent 自然产出什么语言 |
 | 21 | apply 关键决策点用户有感 | git 初始化、worktree 创建、执行策略（SDD vs 串行）三个决策点均展示选项让用户选择 |
 | 22 | 一个制品，一次提交 | 每个制品审查通过后立即 hash-lock + 单独 git commit，records 记录 hash。避免大爆炸提交，每个制品可独立回溯、独立 revert、独立 cherry-pick |
@@ -489,8 +489,8 @@ alloy update [path]
 | 31 | 技能使用审计持久化 | `alloy _skill log` 在每个技能加载后立即记录到 `skill_usage[]`，retrospective §4 自动读取生成全周期技能审计表。解决之前 retrospective 靠 Agent 自报（不准、会漏）的问题 |
 | 32 | 交互降级策略 | 技能文件中 `AskUserQuestion` JSON 块必须附带降级文本格式。Agent 执行时检测平台能力——支持则用原生交互组件，不支持则自动降级为结构化文本选项。确保同一流程在 8 个平台体验一致 |
 | 33 | HOME 目录拒绝初始化 | 主目录写入 openspec/、.gitignore 等会污染环境；可能将整个 home 变为 git 仓库。init 入口硬拦截 |
-| 34 | git init 前置到 alloy init | 守门前移，符合"CLI 守门 / Skill 信任"原则（决策 #15）。`/alloy:start` 不再兜底 git init，仅校验 |
-| 35 | `/alloy:start` 环境完整性检测扩展为完整集 | 入口检测 git/config/schema/commands 四项基础设施，任一缺失引导 `alloy init`。Skill 预检（具体技能加载）保持独立 |
+| 34 | git init 前置到 alloy init | 守门前移，符合"CLI 守门 / Skill 信任"原则（决策 #15）。`/alloy-start` 不再兜底 git init，仅校验 |
+| 35 | `/alloy-start` 环境完整性检测扩展为完整集 | 入口检测 git/config/schema/commands 四项基础设施，任一缺失引导 `alloy init`。Skill 预检（具体技能加载）保持独立 |
 | 36 | init 不检测 agent 是否安装 | init 职责是给选中的 agent 部署 Alloy 工作流，agent 是否安装/是否在该项目用过不影响部署（deployCommands 会自建目录）。原 Claude Code 硬检与后续的 agent 配置目录检测都无决策价值，一律删除 |
 
 ---
@@ -528,7 +528,7 @@ alloy update [path]
 
 ### 推荐开发路径
 
-1. **原型验证**（第 1-2 周）——写 `/alloy:start` + `/alloy:plan` 的 SKILL.md，在 Claude Code 中跑通 Pre-OpenSpec → 规划阶段，验证 OpenSpec + Superpowers 组合是否如设计运作
+1. **原型验证**（第 1-2 周）——写 `/alloy-start` + `/alloy-plan` 的 SKILL.md，在 Claude Code 中跑通 Pre-OpenSpec → 规划阶段，验证 OpenSpec + Superpowers 组合是否如设计运作
 2. **CLI + Schema**（第 3-5 周）——alloy init / status / doctor / update + alloy schema 从零构建，参考 Comet 架构
 3. **完整流程**（第 6-8 周）——补全 apply / finish / archive / fix / discard 的 SKILL.md + 内部命令
 4. **测试 + 文档 + 推广**（第 9-10 周）——单元测试、团队推广、反馈收集

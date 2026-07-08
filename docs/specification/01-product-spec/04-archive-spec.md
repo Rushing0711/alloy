@@ -11,20 +11,20 @@ behaviors:
 
 # alloy archive 行为规格
 
-详见 skill 文件：`commands/alloy/archive.md`
+详见 skill 文件：`skills/alloy-archive/SKILL.md`
 
 ## 命令格式
 
 ```
-/alloy:archive [name]（省略时从当前活跃 change 推断）
+/alloy-archive [name]（省略时从当前活跃 change 推断）
 ```
 
 ## 前置检查（phase 路由）
 
 → phase = applied + verify.md 存在且非 FAIL → 通过，继续
-→ phase = planned → 自动路由到 /alloy:apply
-→ phase = started → 自动路由到 /alloy:plan
-→ phase = archived → 自动路由到 /alloy:finish
+→ phase = planned → 自动路由到 /alloy-apply
+→ phase = started → 自动路由到 /alloy-plan
+→ phase = archived → 自动路由到 /alloy-finish
 → 唯一 HARD STOP：change 目录不存在（前序阶段完全没做）
 
 ## 执行
@@ -50,4 +50,4 @@ behaviors:
 
 `-A` 限定路径可用（如 `git add -A openspec/specs/ openspec/changes/`），无路径限定的 `git add -A` 禁止——防止意外文件混入。
 
-archive 只做 spec 归档和归档提交，不涉及代码合并。代码合入由 /alloy:finish 完成。
+archive 只做 spec 归档和归档提交，不涉及代码合并。代码合入由 /alloy-finish 完成。

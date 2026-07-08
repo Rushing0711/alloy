@@ -1,20 +1,14 @@
 ---
-name: "Alloy: Start"
-description: 新功能构思或接续已有工作时调用
-category: Workflow
-tags: [alloy, workflow]
-spec: 01-product-spec/01-start-spec.md
-behaviors:
-  preconditions: 8
-  hard_stops:    17
-  user_gates:    8
-  warns:         2
-  artifacts: [draft]
-  transitions_to: started
-  external_calls: [opsx:explore, opsx:new, superpowers:brainstorming]
+name: alloy-start
+description: 开始 Alloy 流程--需求澄清，创建 change。手动调用 /alloy-start。
+disable-model-invocation: true
 ---
 
 # alloy-start
+
+## REQUIRED BACKGROUND
+
+**REQUIRED BACKGROUND:** Understand alloy-shared
 
 你是 Alloy 工作流的智能入口。检测状态、路由到正确流程、调度外部技能完成探查和需求设计，产出 draft.md。
 
@@ -28,7 +22,7 @@ behaviors:
 
 > **`<TIMESTAMP>`：** 每次渲染阶段头部时执行 `date "+%Y-%m-%d %H:%M:%S"` 获取本地时间。`<START_TIME>` 是"全新开始"路径中捕获的时间——agent 捕获后复用于 header 和 phase_timings。`<created_at>` 从 `.alloy.yaml` 读取。
 
-**交互规则：** `🔴 STOP` 等价 `USER_GATE`，首次呈现即必须调用平台原生交互工具——禁"先文本展示 (a)/(b) 再等待用户打字"。Claude Code 用 `AskUserQuestion`；其他平台按 `commands/alloy/references/interaction-style.md` §平台工具对照 降级为结构化文本选项。含"沉默 ≠ 授权"通用禁令。跳过任何 USER_GATE / 批量打包 / 基于内容跳过 = 违反 Iron Law。
+**交互规则：** `🔴 STOP` 等价 `USER_GATE`，首次呈现即必须调用平台原生交互工具——禁"先文本展示 (a)/(b) 再等待用户打字"。Claude Code 用 `AskUserQuestion`；其他平台按 `alloy-shared/references/interaction-style.md` §平台工具对照 降级为结构化文本选项。含"沉默 ≠ 授权"通用禁令。跳过任何 USER_GATE / 批量打包 / 基于内容跳过 = 违反 Iron Law。
 
 **状态符号：** `⛔` = HARD_STOP / PRECONDITION_FAIL，`🔴` = USER_GATE，`⚠️` = WARN（视觉规范 §七）。
 
@@ -38,7 +32,7 @@ behaviors:
 
 ### Red Flags（第三层防御——任一借口出现即 STOP）
 
-主文件保留 7 条核心借口，完整 14 条见 `commands/alloy/references/start-rationalizations.md`。
+主文件保留 7 条核心借口，完整 14 条见 `references/rationalizations.md`。
 
 | 借口 | 现实 |
 |------|------|
@@ -75,7 +69,7 @@ alloy status
 ```
 
 > ⛠️ `alloy status` 列出所有活跃 change（phase != finished），含归档目录下的 change。归档 change 名格式 `<date>-<name>`，路径 `openspec/changes/archive/<name>`。
-> 发现 phase=archived 的归档 active change 时,引导用户运行 `/alloy:finish <name>` 接续完成,不在 start 阶段接续（archived 阶段已完成,下一步是 finish）。
+> 发现 phase=archived 的归档 active change 时,引导用户运行 `/alloy-finish <name>` 接续完成,不在 start 阶段接续（archived 阶段已完成,下一步是 finish）。
 - 0 个活跃 change → 进入统一流程（explore 探测 + 确认主题 + new change）
 - 有活跃 change → 🔴 USER_GATE 让用户选：
   - (a) 接续某个活跃 change（列出可选）
@@ -83,7 +77,7 @@ alloy status
   - (c) 中止
 
 > ⛔ [HARD_STOP] **活跃 change 的路由决策是技能加载的前置闸门。** 无论 topic 多明确、需求多清晰，都必须先经此 USER_GATE 确认去向，然后才能加载对应技能。
-> 违反字面 = 违反精神：哪怕"用户已经说了要做什么"、"需求在 /alloy:start 时就带了"、"先 brainstorm 再路由也一样"，也算违反 Iron Law。路由在前，技能在后——顺序不可颠倒。
+> 违反字面 = 违反精神：哪怕"用户已经说了要做什么"、"需求在 /alloy-start 时就带了"、"先 brainstorm 再路由也一样"，也算违反 Iron Law。路由在前，技能在后——顺序不可颠倒。
 
 **开新 change 前 dirty 处理**：用户选 (b) 开新 change 后，agent 检测当前 working tree：
 ```bash
@@ -99,7 +93,7 @@ dirty 时 → 🔴 USER_GATE：检测到未提交变更，如何处理？
 - option label: "取消"
 - option description: "取消开新 change"
 
-**第三步**（⛔ PRECONDITION_FAIL）：「统一流程」路径强制 Skill 预检——cmd: opsx/explore opsx/new, skill: brainstorming。读取 `commands/alloy/references/skill-precheck.md` 检测，任一不可用 → 引导 `alloy init`，不存在降级。
+**第三步**（⛔ PRECONDITION_FAIL）：「统一流程」路径强制 Skill 预检——cmd: opsx/explore opsx/new, skill: brainstorming。读取 `alloy-shared/references/skill-precheck.md` 检测，任一不可用 → 引导 `alloy init`，不存在降级。
 
 **第四步**（⛔ PRECONDITION_FAIL）：「统一流程」路径校验 git 仓库就绪——`git rev-parse --git-dir` 失败时不再兜底 `git init`（git init 已由 `alloy init` 保证），直接引导 `alloy init`。
 
@@ -145,14 +139,14 @@ date "+%Y-%m-%d %H:%M:%S"
 
 > ⛔ [HARD_STOP] 必须用 `Skill` 工具加载 `opsx:explore`——禁手动 `ls`/`find`/`cat`/`grep` 替代探查。
 > Skill 调用的 args 必须传 topic:
-> - 有 topic（用户 `/alloy:start <topic>` 带主题来）: `args: "<topic>"`——禁传 "no-topic"(传 no-topic 会让 explore 不知道用户主题,产出的探查发现不聚焦)
+> - 有 topic（用户 `/alloy-start <topic>` 带主题来）: `args: "<topic>"`——禁传 "no-topic"(传 no-topic 会让 explore 不知道用户主题,产出的探查发现不聚焦)
 > - 无 topic: `args: "no-topic"` 或不传
 > 违反字面 = 违反精神：哪怕"主题会在后续 USER_GATE 确认,explore 不传也行",也算违反——explore 需要围绕 topic 探测,不传 topic = explore 不知道用户想做什么,产出的探查发现不聚焦。
 
-- **有 topic（用户 `/alloy:start <topic>` 带主题来）：** 围绕 topic + 当前项目情况探测，验证 topic 可行性、补充上下文
-- **无 topic（用户 `/alloy:start` 未带主题）：** 与用户沟通探测——扫描项目（README、代码、requirement.md 等），基于探查给 2-3 个建议方向，或问用户想做什么
+- **有 topic（用户 `/alloy-start <topic>` 带主题来）：** 围绕 topic + 当前项目情况探测，验证 topic 可行性、补充上下文
+- **无 topic（用户 `/alloy-start` 未带主题）：** 与用户沟通探测——扫描项目（README、代码、requirement.md 等），基于探查给 2-3 个建议方向，或问用户想做什么
 
-**交互风格：** 使用 `AskUserQuestion` 工具。详见 `commands/alloy/references/interaction-style.md`。
+**交互风格：** 使用 `AskUserQuestion` 工具。详见 `alloy-shared/references/interaction-style.md`。
 
 **额外上下文：** 扫描 `openspec/changes/archive/` 下最近 3 个 `retrospective.md`，提取 §5 意外发现、§6 值得推广、§4 技能跳过模式、§7 偏差分类,作为后续 brainstorming 参考。
 
@@ -185,7 +179,7 @@ date "+%Y-%m-%d %H:%M:%S"
 - 有 topic → 确认该 topic 或调整
 - 无 topic → 给 2-3 个建议方向让用户选，或用户自定义
 
-> ⛔ [HARD_STOP] 主题确认 USER_GATE 不可跳过——即使 topic 明确（用户 `/alloy:start <topic>` 带主题来），也必须用 AskUserQuestion 让用户确认 topic 或调整。
+> ⛔ [HARD_STOP] 主题确认 USER_GATE 不可跳过——即使 topic 明确（用户 `/alloy-start <topic>` 带主题来），也必须用 AskUserQuestion 让用户确认 topic 或调整。
 > thinking 决策"使用 AskUserQuestion"后,下一个动作必须是 AskUserQuestion 工具调用——禁 thinking 决策了但实际输出纯文本选项(决策→执行断裂)。
 > 违反字面 = 违反精神:哪怕"topic 已明确不用再确认"、"thinking 已决策输出文本等价"、"直接进 change name 效率高",也算违反——主题确认是 explore 与 change name 之间的必经闸门,跳过 = 用户失去调整 topic 的机会。
 > explore Skill 返回后,agent 必须立即调 AskUserQuestion,不能做任何其他事情(包括输出分析文本、说"主题已确认"、或直接跳进 step 1)。
@@ -195,7 +189,7 @@ date "+%Y-%m-%d %H:%M:%S"
 > - agent thinking 决策"使用 AskUserQuestion"但实际输出纯文本编号列表(1./2./3.)——决策→执行断裂
 > 主题确认 USER_GATE 只确认 topic 本身——禁合并设计细节问题到本次 AskUserQuestion（详见上方 #X2 HARD_STOP）。
 
-> 主题确认后**直接进入步骤 1（change name + 分支决策）**，不要求用户重新输入 `/alloy:start <topic>`——主题已在流程内确认。
+> 主题确认后**直接进入步骤 1（change name + 分支决策）**，不要求用户重新输入 `/alloy-start <topic>`——主题已在流程内确认。
 
 ---
 
@@ -247,7 +241,7 @@ date "+%Y-%m-%d %H:%M:%S"
    ```
    选 (c) 用当前：跳过创建。
 
-   **⛔ PRECONDITION_FAIL 白名单校验**（读取 `commands/alloy/references/branch-naming.md`）：自定义分支名必须以 `feature/` `fix/` `docs/` `refactor/` `test/` `chore/` 之一开头，后缀 kebab-case，且不与主分支同名。校验失败 → USER_GATE 让用户重新输入合法名称，**禁 agent 自动改写后继续**。
+   **⛔ PRECONDITION_FAIL 白名单校验**（读取 `alloy-shared/references/branch-naming.md`）：自定义分支名必须以 `feature/` `fix/` `docs/` `refactor/` `test/` `chore/` 之一开头，后缀 kebab-case，且不与主分支同名。校验失败 → USER_GATE 让用户重新输入合法名称，**禁 agent 自动改写后继续**。
 
    ⛔ [HARD_STOP] **stash → 分支决策 → 才能继续后续步骤。不可逾越。**
    无例外：
@@ -282,8 +276,8 @@ date "+%Y-%m-%d %H:%M:%S"
 
    🔴 USER_GATE: 选择处理路径
    - (a) 改用其他 name → 回步骤 1 重新建议 change name
-   - (b) 接续已有 change → 退出 start，引导用户跑 `/alloy:start`（无 topic）触发"接续"路径
-   - (c) 中止本次 /alloy:start
+   - (b) 接续已有 change → 退出 start，引导用户跑 `/alloy-start`（无 topic）触发"接续"路径
+   - (c) 中止本次 /alloy-start
 
    > [HARD_STOP] agent 不得自动选 (a) / (b) / (c)——必须由用户明确决策。
    > 违反字面 = 违反精神：哪怕"目录看起来是空的"或"看起来是上次中断的"，也禁 agent 自动复用。
@@ -315,7 +309,7 @@ date "+%Y-%m-%d %H:%M:%S"
    ```
    > 顺序硬约束：`_state init` 必须在 `_phase start` / `_skill log` 之前——后两者在 .alloy.yaml 不存在时会隐式创建并用当前时间作为 created_at。`_state init` 先跑则字段写入受控。
    >
-   > **`--at "$START_TIME"` 让顶层 `started_at` 回填为全周期开始时间**（`/alloy:start` 敲下时刻，= 阶段入口捕获的 START_TIME），与步骤 6 的 `_phase start --at "$START_TIME"` 同源。`created_at` 仍是文件创建时间（opsx:new 后），两者语义不同：created_at 记文件诞生，started_at 记周期起点。
+   > **`--at "$START_TIME"` 让顶层 `started_at` 回填为全周期开始时间**（`/alloy-start` 敲下时刻，= 阶段入口捕获的 START_TIME），与步骤 6 的 `_phase start --at "$START_TIME"` 同源。`created_at` 仍是文件创建时间（opsx:new 后），两者语义不同：created_at 记文件诞生，started_at 记周期起点。
    >
    > **`--feature-branch "$FEATURE_BRANCH"` 一次成型写入 feature_branch**——用步骤 1 分支决策选定的分支名（变量）,禁写死 `feature/<name>`。选 (c) 用当前分支时 `$FEATURE_BRANCH` = 当前分支名,写死会导致 .alloy.yaml 与实际分支不一致。前置：步骤 1 已完成分支决策。
 
@@ -379,7 +373,7 @@ date "+%Y-%m-%d %H:%M:%S"
    每次提问不超过 4 个问题，相关问题合并到一次调用。
    给出默认推荐——推荐选项在 description 中标注理由。
 
-   **⛔ [HARD_STOP] 主题明确时简化——禁多问方向：** 用户 `/alloy:start <topic>` 带主题来时（topic 已在流程内确认）:
+   **⛔ [HARD_STOP] 主题明确时简化——禁多问方向：** 用户 `/alloy-start <topic>` 带主题来时（topic 已在流程内确认）:
    - 禁给 2-3 个方向让用户选（主题已明确,不用再选方向）
    - 禁"需求已清楚,不过还有一个关键细节需要确认"式的多问
    - 直接确认设计要点（位置/行为/范围）,生成 draft
@@ -459,7 +453,7 @@ date "+%Y-%m-%d %H:%M:%S"
 ```
 
 > [HARD_STOP] **start 阶段到此结束。**
-> 不要自动运行 `/alloy:plan`，不要生成 plan 阶段制品，不要调用 `opsx:continue` 或 `writing-plans`。
+> 不要自动运行 `/alloy-plan`，不要生成 plan 阶段制品，不要调用 `opsx:continue` 或 `writing-plans`。
 > 违反字面 = 违反精神：哪怕"用户上次也是接 plan 这次猜跳过 USER_GATE"或"draft 已锁定流程很顺"，也算违反 Iron Law（NO AUTO ADVANCE）。
 > **"不自动进 plan"指未经 USER_GATE 确认不能进——用户在下方 USER_GATE 明确选"进入 plan"后,agent 必须直接加载 plan skill 执行,不再要求用户手动输入命令。**
 
@@ -470,19 +464,19 @@ date "+%Y-%m-%d %H:%M:%S"
 > 常见违规模式:
 > - 纯文本输出"等待用户输入下一个命令"——不是 AskUserQuestion
 > - 纯文本列"(a) 进入 plan / (b) 暂停 / (c) 其他"让用户回复
-> - 用户选 (a) 后提示"请运行 /alloy:plan <name>"让用户手动输入——应直接 Skill 加载
-> 非 Claude Code 平台按 `commands/alloy/references/interaction-style.md` §平台工具对照 降级。
+> - 用户选 (a) 后提示"请运行 /alloy-plan <name>"让用户手动输入——应直接 Skill 加载
+> 非 Claude Code 平台按 `alloy-shared/references/interaction-style.md` §平台工具对照 降级。
 
 > 选项:
-> - (a) 进入 plan 阶段——加载 `alloy:plan` skill 推进制品生成
+> - (a) 进入 plan 阶段——加载 `alloy-plan` skill 推进制品生成
 > - (b) 暂停——查看状态(`alloy status`)或思考 draft 内容
 > - (c) 其他——用户自定义下一步
 
-> 用户选 (a) 后,agent **必须直接用 `Skill` 工具加载 `alloy:plan`**(传入 change name),进入 plan 阶段——用户已在 USER_GATE 授权,阶段转换已触发,再让用户输入命令 = 多此一举。
-> 用户选 (b) 后,agent 停止,输出"已暂停。需要时运行 /alloy:plan <name> 继续。"
+> 用户选 (a) 后,agent **必须直接用 `Skill` 工具加载 `alloy-plan`**(传入 change name),进入 plan 阶段——用户已在 USER_GATE 授权,阶段转换已触发,再让用户输入命令 = 多此一举。
+> 用户选 (b) 后,agent 停止,输出"已暂停。需要时运行 /alloy-plan <name> 继续。"
 > 用户选 (c) 后,agent 停止,等用户后续命令。
 
-> **§5.2.3 路径 B 边界说明：** start 是 phase 推进起点（无前序 phase），phase=started 写入失败时降级路径只有"重跑 /alloy:start"——不存在 phase 回退场景。本阶段无 §5.2.3 适用空间。
+> **§5.2.3 路径 B 边界说明：** start 是 phase 推进起点（无前序 phase），phase=started 写入失败时降级路径只有"重跑 /alloy-start"——不存在 phase 回退场景。本阶段无 §5.2.3 适用空间。
 
 ---
 
@@ -526,8 +520,8 @@ date "+%Y-%m-%d %H:%M:%S"
 
 **所有 🔴 USER_GATE 的选项模板（同款语义节点，6 phase 共用）：**
 - (a) 进入 `<目标阶段>` 继续
-- (b) 查看状态（/alloy:status）
-- (c) 放弃此 change（/alloy:discard）——仅 planned/applied 阶段可选
+- (b) 查看状态（/alloy-status）
+- (c) 放弃此 change（/alloy-discard）——仅 planned/applied 阶段可选
 
 **自动跳转仅限**：用户明确选择 (a) 后才加载目标命令。
 

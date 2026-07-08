@@ -1,33 +1,35 @@
 import { mkdir, cp, readFile, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { getPackageRoot } from "../utils/fs.js";
 import type { DeployOptions } from "./types.js";
-import { getCommandTargetDir } from "./agents.js";
-import { detectCommand } from "./detect-installations.js";
+import { getSkillTargetDir } from "./agents.js";
+import { detectAlloySkill } from "./detect-installations.js";
 import { promptConfirm } from "../utils/prompt.js";
 
-export async function deployCommands(opts: DeployOptions): Promise<string[]> {
+export async function deploySkills(opts: DeployOptions): Promise<string[]> {
   const deployed: string[] = [];
   const packageRoot = getPackageRoot();
 
-  // 始终从冒号源目录读取（commands/alloy/），横线版从冒号源自动生成
-  const colonSourceDir = join(packageRoot, "commands", "alloy");
+  // 源目录：skills/，遍历 alloy-* 子目录
+  const skillsSourceDir = join(packageRoot, "skills");
   const { readdir } = await import("node:fs/promises");
-  const entries = await readdir(colonSourceDir, { withFileTypes: true });
+  const entries = await readdir(skillsSourceDir, { withFileTypes: true });
+  const skillDirs = entries.filter(
+    (e) => e.isDirectory() && e.name.startsWith("alloy-")
+  );
 
   for (const agent of opts.targetAgents) {
-    // 检测已有 Alloy commands
-    const detected = detectCommand("alloy/start", agent, opts.projectPath);
+    // 检测已有 Alloy skills
+    const detected = detectAlloySkill(agent, opts.projectPath);
     if (detected.found) {
       const locationLabel = ({
-        "project-command": "项目级",
-        "user-command": "用户级",
+        "project-skill": "项目级",
+        "user-skill": "用户级",
       } as Record<string, string>)[detected.location!] || detected.location;
-      console.log(`     ℹ Alloy commands 已部署（${locationLabel}：${detected.path}）`);
-      const overwrite = await promptConfirm(`     是否覆盖 ${agent.label} 的 Alloy commands？`, false);
+      console.log(`     ℹ Alloy skills 已部署（${locationLabel}：${detected.path}）`);
+      const overwrite = await promptConfirm(`     是否覆盖 ${agent.label} 的 Alloy skills？`, false);
       if (!overwrite) {
-        console.log(`     ✓ 跳过 ${agent.label} 的 Alloy commands 部署`);
+        console.log(`     ✓ 跳过 ${agent.label} 的 Alloy skills 部署`);
         continue;
       }
     }
@@ -38,44 +40,16 @@ export async function deployCommands(opts: DeployOptions): Promise<string[]> {
       continue;
     }
 
-    const targetDir = getCommandTargetDir(agent, opts.scope, opts.projectPath);
+    const targetDir = getSkillTargetDir(agent, opts.scope, opts.projectPath);
     await mkdir(targetDir, { recursive: true });
 
-    // 顶层 .md 文件（slash command）逐个部署，横线版需 frontmatter 转换
-    for (const entry of entries) {
-      if (!entry.isFile()) continue;
-
-      const src = join(colonSourceDir, entry.name);
-
-      if (agent.supportsColonCommands) {
-        // 冒号版：直接拷贝到 alloy/ 子目录
-        const dest = join(targetDir, entry.name);
-        await cp(src, dest);
-        deployed.push(dest);
-      } else {
-        // 横线版：从冒号源自动生成 — 文件名和 frontmatter 中 : 替换为 -
-        const dashFilename = `alloy-${entry.name}`; // start.md → alloy-start.md
-        const dest = join(targetDir, dashFilename);
-
-        const content = await readFile(src, "utf-8");
-        const convertedContent = content.replace(
-          /name: "Alloy: (.+)"/,
-          'name: "Alloy-$1"'
-        );
-        await writeFile(dest, convertedContent, "utf-8");
-        deployed.push(dest);
-      }
-    }
-
-    // references/ 子目录：skill md 运行时按 commands/alloy/references/xxx.md 相对路径读取，
-    // 必须随 skill 一起部署。内容是纯文档（无 frontmatter），冒号版/横线版都原样拷贝，
-    // 保持 alloy/references/ 子目录结构（横线版 agent 按相对路径读，不依赖命名规则）。
-    const referencesSrc = join(colonSourceDir, "references");
-    if (existsSync(referencesSrc)) {
-      const referencesDest = join(targetDir, "references");
-      await mkdir(referencesDest, { recursive: true });
-      await cp(referencesSrc, referencesDest, { recursive: true });
-      deployed.push(referencesDest);
+    // 每个 skill 目录整体拷贝到 <targetDir>/<skill-name>/
+    // references/ 随 skill 目录一起拷贝，不再单独处理
+    for (const skillDir of skillDirs) {
+      const src = join(skillsSourceDir, skillDir.name);
+      const dest = join(targetDir, skillDir.name);
+      await cp(src, dest, { recursive: true });
+      deployed.push(dest);
     }
   }
 

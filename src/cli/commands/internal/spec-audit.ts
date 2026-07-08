@@ -78,21 +78,28 @@ export interface AuditResult {
 // ─── 扫描 skill 文件 ─────────────────────────────────────
 
 export async function scanSkills(projectRoot: string): Promise<SkillEntry[]> {
-  const skillsDir = join(projectRoot, "commands", "alloy");
+  const skillsDir = join(projectRoot, "skills");
   if (!existsSync(skillsDir)) {
     console.error(`目录不存在: ${skillsDir}（请在 Alloy 项目根目录运行）`);
     process.exit(1);
   }
-  const entries = await readdir(skillsDir);
-  const mdFiles = entries.filter((f) => f.endsWith(".md")).sort();
+  const entries = await readdir(skillsDir, { withFileTypes: true });
+  const skillDirs = entries
+    .filter((e) => e.isDirectory() && e.name.startsWith("alloy-"))
+    .map((e) => e.name)
+    .sort();
 
   const results: SkillEntry[] = [];
 
-  for (const file of mdFiles) {
-    const filePath = join(skillsDir, file);
+  for (const dir of skillDirs) {
+    const filePath = join(skillsDir, dir, "SKILL.md");
+    if (!existsSync(filePath)) {
+      continue;
+    }
     const content = await readFile(filePath, "utf-8");
     const parsed = matter(content);
-    const skillName = file.replace(/\.md$/, "");
+    // skill frontmatter: name / description / disable-model-invocation（+ 可选 spec / behaviors）
+    const skillName = (parsed.data.name as string) ?? dir;
 
     results.push({
       skillName,
@@ -418,7 +425,7 @@ alloy _spec-audit [选项]
   ⚠ status: 未声明 spec 锚点，跳过对账
   ✗ fix: 对应 spec 文件 01-product-spec/06-fix-spec.md 不存在
 
-参考: commands/alloy/references/spec-sync.md
+参考: alloy-shared/references/spec-sync.md
 `;
 
 export async function specAuditCommand(args: string[]): Promise<void> {

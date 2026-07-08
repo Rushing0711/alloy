@@ -9,7 +9,7 @@ import {
   KNOWN_AGENTS,
   COMMAND_IDS,
   detectDeployedAgents,
-  getCommandTargetDir,
+  getSkillTargetDir,
   CLAUDE_CODE_AGENT,
 } from "../../src/core/agents.js";
 
@@ -67,10 +67,8 @@ describe("detectDeployedAgents", () => {
   it("项目级：检测到支持冒号命令的 agent", () => {
     vi.mocked(existsSync).mockImplementation((path) => {
       const pathStr = path.toString();
-      // 模拟 .claude/commands/alloy/ 目录存在
-      if (pathStr.endsWith(".claude/commands/alloy")) return true;
-      // 模拟 .claude/commands/alloy/start.md 存在
-      if (pathStr.endsWith(".claude/commands/alloy/start.md")) return true;
+      // 模拟 .claude/skills/alloy-start/SKILL.md 存在
+      if (pathStr.endsWith(".claude/skills/alloy-start/SKILL.md")) return true;
       return false;
     });
 
@@ -81,8 +79,8 @@ describe("detectDeployedAgents", () => {
 
   it("项目级：检测到不支持冒号命令的 agent", () => {
     vi.mocked(existsSync).mockImplementation((path) => {
-      // 模拟 .cursor/commands/alloy-start.md 存在
-      if (path.toString().includes(".cursor/commands/alloy-start.md")) return true;
+      // 模拟 .cursor/skills/alloy-start/SKILL.md 存在
+      if (path.toString().includes(".cursor/skills/alloy-start/SKILL.md")) return true;
       return false;
     });
 
@@ -103,8 +101,7 @@ describe("detectDeployedAgents", () => {
     vi.mocked(existsSync).mockImplementation((path) => {
       const pathStr = path.toString();
       // 检查是否使用了 HOME 路径
-      if (pathStr.includes(home) && pathStr.endsWith(".claude/commands/alloy")) return true;
-      if (pathStr.includes(home) && pathStr.endsWith(".claude/commands/alloy/start.md")) return true;
+      if (pathStr.includes(home) && pathStr.endsWith(".claude/skills/alloy-start/SKILL.md")) return true;
       return false;
     });
 
@@ -114,25 +111,24 @@ describe("detectDeployedAgents", () => {
   });
 });
 
-describe("getCommandTargetDir", () => {
-  it("支持冒号命令的 agent：返回 alloy 子目录", () => {
+describe("getSkillTargetDir", () => {
+  it("支持冒号命令的 agent：返回 skills 目录", () => {
     const agent = KNOWN_AGENTS.find((a) => a.id === "claude-code")!;
-    const dir = getCommandTargetDir(agent, "project", "/fake/project");
-    expect(dir).toBe("/fake/project/.claude/commands/alloy");
+    const dir = getSkillTargetDir(agent, "project", "/fake/project");
+    expect(dir).toBe("/fake/project/.claude/skills");
   });
 
-  it("不支持冒号命令的 agent：返回 commands 目录", () => {
+  it("不支持冒号命令的 agent：也返回 skills 目录", () => {
     const agent = KNOWN_AGENTS.find((a) => a.id === "cursor")!;
-    const dir = getCommandTargetDir(agent, "project", "/fake/project");
-    // 注意：commandsDir 末尾有斜杠，所以结果也有斜杠
-    expect(dir).toBe("/fake/project/.cursor/commands/");
+    const dir = getSkillTargetDir(agent, "project", "/fake/project");
+    expect(dir).toBe("/fake/project/.cursor/skills");
   });
 
   it("全局级：应使用 HOME 路径", () => {
     const home = process.env.HOME || process.env.USERPROFILE || "~";
     const agent = KNOWN_AGENTS.find((a) => a.id === "claude-code")!;
-    const dir = getCommandTargetDir(agent, "global", "/fake/project");
-    expect(dir).toBe(`${home}/.claude/commands/alloy`);
+    const dir = getSkillTargetDir(agent, "global", "/fake/project");
+    expect(dir).toBe(`${home}/.claude/skills`);
   });
 });
 

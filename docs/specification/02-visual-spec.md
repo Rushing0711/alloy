@@ -176,7 +176,7 @@ Alloy 终端输出使用四种基础格式，覆盖所有阶段的进度提示�
 > 检测到项目还不是 git 仓库。worktree 隔离和版本追踪依赖 git。
 >
 > 1. 立即初始化 —— 执行 git init 并做一次初始提交（推荐）
-> 2. 稍后自行处理 —— 手动初始化后再运行 /alloy:apply
+> 2. 稍后自行处理 —— 手动初始化后再运行 /alloy-apply
 ```
 
 **3 选项（finish 合并确认）：**
@@ -391,7 +391,7 @@ Start / Plan / Apply 阶段在完成框后展示。固定列宽保证对齐：
 
 [制品汇总表 — 仅 draft 一行]
 
-准备好后，运行 /alloy:plan 进入规划阶段。
+准备好后，运行 /alloy-plan 进入规划阶段。
 ```
 
 ### Plan [2/5]
@@ -405,7 +405,7 @@ Start / Plan / Apply 阶段在完成框后展示。固定列宽保证对齐：
 每个制品已在审批时独立 commit，无需再次提交。
 制品文件禁止手动修改。如需变更，回到 brainstorming 在当前 change 内重新讨论。
 
-准备好后，运行 /alloy:apply 进入执行阶段。
+准备好后，运行 /alloy-apply 进入执行阶段。
 ```
 
 ### Apply [3/5]
@@ -419,7 +419,7 @@ Start / Plan / Apply 阶段在完成框后展示。固定列宽保证对齐：
 → 代码变更已提交
 → 验证: <PASS  或  存在 N 个 WARN>
 
-准备好后，运行 /alloy:archive 进入归档阶段。
+准备好后，运行 /alloy-archive 进入归档阶段。
 （worktree 将在 archive 阶段合并清理）
 ```
 
@@ -433,7 +433,7 @@ Start / Plan / Apply 阶段在完成框后展示。固定列宽保证对齐：
 ✓ Delta Spec 已合并到主 spec
 ✓ Change 已归档
 
-→ 运行 /alloy:finish 完成代码合入与现场清理
+→ 运行 /alloy-finish 完成代码合入与现场清理
 ```
 
 ### Finish [5/5]（无制品汇总表）
@@ -471,9 +471,9 @@ Alloy · <命令名> — DONE
 
 | 命令 | 中文简称 |
 |------|---------|
-| `/alloy:fix` | Bug 修复 |
-| `/alloy:discard` | 放弃 Change |
-| `/alloy:status` | 状态查看 |
+| `/alloy-fix` | Bug 修复 |
+| `/alloy-discard` | 放弃 Change |
+| `/alloy-status` | 状态查看 |
 
 ### Step 标题
 
@@ -594,7 +594,7 @@ Alloy · 状态查看
   login-feature  planned    artifacts: draft ✓ proposal ✓ design ✓ specs ✓ tasks ✓ plans ✓
   payment-fix    started    artifacts: draft ✓
 
-下一步：login-feature 等待 /alloy:apply，payment-fix 等待 /alloy:plan
+下一步：login-feature 等待 /alloy-apply，payment-fix 等待 /alloy-plan
 ```
 
 ---

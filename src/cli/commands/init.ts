@@ -7,7 +7,7 @@ import { ensureGitRepo, isHeadUnborn, detectMainBranch } from "../../core/git.js
 import { runHealthCheck } from "../../core/health.js";
 import { installOpenSpecCli, initOpenSpecProject } from "../../core/openspec.js";
 import { installSuperpowers } from "../../core/superpowers.js";
-import { deployCommands, deploySchema } from "../../core/skills.js";
+import { deploySkills, deploySchema } from "../../core/skills.js";
 import { injectAgentConfigs, hasPermissionsConfig, writePermissionsConfig, getPermissionSupportedAgents } from "../../core/agent-config.js";
 import { KNOWN_AGENTS } from "../../core/agents.js";
 import type { AgentInfo, DeployOptions } from "../../core/types.js";
@@ -269,7 +269,7 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   // USER_GATE 2：确认执行清单
   section("即将执行以下操作");
   info("文件部署：");
-  info("  + .claude/commands/alloy/         （新建/更新）");
+  info("  + .claude/skills/alloy-*/         （新建/更新）");
   info("  + .claude/commands/opsx/          （新建/更新）");
   info("  + openspec/config.yaml            （新建/更新，含 main_branch: " + confirmedMainBranch + "）");
   info("  + openspec/schemas/alloy/         （新建/更新）");
@@ -355,18 +355,18 @@ export async function initCommand(opts: InitOptions): Promise<void> {
     success(`Superpowers${versionInfo} 已安装${locationInfo}，跳过`);
   }
 
-  // 6. 部署 Alloy commands
-  section("部署 Alloy commands...");
+  // 6. 部署 Alloy skills
+  section("部署 Alloy skills...");
   if (opts.targetAgents.length === 0) {
-    warn("未选择任何 AI 工具，跳过 command 部署");
+    warn("未选择任何 AI 工具，跳过 skill 部署");
   } else {
     try {
-      const paths = await deployCommands(opts);
+      const paths = await deploySkills(opts);
       for (const p of paths) {
         success(p);
       }
     } catch (e) {
-      error(`command 部署失败: ${(e as Error).message}`);
+      error(`skill 部署失败: ${(e as Error).message}`);
       process.exit(1);
       return;
     }

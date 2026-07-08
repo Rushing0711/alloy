@@ -53,7 +53,7 @@ git commit -m "chore(<name>): 边界内调整——清除 <artifact>，准备重
 
 - 不允许在 apply 阶段回溯到 brainstorming（worktree/代码已生成，回退会破坏一致性）
 - 不允许在 apply 阶段使用 _checkpoint 切换检查点（CLI 已硬校验 phase 仅 started/planned 允许）
-- 处理路径：`/alloy:discard <name>` + `/alloy:start <new-name>`
+- 处理路径：`/alloy-discard <name>` + `/alloy-start <new-name>`
 
 详见 apply.md 的"需求变更处理"段落。
 
@@ -63,6 +63,6 @@ git commit -m "chore(<name>): 边界内调整——清除 <artifact>，准备重
 
 - 不允许在 apply 阶段回溯到 brainstorming
 - 不允许在 apply 阶段使用 _checkpoint 切换检查点（CLI 已硬校验 phase===started）
-- 处理路径：`/alloy:discard <name>` + `/alloy:start <new-name>`
+- 处理路径：`/alloy-discard <name>` + `/alloy-start <new-name>`
 
 详见 apply.md 的"需求变更处理"段落。

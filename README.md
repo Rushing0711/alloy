@@ -1,6 +1,6 @@
 # Alloy
 
-**Alloy 是 AI 编码 Agent 的驾驶舱。** 把需求管理（OpenSpec）和流程纪律（Superpowers）编成一条 5 阶段流水线——你只管 `/alloy:start`，剩下的编排、校验、归档全自动。
+**Alloy 是 AI 编码 Agent 的驾驶舱。** 把需求管理（OpenSpec）和流程纪律（Superpowers）编成一条 5 阶段流水线——你只管 `/alloy-start`，剩下的编排、校验、归档全自动。
 
 | 有 Alloy | 裸用 AI Agent |
 |----------|-------------|
@@ -22,11 +22,11 @@
 ## 工作流
 
 ```
-/alloy:start    [1/5]  智能入口 → 需求探索 → draft.md
-/alloy:plan     [2/5]  proposal → design → specs → tasks → plan（每步审查）
-/alloy:apply    [3/5]  worktree 隔离 → TDD 实现 → 双层验证 → 复盘（start/plan + apply 早期可创建检查点）
-/alloy:archive  [4/5]  Delta Spec 合并 → 移入 archive/
-/alloy:finish   [5/5]  merge / PR / keep（人工闸门）
+/alloy-start    [1/5]  智能入口 → 需求探索 → draft.md
+/alloy-plan     [2/5]  proposal → design → specs → tasks → plan（每步审查）
+/alloy-apply    [3/5]  worktree 隔离 → TDD 实现 → 双层验证 → 复盘（start/plan + apply 早期可创建检查点）
+/alloy-archive  [4/5]  Delta Spec 合并 → 移入 archive/
+/alloy-finish   [5/5]  merge / PR / keep（人工闸门）
 ```
 
 任意阶段退出，回来随便打哪个命令都能自动接上。
@@ -51,14 +51,14 @@ alloy init
 
 | 命令 | 用途 |
 |------|------|
-| `/alloy:start [topic]` | 智能入口：状态检测 → 需求设计 |
-| `/alloy:plan [name]` | 规划：proposal → design → specs → tasks → plan |
-| `/alloy:apply [name]` | 执行：worktree + 实现 + 验证 + 复盘 |
-| `/alloy:archive [name]` | 归档：Delta Spec 合并 + 提交 |
-| `/alloy:finish [name]` | 收尾：merge / PR / keep |
-| `/alloy:fix` | Bug 修复：诊断 → 分流 |
-| `/alloy:discard [name]` | 放弃 change，清理现场 |
-| `/alloy:status [name]` | 查看阶段、制品、下一步 |
+| `/alloy-start [topic]` | 智能入口：状态检测 → 需求设计 |
+| `/alloy-plan [name]` | 规划：proposal → design → specs → tasks → plan |
+| `/alloy-apply [name]` | 执行：worktree + 实现 + 验证 + 复盘 |
+| `/alloy-archive [name]` | 归档：Delta Spec 合并 + 提交 |
+| `/alloy-finish [name]` | 收尾：merge / PR / keep |
+| `/alloy-fix` | Bug 修复：诊断 → 分流 |
+| `/alloy-discard [name]` | 放弃 change，清理现场 |
+| `/alloy-status [name]` | 查看阶段、制品、下一步 |
 
 ### CLI 命令（终端使用）
 

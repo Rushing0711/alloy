@@ -238,14 +238,14 @@ worktree 是 apply 的**本地实现细节**。apply 完成后代码已经合并
 
 | 命令 | 用途 |
 |------|------|
-| `/alloy:start [topic]` | 智能入口：自动检测状态，接续或新建 |
-| `/alloy:plan [name]` | 制品生成，每步审查 |
-| `/alloy:apply [name]` | 执行：worktree + 实现 + 验证 + 复盘 |
-| `/alloy:archive [name]` | 归档：Delta Spec 合并 + 归档 |
-| `/alloy:finish [name]` | 收尾：merge / PR / keep |
-| `/alloy:fix` | Bug 修复入口：诊断 → 分流 |
-| `/alloy:discard [name]` | 放弃当前 change，清理现场 |
-| `/alloy:status [name]` | 查看阶段、制品状态、下一步 |
+| `/alloy-start [topic]` | 智能入口：自动检测状态，接续或新建 |
+| `/alloy-plan [name]` | 制品生成，每步审查 |
+| `/alloy-apply [name]` | 执行：worktree + 实现 + 验证 + 复盘 |
+| `/alloy-archive [name]` | 归档：Delta Spec 合并 + 归档 |
+| `/alloy-finish [name]` | 收尾：merge / PR / keep |
+| `/alloy-fix` | Bug 修复入口：诊断 → 分流 |
+| `/alloy-discard [name]` | 放弃当前 change，清理现场 |
+| `/alloy-status [name]` | 查看阶段、制品状态、下一步 |
 
 ---
 
@@ -373,7 +373,7 @@ function altoggle {
 [ ] 1. 设计文档 (docs/specification/01-product-spec.md) — 设计描述需要更新吗？
 [ ] 2. Schema    (openspec/schemas/alloy/) — DAG/制品/instructions 需要同步吗？
 [ ] 3. Guard     (src/cli/commands/internal/guard.ts) — 检查规则完整吗？
-[ ] 4. Skill 文档 (commands/alloy/*.md) — 流程描述/闸门指令需要更新吗？
+[ ] 4. Skill 文档 (skills/alloy-*/SKILL.md) — 流程描述/闸门指令需要更新吗？
 [ ] 5. CLI 代码  (src/) — 实现对齐了吗？
 [ ] 6. 测试      (test/) — 新增回归测试了吗？
 ```
@@ -490,7 +490,7 @@ alloy doctor --json       # JSON 格式输出
 
 ```bash
 # 删除 Alloy 相关文件
-rm -rf .claude/commands/alloy/
+rm -rf .claude/skills/alloy-*/
 rm -rf openspec/
 rm -f .alloy.yaml
 

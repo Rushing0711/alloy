@@ -1,20 +1,14 @@
 ---
-name: "Alloy: Plan"
-description: Alloy 规划阶段 - draft.md 完成后进入
-category: Workflow
-tags: [alloy, workflow]
-spec: 01-product-spec/02-plan-spec.md
-behaviors:
-  preconditions: 7
-  hard_stops:    20
-  user_gates:    9
-  warns:         1
-  artifacts: [proposal, design, specs, tasks, plans]
-  transitions_to: planned
-  external_calls: [opsx:continue, superpowers:writing-plans]
+name: alloy-plan
+description: 设计计划阶段--创建实现 plan。手动调用 /alloy-plan。
+disable-model-invocation: true
 ---
 
 # alloy-plan
+
+## REQUIRED BACKGROUND
+
+**REQUIRED BACKGROUND:** Understand alloy-shared
 
 你是 Alloy 的规划阶段编排器。按 OpenSpec schema DAG 依赖顺序，制品生成设计文档，每步生成后提供审查窗口。
 
@@ -26,7 +20,7 @@ behaviors:
 
 **核心原则：按 schema DAG 依赖顺序逐一产出制品，每步有审查闸门，不跳过上游直接产下游。** 5 制品（proposal/design/specs/tasks/plans）以 hash-lock + 单独 commit 入 records，禁直接编辑，禁互相替代。
 
-**交互规则：** `🔴 STOP` 等价 `USER_GATE`，首次呈现即必须调用平台原生交互工具——禁"先文本展示 (a)/(b) 再等待用户打字"。Claude Code 用 `AskUserQuestion`；其他平台按 `commands/alloy/references/interaction-style.md` §平台工具对照 降级为结构化文本选项。含"沉默 ≠ 授权"通用禁令——禁批量打包、禁基于内容跳过、禁 agent 回填精确字符串。跳过任何 USER_GATE = 违反 Iron Law。
+**交互规则：** `🔴 STOP` 等价 `USER_GATE`，首次呈现即必须调用平台原生交互工具——禁"先文本展示 (a)/(b) 再等待用户打字"。Claude Code 用 `AskUserQuestion`；其他平台按 `alloy-shared/references/interaction-style.md` §平台工具对照 降级为结构化文本选项。含"沉默 ≠ 授权"通用禁令——禁批量打包、禁基于内容跳过、禁 agent 回填精确字符串。跳过任何 USER_GATE = 违反 Iron Law。
 
 **状态符号：** `⛔` = HARD_STOP / PRECONDITION_FAIL，`🔴` = USER_GATE，`⚠️` = WARN（视觉规范 §七）。
 
@@ -50,7 +44,7 @@ behaviors:
 | "draft 的 commit message 看着像是确认了，跳过 hash 校验吧" | ⛔ PRECONDITION_FAIL：draft 来源必须 `alloy _record check` 验证 hash 链（task #16），commit msg 字符串解析不可靠。 |
 | "rollback 失败了，git reset --hard 清场重来" | ⛔ HARD_STOP：rollback 失败时禁 reset --hard / checkout . / stash drop（§3.5.1 git 自救禁令）。退出 skill 让用户处理。 |
 | "phase 推进失败但 plans 已生成，git reset 回退一下" | ⛔ HARD_STOP：phase 推进路径 B 降级——手动 `alloy _state set` 回退 phase，禁 git reset 清场（§5.2.3）。 |
-| "用户在等，分类先按轻量修正走，错了再说" | 分类不清 = 默认需求变更（plan-rollback.md 已写）。USER_GATE 必须用户明确选择。 |
+| "用户在等，分类先按轻量修正走，错了再说" | 分类不清 = 默认需求变更（references/rollback.md 已写）。USER_GATE 必须用户明确选择。 |
 | "先文本列 (a)/(b) 选项让用户思考，再调 AskUserQuestion 双保险" | ⛔ HARD_STOP：双重呈现违规——首次呈现必须是 AskUserQuestion 工具调用,不是文本。哪怕"先展示选项让用户思考"、"文本+工具双保险",也算违反。常见模式:thinking 决策"用 AskUserQuestion"但执行时先输出纯文本选项(决策→执行断裂)。 |
 | "这个项目很小，不需要那么正式" | 小项目和大项目的闸门完全一样。不存在"规模分级的保护等级"。 |
 | "想确保 skill_usage 落地，_skill log 后单独 commit 一下" | ⛔ HARD_STOP：`_artifact commit` 的 git add 含 .alloy.yaml，会一起 commit。单独 commit 产生冗余的"记录技能使用"commit，与制品 commit 分离。 |
@@ -73,17 +67,17 @@ alloy _phase start openspec/changes/<name> plan
 > `alloy _phase start` 原子完成：幂等写 `phase_timings.plan.started_at` + git add 限路径 + commit。产生独立的"阶段开始"commit（仅 .alloy.yaml），不并入后续制品 commit。
 
 1. **change 目录存在 + draft.md 存在**（⛔ PRECONDITION_FAIL）：
-   - change 不存在 → 引导 `/alloy:start <name>` 创建
-   - draft.md 缺失 → 异常状态，引导重新运行 `/alloy:start`
+   - change 不存在 → 引导 `/alloy-start <name>` 创建
+   - draft.md 缺失 → 异常状态，引导重新运行 `/alloy-start`
 
 2. **phase 校验**（⛔ PRECONDITION_FAIL）：`alloy _guard precheck openspec/changes/<name> planning`
-   - phase ≠ planning 时读取 `commands/alloy/references/phase-routing.md` 自动跳转
+   - phase ≠ planning 时读取 `alloy-shared/references/phase-routing.md` 自动跳转
    - 路由不到合法状态 → ⛔ PRECONDITION_FAIL
 
 3. **git 仓库检查**（⛔ PRECONDITION_FAIL）：`git rev-parse --git-dir`，失败 → 引导初始化或退出。
 
 4. **Skill 预检**（⛔ PRECONDITION_FAIL）：cmd: opsx/continue, skill: writing-plans
-   读取 `commands/alloy/references/skill-precheck.md` 检测。任一不可用 → 引导 `alloy init`，不存在降级。
+   读取 `alloy-shared/references/skill-precheck.md` 检测。任一不可用 → 引导 `alloy init`，不存在降级。
 
 5. **draft 来源验证**（⛔ PRECONDITION_FAIL，task #16）：用 hash 链验证 draft 完整性，**禁用 commit msg 字符串解析**：
 
@@ -95,7 +89,7 @@ alloy _phase start openspec/changes/<name> plan
      echo "  禁止：agent 自动接受不一致的 draft 继续生成下游制品"
      echo ""
      echo "🔴 USER_GATE: 选择处理路径"
-     echo "  (a) 回溯到 /alloy:start 重新确认 draft"
+     echo "  (a) 回溯到 /alloy-start 重新确认 draft"
      echo "  (b) 强制继续——下游制品将基于不可信 draft 生成（不推荐）"
    fi
    ```
@@ -118,8 +112,8 @@ alloy _phase start openspec/changes/<name> plan
    ```
 
    - `on-feature` → ✓ 合规：当前在 feature 分支（非 main），符合 Alloy 工作流推荐
-   - `on-main` → ⛔ `[PRECONDITION_FAIL] 当前在主分支，plan 禁止在主分支执行——制品 commit 会污染主分支历史。请切换到 feature_branch 或回 /alloy:start 重新初始化分支。`
-   - `feature-missing` / `feature-lost:<branch>` → ⛔ `[PRECONDITION_FAIL] feature_branch 状态记录与实际不符。读取 commands/alloy/references/branch-validation.md 修复。`
+   - `on-main` → ⛔ `[PRECONDITION_FAIL] 当前在主分支，plan 禁止在主分支执行——制品 commit 会污染主分支历史。请切换到 feature_branch 或回 /alloy-start 重新初始化分支。`
+   - `feature-missing` / `feature-lost:<branch>` → ⛔ `[PRECONDITION_FAIL] feature_branch 状态记录与实际不符。读取 alloy-shared/references/branch-validation.md 修复。`
    - `on-other:<branch>` → ⛔ `[PRECONDITION_FAIL] 当前位于第三分支 <branch>，非 feature_branch。请切换到 feature_branch。`
 
    **禁止 agent 自动 `git checkout` 切换——可能丢弃用户未提交工作（§3.5.1）。**
@@ -141,14 +135,16 @@ alloy _phase start openspec/changes/<name> plan
 draft.md 来源已在 Step 0 完成 hash 验证（task #16）。本步聚焦 phase 校验和路由：
 
 1. 阶段校验：`alloy _guard precheck openspec/changes/<name> planning`（已在 Step 0 通过，本步幂等重检）
-2. **若 phase 不匹配：** 读取 `commands/alloy/references/phase-routing.md` 自动跳转到对应 skill。
-3. **若 change 不存在或 draft.md 缺失：** 引导 `/alloy:start <name>`——前序阶段完全没做时保留 ⛔ PRECONDITION_FAIL。
+2. **若 phase 不匹配：** 读取 `alloy-shared/references/phase-routing.md` 自动跳转到对应 skill。
+3. **若 change 不存在或 draft.md 缺失：** 引导 `/alloy-start <name>`——前序阶段完全没做时保留 ⛔ PRECONDITION_FAIL。
 
 前置检查通过：draft.md ✓ phase=planning ✓ git ✓ 技能 ✓ draft hash ✓
 
 ---
 
 ### [Step 2/3] 制品生成 · /opsx:continue + writing-plans
+
+**REQUIRED SUB-SKILL:** Use superpowers:writing-plans
 
 **每个制品必须通过 `/opsx:continue` 生成。禁止手动编写制品文件。**
 
@@ -210,7 +206,7 @@ alloy _progress artifacts openspec/changes/<name>
   >
   > 提示：apply 阶段早期的需求变更处理
   > - apply 早期（worktree 未创建 + SDD/EP 未启动）：仍可回退到 brainstorming 处理需求变更，走检查点回退流程
-  > - apply 中后期（worktree 已创建 或 SDD/EP 已启动）：只能 /alloy:discard 重开
+  > - apply 中后期（worktree 已创建 或 SDD/EP 已启动）：只能 /alloy-discard 重开
   > 详见 apply.md 的"需求变更闸门"。
   ```
   > ⛔ [HARD_STOP] plans 锁定后的输出必须含上述需求变更提示，禁省略。违反字面 = 违反精神：哪怕"提示用户已知"，也禁跳过——用户需要明确知道 apply 阶段的变更边界。
@@ -545,25 +541,25 @@ alloy _state set openspec/changes/<name> phase started
 
 🔴 USER_GATE（必须 AskUserQuestion 工具调用）: plan 阶段完成,下一步?
 
-> ⛔ [HARD_STOP] 必须用 `AskUserQuestion` 工具调用——禁纯文本列选项 / 禁直接 `Skill` 加载下一阶段 / 禁纯文本"运行 /alloy:apply"提示 / 禁提示用户手动输入命令。
+> ⛔ [HARD_STOP] 必须用 `AskUserQuestion` 工具调用——禁纯文本列选项 / 禁直接 `Skill` 加载下一阶段 / 禁纯文本"运行 /alloy-apply"提示 / 禁提示用户手动输入命令。
 > 违反字面 = 违反精神:哪怕"纯文本效果一样"、"直接 Skill 更流畅"、"用户已授权提示一下也行",也算违反——AskUserQuestion 强制结构化选项,避免 agent 用模糊措辞让用户回 yes 蒙混过关（§4.1）。
 > 常见违规模式:
-> - 纯文本输出"运行 /alloy:apply 进入执行阶段"让用户手动输入
+> - 纯文本输出"运行 /alloy-apply 进入执行阶段"让用户手动输入
 > - 纯文本列"(a) 进入 apply / (b) 暂停 / (c) 其他"让用户回复
-> - 用户选 (a) 后提示"请运行 /alloy:apply"让用户手动输入——应直接 Skill 加载
-> 非 Claude Code 平台按 `commands/alloy/references/interaction-style.md` §平台工具对照 降级。
+> - 用户选 (a) 后提示"请运行 /alloy-apply"让用户手动输入——应直接 Skill 加载
+> 非 Claude Code 平台按 `alloy-shared/references/interaction-style.md` §平台工具对照 降级。
 
 > 选项:
-> - (a) 进入 apply 阶段——加载 `alloy:apply` skill 推进执行
+> - (a) 进入 apply 阶段——加载 `alloy-apply` skill 推进执行
 > - (b) 暂停——审视规划制品,或查看状态(`alloy status`)
 > - (c) 其他——用户自定义下一步
 
-> 用户选 (a) 后,agent **必须直接用 `Skill` 工具加载 `alloy:apply`**(传入 change name),进入 apply 阶段——用户已在 USER_GATE 授权,再让用户输入命令 = 多此一举。
-> 用户选 (b) 后,agent 停止,输出"已暂停。需要时运行 /alloy:apply <name> 继续。"
+> 用户选 (a) 后,agent **必须直接用 `Skill` 工具加载 `alloy-apply`**(传入 change name),进入 apply 阶段——用户已在 USER_GATE 授权,再让用户输入命令 = 多此一举。
+> 用户选 (b) 后,agent 停止,输出"已暂停。需要时运行 /alloy-apply <name> 继续。"
 > 用户选 (c) 后,agent 停止,等用户后续命令。
 
 > **提示：apply 阶段早期的需求变更处理**
 > apply 阶段早期（worktree 未创建 + SDD/EP 未启动）仍可回退到 brainstorming 处理需求变更，走检查点回退流程。
-> 一旦 worktree 创建或 SDD/EP 启动，只能 `/alloy:discard` 重开。
+> 一旦 worktree 创建或 SDD/EP 启动，只能 `/alloy-discard` 重开。
 > 详见 apply.md 的"需求变更闸门"。
 

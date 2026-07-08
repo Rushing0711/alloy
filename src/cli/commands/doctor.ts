@@ -15,7 +15,8 @@ export interface DoctorResult {
 
 function detectScope(projectPath: string): "global" | "project" | undefined {
   const home = process.env.HOME || process.env.USERPROFILE || "~";
-  const probe = (dir: string) => existsSync(join(dir, ".claude", "commands", "alloy"));
+  // 探测 alloy skill 是否已部署（与 detectAlloySkill 一致：.claude/skills/alloy-start/SKILL.md）
+  const probe = (dir: string) => existsSync(join(dir, ".claude", "skills", "alloy-start", "SKILL.md"));
 
   if (probe(projectPath)) return "project";
   if (probe(home)) return "global";

@@ -16,7 +16,7 @@ behaviors:
 ## alloy status
 
 ```
-/alloy:status [name]（省略时显示所有活跃 change 总览）
+/alloy-status [name]（省略时显示所有活跃 change 总览）
 
 输出指定 change 详情:
   阶段:    planned
@@ -32,7 +32,7 @@ behaviors:
     specs     ✗
     tasks     ✗
     plans     ✗
-  下一步:   等待 /alloy:apply
+  下一步:   等待 /alloy-apply
 
 一致性检查（worktree 残留 / 孤儿 / git worktree list 孤立）由 `alloy doctor` 提供,不在 status 中自动附带。运行 `alloy doctor` 查看完整诊断。
 ```

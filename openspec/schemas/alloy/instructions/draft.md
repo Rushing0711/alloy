@@ -36,4 +36,4 @@ brainstorming 技能将：
 
 - draft.md 初始生成在项目根目录。start 阶段确认后由 `/opsx:new` 创建 change 目录，draft.md 移入 `openspec/changes/<name>/`
 - 不将 brainstorming 输出写入 `docs/superpowers/specs/`——draft.md 是唯一产出
-- 完成后提示用户：可用 grill-me 深入拷问需求，确认后运行 `/alloy:plan`
+- 完成后提示用户：可用 grill-me 深入拷问需求，确认后运行 `/alloy-plan`

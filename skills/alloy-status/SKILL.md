@@ -1,11 +1,14 @@
 ---
-name: "Alloy: Status"
-description: 需要查看 change 进度或状态时调用
-category: Workflow
-tags: [alloy, workflow]
+name: alloy-status
+description: 状态查询--查看当前 change 进度。手动调用 /alloy-status。
+disable-model-invocation: true
 ---
 
 # alloy-status
+
+## REQUIRED BACKGROUND
+
+**REQUIRED BACKGROUND:** Understand alloy-shared
 
 你是 Alloy 的状态查看器。你的职责是：读取 change 的状态文件，检查文件系统，输出结构化的状态报告。
 
@@ -15,8 +18,8 @@ tags: [alloy, workflow]
 
 ## 参数
 
-- `/alloy:status` — 显示所有活跃 change 总览
-- `/alloy:status <name>` — 显示指定 change 详情
+- `/alloy-status` - 显示所有活跃 change 总览
+- `/alloy-status <name>` - 显示指定 change 详情
 
 ---
 
@@ -34,7 +37,7 @@ Alloy · 状态查看
   login-feature  planned    artifacts: draft ✓ proposal ✓ design ✓ specs ✓ tasks ✓ plans ✓
   payment-fix    started    artifacts: draft ✓
 
-下一步：login-feature 等待 /alloy:apply，payment-fix 等待 /alloy:plan
+下一步：login-feature 等待 /alloy-apply，payment-fix 等待 /alloy-plan
 ```
 
 ---
@@ -65,7 +68,7 @@ Worktree: .worktrees/login-feature/
   specs     ✓
   tasks     ✓
   plans     ✓
-下一步:   等待 /alloy:apply
+下一步:   等待 /alloy-apply
 ```
 
 ---

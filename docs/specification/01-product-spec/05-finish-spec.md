@@ -11,16 +11,16 @@ behaviors:
 
 # alloy finish 行为规格
 
-详见 skill 文件：`commands/alloy/finish.md`
+详见 skill 文件：`skills/alloy-finish/SKILL.md`
 
 ## 命令格式
 
 ```
-/alloy:finish [name]（省略时从当前活跃 change 推断）
+/alloy-finish [name]（省略时从当前活跃 change 推断）
 ```
 
 独立命令，两种使用场景：
-1. /alloy:archive 完成后 → 代码合入与现场清理
+1. /alloy-archive 完成后 → 代码合入与现场清理
 2. 手动调用 → archive 时选了 keep，后续想 merge / PR
 
 ## 前置检查

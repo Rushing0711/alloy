@@ -11,34 +11,34 @@ behaviors:
 
 # alloy plan 行为规格
 
-详见 skill 文件：`commands/alloy/plan.md`
+详见 skill 文件：`skills/alloy-plan/SKILL.md`
 
 ## 命令格式
 
 ```
-/alloy:plan [name]（省略时从当前活跃 change 推断）
+/alloy-plan [name]（省略时从当前活跃 change 推断）
 ```
 
 ## 前置检查
 
-change 目录存在且 .alloy.yaml phase=started（/alloy:start 已完成）
+change 目录存在且 .alloy.yaml phase=started（/alloy-start 已完成）
 
 若 phase 不匹配:
-  → planned → 自动路由到 /alloy:apply
-  → applied → 自动路由到 /alloy:apply
-  → archived → 自动路由到 /alloy:finish
+  → planned → 自动路由到 /alloy-apply
+  → applied → 自动路由到 /alloy-apply
+  → archived → 自动路由到 /alloy-finish
   → 唯一 HARD STOP：change 目录不存在、draft.md 缺失（前序阶段完全没做）
 
 若指定 name 但 change 不存在:
-  → ⚠️ "未找到 change '<name>'，请先运行 /alloy:start <topic> 创建"
+  → ⚠️ "未找到 change '<name>'，请先运行 /alloy-start <topic> 创建"
 
 若有活跃 change 但 draft.md 缺失:
-  → ⚠️ 提示异常，引导重新运行 /alloy:start
+  → ⚠️ 提示异常，引导重新运行 /alloy-start
 
 ## 流程
 
 1. 确认 change 已存在 → 读取 .alloy.yaml 确认 phase=started
-   （无需创建 change —— /alloy:start 已完成这一步）
+   （无需创建 change —— /alloy-start 已完成这一步）
 2. 制品进度扫描 → 扫描已有制品（文件存在 + hash 有效），跳过已完成，
    从第一个缺失制品开始生成
 3. 调用 /opsx:continue → 利用 schema DAG 按依赖顺序制品生成
@@ -71,7 +71,7 @@ plan 阶段允许在制品审查过程中打检查点（tag），用户可在变
 
 **清理：** finish / discard 时调用 `alloy _checkpoint clean` 删除该 change 所有 checkpoint tag，避免堆积。archive 阶段不清理——此时 change 目录已移到 `openspec/changes/archive/`，原路径失效；finish 阶段 change 封存，且已有 `$CHANGE_DIR` 解析 archive 路径，是更合适的清理时机。
 
-详见 plan.md "需求变更闸门"段落和 `commands/alloy/references/plan-rollback.md` 场景 A。
+详见 plan.md "需求变更闸门"段落和 `alloy-plan/references/rollback.md` 场景 A。
 
 ## plans.md 定位
 

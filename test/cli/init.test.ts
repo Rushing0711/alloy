@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // Mock 所有外部依赖 - 使用 vi.hoisted 确保在 vi.mock 之前可用
-const { mockDetectEnv, mockRunHealthCheck, mockInstallOpenSpecCli, mockInitOpenSpecProject, mockInstallSuperpowers, mockDeployCommands, mockDeploySchema, mockInjectAgentConfigs, mockPromptSelect, mockPromptMultiSelect, mockPromptConfirm, mockPromptInput, mockSpinnerInstance, mockSpinner, mockEnsureGitRepo, mockIsHeadUnborn, mockDetectMainBranch, mockReadProjectConfig, mockWriteProjectConfig, mockExecSync } = vi.hoisted(() => {
+const { mockDetectEnv, mockRunHealthCheck, mockInstallOpenSpecCli, mockInitOpenSpecProject, mockInstallSuperpowers, mockDeploySkills, mockDeploySchema, mockInjectAgentConfigs, mockPromptSelect, mockPromptMultiSelect, mockPromptConfirm, mockPromptInput, mockSpinnerInstance, mockSpinner, mockEnsureGitRepo, mockIsHeadUnborn, mockDetectMainBranch, mockReadProjectConfig, mockWriteProjectConfig, mockExecSync } = vi.hoisted(() => {
   const mockSpinnerInstance = {
     start: vi.fn().mockReturnThis(),
     stop: vi.fn().mockReturnThis(),
@@ -16,7 +16,7 @@ const { mockDetectEnv, mockRunHealthCheck, mockInstallOpenSpecCli, mockInitOpenS
     mockInstallOpenSpecCli: vi.fn(),
     mockInitOpenSpecProject: vi.fn(),
     mockInstallSuperpowers: vi.fn(),
-    mockDeployCommands: vi.fn(),
+    mockDeploySkills: vi.fn(),
     mockDeploySchema: vi.fn(),
     mockInjectAgentConfigs: vi.fn(),
     mockPromptSelect: vi.fn(),
@@ -49,7 +49,7 @@ vi.mock("../../src/core/openspec.js", () => ({
 }));
 vi.mock("../../src/core/superpowers.js", () => ({ installSuperpowers: mockInstallSuperpowers }));
 vi.mock("../../src/core/skills.js", () => ({
-  deployCommands: mockDeployCommands,
+  deploySkills: mockDeploySkills,
   deploySchema: mockDeploySchema,
 }));
 vi.mock("../../src/core/agent-config.js", () => ({
@@ -105,7 +105,7 @@ describe("init", () => {
     mockInstallOpenSpecCli.mockResolvedValue("installed");
     mockInitOpenSpecProject.mockResolvedValue("success");
     mockInstallSuperpowers.mockResolvedValue({ status: "installed" });
-    mockDeployCommands.mockResolvedValue([]);
+    mockDeploySkills.mockResolvedValue([]);
     mockDeploySchema.mockResolvedValue(join(tmpDir, "openspec/schemas/alloy"));
     mockInjectAgentConfigs.mockResolvedValue(undefined);
     mockEnsureGitRepo.mockReturnValue("exists");
@@ -273,23 +273,23 @@ describe("init", () => {
       expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("OpenSpec 项目初始化失败"));
     });
 
-    it("未选择 target agents 时跳过 command 部署", async () => {
+    it("未选择 target agents 时跳过 skill 部署", async () => {
       await initCommand(defaultOpts);
 
-      expect(mockDeployCommands).not.toHaveBeenCalled();
+      expect(mockDeploySkills).not.toHaveBeenCalled();
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("未选择任何 AI 工具"));
     });
 
-    it("选择 target agents 时部署 commands", async () => {
+    it("选择 target agents 时部署 skills", async () => {
       const opts = {
         ...defaultOpts,
         targetAgents: [{ id: "claude-code", label: "Claude Code", supportsColonCommands: true, commandsDir: ".claude/commands" }],
       };
-      mockDeployCommands.mockResolvedValue(["/path/to/command.md"]);
+      mockDeploySkills.mockResolvedValue(["/path/to/command.md"]);
 
       await initCommand(opts);
 
-      expect(mockDeployCommands).toHaveBeenCalledWith(opts);
+      expect(mockDeploySkills).toHaveBeenCalledWith(opts);
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("/path/to/command.md"));
     });
 
@@ -317,17 +317,17 @@ describe("init", () => {
       expect(mockInjectAgentConfigs).toHaveBeenCalled();
     });
 
-    it("command 部署失败时 exit 1", async () => {
+    it("skill 部署失败时 exit 1", async () => {
       const opts = {
         ...defaultOpts,
         targetAgents: [{ id: "claude-code", label: "Claude Code", supportsColonCommands: true, commandsDir: ".claude/commands" }],
       };
-      mockDeployCommands.mockRejectedValue(new Error("部署失败"));
+      mockDeploySkills.mockRejectedValue(new Error("部署失败"));
 
       await initCommand(opts);
 
       expect(processExitSpy).toHaveBeenCalledWith(1);
-      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("command 部署失败"));
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("skill 部署失败"));
     });
 
     it("Superpowers 安装失败时不 exit", async () => {
@@ -487,7 +487,7 @@ describe("init", () => {
       // 不应执行部署步骤
       expect(mockInstallOpenSpecCli).not.toHaveBeenCalled();
       expect(mockInitOpenSpecProject).not.toHaveBeenCalled();
-      expect(mockDeployCommands).not.toHaveBeenCalled();
+      expect(mockDeploySkills).not.toHaveBeenCalled();
       expect(mockEnsureGitRepo).not.toHaveBeenCalled();
     });
 

@@ -31,9 +31,9 @@ describe("alloy _env check", () => {
     // schema.yaml
     await mkdir(join(tmpDir, "openspec", "schemas", "alloy"), { recursive: true });
     await writeFile(join(tmpDir, "openspec", "schemas", "alloy", "schema.yaml"), "name: alloy\n", "utf-8");
-    // alloy commands（冒号版）
-    await mkdir(join(tmpDir, ".claude", "commands", "alloy"), { recursive: true });
-    await writeFile(join(tmpDir, ".claude", "commands", "alloy", "start.md"), "# start", "utf-8");
+    // alloy skills（冒号版 agent）
+    await mkdir(join(tmpDir, ".claude", "skills", "alloy-start"), { recursive: true });
+    await writeFile(join(tmpDir, ".claude", "skills", "alloy-start", "SKILL.md"), "# start", "utf-8");
 
     process.chdir(tmpDir);
 
@@ -44,7 +44,7 @@ describe("alloy _env check", () => {
 
     expect(logs.join("")).toContain("环境完整");
     expect(logs.join("")).toContain("git ✓");
-    expect(logs.join("")).toContain("commands ✓");
+    expect(logs.join("")).toContain("skills ✓");
   });
 
   it("缺 git 仓库时 exit(1)", async () => {
@@ -53,8 +53,8 @@ describe("alloy _env check", () => {
     await writeFile(join(tmpDir, "openspec", "config.yaml"), "schema: alloy\n", "utf-8");
     await mkdir(join(tmpDir, "openspec", "schemas", "alloy"), { recursive: true });
     await writeFile(join(tmpDir, "openspec", "schemas", "alloy", "schema.yaml"), "name: alloy\n", "utf-8");
-    await mkdir(join(tmpDir, ".claude", "commands", "alloy"), { recursive: true });
-    await writeFile(join(tmpDir, ".claude", "commands", "alloy", "start.md"), "# start", "utf-8");
+    await mkdir(join(tmpDir, ".claude", "skills", "alloy-start"), { recursive: true });
+    await writeFile(join(tmpDir, ".claude", "skills", "alloy-start", "SKILL.md"), "# start", "utf-8");
 
     process.chdir(tmpDir);
 
@@ -74,8 +74,8 @@ describe("alloy _env check", () => {
     // 不写 config.yaml
     await mkdir(join(tmpDir, "openspec", "schemas", "alloy"), { recursive: true });
     await writeFile(join(tmpDir, "openspec", "schemas", "alloy", "schema.yaml"), "name: alloy\n", "utf-8");
-    await mkdir(join(tmpDir, ".claude", "commands", "alloy"), { recursive: true });
-    await writeFile(join(tmpDir, ".claude", "commands", "alloy", "start.md"), "# start", "utf-8");
+    await mkdir(join(tmpDir, ".claude", "skills", "alloy-start"), { recursive: true });
+    await writeFile(join(tmpDir, ".claude", "skills", "alloy-start", "SKILL.md"), "# start", "utf-8");
 
     process.chdir(tmpDir);
 
@@ -96,8 +96,8 @@ describe("alloy _env check", () => {
     await writeFile(join(tmpDir, "openspec", "config.yaml"), "schema: other\n", "utf-8");
     await mkdir(join(tmpDir, "openspec", "schemas", "alloy"), { recursive: true });
     await writeFile(join(tmpDir, "openspec", "schemas", "alloy", "schema.yaml"), "name: alloy\n", "utf-8");
-    await mkdir(join(tmpDir, ".claude", "commands", "alloy"), { recursive: true });
-    await writeFile(join(tmpDir, ".claude", "commands", "alloy", "start.md"), "# start", "utf-8");
+    await mkdir(join(tmpDir, ".claude", "skills", "alloy-start"), { recursive: true });
+    await writeFile(join(tmpDir, ".claude", "skills", "alloy-start", "SKILL.md"), "# start", "utf-8");
 
     process.chdir(tmpDir);
 
@@ -113,7 +113,7 @@ describe("alloy _env check", () => {
     await writeFile(join(tmpDir, "openspec", "config.yaml"), "schema: alloy\n", "utf-8");
     await mkdir(join(tmpDir, "openspec", "schemas", "alloy"), { recursive: true });
     await writeFile(join(tmpDir, "openspec", "schemas", "alloy", "schema.yaml"), "name: alloy\n", "utf-8");
-    // 不部署 commands
+    // 不部署 skills
 
     process.chdir(tmpDir);
 
@@ -124,19 +124,19 @@ describe("alloy _env check", () => {
     spy.mockRestore();
 
     expect(exitSpy).toHaveBeenCalledWith(1);
-    expect(logs.join("")).toContain("Alloy commands");
+    expect(logs.join("")).toContain("Alloy skills");
     exitSpy.mockRestore();
   });
 
-  it("横线版 agent（alloy-start.md）也识别", async () => {
+  it("非冒号版 agent（cursor）也识别", async () => {
     execSync("git init", { cwd: tmpDir, stdio: "pipe" });
     await mkdir(join(tmpDir, "openspec"), { recursive: true });
     await writeFile(join(tmpDir, "openspec", "config.yaml"), "schema: alloy\n", "utf-8");
     await mkdir(join(tmpDir, "openspec", "schemas", "alloy"), { recursive: true });
     await writeFile(join(tmpDir, "openspec", "schemas", "alloy", "schema.yaml"), "name: alloy\n", "utf-8");
-    // 横线版：.cursor/commands/alloy-start.md
-    await mkdir(join(tmpDir, ".cursor", "commands"), { recursive: true });
-    await writeFile(join(tmpDir, ".cursor", "commands", "alloy-start.md"), "# start", "utf-8");
+    // 非冒号版 agent：.cursor/skills/alloy-start/SKILL.md
+    await mkdir(join(tmpDir, ".cursor", "skills", "alloy-start"), { recursive: true });
+    await writeFile(join(tmpDir, ".cursor", "skills", "alloy-start", "SKILL.md"), "# start", "utf-8");
 
     process.chdir(tmpDir);
 
@@ -167,7 +167,7 @@ describe("alloy _env check", () => {
     const out = logs.join("");
     expect(out).toContain("config.yaml");
     expect(out).toContain("schema.yaml");
-    expect(out).toContain("Alloy commands");
+    expect(out).toContain("Alloy skills");
     exitSpy.mockRestore();
   });
 });

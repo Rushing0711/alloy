@@ -9,9 +9,10 @@ import { detectEnv } from "./detect.js";
 import { detectSkill } from "./detect-installations.js";
 import { CLAUDE_CODE_AGENT } from "./agents.js";
 
-const EXPECTED_COMMAND_IDS = [
-  "start", "plan", "apply", "archive",
-  "finish", "fix", "discard", "status",
+const EXPECTED_SKILL_NAMES = [
+  "alloy-start", "alloy-plan", "alloy-apply", "alloy-archive",
+  "alloy-finish", "alloy-fix", "alloy-discard", "alloy-status",
+  "alloy-shared",
 ];
 
 /**
@@ -199,32 +200,32 @@ export async function runHealthCheck(
     });
   }
 
-  // 6. Command 文件完整性
+  // 6. Skills 目录完整性
   try {
     const home = process.env.HOME || process.env.USERPROFILE || "~";
-    const commandsDir =
+    const skillsDir =
       scope === "global"
-        ? join(home, ".claude", "commands")
-        : join(projectPath, ".claude", "commands");
+        ? join(home, ".claude", "skills")
+        : join(projectPath, ".claude", "skills");
 
-    let commandsStatus = checkCommandsIntegrity(commandsDir);
-    // 如果 .claude/commands/ 不完整，尝试检查 commands/（源码目录）
-    if (commandsStatus.status === "fail") {
-      const sourceDir = join(projectPath, "commands");
-      const sourceStatus = checkCommandsIntegrity(sourceDir);
+    let skillsStatus = checkSkillsIntegrity(skillsDir);
+    // 如果 .claude/skills/ 不完整，尝试检查 skills/（源码目录）
+    if (skillsStatus.status === "fail") {
+      const sourceDir = join(projectPath, "skills");
+      const sourceStatus = checkSkillsIntegrity(sourceDir);
       if (sourceStatus.status === "pass") {
-        commandsStatus = {
+        skillsStatus = {
           ...sourceStatus,
-          current: `${sourceStatus.current}（来源: commands/）`,
+          current: `${sourceStatus.current}（来源: skills/）`,
         };
       }
     }
-    results.push(commandsStatus);
+    results.push(skillsStatus);
   } catch {
     results.push({
-      name: "Commands",
+      name: "Skills",
       current: "无法检测",
-      required: `8 个文件`,
+      required: `9 个 skill 目录`,
       status: "warn",
     });
   }
@@ -304,30 +305,30 @@ async function checkSchemaVersions(
 }
 
 /**
- * 检查 .claude/commands/alloy/ 下 8 个 alloy command 文件是否完整。
+ * 检查 skills 目录下 9 个 alloy skill（alloy-start/plan/apply/archive/finish/fix/discard/status/shared）
+ * 是否完整。每个 skill 需存在 <skillsDir>/<skillName>/SKILL.md。
  * 内部 helper，不导出。
  */
-function checkCommandsIntegrity(commandsDir: string): HealthCheckResult {
-  const alloyDir = join(commandsDir, "alloy");
+function checkSkillsIntegrity(skillsDir: string): HealthCheckResult {
   const missing: string[] = [];
-  for (const id of EXPECTED_COMMAND_IDS) {
-    if (!existsSync(join(alloyDir, `${id}.md`))) {
-      missing.push(id);
+  for (const name of EXPECTED_SKILL_NAMES) {
+    if (!existsSync(join(skillsDir, name, "SKILL.md"))) {
+      missing.push(name);
     }
   }
-  const found = EXPECTED_COMMAND_IDS.length - missing.length;
+  const found = EXPECTED_SKILL_NAMES.length - missing.length;
   if (missing.length === 0) {
     return {
-      name: "Commands",
-      current: `${found}/${EXPECTED_COMMAND_IDS.length} 完整`,
-      required: `${EXPECTED_COMMAND_IDS.length} 个文件`,
+      name: "Skills",
+      current: `${found}/${EXPECTED_SKILL_NAMES.length} 完整`,
+      required: `${EXPECTED_SKILL_NAMES.length} 个 skill 目录`,
       status: "pass",
     };
   }
   return {
-    name: "Commands",
-    current: `${found}/${EXPECTED_COMMAND_IDS.length}（缺失: ${missing.join(", ")}）`,
-    required: `${EXPECTED_COMMAND_IDS.length} 个文件`,
+    name: "Skills",
+    current: `${found}/${EXPECTED_SKILL_NAMES.length}（缺失: ${missing.join(", ")}）`,
+    required: `${EXPECTED_SKILL_NAMES.length} 个 skill 目录`,
     status: "fail",
     message: `缺失: ${missing.join(", ")}`,
   };

@@ -119,7 +119,7 @@ Alloy 0.4.0 已融合 OpenSpec（需求追踪）+ Superpowers（流程方法论�
 
 ### 现状缺口
 
-- Alloy 的 skill（`commands/alloy/*.md`）无评估机制，质量靠人工审查
+- Alloy 的 skill（`skills/alloy-*/SKILL.md`）无评估机制，质量靠人工审查
 - skill 迭代无量化反馈，难以判断"改了之后变好还是变差"
 
 ### 计划方向（待细化）

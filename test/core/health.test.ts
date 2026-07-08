@@ -249,7 +249,7 @@ describe("runHealthCheck", () => {
     expect(spResult!.current).toContain("已安装");
   });
 
-  it("Commands: .claude/commands/ 不完整但 commands/ 完整时应返回 pass（来源: commands/）", async () => {
+  it(".claude/skills/ 不完整但 skills/ 完整时应返回 pass（来源: skills/）", async () => {
     vi.mocked(loadCompat).mockResolvedValue(MOCK_CONFIG);
     vi.mocked(execSync).mockReturnValue(Buffer.from("1.3.1\n") as any);
     vi.mocked(readFile).mockImplementation((path: any) => {
@@ -270,25 +270,25 @@ describe("runHealthCheck", () => {
       nodeVersion: "20.0.0",
       gitInstalled: true,
     });
-    // .claude/commands/ 中 plan.md 缺失，但 commands/ 中完整
+    // .claude/skills/ 中 alloy-plan/SKILL.md 缺失，但 skills/ 源码目录完整
     vi.mocked(existsSync).mockImplementation((path: any) => {
       const pathStr = String(path);
-      // .claude/commands/alloy/plan.md 缺失
-      if (pathStr.includes(".claude/commands/alloy/plan.md")) {
+      // 仅 .claude/skills/alloy-plan/SKILL.md 缺失（源码 skills/ 仍完整）
+      if (pathStr.includes(".claude/skills/alloy-plan/SKILL.md")) {
         return false;
       }
       return true;
     });
 
     const results = await runHealthCheck("/fake/packagedir", "/fake/project");
-    const commandsResult = results.find((r) => r.name === "Commands");
+    const commandsResult = results.find((r) => r.name === "Skills");
     expect(commandsResult).toBeDefined();
     expect(commandsResult!.status).toBe("pass");
-    expect(commandsResult!.current).toContain("来源: commands/");
+    expect(commandsResult!.current).toContain("来源: skills/");
   });
 
   // Issue 4: Commands fail 状态
-  it("Commands 目录缺失时应返回 fail", async () => {
+  it("Skills 目录缺失时应返回 fail", async () => {
     vi.mocked(loadCompat).mockResolvedValue(MOCK_CONFIG);
     vi.mocked(execSync).mockReturnValue(Buffer.from("1.3.1\n") as any);
     vi.mocked(readFile).mockResolvedValue(
@@ -298,22 +298,22 @@ describe("runHealthCheck", () => {
       nodeVersion: "20.0.0",
       gitInstalled: true,
     });
-    // existsSync 对特定 command 文件返回 false，模拟缺失
+    // existsSync 对特定 skill SKILL.md 返回 false，模拟缺失（主目录和源码目录都缺失）
     vi.mocked(existsSync).mockImplementation((path: any) => {
       const pathStr = String(path);
-      if (pathStr.includes("plan.md") || pathStr.includes("archive.md")) {
+      if (pathStr.includes("alloy-plan/SKILL.md") || pathStr.includes("alloy-archive/SKILL.md")) {
         return false;
       }
       return true;
     });
 
     const results = await runHealthCheck("/fake/packagedir", "/fake/project");
-    const commandsResult = results.find((r) => r.name === "Commands");
+    const commandsResult = results.find((r) => r.name === "Skills");
     expect(commandsResult).toBeDefined();
     expect(commandsResult!.status).toBe("fail");
     expect(commandsResult!.current).toContain("缺失");
-    expect(commandsResult!.message).toContain("plan");
-    expect(commandsResult!.message).toContain("archive");
+    expect(commandsResult!.message).toContain("alloy-plan");
+    expect(commandsResult!.message).toContain("alloy-archive");
   });
 
   // Issue 4: Schema 版本不匹配导致 warn

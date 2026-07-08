@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
-import { deployCommands, deploySchema } from "../../core/skills.js";
+import { deploySkills, deploySchema } from "../../core/skills.js";
 import { detectDeployedAgents } from "../../core/agents.js";
 import { runHealthCheck } from "../../core/health.js";
 import { getPackageRoot } from "../../utils/fs.js";
@@ -17,7 +17,7 @@ function isDevMode(): boolean {
 }
 
 function detectScope(projectPath: string): "global" | "project" | null {
-  const probe = (dir: string) => existsSync(join(dir, "commands", "alloy"));
+  const probe = (dir: string) => existsSync(join(dir, "skills", "alloy-start"));
 
   // 先检测项目级别
   if (probe(join(projectPath, ".claude"))) return "project";
@@ -97,10 +97,10 @@ export async function updateCommand(projectPath: string): Promise<string[]> {
     }
   }
 
-  // 3. 部署 commands
+  // 3. 部署 skills
   const deployedAgents = detectDeployedAgents(scope, projectPath);
   if (deployedAgents.length === 0) {
-    results.push(`${color.yellow("⚠️")} 未检测到已部署的 Alloy commands，请先运行 alloy init`);
+    results.push(`${color.yellow("⚠️")} 未检测到已部署的 Alloy skills，请先运行 alloy init`);
     return results;
   }
 
@@ -111,10 +111,10 @@ export async function updateCommand(projectPath: string): Promise<string[]> {
   };
 
   try {
-    const paths = await deployCommands(deployOpts);
-    results.push(`${color.green("✓")} commands/ → 部署 ${paths.length} 个文件到 ${deployedAgents.length} 个 agent`);
+    const paths = await deploySkills(deployOpts);
+    results.push(`${color.green("✓")} skills/ → 部署 ${paths.length} 个文件到 ${deployedAgents.length} 个 agent`);
   } catch {
-    results.push(`${color.yellow("⚠️")} command 部署失败`);
+    results.push(`${color.yellow("⚠️")} skill 部署失败`);
   }
   try {
     await deploySchema(deployOpts);
