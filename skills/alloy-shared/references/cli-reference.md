@@ -410,3 +410,4 @@ CLI 自己从 worktree 分支（`worktree-<change-name>`）读 state（用 `git 
 13. **`alloy _artifact commit` 重复锁定检测**：hash 未变跳过（避免回溯再提交污染历史），hash 变了允许重锁
 14. **`alloy _skill log` 前置校验**：非 `--at` 补录时，`phase_timings.<stage>.started_at` 必须已存在
 15. **内部命令不支持 `--help`**（除 `_spec-audit`）：无参数运行看 usage，或查本文件
+16. **`alloy _state write worktree/branch/created_at` 实际值只能在 worktree 内写**：主仓写实际值会被拒（PRECONDITION_FAIL），写 `null`（清理）或 `skipped`（跳过 worktree）允许。防止 feature 分支写 worktree state 导致 merge 冲突。

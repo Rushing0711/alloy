@@ -93,9 +93,9 @@ describe("alloy _state", () => {
     });
 
     it("write 支持含斜杠的路径值", async () => {
-      await stateCommand(["write", changeDir, "worktree", ".worktrees/test-change"]);
+      await stateCommand(["write", changeDir, "feature_branch", ".worktrees/test-change"]);
       const state = await readState(changeDir);
-      expect(state.worktree).toBe(".worktrees/test-change");
+      expect(state.feature_branch).toBe(".worktrees/test-change");
     });
 
     it("write + read feature_branch 往返一致", async () => {

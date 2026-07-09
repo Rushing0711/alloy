@@ -1,5 +1,6 @@
 // src/cli/commands/internal/state.ts
 import { readState, writeState, createInitialState } from "../../utils/state.js";
+import { execSync } from "node:child_process";
 import type { AlloyState } from "../../../core/types.js";
 
 // shell 传入的所有值都是字符串，需根据字段类型转换
@@ -27,6 +28,36 @@ function rejectManagedField(field: string, action: "write" | "merge"): boolean {
     console.error(`[FAIL] 字段 '${field}' 受管，禁止 _state ${action} 直接操作`);
     console.error(`  请使用专用命令: ${table[field]}`);
     console.error("  违反 'Agent 不直接写 YAML' 规则——受管字段需经原子命令保证 hash-lock / commit 一致性");
+    process.exit(1);
+    return true;
+  }
+  return false;
+}
+
+// worktree 相关字段:实际值只能在 worktree 内写（防止 feature 分支写 worktree state 导致 merge 冲突）
+// null（清理）/ skipped（跳过 worktree）在主仓允许
+const WORKTREE_FIELDS = new Set(["worktree", "worktree_branch", "worktree_created_at"]);
+
+function isInWorktree(): boolean {
+  try {
+    const gitDir = execSync("git rev-parse --git-dir", { encoding: "utf-8", stdio: "pipe" }).trim();
+    const gitCommonDir = execSync("git rev-parse --git-common-dir", { encoding: "utf-8", stdio: "pipe" }).trim();
+    return gitDir !== gitCommonDir;
+  } catch {
+    return false;
+  }
+}
+
+function rejectWorktreeFieldInMainRepo(field: string, value: string | undefined): boolean {
+  if (!WORKTREE_FIELDS.has(field)) return false;
+  // null / skipped 在主仓允许（清理 / 跳过 worktree）
+  if (value === "null" || value === "skipped") return false;
+  // 实际值:必须在 worktree 内写
+  if (!isInWorktree()) {
+    console.error(`[FAIL] 字段 '${field}' 的实际值只能在 worktree 内写（当前在主仓 feature 分支）`);
+    console.error(`  worktree state（worktree/worktree_branch/worktree_created_at）必须在 worktree 内写 + commit 到 worktree 分支`);
+    console.error(`  原因:在 feature 分支写 worktree state 会导致 merge worktree -> feature 时 .alloy.yaml 冲突`);
+    console.error(`  例外:写 null（清理）或 skipped（跳过 worktree）在主仓允许`);
     process.exit(1);
     return true;
   }
@@ -144,6 +175,7 @@ export async function stateCommand(args: string[]): Promise<void> {
         process.exit(1);
       }
       if (rejectManagedField(field, "write")) return;
+      if (rejectWorktreeFieldInMainRepo(field, value)) return;
       // 如果文件不存在，用 createInitialState() 创建初始状态（确保 records: [] 等所有字段存在）
       let state: AlloyState;
       try {
