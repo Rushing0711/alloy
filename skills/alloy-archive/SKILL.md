@@ -141,7 +141,7 @@ fi
 > 1. **在 worktree 里**：读 state(worktree / feature_branch / worktree_branch 三字段) + 展示 worktree 分支 commit 列表（.alloy.yaml 在 worktree 里,ExitWorktree 后主仓读不到--此时 archive 尚未执行,change 目录还在原路径 openspec/changes/<name>/）
 > 2. **USER_GATE**：确认清理 worktree
 > 3. **ExitWorktree**：回主仓（merge/remove/branch-d 必须在主仓执行,worktree 里 HEAD 是 worktree 分支,merge 自己没意义;worktree remove 删自己 cwd 会失败）
-> 4. **`alloy _worktree-cleanup` 传入 state 字段**：原子完成 merge + remove + branch -d + worktree_mergedat 记录（用原路径 openspec/changes/<name> 作为 archive-dir,此时 archive 尚未执行）
+> 4. **`alloy _worktree-cleanup <change-dir>`**：原子完成 merge + remove + branch -d + worktree_mergedat 记录（CLI 自己从 worktree 分支读 state,不传参;用原路径 openspec/changes/<name>,此时 archive 尚未执行）
 >
 > 违反字面 = 违反精神：哪怕"在 worktree 里 merge 效率高"、"cd 主仓替代 ExitWorktree",也算违反--worktree 里 merge 自己到自己没意义,cd 不解绑 session,后续命令仍可能在 worktree 执行。
 > 常见违规模式:
@@ -168,7 +168,7 @@ WORKTREE_BRANCH=$(alloy _state read "$CHANGE_DIR" worktree_branch 2>/dev/null)
 `WORKTREE_PATH` 为空 / null / skipped -> 未使用 worktree,跳过整个 worktree 清理段,直接进 /opsx:archive。
 
 > ⛔ [HARD_STOP] agent 必须在 worktree 里读取这三个字段并记住--ExitWorktree 后主仓的 change 目录还没 merge,读不到 state。
-> 这三个字段将作为参数传给 `alloy _worktree-cleanup`,不能让 CLI 自己从 change-dir 读（change-dir 在 worktree 分支 commit,主仓 feature 分支未 merge 时不存在,CLI 读 state 会失败 -> agent 被迫自救手动 git merge 违规）。
+> 这三个字段用于展示给用户（USER_GATE 审查 worktree 信息）。`alloy _worktree-cleanup` 自己从 worktree 分支读 state（用 `git show worktree-<name>:<change-dir>/.alloy.yaml`）,不依赖 agent 传参--解决 agent 在 feature 分支读 state 为 null 的问题。
 
 ```bash
 # 展示 worktree 分支的 commit 列表（供 USER_GATE 审查将合入的内容）
@@ -205,19 +205,15 @@ git log --oneline -10 "$WORKTREE_BRANCH" 2>/dev/null
 > ⛔ [HARD_STOP] 必须调 `ExitWorktree` 工具--禁用 `cd /主仓` / `git -C /主仓` 绕过。
 > ExitWorktree 解绑 session cwd,后续 CLI 命令在主仓执行。
 
-**④ 调用原子 CLI 完成清理（传入 state 字段,用原路径作为 archive-dir）:**
+**④ 调用原子 CLI 完成清理（传入 change-dir,CLI 自己从 worktree 分支读 state）:**
 
 ```bash
 CHANGE_DIR="openspec/changes/<name>"
-alloy _worktree-cleanup \
-  --archive-dir "$CHANGE_DIR" \
-  --worktree-path "$WORKTREE_PATH" \
-  --feature-branch "$FEATURE_BRANCH" \
-  --worktree-branch "$WORKTREE_BRANCH"
+alloy _worktree-cleanup "$CHANGE_DIR"
 ```
 
 > `alloy _worktree-cleanup` 原子完成:
-> 1. 解析参数（archive-dir / worktree-path / feature-branch / worktree-branch）
+> 1. 从 change-dir 提取 change-name,用 `git show worktree-<name>:<change-dir>/.alloy.yaml` 从 worktree 分支读 state（worktree/feature_branch）
 > 2. 校验当前在主仓（不在 worktree）
 > 3. 校验当前分支 = feature_branch
 > 4. git merge worktree_branch 到 feature（失败报告冲突现场,禁 agent 自动 abort）
@@ -226,7 +222,7 @@ alloy _worktree-cleanup \
 > 7. 记录 worktree_merged_at + commit（merge 后 change-dir 在 feature 分支存在,可写）
 >
 > agent 禁自行 git merge / worktree remove / branch -d 模拟--本 CLI 是唯一合法路径。
-> state 字段必须由 agent 在 worktree 里读取后传入--CLI 不从 change-dir 读 state（change-dir 在 worktree 分支,主仓 feature 分支未 merge 时不存在,CLI 读 state 会失败 -> agent 被迫自救手动 git merge 违规）。
+> CLI 自己从 worktree 分支读 state（用 `git show worktree-<name>:<change-dir>/.alloy.yaml`）,不依赖 agent 传参--解决 agent 在 feature 分支读 state 为 null 的问题（state 写在 worktree 分支,feature 分支读不到）。步骤 ① 读 state 是为了展示给用户审查,不是传给 CLI。
 
 CLI 失败 -> ⛔ `[HARD_STOP]` 按 CLI 输出的指引处理（冲突 / 未跟踪文件 / branch -d 失败）,禁 agent 自动 git 自救（§3.5.1）。
 

@@ -383,16 +383,15 @@ alloy _archive <change-dir>
 worktree 清理（原子操作：merge worktree 分支到 feature + remove worktree + branch -d + 记录 `worktree_merged_at`）。**前置：agent 已 ExitWorktree 回主仓。**
 
 ```
-alloy _worktree-cleanup --archive-dir <path> --worktree-path <path> --feature-branch <branch> --worktree-branch <branch>
+alloy _worktree-cleanup <change-dir>
 ```
 
-选项（全部必填）：
-- `--archive-dir <path>`：archive 后的 change 目录
-- `--worktree-path <path>`：worktree 目录路径
-- `--feature-branch <branch>`：feature 分支名
-- `--worktree-branch <branch>`：worktree 分支名
+参数：
+- `<change-dir>`：change 目录路径（如 `openspec/changes/<name>`）
 
-**易错**：state 字段（`worktree` / `feature_branch` / `worktree_branch`）由 agent 在 worktree 里读取后通过参数传入——**不从 archive-dir 读 state**（archive-dir 在 worktree 分支，主仓 feature 分支未 merge 时读不到）。必须在主仓执行（不在 worktree 内）+ 当前分支 = feature 分支。
+CLI 自己从 worktree 分支（`worktree-<change-name>`）读 state（用 `git show`），不依赖 agent 传参。
+
+**易错**：必须在主仓执行（ExitWorktree 后）+ 当前分支 = feature 分支。CLI 从 **worktree 分支**读 state（不是 feature 分支），解决 agent 在 feature 分支读 state 为 null 的问题（state 写在 worktree 分支，feature 读不到）。
 
 ## 易错点汇总
 

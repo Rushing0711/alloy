@@ -1,6 +1,7 @@
 // src/cli/commands/internal/worktree-cleanup.ts
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import path from "node:path";
 import { readState, writeState } from "../../utils/state.js";
 
 function gitExec(cmd: string, opts: { cwd?: string } = {}): { ok: boolean; stdout: string; stderr: string } {
@@ -17,45 +18,80 @@ function gitExec(cmd: string, opts: { cwd?: string } = {}): { ok: boolean; stdou
   }
 }
 
-function parseArgs(args: string[]): {
-  archiveDir?: string;
-  worktreePath?: string;
-  featureBranch?: string;
-  worktreeBranch?: string;
-} {
-  const out: { archiveDir?: string; worktreePath?: string; featureBranch?: string; worktreeBranch?: string } = {};
-  for (let i = 0; i < args.length; i++) {
-    const a = args[i];
-    if (a === "--archive-dir") out.archiveDir = args[++i];
-    else if (a === "--worktree-path") out.worktreePath = args[++i];
-    else if (a === "--feature-branch") out.featureBranch = args[++i];
-    else if (a === "--worktree-branch") out.worktreeBranch = args[++i];
-  }
-  return out;
-}
-
 /**
- * alloy _worktree-cleanup --archive-dir <path> --worktree-path <path> --feature-branch <branch> --worktree-branch <branch>
+ * alloy _worktree-cleanup <change-dir>
  *
  * 原子完成 worktree 清理：merge worktree 分支到 feature + remove worktree + branch -d + worktree_merged_at 记录。
  * 前置：agent 已 ExitWorktree 回主仓（CLI 在主仓执行）。
- * state 字段（worktree/feature_branch/worktree_branch）由 agent 在 worktree 里读取后通过参数传入——
- *   不从 archive-dir 读 state，因为 archive-dir 在 worktree 分支 commit，主仓 feature 分支还没 merge 时读不到。
- * agent 禁自行 git merge / worktree remove / branch -d 模拟——本命令是唯一合法路径。
+ * 自己从 worktree 分支读 state(worktree/feature_branch),不依赖 agent 传参--
+ *   worktree 分支名约定为 worktree-<change-name>,用 git show 读其 .alloy.yaml。
+ *   解决:agent 在 feature 分支读 state 为 null 的问题(state 写在 worktree 分支)。
+ * agent 禁自行 git merge / worktree remove / branch -d 模拟--本命令是唯一合法路径。
  */
 export async function worktreeCleanupCommand(args: string[]): Promise<void> {
-  const opts = parseArgs(args);
-
-  if (!opts.archiveDir || !opts.worktreePath || !opts.featureBranch || !opts.worktreeBranch) {
-    console.error("用法: alloy _worktree-cleanup --archive-dir <path> --worktree-path <path> --feature-branch <branch> --worktree-branch <branch>");
+  // 解析 change-dir(位置参数,第一个不以 -- 开头的)
+  const changeDir = args.find((a) => !a.startsWith("--"));
+  if (!changeDir) {
+    console.error("用法: alloy _worktree-cleanup <change-dir>");
     console.error("");
-    console.error("  state 字段（worktree/feature_branch/worktree_branch）由 agent 在 worktree 里读取后传入。");
-    console.error("  不从 archive-dir 读 state——archive-dir 在 worktree 分支，主仓 feature 分支未 merge 时读不到。");
+    console.error("  原子完成 worktree 清理(merge + remove + branch -d + 记录 merged_at)。");
+    console.error("  自己从 worktree 分支(worktree-<change-name>)读 state,不依赖 agent 传参。");
+    console.error("  前置:agent 已 ExitWorktree 回主仓,当前在 feature 分支。");
     process.exit(1);
     return;
   }
 
-  const { archiveDir, worktreePath, featureBranch, worktreeBranch } = opts;
+  // 从 change-dir 提取 change name
+  const changeName = path.basename(changeDir);
+
+  // worktree 分支名(约定:worktree-<change-name>)
+  const worktreeBranch = `worktree-${changeName}`;
+
+  // 校验 worktree 分支存在
+  const branchCheck = gitExec(`git rev-parse --verify ${worktreeBranch} 2>/dev/null`);
+  if (!branchCheck.ok) {
+    console.error(`⛔ [PRECONDITION_FAIL] worktree 分支 ${worktreeBranch} 不存在`);
+    console.error(`  change-dir: ${changeDir}`);
+    console.error("  可能原因:未使用 worktree / worktree 分支已删除 / change name 不匹配");
+    console.error("  如果未使用 worktree,跳过 worktree 清理,直接进 /opsx:archive。");
+    process.exit(1);
+    return;
+  }
+
+  // 从 worktree 分支读 state(用 git show)
+  const stateShow = gitExec(`git show ${worktreeBranch}:${changeDir}/.alloy.yaml`);
+  if (!stateShow.ok) {
+    console.error(`⛔ [PRECONDITION_FAIL] 无法从 worktree 分支 ${worktreeBranch} 读 .alloy.yaml`);
+    console.error(`  git show ${worktreeBranch}:${changeDir}/.alloy.yaml 失败`);
+    console.error("  可能原因:.alloy.yaml 未 commit 到 worktree 分支 / change-dir 路径不对");
+    process.exit(1);
+    return;
+  }
+
+  // 提取 state 字段(worktree / feature_branch)
+  const stateContent = stateShow.stdout;
+  const worktreePath = stateContent
+    .match(/^worktree:\s*(.+)$/m)?.[1]
+    ?.trim()
+    .replace(/^["']|["']$/g, "");
+  const featureBranch = stateContent
+    .match(/^feature_branch:\s*(.+)$/m)?.[1]
+    ?.trim()
+    .replace(/^["']|["']$/g, "");
+
+  if (!worktreePath || worktreePath === "null" || worktreePath === "skipped") {
+    console.error(`⛔ [PRECONDITION_FAIL] worktree 分支 ${worktreeBranch} 的 state 缺少 worktree 字段`);
+    console.error(`  worktree: ${worktreePath ?? "(空)"}`);
+    console.error("  可能原因:apply 阶段未写 worktree state");
+    process.exit(1);
+    return;
+  }
+
+  if (!featureBranch) {
+    console.error(`⛔ [PRECONDITION_FAIL] worktree 分支 ${worktreeBranch} 的 state 缺少 feature_branch`);
+    process.exit(1);
+    return;
+  }
 
   // silent fallback 检测：worktree 目录不存在（可能已清理过）
   if (!existsSync(worktreePath)) {
@@ -65,13 +101,13 @@ export async function worktreeCleanupCommand(args: string[]): Promise<void> {
       console.log("  仅记录 worktree_merged_at");
       const mergedAt = new Date().toISOString().replace("T", " ").slice(0, 19);
       try {
-        const state = await readState(archiveDir);
+        const state = await readState(changeDir);
         state.worktree_merged_at = mergedAt;
-        await writeState(archiveDir, state);
-        gitExec(`git add "${archiveDir}/.alloy.yaml" && git diff --cached --quiet || git commit -m "chore: 记录 worktree 合并时间"`);
+        await writeState(changeDir, state);
+        gitExec(`git add "${changeDir}/.alloy.yaml" && git diff --cached --quiet || git commit -m "chore: 记录 worktree 合并时间"`);
         console.log("✓ worktree_merged_at 已记录");
       } catch {
-        console.error(`⚠️ 无法读取 state: ${archiveDir}/.alloy.yaml（merge 后再试）`);
+        console.error(`⚠️ 无法读取 state: ${changeDir}/.alloy.yaml（merge 后再试）`);
       }
       return;
     }
@@ -101,15 +137,15 @@ export async function worktreeCleanupCommand(args: string[]): Promise<void> {
   }
 
   // 3. git merge worktree 分支到 feature
-  console.log(`ℹ️ merge worktree 分支 ${worktreeBranch} → feature 分支 ${featureBranch}`);
+  console.log(`ℹ️ merge worktree 分支 ${worktreeBranch} -> feature 分支 ${featureBranch}`);
   const mergeResult = gitExec(`git merge ${worktreeBranch} --no-edit`);
   if (!mergeResult.ok) {
-    console.error("⛔ [HARD_STOP] git merge 失败——worktree 工作未合入 feature 分支");
+    console.error("⛔ [HARD_STOP] git merge 失败--worktree 工作未合入 feature 分支");
     console.error("  冲突现场：");
     console.error(gitExec("git status --short").stdout);
     console.error("");
     console.error("  合法路径：");
-    console.error("    1) 用户手动解决冲突后 git add + git commit，再重新运行 /alloy:archive");
+    console.error("    1) 用户手动解决冲突后 git add + git commit，再重新运行 /alloy-archive");
     console.error("    2) 用户决定放弃 worktree 工作（确认无未保存改动后）");
     console.error("");
     console.error("  禁止：agent 自动运行 git merge --abort / git reset --hard / git checkout . / git stash（§3.5.1）");
@@ -125,12 +161,12 @@ export async function worktreeCleanupCommand(args: string[]): Promise<void> {
     const lines = status.split("\n").filter((l) => l.trim());
 
     if (lines.length > 0) {
-      // 检查未提交修改是否仅含 archive-dir/.alloy.yaml
-      const alloyYamlPath = `${archiveDir}/.alloy.yaml`;
+      // 检查未提交修改是否仅含 change-dir/.alloy.yaml
+      const alloyYamlPath = `${changeDir}/.alloy.yaml`;
       const onlyAlloyYaml = lines.every((l) => l.endsWith(alloyYamlPath));
 
       if (onlyAlloyYaml) {
-        // 仅 .alloy.yaml 未提交修改——merge 已合入 commit 版本,worktree 内的修改冗余,强制 remove
+        // 仅 .alloy.yaml 未提交修改--merge 已合入 commit 版本,worktree 内的修改冗余,强制 remove
         console.log(`ℹ️ worktree 内仅 ${alloyYamlPath} 有未提交修改(merge 已合入 commit 版本),强制 remove`);
         const forceRemove = gitExec(`git worktree remove --force "${worktreePath}"`);
         if (!forceRemove.ok) {
@@ -141,7 +177,7 @@ export async function worktreeCleanupCommand(args: string[]): Promise<void> {
           return;
         }
       } else {
-        // 有其他未提交修改——HARD_STOP(可能是用户代码,不能强制删)
+        // 有其他未提交修改--HARD_STOP(可能是用户代码,不能强制删)
         console.error("⛔ [HARD_STOP] worktree 目录有未提交修改,git worktree remove 拒绝执行");
         console.error("  未提交修改:");
         console.error(status);
@@ -164,33 +200,33 @@ export async function worktreeCleanupCommand(args: string[]): Promise<void> {
   console.log(`ℹ️ 删除 worktree 分支: ${worktreeBranch}`);
   const branchResult = gitExec(`git branch -d ${worktreeBranch}`);
   if (!branchResult.ok) {
-    console.error("⛔ [HARD_STOP] git branch -d 失败——worktree 分支可能未完全合并");
+    console.error("⛔ [HARD_STOP] git branch -d 失败--worktree 分支可能未完全合并");
     console.error(`  worktree 分支: ${worktreeBranch}`);
     console.error(`  feature 分支: ${featureBranch}`);
     console.error(`  ${branchResult.stderr}`);
     console.error("");
-    console.error("  禁止：agent 自动 git branch -D 强制删除——会丢失未合并 commit");
+    console.error("  禁止：agent 自动 git branch -D 强制删除--会丢失未合并 commit");
     console.error("  必须：用户手动检查后 -D，或排查 merge 问题");
     process.exit(1);
     return;
   }
 
-  // 6. 记录 worktree_merged_at + commit（merge 后 archive-dir 在 feature 分支存在）
+  // 6. 记录 worktree_merged_at + commit（merge 后 change-dir 在 feature 分支存在）
   const mergedAt = new Date().toISOString().replace("T", " ").slice(0, 19);
   try {
-    const state = await readState(archiveDir);
+    const state = await readState(changeDir);
     state.worktree_merged_at = mergedAt;
-    await writeState(archiveDir, state);
-    gitExec(`git add "${archiveDir}/.alloy.yaml" && git diff --cached --quiet || git commit -m "chore: 记录 worktree 合并时间"`);
+    await writeState(changeDir, state);
+    gitExec(`git add "${changeDir}/.alloy.yaml" && git diff --cached --quiet || git commit -m "chore: 记录 worktree 合并时间"`);
   } catch {
-    console.error(`⚠️ 无法读取 state: ${archiveDir}/.alloy.yaml（merge 后路径应存在，请检查）`);
-    console.error("  worktree 已清理，但 worktree_merged_at 未记录——请手动检查");
+    console.error(`⚠️ 无法读取 state: ${changeDir}/.alloy.yaml（merge 后路径应存在，请检查）`);
+    console.error("  worktree 已清理，但 worktree_merged_at 未记录--请手动检查");
     process.exit(1);
     return;
   }
 
   console.log("✓ worktree 清理完成：");
-  console.log(`  ✓ merge ${worktreeBranch} → ${featureBranch}`);
+  console.log(`  ✓ merge ${worktreeBranch} -> ${featureBranch}`);
   console.log(`  ✓ worktree remove: ${worktreePath}`);
   console.log(`  ✓ branch -d: ${worktreeBranch}`);
   console.log(`  ✓ worktree_merged_at: ${mergedAt}`);
