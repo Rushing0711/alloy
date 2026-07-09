@@ -1,4 +1,5 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { chmodSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { execSync } from "node:child_process";
@@ -107,6 +108,52 @@ export async function ensureGitattributes(projectPath: string): Promise<void> {
   const block = `\n### Alloy: 强制 LF 换行(避免 Windows CRLF 混入) ###\n${lfRule}\n`;
   await writeFile(gitattributesPath, content + block, "utf-8");
   success(".gitattributes → * text=auto eol=lf");
+}
+
+/**
+ * 确保 .git/hooks/pre-commit 装 alloy _pre-commit-check(兜底 PreToolUse hook 盲区)。
+ * - 不存在:创建(可执行)
+ * - 已含 _pre-commit-check + 路径正确:幂等跳过
+ * - 已含 _pre-commit-check + 路径过时:替换为当前路径
+ * - 有用户自己的 hook(不含 _pre-commit-check):追加 alloy 检查
+ */
+export async function ensurePreCommitHook(projectPath: string): Promise<void> {
+  const hookPath = join(projectPath, ".git", "hooks", "pre-commit");
+  const alloyCliPath = join(getPackageRoot(), "dist", "cli", "index.js");
+  const alloyCheck = `node ${alloyCliPath} _pre-commit-check`;
+
+  let existing = "";
+  try {
+    existing = await readFile(hookPath, "utf-8");
+  } catch {
+    // 文件不存在
+  }
+
+  // 已含 _pre-commit-check
+  if (existing.includes("_pre-commit-check")) {
+    if (existing.includes(alloyCliPath)) {
+      return; // 路径正确,幂等跳过
+    }
+    // 路径过时,替换 _pre-commit-check 行
+    const updated = existing.replace(/node\s+\S+\s+_pre-commit-check/g, alloyCheck);
+    await writeFile(hookPath, updated, "utf-8");
+    chmodSync(hookPath, "755");
+    return;
+  }
+
+  // 有用户自己的 hook,追加 alloy 检查
+  if (existing.trim()) {
+    const appended = existing.trimEnd() + `\n\n# Alloy pre-commit check(兜底 PreToolUse hook 盲区)\n${alloyCheck}\n`;
+    await writeFile(hookPath, appended, "utf-8");
+    chmodSync(hookPath, "755");
+    return;
+  }
+
+  // 文件不存在,创建
+  await mkdir(join(hookPath, ".."), { recursive: true });
+  const hookContent = `#!/bin/sh\n# Alloy pre-commit hook:兜底 PreToolUse hook 盲区(agent 用 Bash 写文件绕过 Write/Edit)\n${alloyCheck}\n`;
+  await writeFile(hookPath, hookContent, "utf-8");
+  chmodSync(hookPath, "755");
 }
 
 export async function initCommand(opts: InitOptions): Promise<void> {
@@ -383,6 +430,7 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   // 7. 确保 .gitignore 包含 Alloy 运行时目录 + .gitattributes 强制 LF
   await ensureGitignore(opts.projectPath);
   await ensureGitattributes(opts.projectPath);
+  await ensurePreCommitHook(opts.projectPath);
 
   // 7.5 注入 agent 专有配置（如 .claude/settings.json 的 worktree.baseRef）
   section("注入 agent 专有配置...");

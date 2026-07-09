@@ -101,7 +101,7 @@ source <(alloy completion bash)         # 临时启用 bash 补全
 
 ## 内部命令（`_` 开头）
 
-面向 skill md 编排，16 个。Agent 通过这些命令操作 state、推进 phase、锁定制品 hash、归档等。**Agent 不直接写 YAML**——必须通过 `_state` / `_artifact` / `_phase` 等原子命令操作 `.alloy.yaml`。
+面向 skill md 编排，17 个。Agent 通过这些命令操作 state、推进 phase、锁定制品 hash、归档等。**Agent 不直接写 YAML**——必须通过 `_state` / `_artifact` / `_phase` 等原子命令操作 `.alloy.yaml`。
 
 ### alloy _state
 
@@ -421,6 +421,26 @@ alloy _hook-guard
 
 **不直接调用**：本命令由 agent 的 PreToolUse hook 自动触发，agent 不主动调用。
 
+### alloy _pre-commit-check
+
+git pre-commit hook 适配器。读暂存文件(`git diff --cached --name-only`)+ 调 guardCheck 判定,exit 0(放行)/ 1(拦截)。由 `alloy init` 自动装到 `.git/hooks/pre-commit`。
+
+```
+alloy _pre-commit-check
+```
+
+行为:
+- 读 git 暂存文件列表
+- 复用 `guardCheck`(与 PreToolUse hook 行为一致):非 alloy 放行 / apply 放行 / 白名单放行 / 非白名单拦截 / pending_gate 拦截
+- 有暂存文件被拦 -> exit 1(拦截 commit)
+- 全通过 -> exit 0(放行 commit)
+
+**兜底 PreToolUse hook 盲区**:agent 用 Bash 写文件(`echo > / cat << / tee`)绕过 Write/Edit hook,但 commit 时 pre-commit 检查暂存文件,拦住。
+
+**逃生阀**:`ALLOY_FORCE_WRITE=1` 环境变量绕过(仅限修复畸形状态)。
+
+**不直接调用**:本命令由 `.git/hooks/pre-commit` 自动触发,agent 不主动调用。
+
 ## 易错点汇总
 
 1. **`alloy status` 查特定 change 用 `alloy status <name>`**，禁用 `--change`（不支持）
@@ -442,3 +462,4 @@ alloy _hook-guard
 17. **`alloy _state write phase` 被拦截**：phase 推进必须走 `_phase start/complete` 或 `_guard --apply`，确保阶段时间链 + 制品完整性。逃生阀 `ALLOY_FORCE_PHASE=1`（仅限修复畸形状态）
 18. **`alloy _hook-guard` PreToolUse hook 逃生阀**：`ALLOY_FORCE_WRITE=1` 绕过 hook 拦截（仅限修复畸形状态）。hook 由 `alloy init` 自动装到 `.claude/settings.json` / `.codex/settings.json`，拦截非 apply 阶段写源码
 19. **`alloy _guard user-gate require` 后写源码被拦**:pending_gate 期间,hook-guard 拦截非白名单写入(即使 apply 阶段)。需先用问答工具(AskUserQuestion/question,自动 clear pending_gate)或 `alloy _guard user-gate pass <change-dir>` 降级。解决弱模型忘记用问答工具与用户确认的问题
+20. **pre-commit hook 兜底 PreToolUse 盲区**:agent 用 Bash 写文件(`echo > / cat << / tee`)绕过 Write/Edit hook,但 `git commit` 时 pre-commit 检查暂存文件,拦住。逃生阀 `ALLOY_FORCE_WRITE=1`。由 `alloy init` 自动装到 `.git/hooks/pre-commit`

@@ -419,6 +419,11 @@ async function main() {
       await hookGuardCommand(restArgs);
       break;
     }
+    case "_pre-commit-check": {
+      const { preCommitCheckCommand } = await import("./commands/internal/pre-commit-check.js");
+      await preCommitCheckCommand(restArgs);
+      break;
+    }
     default:
       console.error(`未知命令: ${command}`);
       console.log(USAGE);
