@@ -161,29 +161,37 @@ export async function worktreeCleanupCommand(args: string[]): Promise<void> {
     const lines = status.split("\n").filter((l) => l.trim());
 
     if (lines.length > 0) {
-      // 检查未提交修改是否仅含 change-dir/.alloy.yaml
       const alloyYamlPath = `${changeDir}/.alloy.yaml`;
-      const onlyAlloyYaml = lines.every((l) => l.endsWith(alloyYamlPath));
+      // 分离 untracked(??)和 tracked(modified/staged 等)
+      const untrackedLines = lines.filter((l) => l.startsWith("?? "));
+      const trackedLines = lines.filter((l) => !l.startsWith("?? "));
+      // tracked 修改:如果仅含 .alloy.yaml -> 可 --force;否则 HARD_STOP
+      const trackedNonAlloy = trackedLines.filter((l) => !l.endsWith(alloyYamlPath));
 
-      if (onlyAlloyYaml) {
-        // 仅 .alloy.yaml 未提交修改--merge 已合入 commit 版本,worktree 内的修改冗余,强制 remove
-        console.log(`ℹ️ worktree 内仅 ${alloyYamlPath} 有未提交修改(merge 已合入 commit 版本),强制 remove`);
-        const forceRemove = gitExec(`git worktree remove --force "${worktreePath}"`);
-        if (!forceRemove.ok) {
-          console.error("⛔ [HARD_STOP] git worktree remove --force 失败");
-          console.error(`  ${forceRemove.stderr}`);
-          console.error("  禁止：agent 自动 git clean -fd / rm -rf（§3.5.1）");
-          process.exit(1);
-          return;
-        }
-      } else {
-        // 有其他未提交修改--HARD_STOP(可能是用户代码,不能强制删)
-        console.error("⛔ [HARD_STOP] worktree 目录有未提交修改,git worktree remove 拒绝执行");
-        console.error("  未提交修改:");
-        console.error(status);
+      if (trackedNonAlloy.length > 0) {
+        // 有 tracked 文件修改(非 .alloy.yaml)-> HARD_STOP(保护用户代码)
+        console.error("⛔ [HARD_STOP] worktree 目录有 tracked 文件未提交修改,git worktree remove 拒绝执行");
+        console.error("  tracked 文件修改:");
+        console.error(trackedNonAlloy.join("\n"));
         console.error("");
         console.error("  禁止：agent 自动 git clean -fd / rm -rf（§3.5.1）");
         console.error("  必须：用户确认后手动 git worktree remove --force,或退出 skill 处理");
+        process.exit(1);
+        return;
+      }
+
+      // 只有 untracked + .alloy.yaml -> --force(untracked 未进 git,删除不丢 commit)
+      const alloyCount = trackedLines.filter((l) => l.endsWith(alloyYamlPath)).length;
+      console.log(`ℹ️ worktree 内有 ${untrackedLines.length} 个 untracked 文件 + ${alloyCount} 个 .alloy.yaml 修改(merge 已合入 commit 版本),强制 remove(untracked 未进 git,删除不丢 commit)`);
+      if (untrackedLines.length > 0) {
+        console.log(`  untracked 文件(将被删除):`);
+        untrackedLines.forEach((l) => console.log(`    ${l}`));
+      }
+      const forceRemove = gitExec(`git worktree remove --force "${worktreePath}"`);
+      if (!forceRemove.ok) {
+        console.error("⛔ [HARD_STOP] git worktree remove --force 失败");
+        console.error(`  ${forceRemove.stderr}`);
+        console.error("  禁止：agent 自动 git clean -fd / rm -rf（§3.5.1）");
         process.exit(1);
         return;
       }
