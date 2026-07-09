@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { runHealthCheck } from "../../core/health.js";
+import { KNOWN_AGENTS } from "../../core/agents.js";
+import { getHookSupportedAgents, hasHookConfig } from "../../core/agent-config.js";
 import type { HealthCheckResult } from "../../core/types.js";
 import { findActiveChanges } from "../utils/state.js";
 import { color } from "../../utils/format.js";
@@ -11,6 +13,51 @@ import { section, check, warn } from "../../utils/output.js";
 export interface DoctorResult {
   healthResults: HealthCheckResult[];
   consistencyWarnings: string[];
+  agentProtection: AgentProtectionInfo[];
+}
+
+export interface AgentProtectionInfo {
+  agentId: string;
+  agentLabel: string;
+  installed: boolean;
+  hookConfigured: boolean;
+  protectionLevel: "hook" | "skill-only" | "none";
+}
+
+/**
+ * 检测项目装了哪些 agent + 各 agent 的保护层级。
+ * - hook:有 PreToolUse hook 真闸门(Claude Code/Codex,绝对路径正确)
+ * - skill-only:装了 alloy skill 但无 hook(如 Pi/OpenCode,或 Claude Code 未装 hook / hook 配置无效)
+ * - none:没装 alloy(不返回)
+ */
+export async function detectAgentProtection(projectPath: string): Promise<AgentProtectionInfo[]> {
+  const hookSupportedAgents = getHookSupportedAgents();
+  const result: AgentProtectionInfo[] = [];
+
+  for (const agent of KNOWN_AGENTS) {
+    const agentDir = agent.commandsDir.split("/")[0];
+    const skillPath = join(projectPath, agentDir, "skills", "alloy-start", "SKILL.md");
+    const installed = existsSync(skillPath);
+
+    if (!installed) continue;
+
+    let hookConfigured = false;
+    if (hookSupportedAgents.includes(agent.id)) {
+      hookConfigured = await hasHookConfig(projectPath, agent.id);
+    }
+
+    const protectionLevel: AgentProtectionInfo["protectionLevel"] = hookConfigured ? "hook" : "skill-only";
+
+    result.push({
+      agentId: agent.id,
+      agentLabel: agent.label,
+      installed: true,
+      hookConfigured,
+      protectionLevel,
+    });
+  }
+
+  return result;
 }
 
 function detectScope(projectPath: string): "global" | "project" | undefined {
@@ -111,7 +158,9 @@ export async function doctorCommand(
   const changes = await findActiveChanges(changesDir);
   const consistencyWarnings = checkWorktreeConsistency(changes, projectPath);
 
-  return { healthResults, consistencyWarnings };
+  const agentProtection = await detectAgentProtection(projectPath);
+
+  return { healthResults, consistencyWarnings, agentProtection };
 }
 
 export function formatDoctorResult(
@@ -146,6 +195,17 @@ export function formatDoctorResult(
     lines.push("\n" + color.bold("文件一致性：") + color.green(" ✓ 无问题"));
   }
 
+  if ((result.agentProtection ?? []).length > 0) {
+    lines.push("\n" + color.bold("Agent 保护层级："));
+    for (const a of result.agentProtection) {
+      const mark = a.protectionLevel === "hook" ? color.green("✓") : color.yellow("⚠️");
+      const level = a.protectionLevel === "hook"
+        ? "hook 真闸门"
+        : "仅 skill(无 hook,保护降级)";
+      lines.push(`  ${mark} ${a.agentLabel}: ${level}`);
+    }
+  }
+
   return lines.join("\n");
 }
 
@@ -163,5 +223,15 @@ export function printDoctorResult(result: DoctorResult): void {
   } else {
     section("文件一致性");
     check("一致性", "无问题", "pass");
+  }
+
+  if ((result.agentProtection ?? []).length > 0) {
+    section("Agent 保护层级");
+    for (const a of result.agentProtection) {
+      const level = a.protectionLevel === "hook"
+        ? "hook 真闸门"
+        : "仅 skill(无 hook,保护降级)";
+      check(a.agentLabel, level, a.protectionLevel === "hook" ? "pass" : "warn");
+    }
   }
 }

@@ -54,7 +54,12 @@ alloy doctor [path] [--json]
      ├── worktree 字段为 null 但 .claude/worktrees/<name>/ 或 .worktrees/<name>/ 目录存在 → ⚠️ "worktree 孤儿"（状态写入缺失）
      └── git worktree list 中有孤立 worktree → ⚠️ 提示清理
 
---json: 以 JSON 格式输出 healthResults + consistencyWarnings
+  3. Agent 保护层级(检测项目装了哪些 agent + 各 agent 的保护):
+     - hook 真闸门:装了 PreToolUse hook(Claude Code/Codex,绝对路径正确)
+     - 仅 skill(无 hook,保护降级):装了 alloy skill 但无 hook(Pi/OpenCode 等,或 Claude Code 未装 hook / hook 配置无效)
+     - 检测逻辑:遍历 KNOWN_AGENTS,<agentDir>/skills/alloy-start/SKILL.md 存在 = 装了 skill;hasHookConfig 严格检测绝对路径 hook
+
+--json: 以 JSON 格式输出 healthResults + consistencyWarnings + agentProtection
 ```
 
 ## alloy init

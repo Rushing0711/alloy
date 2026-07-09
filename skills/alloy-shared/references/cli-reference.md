@@ -55,7 +55,7 @@ alloy status --json                # JSON 输出（程序消费）
 
 ### alloy doctor
 
-诊断：版本兼容性、文件一致性。
+诊断：版本兼容性、文件一致性、agent 保护层级。
 
 ```
 alloy doctor [path] [options]
@@ -64,6 +64,10 @@ alloy doctor [path] [options]
 选项：
 - `--json`：JSON 格式输出
 - `--help, -h`：显示帮助
+
+输出含 "Agent 保护层级" 段(检测项目装了哪些 agent + 各 agent 的保护)：
+- ✓ hook 真闸门：装了 PreToolUse hook(Claude Code/Codex,绝对路径正确)
+- ⚠️ 仅 skill(无 hook,保护降级)：装了 alloy skill 但无 hook(如 Pi/OpenCode,或 Claude Code 未装 hook / hook 配置无效)
 
 ### alloy update
 

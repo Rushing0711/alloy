@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, mkdir } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -12,7 +12,8 @@ vi.mock("node:child_process", () => ({
 
 import { runHealthCheck } from "../../src/core/health.js";
 import { execSync } from "node:child_process";
-import { doctorCommand, formatDoctorResult, checkWorktreeConsistency } from "../../src/cli/commands/doctor.js";
+import { doctorCommand, formatDoctorResult, checkWorktreeConsistency, detectAgentProtection } from "../../src/cli/commands/doctor.js";
+import { writeHookConfig } from "../../src/core/agent-config.js";
 import type { HealthCheckResult } from "../../src/core/types.js";
 
 describe("doctorCommand", () => {
@@ -209,5 +210,90 @@ describe("checkWorktreeConsistency", () => {
 
     const warnings = checkWorktreeConsistency(changes, tmpProject);
     expect(warnings.some((w) => w.includes("孤立 worktree") && w.includes("unknown-change"))).toBe(true);
+  });
+});
+
+describe("detectAgentProtection", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "alloy-doctor-agent-"));
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  async function installSkill(agentDir: string) {
+    await mkdir(join(tmpDir, agentDir, "skills", "alloy-start"), { recursive: true });
+    await writeFile(join(tmpDir, agentDir, "skills", "alloy-start", "SKILL.md"), "", "utf-8");
+  }
+
+  it("无 agent 装了 skill -> agentProtection = []", async () => {
+    const result = await detectAgentProtection(tmpDir);
+    expect(result).toEqual([]);
+  });
+
+  it("Claude Code 装了 skill + hook(绝对路径)-> protectionLevel = hook", async () => {
+    await installSkill(".claude");
+    await writeHookConfig(tmpDir, "claude-code");
+    const result = await detectAgentProtection(tmpDir);
+    const cc = result.find((a) => a.agentId === "claude-code");
+    expect(cc).toBeDefined();
+    expect(cc!.protectionLevel).toBe("hook");
+    expect(cc!.hookConfigured).toBe(true);
+  });
+
+  it("Claude Code 装了 skill 但没装 hook -> protectionLevel = skill-only", async () => {
+    await installSkill(".claude");
+    const result = await detectAgentProtection(tmpDir);
+    const cc = result.find((a) => a.agentId === "claude-code");
+    expect(cc!.protectionLevel).toBe("skill-only");
+    expect(cc!.hookConfigured).toBe(false);
+  });
+
+  it("Claude Code 装了 skill + hook(旧版 alloy _hook-guard 非绝对路径)-> protectionLevel = skill-only", async () => {
+    await installSkill(".claude");
+    await writeFile(
+      join(tmpDir, ".claude", "settings.json"),
+      JSON.stringify({
+        hooks: {
+          PreToolUse: [{ matcher: "Write|Edit", hooks: [{ type: "command", command: "alloy _hook-guard" }] }],
+        },
+      }),
+      "utf-8"
+    );
+    const result = await detectAgentProtection(tmpDir);
+    const cc = result.find((a) => a.agentId === "claude-code");
+    expect(cc!.protectionLevel).toBe("skill-only");
+    expect(cc!.hookConfigured).toBe(false);
+  });
+
+  it("Pi 装了 skill(无 hook 机制)-> protectionLevel = skill-only", async () => {
+    await installSkill(".pi");
+    const result = await detectAgentProtection(tmpDir);
+    const pi = result.find((a) => a.agentId === "pi");
+    expect(pi).toBeDefined();
+    expect(pi!.protectionLevel).toBe("skill-only");
+    expect(pi!.hookConfigured).toBe(false);
+  });
+
+  it("Codex 装了 skill + hook -> protectionLevel = hook", async () => {
+    await installSkill(".codex");
+    await writeHookConfig(tmpDir, "codex");
+    const result = await detectAgentProtection(tmpDir);
+    const codex = result.find((a) => a.agentId === "codex");
+    expect(codex!.protectionLevel).toBe("hook");
+  });
+
+  it("多个 agent 装了 skill -> 都显示", async () => {
+    await installSkill(".claude");
+    await installSkill(".codex");
+    await installSkill(".pi");
+    const result = await detectAgentProtection(tmpDir);
+    const ids = result.map((a) => a.agentId);
+    expect(ids).toContain("claude-code");
+    expect(ids).toContain("codex");
+    expect(ids).toContain("pi");
   });
 });
