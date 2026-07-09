@@ -57,6 +57,8 @@ vi.mock("../../src/core/agent-config.js", () => ({
   hasPermissionsConfig: vi.fn().mockResolvedValue(false),
   writePermissionsConfig: vi.fn().mockResolvedValue(true),
   getPermissionSupportedAgents: vi.fn().mockReturnValue(["claude-code", "codebuddy", "pi"]),
+  writeHookConfig: vi.fn().mockResolvedValue(true),
+  getHookSupportedAgents: vi.fn().mockReturnValue(["claude-code", "codex"]),
 }));
 vi.mock("../../src/utils/prompt.js", () => ({
   promptSelect: mockPromptSelect,
@@ -315,6 +317,42 @@ describe("init", () => {
       await initCommand(opts);
 
       expect(mockInjectAgentConfigs).toHaveBeenCalled();
+    });
+
+    it("选择 Claude Code 时装 PreToolUse hook(alloy _hook-guard)", async () => {
+      const opts = {
+        ...defaultOpts,
+        targetAgents: [{ id: "claude-code", label: "Claude Code", supportsColonCommands: true, commandsDir: ".claude/commands" }],
+      };
+      const { writeHookConfig } = await import("../../src/core/agent-config.js");
+
+      await initCommand(opts);
+
+      expect(writeHookConfig).toHaveBeenCalledWith(tmpDir, "claude-code");
+    });
+
+    it("选择 Codex 时装 PreToolUse hook", async () => {
+      const opts = {
+        ...defaultOpts,
+        targetAgents: [{ id: "codex", label: "Codex", supportsColonCommands: false, commandsDir: ".codex/commands" }],
+      };
+      const { writeHookConfig } = await import("../../src/core/agent-config.js");
+
+      await initCommand(opts);
+
+      expect(writeHookConfig).toHaveBeenCalledWith(tmpDir, "codex");
+    });
+
+    it("选择不支持 hook 的 agent 时不装 hook", async () => {
+      const opts = {
+        ...defaultOpts,
+        targetAgents: [{ id: "cursor", label: "Cursor", supportsColonCommands: false, commandsDir: ".cursor/commands" }],
+      };
+      const { writeHookConfig } = await import("../../src/core/agent-config.js");
+
+      await initCommand(opts);
+
+      expect(writeHookConfig).not.toHaveBeenCalled();
     });
 
     it("skill 部署失败时 exit 1", async () => {

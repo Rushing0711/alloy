@@ -93,6 +93,7 @@ export interface AlloyState {
   records: ArtifactRecord[];
   skill_usage: SkillUsageEntry[];
   feature_branch?: string | null;
+  pending_gate?: string | null;
 }
 
 export interface ProjectConfig {

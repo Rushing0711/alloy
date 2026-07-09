@@ -97,7 +97,7 @@ source <(alloy completion bash)         # 临时启用 bash 补全
 
 ## 内部命令（`_` 开头）
 
-面向 skill md 编排，15 个。Agent 通过这些命令操作 state、推进 phase、锁定制品 hash、归档等。**Agent 不直接写 YAML**——必须通过 `_state` / `_artifact` / `_phase` 等原子命令操作 `.alloy.yaml`。
+面向 skill md 编排，16 个。Agent 通过这些命令操作 state、推进 phase、锁定制品 hash、归档等。**Agent 不直接写 YAML**——必须通过 `_state` / `_artifact` / `_phase` 等原子命令操作 `.alloy.yaml`。
 
 ### alloy _state
 
@@ -143,6 +143,7 @@ alloy _guard branch-position <change-dir>
 alloy _guard verify-passed <change-dir>
 alloy _guard precheck <change-dir> <expected-phase>
 alloy _guard worktree-status <change-dir>
+alloy _guard user-gate <require|pass> <change-dir> [<gate-id>]
 ```
 
 子命令说明：
@@ -151,6 +152,8 @@ alloy _guard worktree-status <change-dir>
 - `verify-passed <change-dir>`：读 verify.md 判定，输出 `PASS` / `FAIL` / `WARNING`。退出码 0=PASS/WARNING，1=FAIL
 - `precheck <change-dir> <expected-phase>`：单点 phase 路由校验。`expected-phase` 支持逗号分隔多值（如 `planned,applied`）。输出 `PASS:<phase>` / `FAIL:<reason>`。退出码 0=通过，1=不通过
 - `worktree-status <change-dir>`：输出 `done:<path>:<branch>` / `stale:<path>` / `skipped` / `pending`。退出码始终 0（查询命令）
+- `user-gate require <change-dir> <gate-id>`：设 pending_gate,后续 Write/Edit 非白名单被 hook-guard 拦截(即使 apply 阶段),直到问答工具(AskUserQuestion/question)调用自动 clear,或手动 `user-gate pass` 降级
+- `user-gate pass <change-dir>`：清除 pending_gate(手动降级 / 无问答工具的 agent)。pending_gate 是临时状态,不 commit
 
 允许的 phase 转换：`started→planned`、`planned→applied`、`applied→archived`、`archived→finished`。`-ing` 进行中态由 `_phase start/complete` 推进，**不通过 `_guard --apply`**。
 
@@ -393,13 +396,34 @@ CLI 自己从 worktree 分支（`worktree-<change-name>`）读 state（用 `git 
 
 **易错**：必须在主仓执行（ExitWorktree 后）+ 当前分支 = feature 分支。CLI 从 **worktree 分支**读 state（不是 feature 分支），解决 agent 在 feature 分支读 state 为 null 的问题（state 写在 worktree 分支，feature 读不到）。
 
+### alloy _hook-guard
+
+PreToolUse hook 适配器（Claude Code/Codex 共用）。从 stdin 读 JSON，判定 Write/Edit 是否允许，exit 0（放行）/ 2（拦截）。由 `alloy init` 自动装到 `.claude/settings.json` / `.codex/settings.json` 的 `hooks.PreToolUse`。
+
+```
+alloy _hook-guard
+```
+
+行为：
+- 从 stdin 读 JSON（`{tool_name, tool_input:{file_path}}`）
+- 只拦截 `Write` / `Edit` 工具
+- 扫描 `openspec/changes/*/.alloy.yaml` 收集所有活跃 change 的 phase
+- 非 alloy 项目（无 .alloy.yaml） -> 放行
+- 有任一 change 在 apply 阶段（`applying`/`applied`） -> 放行（允许写源码）
+- 非 apply 阶段 + 白名单路径（`openspec/`/`.alloy.yaml`/`.claude/`/`.codex/`/`docs/`/`*.md`/`.gitignore`/`.gitattributes`） -> 放行
+- 非 apply 阶段 + 非白名单路径（`src/`/`scripts/`/代码文件） -> 拦截 exit 2
+
+**逃生阀**：`ALLOY_FORCE_WRITE=1` 环境变量绕过（仅限修复畸形状态）。
+
+**不直接调用**：本命令由 agent 的 PreToolUse hook 自动触发，agent 不主动调用。
+
 ## 易错点汇总
 
 1. **`alloy status` 查特定 change 用 `alloy status <name>`**，禁用 `--change`（不支持）
 2. **`alloy _verify` 只支持 `phase-enter|phase-exit <phase> <change-dir>`**，禁用 `run` 等其他子命令
 3. **`alloy _skill` 是命令名**（不是 `_skill-usage`），文件名是 `skill-usage.ts` 但命令注册为 `_skill`
 4. **`alloy _env check` 必须带 `check` 子命令**，无子命令 exit 1
-5. **`alloy _state write/merge` 禁操作受管字段**：`records`（用 `_artifact commit`）、`skill_usage`（用 `_skill log/skip`）、`phase_timings`（用 `_phase start/complete/reset`；`merge` 放开 `phase_timings` 但 `write` 仍拦截）
+5. **`alloy _state write/merge` 禁操作受管字段**：`records`（用 `_artifact commit`）、`skill_usage`（用 `_skill log/skip`）、`phase_timings`（用 `_phase start/complete/reset`；`merge` 放开 `phase_timings` 但 `write` 仍拦截）、`phase`（用 `_phase start/complete` 或 `_guard --apply`，逃生阀 `ALLOY_FORCE_PHASE=1`）
 6. **`alloy _phase complete` 前必须先 `_phase start`**：`started_at` 缺失则 PRECONDITION_FAIL
 7. **`alloy _checkpoint` 仅 start/plan/apply 早期允许**：archive/finish 阶段禁止；apply 中后期（worktree 已创建或 SDD/EP 已启动）禁止
 8. **`alloy _archive` 是唯一合法归档路径**：禁自行 mkdir/cp/mv 模拟
@@ -411,3 +435,6 @@ CLI 自己从 worktree 分支（`worktree-<change-name>`）读 state（用 `git 
 14. **`alloy _skill log` 前置校验**：非 `--at` 补录时，`phase_timings.<stage>.started_at` 必须已存在
 15. **内部命令不支持 `--help`**（除 `_spec-audit`）：无参数运行看 usage，或查本文件
 16. **`alloy _state write worktree/branch/created_at` 实际值只能在 worktree 内写**：主仓写实际值会被拒（PRECONDITION_FAIL），写 `null`（清理）或 `skipped`（跳过 worktree）允许。防止 feature 分支写 worktree state 导致 merge 冲突。
+17. **`alloy _state write phase` 被拦截**：phase 推进必须走 `_phase start/complete` 或 `_guard --apply`，确保阶段时间链 + 制品完整性。逃生阀 `ALLOY_FORCE_PHASE=1`（仅限修复畸形状态）
+18. **`alloy _hook-guard` PreToolUse hook 逃生阀**：`ALLOY_FORCE_WRITE=1` 绕过 hook 拦截（仅限修复畸形状态）。hook 由 `alloy init` 自动装到 `.claude/settings.json` / `.codex/settings.json`，拦截非 apply 阶段写源码
+19. **`alloy _guard user-gate require` 后写源码被拦**:pending_gate 期间,hook-guard 拦截非白名单写入(即使 apply 阶段)。需先用问答工具(AskUserQuestion/question,自动 clear pending_gate)或 `alloy _guard user-gate pass <change-dir>` 降级。解决弱模型忘记用问答工具与用户确认的问题

@@ -69,9 +69,9 @@ alloy doctor [path] [--json]
 
 | 命令 | 子命令 | 说明 |
 |------|--------|------|
-| `alloy _state` | `read\|write\|init\|merge\|check\|timestamp` | 读写 `.alloy.yaml` 状态文件。`init` 支持 `--at <timestamp>` 回填顶层 `started_at` + `--feature-branch <name>` 一次成型写入 feature_branch |
+| `alloy _state` | `read\|write\|init\|merge\|check\|timestamp` | 读写 `.alloy.yaml` 状态文件。`init` 支持 `--at <timestamp>` 回填顶层 `started_at` + `--feature-branch <name>` 一次成型写入 feature_branch。**受管字段拦截**:`records`/`skill_usage`/`phase_timings` 禁 `write`/`merge`;`phase` 禁 `write`(走 `_phase start/complete` 或 `_guard --apply`,逃生阀 `ALLOY_FORCE_PHASE=1`);`worktree`/`worktree_branch`/`worktree_created_at` 实际值只能在 worktree 内写(主仓写 `null`/`skipped` 允许) |
 | `alloy _skill` | `log\|skip` | 技能使用记录管理，持久化到 `skill_usage[]`。字段 `called_at`（调用时间，多次调用更新为最新）+ `count`（累加）。`log` 同一 skill+stage 已存在时 count++ |
-| `alloy _guard` | `precheck\|verify-passed\|branch-position\|worktree-status` + `<name> <phase> --apply` | 阶段转换校验 + phase 推进 |
+| `alloy _guard` | `precheck\|verify-passed\|branch-position\|worktree-status\|user-gate` + `<name> <phase> --apply` | 阶段转换校验 + phase 推进 + USER_GATE 闸门(`user-gate require/pass`,配合 hook-guard 拦截 agent 跳过用户确认) |
 | `alloy _phase` | `start\|complete\|reset` | 阶段时间记录 + phase 推进。`start` 推进到 -ing（进行中）+ 写 started_at，`complete` 推进到 -ed（已完成）+ 写 completed_at，`complete finish` 额外写顶层 `completed_at`（全周期完成时间） |
 | `alloy _verify` | `phase-enter\|phase-exit <phase> <change-dir>` | 阶段转换状态校验——CLI 确定性校验制品 + state 字段 + 目录位置,不替代 agent 执行,只报告缺失项。`phase-enter` 期望 phase=-ing(进入阶段后),`phase-exit` 期望 phase=-ing(_phase complete 之前,尚未推进到 -ed)。比 `_guard precheck`(单点 phase 路由)更全面。空参数(如 bash 变量未设置)报 `⛔ [PRECONDITION_FAIL] 参数缺失` + 指明哪个参数空 + bash 变量提示 |
 | `alloy _record` | `compute\|write\|check\|approver` | 制品 hash 记录管理 |
@@ -82,5 +82,6 @@ alloy doctor [path] [--json]
 | `alloy _progress` | `artifacts` | 制品进度扫描，输出每个制品状态（done/missing/hash-mismatch/pending），供 plan/apply 决定从哪个制品开始 |
 | `alloy _artifact` | `commit\|reset` | `commit` 原子完成 hash 计算 + records 写入 + git add 限路径 + commit（重复锁定且 hash 未变时跳过）；`reset` 清掉指定制品的 record |
 | `alloy _archive` | `<change-dir>` | 归档原子命令:调用 openspec archive CLI + 校验 Delta Spec promote + 校验目录移动。agent 禁自行 mkdir/cp/mv 模拟 |
-| `alloy _worktree-cleanup` | `--archive-dir <path> --worktree-path <path> --feature-branch <branch> --worktree-branch <branch>` | worktree 清理原子命令:merge worktree 分支到 feature + remove worktree + branch -d + worktree_merged_at 记录。state 字段由 agent 在 worktree 里读取后传入(不从 archive-dir 读 state)。agent 禁自行 git merge / worktree remove / branch -d 模拟。worktree remove 失败时,若未提交修改仅含 archive-dir/.alloy.yaml 则自动 `--force`(merge 已合入 commit 版本,worktree 内修改冗余);有其他文件修改 HARD_STOP 保护用户代码 |
+| `alloy _worktree-cleanup` | `<change-dir>` | worktree 清理原子命令:merge worktree 分支到 feature + remove worktree + branch -d + worktree_merged_at 记录。CLI 自己从 worktree 分支(`worktree-<change-name>`)读 state(用 `git show`),不依赖 agent 传参。agent 禁自行 git merge / worktree remove / branch -d 模拟。worktree remove 失败时,untracked 文件自动 `--force`(未进 git,删除不丢 commit);tracked 文件修改(非 .alloy.yaml)HARD_STOP 保护用户代码 |
 | `alloy _spec-audit` | — | spec 审计工具,检测 skill frontmatter 与 spec 的 behaviors 字段漂移。详见 `alloy _spec-audit --help` |
+| `alloy _hook-guard` | - | PreToolUse hook 适配器(Claude Code/Codex 共用)。从 stdin 读 JSON,判定 Write/Edit 是否允许,exit 0(放行)/2(拦截)。由 `alloy init` 自动装到 `.claude/settings.json`/`.codex/settings.json` 的 `hooks.PreToolUse`。拦截非 apply 阶段写源码(`src/`/`scripts/` 等),白名单放行(`openspec/`/`.alloy.yaml`/`.claude/`/`docs/`/`*.md` 等)。逃生阀 `ALLOY_FORCE_WRITE=1` |

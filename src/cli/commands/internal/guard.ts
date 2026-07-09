@@ -33,6 +33,9 @@ export async function guardCommand(args: string[]): Promise<void> {
   if (subCommand === "worktree-status") {
     return worktreeStatusGuard(args.slice(1));
   }
+  if (subCommand === "user-gate") {
+    return userGateGuard(args.slice(1));
+  }
 
   // 原有 phase 转换校验逻辑
   const changeDir = args[0];
@@ -325,4 +328,51 @@ async function worktreeStatusGuard(args: string[]): Promise<void> {
 
   console.log(`stale:${worktree}`);
   return; // exit(0)
+}
+
+/**
+ * alloy _guard user-gate <require|pass> <change-dir> [<gate-id>]
+ *
+ * USER_GATE 闸门:配合 hook-guard 拦截 agent 跳过用户确认。
+ * - require:设置 pending_gate,后续 Write/Edit 非白名单被 hook 拦截,直到问答工具调用或手动 pass
+ * - pass:清除 pending_gate(手动降级 / 无问答工具的 agent)
+ *
+ * hook-guard 检测到 AskUserQuestion/question 工具调用时,自动 clear 所有 pending_gate。
+ * pending_gate 是临时状态,不 commit(由 _state write 模式管理)。
+ */
+async function userGateGuard(args: string[]): Promise<void> {
+  const action = args[0];
+  const changeDir = args[1];
+
+  if (action === "require") {
+    const gateId = args[2];
+    if (!changeDir || !gateId) {
+      console.error("用法: alloy _guard user-gate require <change-dir> <gate-id>");
+      process.exit(1);
+      return;
+    }
+    const state = await readState(changeDir);
+    state.pending_gate = gateId;
+    await writeState(changeDir, state);
+    console.log(`✓ user-gate 已设: ${gateId} (${changeDir})`);
+    console.log("  hook-guard 将拦截非白名单写入,直到问答工具调用或 alloy _guard user-gate pass");
+    return;
+  }
+
+  if (action === "pass") {
+    if (!changeDir) {
+      console.error("用法: alloy _guard user-gate pass <change-dir>");
+      process.exit(1);
+      return;
+    }
+    const state = await readState(changeDir);
+    const cleared = state.pending_gate ?? null;
+    state.pending_gate = null;
+    await writeState(changeDir, state);
+    console.log(`✓ user-gate 已通过: ${cleared ?? "(无)"} (${changeDir})`);
+    return;
+  }
+
+  console.error(`未知操作: ${action} (支持: require, pass)`);
+  process.exit(1);
 }

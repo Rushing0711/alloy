@@ -178,6 +178,11 @@ git log --oneline -10 "$WORKTREE_BRANCH" 2>/dev/null
 
 **② USER_GATE 确认清理：**
 
+> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级:
+```bash
+alloy _guard user-gate require "$CHANGE_DIR" archive:worktree-cleanup
+```
+
 🔴 USER_GATE（必须 AskUserQuestion）: 确认清理 worktree?
 
 > 选项:
@@ -258,6 +263,11 @@ alloy _archive openspec/changes/<name>
 ```bash
 SPEC_DIFF=$(git diff --stat openspec/specs/)
 SPEC_DIFF_FULL=$(git diff openspec/specs/ | head -200)  # 截 200 行防爆量
+```
+
+> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级:
+```bash
+alloy _guard user-gate require "$CHANGE_DIR" archive:delta-spec-review
 ```
 
 🔴 USER_GATE（必须 AskUserQuestion，问题模板）：
@@ -341,6 +351,11 @@ git reset HEAD~1                                  # 退回 phase commit
 ```
 
 archive 不做代码合并--代码合入由 `/alloy-finish` 处理。
+
+> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级:
+```bash
+alloy _guard user-gate require "$CHANGE_DIR" archive:phase-complete
+```
 
 🔴 USER_GATE（必须 AskUserQuestion）: archive 阶段完成,下一步?
 

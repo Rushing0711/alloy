@@ -70,6 +70,11 @@ alloy _config read . main_branch
 
 ## 🔴 STOP 确认提示（USER_GATE - 精确字符串确认）
 
+> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级:
+```bash
+alloy _guard user-gate require openspec/changes/<name> discard:confirm-delete
+```
+
 > ⛔ [HARD_STOP] 清理前必须展示将要删除的内容并等待用户精确确认。
 > 违反字面 = 违反精神：哪怕"用户已经口头同意"、"y 就行"、"删了吧"，也算违反--精确字符串是防手滑的最后一道防线，模糊回复一律不算确认。
 

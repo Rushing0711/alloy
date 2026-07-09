@@ -414,6 +414,11 @@ async function main() {
       await verifyCommand(restArgs);
       break;
     }
+    case "_hook-guard": {
+      const { hookGuardCommand } = await import("./commands/internal/hook-guard.js");
+      await hookGuardCommand(restArgs);
+      break;
+    }
     default:
       console.error(`未知命令: ${command}`);
       console.log(USAGE);

@@ -72,12 +72,6 @@ describe("alloy _state", () => {
       expect(out).toBe("1");
     });
 
-    it("write 更新 phase 字段", async () => {
-      await stateCommand(["write", changeDir, "phase", "planned"]);
-      const state = await readState(changeDir);
-      expect(state.phase).toBe("planned");
-    });
-
     it("write schema_version 转换为 number 类型", async () => {
       await stateCommand(["write", changeDir, "schema_version", "2"]);
       const state = await readState(changeDir);
@@ -86,7 +80,7 @@ describe("alloy _state", () => {
     });
 
     it("write 自动更新 updated_at（含 Z 后缀）", async () => {
-      await stateCommand(["write", changeDir, "phase", "applied"]);
+      await stateCommand(["write", changeDir, "feature_branch", "feat/test"]);
       const state = await readState(changeDir);
       expect(state.updated_at).not.toBe("2020-01-01T00:00:00Z");
       expect(state.updated_at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
@@ -192,6 +186,95 @@ describe("alloy _state", () => {
         exitSpy.mockRestore();
       });
     });
+
+    describe("phase 直接写拦截", () => {
+      let originalForcePhase: string | undefined;
+
+      beforeEach(() => {
+        originalForcePhase = process.env.ALLOY_FORCE_PHASE;
+        delete process.env.ALLOY_FORCE_PHASE;
+      });
+
+      afterEach(() => {
+        if (originalForcePhase === undefined) {
+          delete process.env.ALLOY_FORCE_PHASE;
+        } else {
+          process.env.ALLOY_FORCE_PHASE = originalForcePhase;
+        }
+      });
+
+      it("write phase 时拒绝并 exit(1)", async () => {
+        const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+        const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+        await stateCommand(["write", changeDir, "phase", "planned"]);
+
+        expect(exitSpy).toHaveBeenCalledWith(1);
+        expect(errSpy.mock.calls.some((c) => String(c[0]).includes("phase") && String(c[0]).includes("受管"))).toBe(true);
+        exitSpy.mockRestore();
+        errSpy.mockRestore();
+      });
+
+      it("提示走 _phase start/complete", async () => {
+        const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+        const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+        await stateCommand(["write", changeDir, "phase", "planned"]);
+
+        expect(errSpy.mock.calls.some((c) => String(c[0]).includes("_phase start"))).toBe(true);
+        exitSpy.mockRestore();
+        errSpy.mockRestore();
+      });
+
+      it("提示走 _guard --apply", async () => {
+        const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+        const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+        await stateCommand(["write", changeDir, "phase", "planned"]);
+
+        expect(errSpy.mock.calls.some((c) => String(c[0]).includes("_guard") && String(c[0]).includes("--apply"))).toBe(true);
+        exitSpy.mockRestore();
+        errSpy.mockRestore();
+      });
+
+      it("提示 ALLOY_FORCE_PHASE 逃生阀", async () => {
+        const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+        const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+        await stateCommand(["write", changeDir, "phase", "planned"]);
+
+        expect(errSpy.mock.calls.some((c) => String(c[0]).includes("ALLOY_FORCE_PHASE"))).toBe(true);
+        exitSpy.mockRestore();
+        errSpy.mockRestore();
+      });
+
+      it("ALLOY_FORCE_PHASE=1 逃生阀放行", async () => {
+        process.env.ALLOY_FORCE_PHASE = "1";
+        await stateCommand(["write", changeDir, "phase", "planned"]);
+        const state = await readState(changeDir);
+        expect(state.phase).toBe("planned");
+      });
+
+      it("拦截后 phase 未被修改", async () => {
+        const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+        const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+        try {
+          await stateCommand(["write", changeDir, "phase", "planned"]);
+        } catch {}
+
+        const after = await readState(changeDir);
+        expect(after.phase).toBe("started");
+        exitSpy.mockRestore();
+        errSpy.mockRestore();
+      });
+
+      it("write 其他字段(feature_branch)不拦截", async () => {
+        await stateCommand(["write", changeDir, "feature_branch", "feat/test"]);
+        const state = await readState(changeDir);
+        expect(state.feature_branch).toBe("feat/test");
+      });
+    });
   });
 
   describe("init——文件不存在时创建完整初始状态", () => {
@@ -228,9 +311,9 @@ describe("alloy _state", () => {
 
     it("write 到不存在的目录时先读取初始状态再写入", async () => {
       const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
-      await stateCommand(["write", changeDir, "phase", "planned"]);
+      await stateCommand(["write", changeDir, "feature_branch", "feat/test"]);
       const state = await readState(changeDir);
-      expect(state.phase).toBe("planned");
+      expect(state.feature_branch).toBe("feat/test");
       expect(state.schema_version).toBe(1); // 初始状态的默认值
       expect(state.records).toEqual([]); // 初始状态的 records
       exitSpy.mockRestore();

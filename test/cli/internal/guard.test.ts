@@ -358,4 +358,61 @@ describe("alloy _guard", () => {
     const state = await readState(changeDir);
     expect(state.phase).toBe("started"); // unchanged
   });
+
+  describe("user-gate", () => {
+    it("require 设置 pending_gate", async () => {
+      await guardCommand(["user-gate", "require", changeDir, "confirm-main-branch"]);
+      const state = await readState(changeDir);
+      expect(state.pending_gate).toBe("confirm-main-branch");
+    });
+
+    it("require 缺 change-dir -> exit 1", async () => {
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+      const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      await guardCommand(["user-gate", "require"]);
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      exitSpy.mockRestore();
+      errSpy.mockRestore();
+    });
+
+    it("require 缺 gate-id -> exit 1", async () => {
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+      const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      await guardCommand(["user-gate", "require", changeDir]);
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      exitSpy.mockRestore();
+      errSpy.mockRestore();
+    });
+
+    it("pass 清除 pending_gate", async () => {
+      await guardCommand(["user-gate", "require", changeDir, "confirm-main-branch"]);
+      await guardCommand(["user-gate", "pass", changeDir]);
+      const state = await readState(changeDir);
+      expect(state.pending_gate).toBeNull();
+    });
+
+    it("pass 缺 change-dir -> exit 1", async () => {
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+      const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      await guardCommand(["user-gate", "pass"]);
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      exitSpy.mockRestore();
+      errSpy.mockRestore();
+    });
+
+    it("pass 时 pending_gate 已 null -> 幂等", async () => {
+      await guardCommand(["user-gate", "pass", changeDir]);
+      const state = await readState(changeDir);
+      expect(state.pending_gate).toBeNull();
+    });
+
+    it("未知操作 -> exit 1", async () => {
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+      const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      await guardCommand(["user-gate", "bogus", changeDir]);
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      exitSpy.mockRestore();
+      errSpy.mockRestore();
+    });
+  });
 });

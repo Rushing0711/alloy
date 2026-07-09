@@ -3,7 +3,10 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { writeFile, readFile, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { injectAgentConfigs, hasPermissionsConfig, writePermissionsConfig, ALLOY_PERMISSIONS, getPermissionSupportedAgents } from "../../src/core/agent-config.js";
+import { injectAgentConfigs, hasPermissionsConfig, writePermissionsConfig, ALLOY_PERMISSIONS, getPermissionSupportedAgents, hasHookConfig, writeHookConfig, getHookSupportedAgents } from "../../src/core/agent-config.js";
+import { getPackageRoot } from "../../src/utils/fs.js";
+
+const expectedHookCommand = `node ${getPackageRoot()}/dist/cli/index.js _hook-guard`;
 import type { AgentInfo, DeployOptions } from "../../src/core/types.js";
 
 const claudeCode: AgentInfo = {
@@ -223,5 +226,140 @@ describe("getPermissionSupportedAgents", () => {
     expect(agents).toContain("pi");
     expect(agents).not.toContain("codex");
     expect(agents).not.toContain("gemini-cli");
+  });
+});
+
+describe("hasHookConfig", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = join(tmpdir(), `alloy-hook-check-${Date.now()}`);
+    await mkdir(tmpDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("文件不存在时返回 false", async () => {
+    expect(await hasHookConfig(tmpDir, "claude-code")).toBe(false);
+  });
+
+  it("有 alloy _hook-guard 时返回 true", async () => {
+    await mkdir(join(tmpDir, ".claude"), { recursive: true });
+    await writeFile(
+      join(tmpDir, ".claude/settings.json"),
+      JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Write|Edit", hooks: [{ type: "command", command: expectedHookCommand }] }] } }),
+      "utf-8"
+    );
+    expect(await hasHookConfig(tmpDir, "claude-code")).toBe(true);
+  });
+
+  it("有其他 hook 但无 alloy -> false", async () => {
+    await mkdir(join(tmpDir, ".claude"), { recursive: true });
+    await writeFile(
+      join(tmpDir, ".claude/settings.json"),
+      JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Write|Edit", hooks: [{ type: "command", command: "other-hook" }] }] } }),
+      "utf-8"
+    );
+    expect(await hasHookConfig(tmpDir, "claude-code")).toBe(false);
+  });
+
+  it("不支持的 agent id 返回 false", async () => {
+    expect(await hasHookConfig(tmpDir, "unknown-agent")).toBe(false);
+  });
+});
+
+describe("writeHookConfig", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = join(tmpdir(), `alloy-hook-write-${Date.now()}`);
+    await mkdir(tmpDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("Claude Code: 文件不存在时创建并写入 PreToolUse hook", async () => {
+    const written = await writeHookConfig(tmpDir, "claude-code");
+    expect(written).toBe(true);
+
+    const settings = JSON.parse(await readFile(join(tmpDir, ".claude/settings.json"), "utf-8"));
+    const preToolUse = settings.hooks.PreToolUse;
+    expect(Array.isArray(preToolUse)).toBe(true);
+    const alloyEntry = preToolUse.find((e: { matcher: string }) => e.matcher === "Write|Edit");
+    expect(alloyEntry).toBeTruthy();
+    expect(alloyEntry.hooks.some((h: { command: string }) => h.command === expectedHookCommand)).toBe(true);
+  });
+
+  it("Codex: 写入 .codex/settings.json", async () => {
+    const written = await writeHookConfig(tmpDir, "codex");
+    expect(written).toBe(true);
+
+    const settings = JSON.parse(await readFile(join(tmpDir, ".codex/settings.json"), "utf-8"));
+    const preToolUse = settings.hooks.PreToolUse;
+    expect(Array.isArray(preToolUse)).toBe(true);
+    const alloyEntry = preToolUse.find((e: { matcher: string }) => e.matcher === "Write|Edit");
+    expect(alloyEntry.hooks.some((h: { command: string }) => h.command === expectedHookCommand)).toBe(true);
+  });
+
+  it("不支持的 agent id 返回 false", async () => {
+    const written = await writeHookConfig(tmpDir, "unknown-agent");
+    expect(written).toBe(false);
+  });
+
+  it("幂等：二次写入不重复", async () => {
+    await writeHookConfig(tmpDir, "claude-code");
+    await writeHookConfig(tmpDir, "claude-code");
+
+    const settings = JSON.parse(await readFile(join(tmpDir, ".claude/settings.json"), "utf-8"));
+    const preToolUse = settings.hooks.PreToolUse;
+    const alloyEntries = preToolUse.filter((e: { matcher: string; hooks: { command: string }[] }) =>
+      e.matcher === "Write|Edit" && e.hooks.some((h) => h.command === expectedHookCommand)
+    );
+    expect(alloyEntries).toHaveLength(1);
+  });
+
+  it("保留现有配置(permissions/worktree)", async () => {
+    await mkdir(join(tmpDir, ".claude"), { recursive: true });
+    await writeFile(
+      join(tmpDir, ".claude/settings.json"),
+      JSON.stringify({ permissions: { allow: ["Bash(npm test *)"] }, worktree: { baseRef: "head" } }),
+      "utf-8"
+    );
+
+    await writeHookConfig(tmpDir, "claude-code");
+
+    const settings = JSON.parse(await readFile(join(tmpDir, ".claude/settings.json"), "utf-8"));
+    expect(settings.permissions.allow).toContain("Bash(npm test *)");
+    expect(settings.worktree.baseRef).toBe("head");
+    expect(settings.hooks.PreToolUse).toBeTruthy();
+  });
+
+  it("已有其他 PreToolUse hook -> 合并到同 matcher 的 hooks 数组", async () => {
+    await mkdir(join(tmpDir, ".claude"), { recursive: true });
+    await writeFile(
+      join(tmpDir, ".claude/settings.json"),
+      JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Write|Edit", hooks: [{ type: "command", command: "other-hook" }] }] } }),
+      "utf-8"
+    );
+
+    await writeHookConfig(tmpDir, "claude-code");
+
+    const settings = JSON.parse(await readFile(join(tmpDir, ".claude/settings.json"), "utf-8"));
+    const entry = settings.hooks.PreToolUse.find((e: { matcher: string }) => e.matcher === "Write|Edit");
+    expect(entry.hooks).toHaveLength(2);
+    expect(entry.hooks.some((h: { command: string }) => h.command === "other-hook")).toBe(true);
+    expect(entry.hooks.some((h: { command: string }) => h.command === expectedHookCommand)).toBe(true);
+  });
+});
+
+describe("getHookSupportedAgents", () => {
+  it("返回支持 PreToolUse hook 的 agent id 列表", () => {
+    const agents = getHookSupportedAgents();
+    expect(agents).toContain("claude-code");
+    expect(agents).toContain("codex");
   });
 });

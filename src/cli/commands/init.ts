@@ -8,7 +8,7 @@ import { runHealthCheck } from "../../core/health.js";
 import { installOpenSpecCli, initOpenSpecProject } from "../../core/openspec.js";
 import { installSuperpowers } from "../../core/superpowers.js";
 import { deploySkills, deploySchema } from "../../core/skills.js";
-import { injectAgentConfigs, hasPermissionsConfig, writePermissionsConfig, getPermissionSupportedAgents } from "../../core/agent-config.js";
+import { injectAgentConfigs, hasPermissionsConfig, writePermissionsConfig, getPermissionSupportedAgents, writeHookConfig, getHookSupportedAgents } from "../../core/agent-config.js";
 import { KNOWN_AGENTS } from "../../core/agents.js";
 import type { AgentInfo, DeployOptions } from "../../core/types.js";
 import { getPackageRoot } from "../../utils/fs.js";
@@ -276,6 +276,12 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   if (hasClaudeCode) {
     info("  + .claude/settings.json           （新建/更新，worktree.baseRef: head）");
   }
+  const hookAgentLabels = opts.targetAgents
+    .filter(a => getHookSupportedAgents().includes(a.id))
+    .map(a => a.label);
+  if (hookAgentLabels.length > 0) {
+    info(`  + PreToolUse hook                  （${hookAgentLabels.join(" / ")} 的 hooks.PreToolUse,alloy _hook-guard 真闸门）`);
+  }
   if (configurePermissions && supportedAgents.length > 0) {
     info(`  + 权限白名单                         （${permissionAgentLabels.join(" / ")} 的 permissions.allow/deny）`);
   }
@@ -399,6 +405,25 @@ export async function initCommand(opts: InitOptions): Promise<void> {
         }
       } catch (e) {
         warn(`${agentLabel} 权限白名单写入失败: ${(e as Error).message}`);
+      }
+    }
+  }
+
+  // 7.7 写入 PreToolUse hook(真闸门)--对支持 hook 的 agent 自动装(claude-code + codex)
+  const hookSupportedAgentIds = opts.targetAgents
+    .map(a => a.id)
+    .filter(id => getHookSupportedAgents().includes(id));
+  if (hookSupportedAgentIds.length > 0) {
+    section("写入 PreToolUse hook...");
+    for (const agentId of hookSupportedAgentIds) {
+      const agentLabel = opts.targetAgents.find(a => a.id === agentId)?.label ?? agentId;
+      try {
+        const written = await writeHookConfig(opts.projectPath, agentId);
+        if (written) {
+          success(`${agentLabel} -> hooks.PreToolUse (alloy _hook-guard)`);
+        }
+      } catch (e) {
+        warn(`${agentLabel} hook 写入失败: ${(e as Error).message}`);
       }
     }
   }

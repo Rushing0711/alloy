@@ -197,3 +197,112 @@ export async function writePermissionsConfig(projectPath: string, agentId: strin
   await writeFile(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");
   return true;
 }
+
+// --- PreToolUse hook 配置(alloy _hook-guard) ---
+
+import { getPackageRoot } from "../utils/fs.js";
+
+/**
+ * 支持 PreToolUse hook 的 agent 配置--alloy init 可项目级注入。
+ * Claude Code / Codex 共用同款协议(外部脚本 + exit 2 阻断)。
+ */
+const ALLOY_HOOK_CONFIGS: Record<string, string> = {
+  "claude-code": ".claude/settings.json",
+  "codex": ".codex/settings.json",
+};
+
+const ALLOY_HOOK_MATCHER = "Write|Edit";
+
+/**
+ * hook command 用绝对路径,不依赖 PATH/alias。
+ * 原因:Claude Code 的 hook 执行环境(/bin/sh)不加载用户 shell alias,
+ * 若用户用 alias 指向开发版 alloy,hook 会找到 PATH 里的旧版 alloy(无 _hook-guard 命令)。
+ * 绝对路径确保 hook 总是调用当前 alloy 包的 CLI。
+ */
+function getHookCommand(): string {
+  const alloyCliPath = join(getPackageRoot(), "dist", "cli", "index.js");
+  return `node ${alloyCliPath} _hook-guard`;
+}
+
+/** 返回支持 PreToolUse hook 的 agent id 列表 */
+export function getHookSupportedAgents(): string[] {
+  return Object.keys(ALLOY_HOOK_CONFIGS);
+}
+
+interface PreToolUseEntry {
+  matcher?: string;
+  hooks?: { type: string; command: string }[];
+}
+
+/** 检测指定 agent 是否已装 alloy _hook-guard(绝对路径版本) */
+export async function hasHookConfig(projectPath: string, agentId: string): Promise<boolean> {
+  const settingsFile = ALLOY_HOOK_CONFIGS[agentId];
+  if (!settingsFile) return false;
+
+  const settingsPath = join(projectPath, settingsFile);
+  try {
+    const raw = await readFile(settingsPath, "utf-8");
+    const settings = JSON.parse(raw);
+    const preToolUse = settings?.hooks?.PreToolUse;
+    if (!Array.isArray(preToolUse)) return false;
+
+    const hookCommand = getHookCommand();
+    return preToolUse.some((entry: PreToolUseEntry) =>
+      entry?.matcher === ALLOY_HOOK_MATCHER &&
+      Array.isArray(entry.hooks) &&
+      entry.hooks.some((h) => h?.command === hookCommand)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 写入 alloy _hook-guard 到指定 agent 的 PreToolUse hook(幂等)。
+ * 若已有旧版 `alloy _hook-guard`(无绝对路径),替换为绝对路径版本。
+ */
+export async function writeHookConfig(projectPath: string, agentId: string): Promise<boolean> {
+  const settingsFile = ALLOY_HOOK_CONFIGS[agentId];
+  if (!settingsFile) return false;
+
+  const settingsPath = join(projectPath, settingsFile);
+  let settings: Record<string, unknown> = {};
+  try {
+    const raw = await readFile(settingsPath, "utf-8");
+    settings = JSON.parse(raw);
+  } catch {
+    // 文件不存在
+  }
+
+  const hooks = (settings.hooks ?? {}) as Record<string, unknown>;
+  const preToolUse: PreToolUseEntry[] = Array.isArray(hooks.PreToolUse)
+    ? [...hooks.PreToolUse] as PreToolUseEntry[]
+    : [];
+
+  const hookCommand = getHookCommand();
+
+  // 找同 matcher 的 entry
+  let entry = preToolUse.find((e) => e?.matcher === ALLOY_HOOK_MATCHER);
+  if (!entry) {
+    entry = { matcher: ALLOY_HOOK_MATCHER, hooks: [] };
+    preToolUse.push(entry);
+  }
+  if (!Array.isArray(entry.hooks)) entry.hooks = [];
+
+  // 检测是否已有绝对路径版本
+  const hasExactCommand = entry.hooks.some((h) => h?.command === hookCommand);
+  if (!hasExactCommand) {
+    // 移除旧的 _hook-guard 命令(可能是 `alloy _hook-guard` 无绝对路径,旧版不生效)
+    entry.hooks = entry.hooks.filter((h) => !h?.command?.includes("_hook-guard"));
+    // 追加绝对路径版本
+    entry.hooks.push({ type: "command", command: hookCommand });
+  }
+
+  hooks.PreToolUse = preToolUse;
+  settings.hooks = hooks;
+
+  const dir = join(settingsPath, "..");
+  await mkdir(dir, { recursive: true });
+  await writeFile(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");
+  return true;
+}

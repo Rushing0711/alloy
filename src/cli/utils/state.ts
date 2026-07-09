@@ -28,6 +28,7 @@ export function createInitialState(startedAt?: string, featureBranch?: string): 
     completed_at: null,
     records: [],
     skill_usage: [],
+    pending_gate: null,
   };
 }
 

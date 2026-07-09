@@ -145,6 +145,11 @@ SKILL_USAGE=$(alloy _state read openspec/changes/<name> skill_usage)
 
 任一标志位不满足（worktree 已创建 或 SDD/EP 已启动）时，回退会破坏 worktree 隔离或丢失代码。此时只能 discard。
 
+> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级:
+```bash
+alloy _guard user-gate require openspec/changes/<name> apply:requirement-change
+```
+
 🔴 USER_GATE（必须 AskUserQuestion）：检测到需求变更，根据标志位结果选择路径：
 
 **档位 A（apply 早期）选项：**
@@ -210,6 +215,11 @@ alloy _guard branch-position openspec/changes/<name>
 > - agent 手动 `mkdir -p .worktrees && git worktree add .worktrees/<name>`——应该用 `EnterWorktree(name)` 工具
 > - agent 认为"手动更可控"绕过 EnterWorktree——EnterWorktree 的 session 解绑是关键,手动 cd 替代不了
 - **必须等用户明确选择（创建/跳过）后才继续。模糊回复（"嗯"、"好吧"）不算同意。**
+
+> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级:
+```bash
+alloy _guard user-gate require openspec/changes/<name> apply:worktree-choice
+```
 
 🔴 USER_GATE（必须 AskUserQuestion）: 确认 worktree 选择。**选项描述必须如实映射任务规模,禁说反：**
 

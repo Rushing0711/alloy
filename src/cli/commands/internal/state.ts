@@ -64,6 +64,25 @@ function rejectWorktreeFieldInMainRepo(field: string, value: string | undefined)
   return false;
 }
 
+/**
+ * phase 字段直接写拦截:禁止 _state write phase,强制走 _phase start/complete 或 _guard --apply。
+ * 逃生阀:ALLOY_FORCE_PHASE=1(仅限修复畸形状态)。
+ * phase 推进涉及阶段时间链(started_at/completed_at)+ 制品完整性(hash-lock),
+ * 直接写 phase 会绕过这些校验,导致时间链断裂 + 制品未校验。
+ */
+function rejectDirectPhaseWrite(field: string): boolean {
+  if (field !== "phase") return false;
+  if (process.env.ALLOY_FORCE_PHASE === "1") return false;
+  console.error(`[FAIL] 字段 'phase' 受管,禁止 _state write 直接操作`);
+  console.error(`  phase 推进必须走专用命令,确保阶段时间链 + 制品完整性:`);
+  console.error(`    阶段开始:alloy _phase start <change-dir> <start|plan|apply|archive|finish>`);
+  console.error(`    阶段完成:alloy _phase complete <change-dir> <start|plan|apply|archive|finish>`);
+  console.error(`    转换校验:alloy _guard <change-dir> <target-phase> --apply`);
+  console.error(`  逃生阀:ALLOY_FORCE_PHASE=1(仅限修复畸形状态)`);
+  process.exit(1);
+  return true;
+}
+
 function coerceValue(field: string, value: string | undefined): unknown {
   if (value === undefined) return undefined;
   if (value === "null") return null;
@@ -175,6 +194,7 @@ export async function stateCommand(args: string[]): Promise<void> {
         process.exit(1);
       }
       if (rejectManagedField(field, "write")) return;
+      if (rejectDirectPhaseWrite(field)) return;
       if (rejectWorktreeFieldInMainRepo(field, value)) return;
       // 如果文件不存在，用 createInitialState() 创建初始状态（确保 records: [] 等所有字段存在）
       let state: AlloyState;
