@@ -21,3 +21,4 @@ Alloy 共享背景知识。本 skill 不直接执行，只被其他 alloy skill 
 | 调用 alloy skill 前自检 | references/skill-precheck.md | skill 前置检查 |
 | 改 spec 后同步 | references/spec-sync.md | spec 同步规则 |
 | 校验分支状态 | references/branch-validation.md | 分支校验逻辑 |
+| 调用 alloy CLI 命令前查正确用法 | references/cli-reference.md | CLI 命令速查（语法/参数/选项/易错点） |

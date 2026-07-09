@@ -17,7 +17,7 @@
 |-------------|------|---------|------|
 | `skills/alloy-*/SKILL.md`（Skill 文件） | `docs/reference/skill-writing-guide.md` | 默认问分支。用户说"直接改"、纯读取、测试验证时不触发 | 提醒同步 spec |
 | `openspec/schemas/`（Schema） | — | 同上 | — |
-| `src/`（TypeScript 源码） | — | 同上 | 提醒同步 01-product-spec/08-cli-spec.md |
+| `src/`（TypeScript 源码） | — | 同上 | 提醒同步 01-product-spec/08-cli-spec.md + cli-reference.md |
 | `docs/specification/`（产品规格） | — | 同上 | — |
 | `docs/handbook.md`（开发手册） | — | 同上 | — |
 
@@ -56,6 +56,7 @@ openspec/schemas/ # 制品 schema 定义
 3. **修改 schema 后必须运行 `openspec schemas` 验证**
 4. **代码改动必须有测试覆盖**
 5. **提高 agent 执行稳定性是核心目标**——重复出现的多步 bash 序列（状态写入 + commit、hash-lock + commit 等）应下沉为原子 CLI 命令，由 TypeScript 实现并配测试；skill md 只负责编排和调用，不手写这类逻辑。实现指导是"原子性操作"，具体手段是 CLI——**不能为了 CLI 而 CLI**：只有当下沉真能提升稳定性、原子性、可测试性时才做，单次一次性 bash 或纯编排逻辑不必下沉。
+6. **调整 CLI 命令后必须更新 `skills/alloy-shared/references/cli-reference.md`**--避免 skill md 里的命令用法与实际 CLI 偏差。修改 `src/cli/` 或 `src/cli/commands/internal/` 的新增/删除/改签名，都要同步更新 cli-reference.md。
 
 ## PR 规范
 
