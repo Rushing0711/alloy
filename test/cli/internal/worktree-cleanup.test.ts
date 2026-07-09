@@ -317,7 +317,7 @@ describe("alloy _worktree-cleanup", () => {
 
     await worktreeCleanupCommand([CHANGE_DIR]);
 
-    expect(errSpy.mock.calls.some(c => String(c[0]).includes("worktree 目录有未提交修改"))).toBe(true);
+    expect(errSpy.mock.calls.some(c => String(c[0]).includes("tracked 文件未提交修改"))).toBe(true);
     expect(exitSpy).toHaveBeenCalledWith(1);
     expect(execSyncMock.mock.calls.some(c => String(c[0]).includes("git worktree remove --force"))).toBe(false);
     expect(execSyncMock.mock.calls.some(c => String(c[0]).includes("git branch -d"))).toBe(false);
