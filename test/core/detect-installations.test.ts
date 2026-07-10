@@ -32,11 +32,11 @@ const claudeAgent: AgentInfo = {
   commandsDir: ".claude/commands/",
 };
 
-const cursorAgent: AgentInfo = {
-  id: "cursor",
-  label: "Cursor",
+const opencodeAgent: AgentInfo = {
+  id: "opencode",
+  label: "OpenCode",
   supportsColonCommands: false,
-  commandsDir: ".cursor/commands/",
+  commandsDir: ".opencode/commands/",
 };
 
 const PROJECT = "/test/project";
@@ -106,33 +106,33 @@ describe("detectAlloySkill", () => {
     });
   });
 
-  it("Cursor agent 使用 .cursor/skills/ 路径", () => {
+  it("Cursor agent 使用 .opencode/skills/ 路径", () => {
     vi.mocked(existsSync).mockImplementation((p) =>
-      p === `${PROJECT}/.cursor/skills/alloy-start/SKILL.md`
+      p === `${PROJECT}/.opencode/skills/alloy-start/SKILL.md`
     );
 
-    const result = detectAlloySkill(cursorAgent, PROJECT);
+    const result = detectAlloySkill(opencodeAgent, PROJECT);
 
     expect(result).toEqual({
       found: true,
       location: "project-skill",
-      path: `${PROJECT}/.cursor/skills/alloy-start/SKILL.md`,
+      path: `${PROJECT}/.opencode/skills/alloy-start/SKILL.md`,
       version: null,
     });
-    expect(existsSync).toHaveBeenCalledWith(`${PROJECT}/.cursor/skills/alloy-start/SKILL.md`);
+    expect(existsSync).toHaveBeenCalledWith(`${PROJECT}/.opencode/skills/alloy-start/SKILL.md`);
   });
 
   it("Cursor agent 未找到时检查用户级路径", () => {
     vi.mocked(existsSync).mockImplementation((p) =>
-      p === `${HOME}/.cursor/skills/alloy-start/SKILL.md`
+      p === `${HOME}/.opencode/skills/alloy-start/SKILL.md`
     );
 
-    const result = detectAlloySkill(cursorAgent, PROJECT);
+    const result = detectAlloySkill(opencodeAgent, PROJECT);
 
     expect(result).toEqual({
       found: true,
       location: "user-skill",
-      path: `${HOME}/.cursor/skills/alloy-start/SKILL.md`,
+      path: `${HOME}/.opencode/skills/alloy-start/SKILL.md`,
       version: null,
     });
   });
@@ -143,7 +143,7 @@ describe("detectAlloySkill", () => {
 // ---------------------------------------------------------------------------
 describe("detectSkill", () => {
   it("非 Claude Code agent 直接返回 NOT_FOUND", () => {
-    const result = detectSkill("superpowers", cursorAgent, PROJECT);
+    const result = detectSkill("superpowers", opencodeAgent, PROJECT);
 
     expect(result).toEqual({
       found: false,

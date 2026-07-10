@@ -128,15 +128,15 @@ describe("alloy _env check", () => {
     exitSpy.mockRestore();
   });
 
-  it("非冒号版 agent（cursor）也识别", async () => {
+  it("非冒号版 agent（opencode）也识别", async () => {
     execSync("git init", { cwd: tmpDir, stdio: "pipe" });
     await mkdir(join(tmpDir, "openspec"), { recursive: true });
     await writeFile(join(tmpDir, "openspec", "config.yaml"), "schema: alloy\n", "utf-8");
     await mkdir(join(tmpDir, "openspec", "schemas", "alloy"), { recursive: true });
     await writeFile(join(tmpDir, "openspec", "schemas", "alloy", "schema.yaml"), "name: alloy\n", "utf-8");
-    // 非冒号版 agent：.cursor/skills/alloy-start/SKILL.md
-    await mkdir(join(tmpDir, ".cursor", "skills", "alloy-start"), { recursive: true });
-    await writeFile(join(tmpDir, ".cursor", "skills", "alloy-start", "SKILL.md"), "# start", "utf-8");
+    // 非冒号版 agent：.opencode/skills/alloy-start/SKILL.md
+    await mkdir(join(tmpDir, ".opencode", "skills", "alloy-start"), { recursive: true });
+    await writeFile(join(tmpDir, ".opencode", "skills", "alloy-start", "SKILL.md"), "# start", "utf-8");
 
     process.chdir(tmpDir);
 

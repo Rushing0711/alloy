@@ -91,18 +91,14 @@ export const ALLOY_PERMISSIONS: {
 
 /**
  * 支持项目级 permissions 的 agent 配置——alloy init 可项目级注入。
- * 语法:Claude Code / CodeBuddy / Pi 均支持 `Bash(cmd *)` 模式,格式一致(permissions.allow/deny)。
+ * 语法:Claude Code / Pi 支持 `Bash(cmd *)` 模式,格式一致(permissions.allow/deny)。
  *
  * 不含的 agent:
- * - Trae:配置文件路径待确认(traecli config,YAML 格式,冒号语法 Bash(cmd:*))
  * - OpenCode:工具级权限(非命令模式),不够精确,不自动配置
- * - Qoder:官网待验证
- * - Cursor:仅网络控制(sandbox.json),不控制命令
- * - Codex / Gemini CLI:全局配置,非项目级
+ * - Codex:全局配置,非项目级
  */
 const ALLOY_PERMISSION_CONFIGS: Record<string, string> = {
   "claude-code": ".claude/settings.json",
-  "codebuddy": ".codebuddy/settings.json",
   "pi": ".pi/permissions.json",
 };
 
@@ -299,6 +295,103 @@ export async function writeHookConfig(projectPath: string, agentId: string): Pro
   }
 
   hooks.PreToolUse = preToolUse;
+  settings.hooks = hooks;
+
+  const dir = join(settingsPath, "..");
+  await mkdir(dir, { recursive: true });
+  await writeFile(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");
+  return true;
+}
+
+// --- Stop hook 配置(alloy _stop-guard,检测文本输出代替 AskUserQuestion) ---
+
+/**
+ * 支持 Stop hook 的 agent 配置。
+ * 仅 Claude Code 已确认支持 Stop hook + last_assistant_message。
+ * OpenCode/Codex/Pi 的 Stop hook 能力待确认(确认后加入此处)。
+ */
+const ALLOY_STOP_HOOK_CONFIGS: Record<string, string> = {
+  "claude-code": ".claude/settings.json",
+};
+
+function getStopHookCommand(): string {
+  const alloyCliPath = join(getPackageRoot(), "dist", "cli", "index.js");
+  return `node ${alloyCliPath} _stop-guard`;
+}
+
+/** 返回支持 Stop hook 的 agent id 列表 */
+export function getStopHookSupportedAgents(): string[] {
+  return Object.keys(ALLOY_STOP_HOOK_CONFIGS);
+}
+
+interface StopHookEntry {
+  hooks?: { type: string; command: string }[];
+}
+
+/** 检测指定 agent 是否已装 alloy _stop-guard */
+export async function hasStopHookConfig(projectPath: string, agentId: string): Promise<boolean> {
+  const settingsFile = ALLOY_STOP_HOOK_CONFIGS[agentId];
+  if (!settingsFile) return false;
+
+  const settingsPath = join(projectPath, settingsFile);
+  try {
+    const raw = await readFile(settingsPath, "utf-8");
+    const settings = JSON.parse(raw);
+    const stop = settings?.hooks?.Stop;
+    if (!Array.isArray(stop)) return false;
+
+    const hookCommand = getStopHookCommand();
+    return stop.some((entry: StopHookEntry) =>
+      Array.isArray(entry?.hooks) &&
+      entry.hooks.some((h) => h?.command === hookCommand)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 写入 alloy _stop-guard 到指定 agent 的 Stop hook(幂等)。
+ * 仅 claude-code(其他 agent 待确认 Stop hook 能力后适配)。
+ *
+ * Stop hook 无 matcher(不针对特定工具),与 PreToolUse 的 Write|Edit matcher 不同。
+ * 与 writeHookConfig 写同一个 settings.json,先后调用互不影响(各自维护 hooks.Stop / hooks.PreToolUse)。
+ */
+export async function writeStopHookConfig(projectPath: string, agentId: string): Promise<boolean> {
+  const settingsFile = ALLOY_STOP_HOOK_CONFIGS[agentId];
+  if (!settingsFile) return false;
+
+  const settingsPath = join(projectPath, settingsFile);
+  let settings: Record<string, unknown> = {};
+  try {
+    const raw = await readFile(settingsPath, "utf-8");
+    settings = JSON.parse(raw);
+  } catch {
+    // 文件不存在
+  }
+
+  const hooks = (settings.hooks ?? {}) as Record<string, unknown>;
+  const stop: StopHookEntry[] = Array.isArray(hooks.Stop)
+    ? [...hooks.Stop] as StopHookEntry[]
+    : [];
+
+  const hookCommand = getStopHookCommand();
+
+  // Stop hook 无 matcher,用第一个 entry
+  let entry = stop[0];
+  if (!entry) {
+    entry = { hooks: [] };
+    stop.push(entry);
+  }
+  if (!Array.isArray(entry.hooks)) entry.hooks = [];
+
+  const hasExactCommand = entry.hooks.some((h) => h?.command === hookCommand);
+  if (!hasExactCommand) {
+    entry.hooks = entry.hooks.filter((h) => !h?.command?.includes("_stop-guard"));
+    entry.hooks.push({ type: "command", command: hookCommand });
+  }
+
+  hooks.Stop = stop;
   settings.hooks = hooks;
 
   const dir = join(settingsPath, "..");

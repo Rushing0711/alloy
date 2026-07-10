@@ -7,19 +7,25 @@
  * 解决问题:agent 在 explore/start 阶段直接写代码,跳过 alloy 流程(plan/apply/archive)。
  *
  * 判定规则:
- * 1. 非 alloy 项目(phases 空)-> 放行(不影响非 alloy 项目)
- * 2. 有任一 change 在 apply 阶段 -> 放行(允许写源码)
- * 3. 非 apply 阶段 + 白名单路径 -> 放行(openspec/文档/配置等)
- * 4. 非 apply 阶段 + 非白名单路径 -> 拦截(src/、scripts/、根目录代码文件等)
+ * 1. 非 alloy 项目(无 openspec/changes/)-> 放行(不影响非 alloy 项目)
+ * 2. 有 pending_gate -> 非白名单拦截(强制先问答;优先级高于 apply)
+ * 3. 有任一 change 在 apply/finishing/finished 阶段 -> 放行(允许写源码 / finish 合入 main 的 commit)
+ * 4. 非 apply 阶段 + 白名单路径 -> 放行(openspec/文档/配置等)
+ * 5. 非 apply 阶段 + 非白名单路径 -> 拦截(src/、scripts/、根目录代码文件等)
+ *
+ * 关键:alloy 项目但无活跃 change(phases 空)也走拦截,强制 agent 先 _phase start 创建 change,
+ * 避免 agent 不创建 change 直接写文件绕过整个 alloy 流程。
  */
 
 export interface GuardInput {
   /** 要写的文件路径(项目相对路径,可带 ./ 前缀) */
   filePath: string;
-  /** 所有活跃 change 的 phase 列表(空数组=非 alloy 项目) */
+  /** 所有活跃 change 的 phase 列表(空数组=无活跃 change 或非 alloy 项目) */
   phases: string[];
   /** 所有活跃 change 的未通过 user-gate 列表(非空=有 pending_gate,需先问答) */
   pendingGates?: string[];
+  /** 是否 alloy 项目(有 openspec/changes/ 目录)。默认 true(安全优先:不传视为 alloy 项目)。alloy 项目即使无活跃 change 也走拦截逻辑 */
+  isAlloyProject?: boolean;
 }
 
 export interface GuardResult {
@@ -27,8 +33,8 @@ export interface GuardResult {
   reason: string;
 }
 
-/** apply 阶段(允许写源码) */
-const APPLY_PHASES = new Set(["applying", "applied"]);
+/** 允许写源码的阶段:apply(写源码)+ finishing/finished(finish 阶段合入 main 的 squash merge commit) */
+const APPLY_PHASES = new Set(["applying", "applied", "finishing", "finished"]);
 
 /**
  * 非 apply 阶段白名单(允许写的路径模式)
@@ -53,10 +59,11 @@ const NON_APPLY_WHITELIST: RegExp[] = [
 export function guardCheck(input: GuardInput): GuardResult {
   const { filePath, phases } = input;
   const pendingGates = input.pendingGates ?? [];
+  const isAlloyProject = input.isAlloyProject ?? true;
 
-  // 1. 非 alloy 项目(无 phases 无 pendingGates):放行
-  if (phases.length === 0 && pendingGates.length === 0) {
-    return { allowed: true, reason: "非 alloy 项目(无活跃 change),放行" };
+  // 1. 真非 alloy 项目(无 openspec/changes/):放行(不影响非 alloy 项目)
+  if (!isAlloyProject) {
+    return { allowed: true, reason: "非 alloy 项目(无 openspec/changes/),放行" };
   }
 
   const normalizedPath = filePath.replace(/^\.\//, "");
@@ -90,9 +97,12 @@ export function guardCheck(input: GuardInput): GuardResult {
     };
   }
 
-  // 5. 非白名单:拦截
+  // 5. 非白名单:拦截(phases 空 = 无活跃 change,或所有 change 非 apply)
+  const phaseDesc = phases.length === 0
+    ? "无活跃 change"
+    : `phases=${phases.join(",")}`;
   return {
     allowed: false,
-    reason: `所有活跃 change 均非 apply 阶段(phases=${phases.join(",")}),禁止写: ${normalizedPath}`,
+    reason: `alloy 项目(${phaseDesc}),禁止写: ${normalizedPath}`,
   };
 }

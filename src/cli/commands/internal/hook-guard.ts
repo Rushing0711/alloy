@@ -13,24 +13,59 @@ interface HookInput {
 }
 
 /**
- * 扫描 openspec/changes 下所有 change 目录的 .alloy.yaml,收集所有活跃 change 的 phase。
+ * 判断是否 alloy 项目(有 openspec/changes/ 目录)。
+ * alloy init 会创建此目录。即使所有 change 都归档(只剩 archive/),目录仍存在。
+ * 用于区分"真非 alloy 项目(放行)"和"alloy 项目但无活跃 change(拦截)"。
+ */
+export function isAlloyProject(projectRoot: string): boolean {
+  const changesDir = join(projectRoot, "openspec", "changes");
+  return existsSync(changesDir);
+}
+
+/**
+ * 收集所有 change 目录路径(活跃 + 归档)。
+ * 活跃:openspec/changes/<entry>/(跳过 archive/ 子目录)
+ * 归档:openspec/changes/archive/<entry>/(含 archived/finishing/finished change)
+ *
+ * 扫描 archive/ 是为了让 guardCheck 知道 finish 阶段的 change(phase=finishing/finished),
+ * 从而放行 finish 阶段合入 main 的 squash merge commit。
+ */
+function scanChangeDirs(projectRoot: string): string[] {
+  const dirs: string[] = [];
+  const changesDir = join(projectRoot, "openspec", "changes");
+  if (!existsSync(changesDir)) return dirs;
+
+  collectChangeDirsFromDir(changesDir, dirs, true);
+  const archiveDir = join(changesDir, "archive");
+  if (existsSync(archiveDir)) {
+    collectChangeDirsFromDir(archiveDir, dirs, false);
+  }
+  return dirs;
+}
+
+function collectChangeDirsFromDir(dir: string, dirs: string[], skipArchive: boolean): void {
+  let entries: Dirent[];
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (skipArchive && entry.name === "archive") continue;
+    dirs.push(join(dir, entry.name));
+  }
+}
+
+/**
+ * 扫描所有 change(活跃 + 归档)的 .alloy.yaml,收集所有 phase。
  * 非 alloy 项目(无 openspec/changes/)返回空数组。
+ * 含 archive/ 下的 archived/finishing/finished phase(用于 guardCheck 放行 finish 阶段合入)。
  */
 export function collectPhases(projectRoot: string): string[] {
   const phases: string[] = [];
-  const changesDir = join(projectRoot, "openspec", "changes");
-  if (!existsSync(changesDir)) return phases;
-
-  let entries: Dirent[];
-  try {
-    entries = readdirSync(changesDir, { withFileTypes: true });
-  } catch {
-    return phases;
-  }
-
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const stateFile = join(changesDir, entry.name, ".alloy.yaml");
+  for (const changeDir of scanChangeDirs(projectRoot)) {
+    const stateFile = join(changeDir, ".alloy.yaml");
     try {
       const content = readFileSync(stateFile, "utf-8");
       const match = content.match(/^phase:\s*(.+)$/m);
@@ -45,24 +80,13 @@ export function collectPhases(projectRoot: string): string[] {
 }
 
 /**
- * 扫描 openspec/changes 下所有 change 的 .alloy.yaml,收集所有未通过的 user-gate。
+ * 扫描所有 change(活跃 + 归档)的 .alloy.yaml,收集所有未通过的 user-gate。
  * pending_gate 为 null/空/不存在 -> 跳过。
  */
 export function collectPendingGates(projectRoot: string): string[] {
   const gates: string[] = [];
-  const changesDir = join(projectRoot, "openspec", "changes");
-  if (!existsSync(changesDir)) return gates;
-
-  let entries: Dirent[];
-  try {
-    entries = readdirSync(changesDir, { withFileTypes: true });
-  } catch {
-    return gates;
-  }
-
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const stateFile = join(changesDir, entry.name, ".alloy.yaml");
+  for (const changeDir of scanChangeDirs(projectRoot)) {
+    const stateFile = join(changeDir, ".alloy.yaml");
     try {
       const content = readFileSync(stateFile, "utf-8");
       const match = content.match(/^pending_gate:\s*(.+)$/m);
@@ -80,24 +104,12 @@ export function collectPendingGates(projectRoot: string): string[] {
 }
 
 /**
- * 清除所有 change 的 pending_gate(问答工具调用后自动触发)。
+ * 清除所有 change(活跃 + 归档)的 pending_gate(问答工具调用后自动触发)。
  * 用 readState/writeState 保证 yaml 格式正确。
  */
 export async function clearAllPendingGates(projectRoot: string): Promise<void> {
-  const changesDir = join(projectRoot, "openspec", "changes");
-  if (!existsSync(changesDir)) return;
-
-  let entries: Dirent[];
-  try {
-    entries = readdirSync(changesDir, { withFileTypes: true });
-  } catch {
-    return;
-  }
-
   const { readState, writeState } = await import("../../utils/state.js");
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const changeDir = join(changesDir, entry.name);
+  for (const changeDir of scanChangeDirs(projectRoot)) {
     const stateFile = join(changeDir, ".alloy.yaml");
     try {
       const content = readFileSync(stateFile, "utf-8");
@@ -137,7 +149,8 @@ export function evaluateHook(
   phases: string[],
   env: Record<string, string>,
   projectRoot?: string,
-  pendingGates?: string[]
+  pendingGates?: string[],
+  isAlloyProject?: boolean
 ): { exitCode: number; message?: string; clearPendingGates?: boolean } {
   const gates = pendingGates ?? [];
 
@@ -183,14 +196,14 @@ export function evaluateHook(
     relPath = filePath;
   }
 
-  // 调 guardCheck(传 pendingGates)
-  const result = guardCheck({ filePath: relPath, phases, pendingGates: gates });
+  // 调 guardCheck(传 pendingGates + isAlloyProject;undefined 时 guardCheck 内部默认 true)
+  const result = guardCheck({ filePath: relPath, phases, pendingGates: gates, isAlloyProject });
 
   if (result.allowed) {
     return { exitCode: 0 };
   }
 
-  // 拦截:自适应消息(user-gate vs 非 apply)
+  // 拦截:自适应消息(user-gate vs 无活跃 change vs 非 apply)
   const message = result.reason.includes("user-gate")
     ? [
         `⛔ [alloy hook] ${result.reason}`,
@@ -198,12 +211,19 @@ export function evaluateHook(
         "  或调 alloy _guard user-gate pass <change-dir> 手动降级。",
         "  如确需紧急绕过,设置 ALLOY_FORCE_WRITE=1。",
       ].join("\n")
-    : [
-        `⛔ [alloy hook] ${result.reason}`,
-        "  当前阶段不允许写源码。请先进入 apply 阶段:",
-        "    alloy _phase start <change-dir> apply",
-        "  如确需紧急修复畸形状态,设置 ALLOY_FORCE_WRITE=1 绕过。",
-      ].join("\n");
+    : phases.length === 0
+      ? [
+          `⛔ [alloy hook] ${result.reason}`,
+          "  alloy 项目无活跃 change,禁止直接写源码。",
+          "  请先调 /alloy-start <topic> 创建 change 并走完 plan -> apply 流程。",
+          "  如确需紧急绕过,设置 ALLOY_FORCE_WRITE=1。",
+        ].join("\n")
+      : [
+          `⛔ [alloy hook] ${result.reason}`,
+          "  当前阶段不允许写源码。请先进入 apply 阶段:",
+          "    alloy _phase start <change-dir> apply",
+          "  如确需紧急修复畸形状态,设置 ALLOY_FORCE_WRITE=1 绕过。",
+        ].join("\n");
 
   return { exitCode: 2, message };
 }
@@ -222,7 +242,8 @@ export async function hookGuardCommand(args: string[]): Promise<void> {
   const projectRoot = process.cwd();
   const phases = collectPhases(projectRoot);
   const pendingGates = collectPendingGates(projectRoot);
-  const result = evaluateHook(raw, phases, process.env as Record<string, string>, projectRoot, pendingGates);
+  const isAlloy = isAlloyProject(projectRoot);
+  const result = evaluateHook(raw, phases, process.env as Record<string, string>, projectRoot, pendingGates, isAlloy);
 
   if (result.clearPendingGates) {
     await clearAllPendingGates(projectRoot);

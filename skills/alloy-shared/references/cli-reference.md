@@ -18,14 +18,14 @@ alloy init [path] [options]
 
 选项：
 - `--scope <project|global>`：安装范围，默认 `project`
-- `--agents <id,id,...>`：非交互式模式，指定要安装的 AI 工具（逗号分隔）。可用 agent：`claude-code, codebuddy, qoder, cursor, opencode, codex, trae, pi`
+- `--agents <id,id,...>`：非交互式模式，指定要安装的 AI 工具（逗号分隔）。可用 agent：`claude-code, codex, opencode, pi`
 - `--help, -h`：显示帮助
 
 示例：
 ```bash
 alloy init                         # 交互式，当前目录，project 范围
 alloy init /path/to/repo --scope global
-alloy init --agents claude-code,cursor   # 非交互式
+alloy init --agents claude-code,opencode   # 非交互式
 ```
 
 ### alloy status
@@ -411,9 +411,10 @@ alloy _hook-guard
 行为：
 - 从 stdin 读 JSON（`{tool_name, tool_input:{file_path}}`）
 - 只拦截 `Write` / `Edit` 工具
-- 扫描 `openspec/changes/*/.alloy.yaml` 收集所有活跃 change 的 phase
-- 非 alloy 项目（无 .alloy.yaml） -> 放行
-- 有任一 change 在 apply 阶段（`applying`/`applied`） -> 放行（允许写源码）
+- 扫描 `openspec/changes/*/.alloy.yaml`(含 `archive/*/`)收集所有 change 的 phase(活跃 + 归档)
+- 非 alloy 项目（无 `openspec/changes/` 目录） -> 放行
+- alloy 项目但无活跃 change（phases 空） -> 拦截（强制先 /alloy-start 创建 change,防绕过整个流程）
+- 有任一 change 在 apply/finishing/finished 阶段（`applying`/`applied`/`finishing`/`finished`） -> 放行（允许写源码 / finish 合入 main 的 commit）
 - 非 apply 阶段 + 白名单路径（`openspec/`/`.alloy.yaml`/`.claude/`/`.codex/`/`docs/`/`*.md`/`.gitignore`/`.gitattributes`） -> 放行
 - 非 apply 阶段 + 非白名单路径（`src/`/`scripts/`/代码文件） -> 拦截 exit 2
 
@@ -431,11 +432,38 @@ alloy _pre-commit-check
 
 行为:
 - 读 git 暂存文件列表
-- 复用 `guardCheck`(与 PreToolUse hook 行为一致):非 alloy 放行 / apply 放行 / 白名单放行 / 非白名单拦截 / pending_gate 拦截
+- 复用 `guardCheck`(与 PreToolUse hook 行为一致):非 alloy 放行 / alloy 无活跃 change 拦截 / apply/finishing/finished 放行 / 白名单放行 / 非白名单拦截 / pending_gate 拦截
 - 有暂存文件被拦 -> exit 1(拦截 commit)
 - 全通过 -> exit 0(放行 commit)
 
 **兜底 PreToolUse hook 盲区**:agent 用 Bash 写文件(`echo > / cat << / tee`)绕过 Write/Edit hook,但 commit 时 pre-commit 检查暂存文件,拦住。
+
+### alloy _stop-guard
+
+Stop hook 适配器(仅 Claude Code)。检测 agent 在 USER_GATE 用纯文本输出 (a)/(b) 选项代替 AskUserQuestion 的违规行为,返回 additionalContext 提醒 agent 改用工具。
+
+```
+alloy _stop-guard
+```
+
+行为:
+- 从 stdin 读 JSON(`{last_assistant_message, stop_hook_active}`)
+- `stop_hook_active=true` -> 放行(防死循环,Stop hook 已提醒过)
+- 检测 `last_assistant_message` 含 USER_GATE 文本模式:
+  - `🔴 USER_GATE` 标记(alloy 专属)
+  - 或 `(a)` + `(b)` + 确认/选项/选择 关键词组合
+- 命中 -> exit 2 + stderr,Claude Code 把 stderr 作为 error 反馈给 agent,对话继续,agent 收到后修正
+- 未命中 -> exit 0
+
+**解决的问题**:弱模型在 USER_GATE 用文本输出选项让用户回复 a/b,跳过 AskUserQuestion 工具调用。hook-guard 管不到(不写源码不触发),Stop hook 在回合结束时检测 `last_assistant_message`,命中则 exit 2 阻止结束 + stderr 提醒 agent 改用 AskUserQuestion。
+
+**为什么用 exit 2 + stderr 而不是 additionalContext JSON**:additionalContext 依赖较新版本 + stdout 易被 shell profile 污染导致 JSON validation failed。exit 2 + stderr 跨版本通吃,更可靠。
+
+**逃生阀**:`ALLOY_FORCE_STOP=1` 绕过(仅限修复畸形状态)。
+
+**仅 Claude Code**:依赖 Stop hook + `last_assistant_message` 字段。OpenCode/Codex/Pi 的 Stop hook 能力待确认,确认后适配。由 `alloy init` 自动装到 `.claude/settings.json` 的 `hooks.Stop`。
+
+**不直接调用**:本命令由 agent 的 Stop hook 自动触发,agent 不主动调用。
 
 **逃生阀**:`ALLOY_FORCE_WRITE=1` 环境变量绕过(仅限修复畸形状态)。
 

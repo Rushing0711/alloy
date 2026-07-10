@@ -14,38 +14,6 @@ export const KNOWN_AGENTS: AgentInfo[] = [
     tier: "stable",
   },
   {
-    id: "codebuddy",
-    label: "CodeBuddy",
-    supportsColonCommands: true,
-    commandsDir: ".codebuddy/commands/",
-    interactiveTool: "none",
-    tier: "experimental",
-  },
-  {
-    id: "qoder",
-    label: "Qoder",
-    supportsColonCommands: true,
-    commandsDir: ".qoder/commands/",
-    interactiveTool: "none",
-    tier: "experimental",
-  },
-  {
-    id: "cursor",
-    label: "Cursor",
-    supportsColonCommands: false,
-    commandsDir: ".cursor/commands/",
-    interactiveTool: "partial",
-    tier: "experimental",
-  },
-  {
-    id: "opencode",
-    label: "OpenCode",
-    supportsColonCommands: false,
-    commandsDir: ".opencode/commands/",
-    interactiveTool: "question",
-    tier: "experimental",
-  },
-  {
     id: "codex",
     label: "Codex",
     supportsColonCommands: false,
@@ -55,11 +23,11 @@ export const KNOWN_AGENTS: AgentInfo[] = [
     tier: "experimental",
   },
   {
-    id: "trae",
-    label: "Trae",
+    id: "opencode",
+    label: "OpenCode",
     supportsColonCommands: false,
-    commandsDir: ".trae/commands/",
-    interactiveTool: "none",
+    commandsDir: ".opencode/commands/",
+    interactiveTool: "question",
     tier: "experimental",
   },
   {
@@ -122,3 +90,29 @@ if (!claudeCodeAgent) {
   throw new Error("KNOWN_AGENTS 中未找到 claude-code agent,请检查 agents.ts 配置");
 }
 export const CLAUDE_CODE_AGENT = claudeCodeAgent;
+
+/**
+ * 运行时检测当前 agent 类型(通过环境变量)。
+ * 用于 hook 适配:_stop-guard 等命令需要知道当前是哪个 agent,决定检测逻辑。
+ *
+ * 优先级:
+ * 1. AI_AGENT 环境变量(格式 <agent-id>_<version>_agent,多 agent 工具通用规范)
+ * 2. 各 agent 专属环境变量回退(已确认的 agent)
+ *
+ * 已确认的环境变量标记:
+ * - Claude Code: AI_AGENT=claude-code_*_agent, CLAUDECODE=1
+ *
+ * 待确认(预计格式一致,但未实测):
+ * - Codex / OpenCode / Pi: 需在各自环境跑 `env | grep -i agent` 确认
+ */
+export function detectAgent(): string {
+  const aiAgent = process.env.AI_AGENT;
+  if (aiAgent) {
+    // 格式: claude-code_2-1-153_agent
+    const match = aiAgent.match(/^(.+?)_[\d-]+_agent$/);
+    if (match) return match[1];
+    return aiAgent;
+  }
+  if (process.env.CLAUDECODE === "1") return "claude-code";
+  return "unknown";
+}

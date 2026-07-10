@@ -109,16 +109,6 @@ describe("hasPermissionsConfig", () => {
     expect(await hasPermissionsConfig(tmpDir, "unknown-agent")).toBe(false);
   });
 
-  it("CodeBuddy 检测 .codebuddy/settings.json", async () => {
-    await mkdir(join(tmpDir, ".codebuddy"), { recursive: true });
-    await writeFile(
-      join(tmpDir, ".codebuddy/settings.json"),
-      JSON.stringify({ permissions: { allow: ["Bash(alloy *)"] } }),
-      "utf-8"
-    );
-    expect(await hasPermissionsConfig(tmpDir, "codebuddy")).toBe(true);
-  });
-
   it("Pi 检测 .pi/permissions.json", async () => {
     await mkdir(join(tmpDir, ".pi"), { recursive: true });
     await writeFile(
@@ -151,15 +141,6 @@ describe("writePermissionsConfig", () => {
     expect(settings.permissions.deny).toContain("Bash(git push --force *)");
     expect(settings.permissions.allow.length).toBe(ALLOY_PERMISSIONS.allow.length);
     expect(settings.permissions.deny.length).toBe(ALLOY_PERMISSIONS.deny.length);
-  });
-
-  it("CodeBuddy: 写入 .codebuddy/settings.json", async () => {
-    const written = await writePermissionsConfig(tmpDir, "codebuddy");
-    expect(written).toBe(true);
-
-    const settings = JSON.parse(await readFile(join(tmpDir, ".codebuddy/settings.json"), "utf-8"));
-    expect(settings.permissions.allow).toContain("Bash(alloy *)");
-    expect(settings.permissions.deny).toContain("Bash(git push --force *)");
   });
 
   it("Pi: 写入 .pi/permissions.json", async () => {
@@ -222,7 +203,6 @@ describe("getPermissionSupportedAgents", () => {
   it("返回支持项目级 permissions 的 agent id 列表", () => {
     const agents = getPermissionSupportedAgents();
     expect(agents).toContain("claude-code");
-    expect(agents).toContain("codebuddy");
     expect(agents).toContain("pi");
     expect(agents).not.toContain("codex");
     expect(agents).not.toContain("gemini-cli");

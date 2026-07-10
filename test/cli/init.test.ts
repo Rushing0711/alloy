@@ -56,9 +56,11 @@ vi.mock("../../src/core/agent-config.js", () => ({
   injectAgentConfigs: mockInjectAgentConfigs,
   hasPermissionsConfig: vi.fn().mockResolvedValue(false),
   writePermissionsConfig: vi.fn().mockResolvedValue(true),
-  getPermissionSupportedAgents: vi.fn().mockReturnValue(["claude-code", "codebuddy", "pi"]),
+  getPermissionSupportedAgents: vi.fn().mockReturnValue(["claude-code", "pi"]),
   writeHookConfig: vi.fn().mockResolvedValue(true),
   getHookSupportedAgents: vi.fn().mockReturnValue(["claude-code", "codex"]),
+  writeStopHookConfig: vi.fn().mockResolvedValue(true),
+  getStopHookSupportedAgents: vi.fn().mockReturnValue(["claude-code"]),
 }));
 vi.mock("../../src/utils/prompt.js", () => ({
   promptSelect: mockPromptSelect,
@@ -158,29 +160,29 @@ describe("init", () => {
       expect(mockPromptSelect).toHaveBeenCalledWith("Install scope:", [
         { name: "Project (current directory)", value: "project" },
         { name: "Global (home directory)", value: "global" },
-      ]);
+      ], { default: "project" });
     });
   });
 
   describe("selectTargetAgents 单级多选", () => {
     it("多选返回选中的 agent(含 stable + experimental)", async () => {
-      mockPromptMultiSelect.mockResolvedValue(["claude-code", "cursor"]);
+      mockPromptMultiSelect.mockResolvedValue(["claude-code", "opencode"]);
 
       const result = await selectTargetAgents();
 
-      expect(result.map((a) => a.id)).toEqual(["claude-code", "cursor"]);
+      expect(result.map((a) => a.id)).toEqual(["claude-code", "opencode"]);
       // 单级多选不再调用 promptSelect / promptConfirm
       expect(mockPromptSelect).not.toHaveBeenCalled();
       expect(mockPromptConfirm).not.toHaveBeenCalled();
     });
 
     it("选 experimental agent 无需额外确认(备注即告知)", async () => {
-      mockPromptMultiSelect.mockResolvedValue(["cursor"]);
+      mockPromptMultiSelect.mockResolvedValue(["opencode"]);
 
       const result = await selectTargetAgents();
 
       expect(result).toHaveLength(1);
-      expect(result[0].id).toBe("cursor");
+      expect(result[0].id).toBe("opencode");
       expect(mockPromptConfirm).not.toHaveBeenCalled();
     });
 
@@ -201,7 +203,7 @@ describe("init", () => {
 
       const choices = mockPromptMultiSelect.mock.calls[0][1] as Array<{ value: string; name: string }>;
       const claudeCode = choices.find((c) => c.value === "claude-code");
-      const cursor = choices.find((c) => c.value === "cursor");
+      const cursor = choices.find((c) => c.value === "opencode");
       expect(claudeCode.name).toContain("stable");
       expect(cursor.name).toContain("实验性");
     });
@@ -311,7 +313,7 @@ describe("init", () => {
     it("未选择 Claude Code 时注入器仍被调用（内部跳过 settings）", async () => {
       const opts = {
         ...defaultOpts,
-        targetAgents: [{ id: "cursor", label: "Cursor", supportsColonCommands: false, commandsDir: ".cursor/commands" }],
+        targetAgents: [{ id: "opencode", label: "OpenCode", supportsColonCommands: false, commandsDir: ".opencode/commands" }],
       };
 
       await initCommand(opts);
@@ -346,7 +348,7 @@ describe("init", () => {
     it("选择不支持 hook 的 agent 时不装 hook", async () => {
       const opts = {
         ...defaultOpts,
-        targetAgents: [{ id: "cursor", label: "Cursor", supportsColonCommands: false, commandsDir: ".cursor/commands" }],
+        targetAgents: [{ id: "opencode", label: "OpenCode", supportsColonCommands: false, commandsDir: ".opencode/commands" }],
       };
       const { writeHookConfig } = await import("../../src/core/agent-config.js");
 
@@ -467,15 +469,15 @@ describe("init", () => {
         ...defaultOpts,
         targetAgents: [
           { id: "claude-code", label: "Claude Code", supportsColonCommands: true, commandsDir: ".claude/commands/" },
-          { id: "cursor", label: "Cursor", supportsColonCommands: false, commandsDir: ".cursor/commands/" },
+          { id: "opencode", label: "OpenCode", supportsColonCommands: false, commandsDir: ".opencode/commands/" },
         ],
       };
 
       await initCommand(opts);
 
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("Claude Code"));
-      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("Cursor"));
-      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("Claude Code / Cursor"));
+      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("OpenCode"));
+      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("Claude Code / OpenCode"));
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("/alloy-start <topic>"));
     });
   });

@@ -9,7 +9,7 @@ import { runHealthCheck } from "../../core/health.js";
 import { installOpenSpecCli, initOpenSpecProject } from "../../core/openspec.js";
 import { installSuperpowers } from "../../core/superpowers.js";
 import { deploySkills, deploySchema } from "../../core/skills.js";
-import { injectAgentConfigs, hasPermissionsConfig, writePermissionsConfig, getPermissionSupportedAgents, writeHookConfig, getHookSupportedAgents } from "../../core/agent-config.js";
+import { injectAgentConfigs, hasPermissionsConfig, writePermissionsConfig, getPermissionSupportedAgents, writeHookConfig, getHookSupportedAgents, writeStopHookConfig, getStopHookSupportedAgents } from "../../core/agent-config.js";
 import { KNOWN_AGENTS } from "../../core/agents.js";
 import type { AgentInfo, DeployOptions } from "../../core/types.js";
 import { getPackageRoot } from "../../utils/fs.js";
@@ -23,7 +23,7 @@ export async function selectScope(passedScope?: string): Promise<"global" | "pro
   return promptSelect("Install scope:", [
     { name: "Project (current directory)", value: "project" },
     { name: "Global (home directory)", value: "global" },
-  ]) as Promise<"global" | "project">;
+  ], { default: "project" }) as Promise<"global" | "project">;
 }
 
 export async function selectTargetAgents(): Promise<AgentInfo[]> {
@@ -225,7 +225,8 @@ export async function initCommand(opts: InitOptions): Promise<void> {
       [
         { name: `${defaultBranch}（检测值）`, value: defaultBranch },
         { name: "自定义分支名", value: "__custom__" },
-      ]
+      ],
+      { default: defaultBranch }
     );
 
     if (branchChoice === "__custom__") {
@@ -301,7 +302,8 @@ export async function initCommand(opts: InitOptions): Promise<void> {
         [
           { name: "更新(合并 alloy 推荐的 allow/deny)", value: "update" },
           { name: "跳过(保留现有配置)", value: "skip" },
-        ]
+        ],
+        { default: "skip" }
       );
       configurePermissions = (choice === "update");
     } else {
@@ -349,7 +351,7 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   info("");
   info(`主分支: ${confirmedMainBranch}`);
 
-  const confirmed = await promptConfirm("\n确认执行以上操作？", false);
+  const confirmed = await promptConfirm("\n确认执行以上操作？", !existingMainBranch);
   if (!confirmed) {
     info("✗ 已取消初始化，项目未发生任何变化");
     process.exit(0);
@@ -472,6 +474,25 @@ export async function initCommand(opts: InitOptions): Promise<void> {
         }
       } catch (e) {
         warn(`${agentLabel} hook 写入失败: ${(e as Error).message}`);
+      }
+    }
+  }
+
+  // 7.8 写入 Stop hook(检测文本输出代替 AskUserQuestion)--对支持 Stop hook 的 agent 自动装(仅 claude-code)
+  const stopHookSupportedAgentIds = opts.targetAgents
+    .map(a => a.id)
+    .filter(id => getStopHookSupportedAgents().includes(id));
+  if (stopHookSupportedAgentIds.length > 0) {
+    section("写入 Stop hook...");
+    for (const agentId of stopHookSupportedAgentIds) {
+      const agentLabel = opts.targetAgents.find(a => a.id === agentId)?.label ?? agentId;
+      try {
+        const written = await writeStopHookConfig(opts.projectPath, agentId);
+        if (written) {
+          success(`${agentLabel} -> hooks.Stop (alloy _stop-guard)`);
+        }
+      } catch (e) {
+        warn(`${agentLabel} Stop hook 写入失败: ${(e as Error).message}`);
       }
     }
   }

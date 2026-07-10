@@ -5,8 +5,12 @@ export interface Choice {
   value: string;
 }
 
-export async function promptSelect(message: string, choices: Choice[]): Promise<string> {
-  return select({ message, choices });
+export async function promptSelect(
+  message: string,
+  choices: Choice[],
+  opts?: { default?: string }
+): Promise<string> {
+  return select({ message, choices, default: opts?.default });
 }
 
 export async function promptMultiSelect(
@@ -33,7 +37,18 @@ export async function promptMultiSelect(
 }
 
 export async function promptConfirm(message: string, defaultValue?: boolean): Promise<boolean> {
-  return confirm({ message, default: defaultValue });
+  return confirm({
+    message,
+    default: defaultValue,
+    theme: {
+      style: {
+        defaultAnswer: (text: string) => {
+          const enterHint = text.startsWith("Y") ? "回车=Y" : "回车=N";
+          return `\x1b[2m[${text}]（${enterHint}）\x1b[0m`;
+        },
+      },
+    },
+  });
 }
 
 export async function promptInput(

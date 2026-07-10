@@ -5,13 +5,42 @@ import { guardCheck } from "../../src/core/hook-guard.js";
 describe("hook-guard guardCheck", () => {
   describe("非 alloy 项目(phases 空)", () => {
     it("无 .alloy.yaml 时放行任意路径", () => {
-      const result = guardCheck({ filePath: "src/foo.ts", phases: [] });
+      const result = guardCheck({ filePath: "src/foo.ts", phases: [], isAlloyProject: false });
       expect(result.allowed).toBe(true);
     });
 
     it("无 .alloy.yaml 时放行 scripts/", () => {
-      const result = guardCheck({ filePath: "scripts/hello.sh", phases: [] });
+      const result = guardCheck({ filePath: "scripts/hello.sh", phases: [], isAlloyProject: false });
       expect(result.allowed).toBe(true);
+    });
+  });
+
+  describe("alloy 项目无活跃 change(核心修复:防绕过)", () => {
+    it("alloy 项目 + phases 空 + 非白名单 -> 拦截(强制先 _phase start)", () => {
+      const result = guardCheck({ filePath: "src/foo.ts", phases: [], isAlloyProject: true });
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toContain("无活跃 change");
+    });
+
+    it("alloy 项目 + phases 空 + scripts/ -> 拦截", () => {
+      const result = guardCheck({ filePath: "scripts/hello.sh", phases: [], isAlloyProject: true });
+      expect(result.allowed).toBe(false);
+    });
+
+    it("alloy 项目 + phases 空 + 白名单 openspec/ -> 放行", () => {
+      const result = guardCheck({ filePath: "openspec/changes/foo/proposal.md", phases: [], isAlloyProject: true });
+      expect(result.allowed).toBe(true);
+    });
+
+    it("alloy 项目 + phases 空 + .md -> 放行(白名单)", () => {
+      const result = guardCheck({ filePath: "README.md", phases: [], isAlloyProject: true });
+      expect(result.allowed).toBe(true);
+    });
+
+    it("alloy 项目 + phases 空 + pendingGates 非空 + 非白名单 -> 拦截(pending_gate 优先)", () => {
+      const result = guardCheck({ filePath: "src/foo.ts", phases: [], pendingGates: ["gate-a"], isAlloyProject: true });
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toContain("user-gate");
     });
   });
 
@@ -29,6 +58,28 @@ describe("hook-guard guardCheck", () => {
     it("apply 阶段放行 scripts/hello.sh", () => {
       const result = guardCheck({ filePath: "scripts/hello.sh", phases: ["applying"] });
       expect(result.allowed).toBe(true);
+    });
+  });
+
+  describe("finishing/finished 阶段(finish 合入 main 的 commit 放行)", () => {
+    it("finishing 阶段放行 src/", () => {
+      const result = guardCheck({ filePath: "src/foo.ts", phases: ["finishing"] });
+      expect(result.allowed).toBe(true);
+    });
+
+    it("finished 阶段放行 src/", () => {
+      const result = guardCheck({ filePath: "src/foo.ts", phases: ["finished"] });
+      expect(result.allowed).toBe(true);
+    });
+
+    it("finishing 阶段放行 scripts/hello.sh(squash merge 暂存)", () => {
+      const result = guardCheck({ filePath: "scripts/hello.sh", phases: ["finishing"] });
+      expect(result.allowed).toBe(true);
+    });
+
+    it("archived 阶段拦截 src/(归档后不应写源码)", () => {
+      const result = guardCheck({ filePath: "src/foo.ts", phases: ["archived"] });
+      expect(result.allowed).toBe(false);
     });
   });
 
@@ -115,11 +166,6 @@ describe("hook-guard guardCheck", () => {
       expect(result.allowed).toBe(false);
     });
 
-    it("finished 阶段拦截 src/", () => {
-      const result = guardCheck({ filePath: "src/foo.ts", phases: ["finished"] });
-      expect(result.allowed).toBe(false);
-    });
-
     it("拦截原因包含 phase 和路径", () => {
       const result = guardCheck({ filePath: "src/foo.ts", phases: ["planned"] });
       expect(result.reason).toContain("planned");
@@ -199,7 +245,7 @@ describe("hook-guard guardCheck", () => {
     });
 
     it("phases 空 + pendingGates 非空 -> 拦截(有 pending_gate 说明是 alloy 项目)", () => {
-      const result = guardCheck({ filePath: "src/foo.ts", phases: [], pendingGates: ["confirm-main-branch"] });
+      const result = guardCheck({ filePath: "src/foo.ts", phases: [], pendingGates: ["confirm-main-branch"], isAlloyProject: true });
       expect(result.allowed).toBe(false);
     });
 

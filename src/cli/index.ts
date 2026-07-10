@@ -51,7 +51,7 @@ alloy init [path] [options]
 选项:
   --scope <project|global>  安装范围，默认 project
   --agents <id,id,...>      非交互式模式，指定要安装的 AI 工具（逗号分隔）
-                            可用的 agent: claude-code, codebuddy, qoder, cursor, opencode, codex, trae, pi
+                            可用的 agent: claude-code, codex, opencode, pi
   --help, -h                显示本帮助
 `;
     case "status":
@@ -422,6 +422,11 @@ async function main() {
     case "_pre-commit-check": {
       const { preCommitCheckCommand } = await import("./commands/internal/pre-commit-check.js");
       await preCommitCheckCommand(restArgs);
+      break;
+    }
+    case "_stop-guard": {
+      const { stopGuardCommand } = await import("./commands/internal/stop-guard.js");
+      await stopGuardCommand(restArgs);
       break;
     }
     default:

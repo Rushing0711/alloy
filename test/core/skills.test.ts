@@ -85,13 +85,13 @@ describe("deploySkills", () => {
     const opts: DeployOptions = {
       scope: "project",
       projectPath,
-      targetAgents: [{ id: "cursor", label: "Cursor", supportsColonCommands: false, commandsDir: ".cursor/commands/" }],
+      targetAgents: [{ id: "opencode", label: "OpenCode", supportsColonCommands: false, commandsDir: ".opencode/commands/" }],
     };
     const deployed = await deploySkills(opts);
     expect(deployed.length).toBe(9);
-    // cursor 部署到 .cursor/skills/
-    expect(deployed.some(p => p.includes(join(".cursor", "skills", "alloy-start")))).toBe(true);
-    const startSkillPath = join(projectPath, ".cursor", "skills", "alloy-start", "SKILL.md");
+    // opencode 部署到 .opencode/skills/
+    expect(deployed.some(p => p.includes(join(".opencode", "skills", "alloy-start")))).toBe(true);
+    const startSkillPath = join(projectPath, ".opencode", "skills", "alloy-start", "SKILL.md");
     const content = await readFile(startSkillPath, "utf-8");
     expect(content).toContain("name: alloy-start");
   });
@@ -112,16 +112,16 @@ describe("deploySkills", () => {
       projectPath,
       targetAgents: [
         { id: "claude-code", label: "CC", supportsColonCommands: true, commandsDir: ".claude/commands/" },
-        { id: "cursor", label: "Cursor", supportsColonCommands: false, commandsDir: ".cursor/commands/" },
+        { id: "opencode", label: "OpenCode", supportsColonCommands: false, commandsDir: ".opencode/commands/" },
       ],
     };
     const deployed = await deploySkills(opts);
-    // 9 (claude-code) + 9 (cursor) = 18
+    // 9 (claude-code) + 9 (opencode) = 18
     expect(deployed.length).toBe(18);
     const claudeFiles = deployed.filter(p => p.includes(join(".claude", "skills")));
-    const cursorFiles = deployed.filter(p => p.includes(join(".cursor", "skills")));
+    const opencodeFiles = deployed.filter(p => p.includes(join(".opencode", "skills")));
     expect(claudeFiles.length).toBe(9);
-    expect(cursorFiles.length).toBe(9);
+    expect(opencodeFiles.length).toBe(9);
   });
 
   it("检测到已有安装且用户拒绝覆盖时跳过该 agent", async () => {

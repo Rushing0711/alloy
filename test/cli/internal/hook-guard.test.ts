@@ -69,7 +69,20 @@ describe("alloy _hook-guard", () => {
 
     it("Write 工具 + 空 phases(非 alloy 项目) -> exit 0", () => {
       const stdin = JSON.stringify({ tool_name: "Write", tool_input: { file_path: "src/foo.ts" } });
-      const result = evaluateHook(stdin, [], {});
+      const result = evaluateHook(stdin, [], {}, undefined, [], false);
+      expect(result.exitCode).toBe(0);
+    });
+
+    it("Write 工具 + alloy 项目 + 空 phases -> exit 2(核心修复:防绕过)", () => {
+      const stdin = JSON.stringify({ tool_name: "Write", tool_input: { file_path: "src/foo.ts" } });
+      const result = evaluateHook(stdin, [], {}, undefined, [], true);
+      expect(result.exitCode).toBe(2);
+      expect(result.message).toContain("无活跃 change");
+    });
+
+    it("Write 工具 + alloy 项目 + 空 phases + 白名单 -> exit 0", () => {
+      const stdin = JSON.stringify({ tool_name: "Write", tool_input: { file_path: "openspec/foo.md" } });
+      const result = evaluateHook(stdin, [], {}, undefined, [], true);
       expect(result.exitCode).toBe(0);
     });
 
@@ -205,6 +218,32 @@ describe("alloy _hook-guard", () => {
       await mkdir(changeDir, { recursive: true });
       await writeFile(join(changeDir, ".alloy.yaml"), 'phase: "planned"\n', "utf-8");
       expect(collectPhases(tmpDir)).toEqual(["planned"]);
+    });
+
+    it("扫描 archive/ 下的 archived change -> [archived]", async () => {
+      const archiveChangeDir = join(tmpDir, "openspec", "changes", "archive", "2026-07-10-foo");
+      await mkdir(archiveChangeDir, { recursive: true });
+      await writeFile(join(archiveChangeDir, ".alloy.yaml"), "phase: archived\n", "utf-8");
+      expect(collectPhases(tmpDir)).toEqual(["archived"]);
+    });
+
+    it("扫描 archive/ 下的 finished change -> [finished]", async () => {
+      const archiveChangeDir = join(tmpDir, "openspec", "changes", "archive", "2026-07-10-foo");
+      await mkdir(archiveChangeDir, { recursive: true });
+      await writeFile(join(archiveChangeDir, ".alloy.yaml"), "phase: finished\n", "utf-8");
+      expect(collectPhases(tmpDir)).toEqual(["finished"]);
+    });
+
+    it("同时扫描活跃 + 归档 change", async () => {
+      const activeDir = join(tmpDir, "openspec", "changes", "bar");
+      const archiveDir = join(tmpDir, "openspec", "changes", "archive", "2026-07-10-foo");
+      await mkdir(activeDir, { recursive: true });
+      await mkdir(archiveDir, { recursive: true });
+      await writeFile(join(activeDir, ".alloy.yaml"), "phase: applying\n", "utf-8");
+      await writeFile(join(archiveDir, ".alloy.yaml"), "phase: finished\n", "utf-8");
+      const phases = collectPhases(tmpDir);
+      expect(phases).toContain("applying");
+      expect(phases).toContain("finished");
     });
   });
 

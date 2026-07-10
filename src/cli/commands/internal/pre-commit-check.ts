@@ -1,6 +1,6 @@
 // src/cli/commands/internal/pre-commit-check.ts
 import { execSync } from "node:child_process";
-import { collectPhases, collectPendingGates } from "./hook-guard.js";
+import { collectPhases, collectPendingGates, isAlloyProject } from "./hook-guard.js";
 import { guardCheck } from "../../../core/hook-guard.js";
 
 /**
@@ -11,21 +11,22 @@ export function evaluatePreCommit(
   stagedFiles: string[],
   phases: string[],
   pendingGates: string[],
-  env: Record<string, string>
+  env: Record<string, string>,
+  isAlloyProject?: boolean
 ): { exitCode: number; message?: string } {
   // 逃生阀(复用 hook-guard 的 ALLOY_FORCE_WRITE)
   if (env.ALLOY_FORCE_WRITE === "1") {
     return { exitCode: 0 };
   }
 
-  // 非 alloy 项目(无活跃 change + 无 pending_gate):放行
-  if (phases.length === 0 && pendingGates.length === 0) {
+  // 真非 alloy 项目(显式 false):放行。undefined 视为 alloy(安全优先)
+  if (isAlloyProject === false) {
     return { exitCode: 0 };
   }
 
   const blocked: string[] = [];
   for (const file of stagedFiles) {
-    const result = guardCheck({ filePath: file, phases, pendingGates });
+    const result = guardCheck({ filePath: file, phases, pendingGates, isAlloyProject: true });
     if (!result.allowed) {
       blocked.push(`${file}: ${result.reason}`);
     }
@@ -73,8 +74,9 @@ export async function preCommitCheckCommand(args: string[]): Promise<void> {
   const projectRoot = process.cwd();
   const phases = collectPhases(projectRoot);
   const pendingGates = collectPendingGates(projectRoot);
+  const isAlloy = isAlloyProject(projectRoot);
   const stagedFiles = readStagedFiles();
-  const result = evaluatePreCommit(stagedFiles, phases, pendingGates, process.env as Record<string, string>);
+  const result = evaluatePreCommit(stagedFiles, phases, pendingGates, process.env as Record<string, string>, isAlloy);
 
   if (result.message) {
     console.error(result.message);

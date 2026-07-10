@@ -11,11 +11,12 @@ import {
   detectDeployedAgents,
   getSkillTargetDir,
   CLAUDE_CODE_AGENT,
+  detectAgent,
 } from "../../src/core/agents.js";
 
 describe("KNOWN_AGENTS", () => {
-  it("应包含 8 个 agent 定义", () => {
-    expect(KNOWN_AGENTS).toHaveLength(8);
+  it("应包含 4 个 agent 定义", () => {
+    expect(KNOWN_AGENTS).toHaveLength(4);
   });
 
   it("每个 agent 应有必需字段", () => {
@@ -34,11 +35,11 @@ describe("KNOWN_AGENTS", () => {
     expect(claude?.commandsDir).toBe(".claude/commands/");
   });
 
-  it("应包含 cursor agent（不支持冒号命令）", () => {
-    const cursor = KNOWN_AGENTS.find((a) => a.id === "cursor");
-    expect(cursor).toBeDefined();
-    expect(cursor?.supportsColonCommands).toBe(false);
-    expect(cursor?.commandsDir).toBe(".cursor/commands/");
+  it("应包含 opencode agent（不支持冒号命令）", () => {
+    const opencode = KNOWN_AGENTS.find((a) => a.id === "opencode");
+    expect(opencode).toBeDefined();
+    expect(opencode?.supportsColonCommands).toBe(false);
+    expect(opencode?.commandsDir).toBe(".opencode/commands/");
   });
 
   it("codex agent 应标记为 globalOnly", () => {
@@ -79,14 +80,14 @@ describe("detectDeployedAgents", () => {
 
   it("项目级：检测到不支持冒号命令的 agent", () => {
     vi.mocked(existsSync).mockImplementation((path) => {
-      // 模拟 .cursor/skills/alloy-start/SKILL.md 存在
-      if (path.toString().includes(".cursor/skills/alloy-start/SKILL.md")) return true;
+      // 模拟 .opencode/skills/alloy-start/SKILL.md 存在
+      if (path.toString().includes(".opencode/skills/alloy-start/SKILL.md")) return true;
       return false;
     });
 
     const agents = detectDeployedAgents("project", "/fake/project");
     expect(agents).toHaveLength(1);
-    expect(agents[0].id).toBe("cursor");
+    expect(agents[0].id).toBe("opencode");
   });
 
   it("项目级：未检测到任何 agent", () => {
@@ -119,9 +120,9 @@ describe("getSkillTargetDir", () => {
   });
 
   it("不支持冒号命令的 agent：也返回 skills 目录", () => {
-    const agent = KNOWN_AGENTS.find((a) => a.id === "cursor")!;
+    const agent = KNOWN_AGENTS.find((a) => a.id === "opencode")!;
     const dir = getSkillTargetDir(agent, "project", "/fake/project");
-    expect(dir).toBe("/fake/project/.cursor/skills");
+    expect(dir).toBe("/fake/project/.opencode/skills");
   });
 
   it("全局级：应使用 HOME 路径", () => {
@@ -146,11 +147,59 @@ describe("agent tier", () => {
     expect(claudeCode?.tier).toBe("stable");
   });
 
-  it("其他 7 个 agent 应为 experimental", () => {
+  it("其他 3 个 agent 应为 experimental", () => {
     const experimental = KNOWN_AGENTS.filter((a) => a.id !== "claude-code");
-    expect(experimental).toHaveLength(7);
+    expect(experimental).toHaveLength(3);
     for (const a of experimental) {
       expect(a.tier).toBe("experimental");
     }
+  });
+});
+
+describe("detectAgent(运行时 agent 检测)", () => {
+  const originalAiAgent = process.env.AI_AGENT;
+  const originalClaudecode = process.env.CLAUDECODE;
+
+  afterEach(() => {
+    if (originalAiAgent === undefined) delete process.env.AI_AGENT;
+    else process.env.AI_AGENT = originalAiAgent;
+    if (originalClaudecode === undefined) delete process.env.CLAUDECODE;
+    else process.env.CLAUDECODE = originalClaudecode;
+  });
+
+  it("AI_AGENT=claude-code_2-1-153_agent -> claude-code", () => {
+    process.env.AI_AGENT = "claude-code_2-1-153_agent";
+    delete process.env.CLAUDECODE;
+    expect(detectAgent()).toBe("claude-code");
+  });
+
+  it("AI_AGENT=opencode_1-0-0_agent -> opencode", () => {
+    process.env.AI_AGENT = "opencode_1-0-0_agent";
+    delete process.env.CLAUDECODE;
+    expect(detectAgent()).toBe("opencode");
+  });
+
+  it("AI_AGENT=codex_0-5-0_agent -> codex", () => {
+    process.env.AI_AGENT = "codex_0-5-0_agent";
+    delete process.env.CLAUDECODE;
+    expect(detectAgent()).toBe("codex");
+  });
+
+  it("AI_AGENT 无 _agent 后缀 -> 原样返回", () => {
+    process.env.AI_AGENT = "some-unknown-agent";
+    delete process.env.CLAUDECODE;
+    expect(detectAgent()).toBe("some-unknown-agent");
+  });
+
+  it("无 AI_AGENT + CLAUDECODE=1 -> claude-code(回退)", () => {
+    delete process.env.AI_AGENT;
+    process.env.CLAUDECODE = "1";
+    expect(detectAgent()).toBe("claude-code");
+  });
+
+  it("无任何标记环境变量 -> unknown", () => {
+    delete process.env.AI_AGENT;
+    delete process.env.CLAUDECODE;
+    expect(detectAgent()).toBe("unknown");
   });
 });
