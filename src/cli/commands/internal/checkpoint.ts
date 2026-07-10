@@ -57,14 +57,14 @@ async function assertCheckpointPhase(changeDir: string): Promise<boolean> {
     }
     console.error(`⛔ [PRECONDITION_FAIL] apply 中后期禁止检查点操作——worktree 已创建或 SDD/EP 已启动，回退会破坏一致性。`);
     console.error(`  worktree: ${state.worktree ?? "null"} | SDD/EP 已启动: ${sddEpStarted}`);
-    console.error(`  如需变更，请用 /alloy:discard 重开 change。`);
+    console.error(`  如需变更，请用 /alloy-discard 重开 change。`);
     process.exit(1);
     return false;
   }
 
   // archive/finished
   console.error(`⛔ [PRECONDITION_FAIL] 检查点操作仅 start/plan/apply 早期允许，当前 phase=${phase}`);
-  console.error(`  ${phase} 阶段禁止检查点操作。如需变更，请用 /alloy:discard 重开 change。`);
+  console.error(`  ${phase} 阶段禁止检查点操作。如需变更，请用 /alloy-discard 重开 change。`);
   process.exit(1);
   return false;
 }

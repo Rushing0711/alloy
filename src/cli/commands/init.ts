@@ -605,5 +605,5 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   const labels = opts.targetAgents.length > 0
     ? opts.targetAgents.map(a => a.label).join(" / ")
     : "目标 Agent";
-  info(`在 ${labels} 中输入 /alloy:start <topic> 开始工作\n`);
+  info(`在 ${labels} 中输入 /alloy-start <topic> 开始工作\n`);
 }

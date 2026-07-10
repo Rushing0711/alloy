@@ -476,7 +476,7 @@ describe("init", () => {
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("Claude Code"));
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("Cursor"));
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("Claude Code / Cursor"));
-      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("/alloy:start <topic>"));
+      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("/alloy-start <topic>"));
     });
   });
 
