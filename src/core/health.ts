@@ -7,7 +7,7 @@ import type { DepCheckResult, HealthCheckResult } from "./types.js";
 import { loadCompat } from "./compat.js";
 import { detectEnv } from "./detect.js";
 import { detectSkill } from "./detect-installations.js";
-import { CLAUDE_CODE_AGENT } from "./agents.js";
+import { CLAUDE_CODE_AGENT, KNOWN_AGENTS } from "./agents.js";
 
 const EXPECTED_SKILL_NAMES = [
   "alloy-start", "alloy-plan", "alloy-apply", "alloy-archive",
@@ -200,17 +200,29 @@ export async function runHealthCheck(
     });
   }
 
-  // 6. Skills 目录完整性
+  // 6. Skills 目录完整性--遍历 KNOWN_AGENTS 找已部署的
   try {
     const home = process.env.HOME || process.env.USERPROFILE || "~";
-    const skillsDir =
-      scope === "global"
-        ? join(home, ".claude", "skills")
-        : join(projectPath, ".claude", "skills");
+    let skillsStatus: HealthCheckResult | null = null;
 
-    let skillsStatus = checkSkillsIntegrity(skillsDir);
-    // 如果 .claude/skills/ 不完整，尝试检查 skills/（源码目录）
-    if (skillsStatus.status === "fail") {
+    for (const agent of KNOWN_AGENTS) {
+      const agentBase = agent.commandsDir.split("/")[0];
+      const skillsDir = scope === "global" && !agent.globalOnly
+        ? join(home, agentBase, "skills")
+        : join(projectPath, agentBase, "skills");
+      const status = checkSkillsIntegrity(skillsDir);
+      if (status.status === "pass") {
+        skillsStatus = {
+          ...status,
+          current: `${status.current}（来源: ${agentBase}/skills/）`,
+        };
+        break;
+      }
+      if (!skillsStatus) skillsStatus = status;
+    }
+
+    // fallback: 源码目录 skills/
+    if (!skillsStatus || skillsStatus.status === "fail") {
       const sourceDir = join(projectPath, "skills");
       const sourceStatus = checkSkillsIntegrity(sourceDir);
       if (sourceStatus.status === "pass") {
@@ -220,7 +232,13 @@ export async function runHealthCheck(
         };
       }
     }
-    results.push(skillsStatus);
+
+    results.push(skillsStatus ?? {
+      name: "Skills",
+      current: "0/9",
+      required: `9 个 skill 目录`,
+      status: "fail",
+    });
   } catch {
     results.push({
       name: "Skills",

@@ -61,6 +61,15 @@ vi.mock("../../src/core/agent-config.js", () => ({
   getHookSupportedAgents: vi.fn().mockReturnValue(["claude-code", "codex"]),
   writeStopHookConfig: vi.fn().mockResolvedValue(true),
   getStopHookSupportedAgents: vi.fn().mockReturnValue(["claude-code"]),
+  getHookConfigPath: vi.fn().mockImplementation((agentId: string) => {
+    switch (agentId) {
+      case "claude-code": return ".claude/settings.json (hooks.PreToolUse)";
+      case "codex": return ".codex/settings.json (hooks.PreToolUse)";
+      case "pi": return ".pi/extensions/alloy-guard.ts (tool_call 扩展)";
+      case "opencode": return ".opencode/tools/write.ts+edit.ts (custom tool)";
+      default: return "";
+    }
+  }),
 }));
 vi.mock("../../src/utils/prompt.js", () => ({
   promptSelect: mockPromptSelect,

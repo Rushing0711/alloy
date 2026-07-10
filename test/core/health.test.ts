@@ -249,7 +249,7 @@ describe("runHealthCheck", () => {
     expect(spResult!.current).toContain("已安装");
   });
 
-  it(".claude/skills/ 不完整但 skills/ 完整时应返回 pass（来源: skills/）", async () => {
+  it("所有 agent skills 不完整但 skills/ 源码完整时应返回 pass（来源: skills/）", async () => {
     vi.mocked(loadCompat).mockResolvedValue(MOCK_CONFIG);
     vi.mocked(execSync).mockReturnValue(Buffer.from("1.3.1\n") as any);
     vi.mocked(readFile).mockImplementation((path: any) => {
@@ -270,11 +270,11 @@ describe("runHealthCheck", () => {
       nodeVersion: "20.0.0",
       gitInstalled: true,
     });
-    // .claude/skills/ 中 alloy-plan/SKILL.md 缺失，但 skills/ 源码目录完整
+    // 所有 agent 的 skills/alloy-plan/SKILL.md 缺失，但 skills/ 源码目录完整
     vi.mocked(existsSync).mockImplementation((path: any) => {
       const pathStr = String(path);
-      // 仅 .claude/skills/alloy-plan/SKILL.md 缺失（源码 skills/ 仍完整）
-      if (pathStr.includes(".claude/skills/alloy-plan/SKILL.md")) {
+      // agent 目录(.claude/.codex/.opencode/.pi)下的 skills/alloy-plan 缺失
+      if (/\.(claude|codex|opencode|pi)\/skills\/alloy-plan\/SKILL\.md/.test(pathStr)) {
         return false;
       }
       return true;

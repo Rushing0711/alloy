@@ -9,7 +9,7 @@ import { runHealthCheck } from "../../core/health.js";
 import { installOpenSpecCli, initOpenSpecProject } from "../../core/openspec.js";
 import { installSuperpowers } from "../../core/superpowers.js";
 import { deploySkills, deploySchema } from "../../core/skills.js";
-import { injectAgentConfigs, hasPermissionsConfig, writePermissionsConfig, getPermissionSupportedAgents, writeHookConfig, getHookSupportedAgents, writeStopHookConfig, getStopHookSupportedAgents } from "../../core/agent-config.js";
+import { injectAgentConfigs, hasPermissionsConfig, writePermissionsConfig, getPermissionSupportedAgents, writeHookConfig, getHookSupportedAgents, writeStopHookConfig, getStopHookSupportedAgents, getHookConfigPath } from "../../core/agent-config.js";
 import { KNOWN_AGENTS } from "../../core/agents.js";
 import type { AgentInfo, DeployOptions } from "../../core/types.js";
 import { getPackageRoot } from "../../utils/fs.js";
@@ -318,18 +318,26 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   // USER_GATE 2：确认执行清单
   section("即将执行以下操作");
   info("文件部署：");
-  info("  + .claude/skills/alloy-*/         （新建/更新）");
-  info("  + .claude/commands/opsx/          （新建/更新）");
-  info("  + openspec/config.yaml            （新建/更新，含 main_branch: " + confirmedMainBranch + "）");
+  for (const agent of opts.targetAgents) {
+    const agentBase = agent.commandsDir.split("/")[0];
+    info(`  + ${agentBase}/skills/alloy-*/         （新建/更新）`);
+  }
+  if (hasClaudeCode) {
+    info("  + .claude/commands/opsx/          （新建/更新）");
+  }
+  for (const agent of opts.targetAgents) {
+    if (agent.id === "claude-code") continue; // 已在上面显示
+    const agentBase = agent.commandsDir.split("/")[0];
+    info(`  + ${agentBase}/commands/opsx/          （新建/更新）`);
+  }
+  info(`  + openspec/config.yaml            （新建/更新，含 main_branch: ${confirmedMainBranch}）`);
   info("  + openspec/schemas/alloy/         （新建/更新）");
   if (hasClaudeCode) {
     info("  + .claude/settings.json           （新建/更新，worktree.baseRef: head）");
   }
-  const hookAgentLabels = opts.targetAgents
-    .filter(a => getHookSupportedAgents().includes(a.id))
-    .map(a => a.label);
-  if (hookAgentLabels.length > 0) {
-    info(`  + PreToolUse hook                  （${hookAgentLabels.join(" / ")} 的 hooks.PreToolUse,alloy _hook-guard 真闸门）`);
+  const hookAgents = opts.targetAgents.filter(a => getHookSupportedAgents().includes(a.id));
+  for (const agent of hookAgents) {
+    info(`  + hook 闸门                         （${agent.label}: ${getHookConfigPath(agent.id)},alloy _hook-guard 真闸门）`);
   }
   if (configurePermissions && supportedAgents.length > 0) {
     info(`  + 权限白名单                         （${permissionAgentLabels.join(" / ")} 的 permissions.allow/deny）`);
@@ -342,7 +350,8 @@ export async function initCommand(opts: InitOptions): Promise<void> {
     info("  + git init                        （当前不是 git 仓库）");
   }
   if (willCommit) {
-    info(`  + git add .claude/ .gitignore .gitattributes openspec/config.yaml openspec/schemas/`);
+    const agentBases = [...new Set(opts.targetAgents.map(a => a.commandsDir.split("/")[0]))];
+    info(`  + git add ${agentBases.join(" ")} .gitignore .gitattributes openspec/config.yaml openspec/schemas/`);
     info(`  + git commit -m "chore: alloy init 项目初始化"`);
     info(`    （仓库无任何 commit，将在 ${confirmedMainBranch} 分支创建初始 commit，锁定 main 分支）`);
   } else {
@@ -459,7 +468,7 @@ export async function initCommand(opts: InitOptions): Promise<void> {
     }
   }
 
-  // 7.7 写入 PreToolUse hook(真闸门)--对支持 hook 的 agent 自动装(claude-code + codex)
+  // 7.7 写入 PreToolUse hook(真闸门)--对支持 hook 的 agent 自动装(claude-code/codex settings.json,pi 扩展,opencode custom tool)
   const hookSupportedAgentIds = opts.targetAgents
     .map(a => a.id)
     .filter(id => getHookSupportedAgents().includes(id));
@@ -470,7 +479,7 @@ export async function initCommand(opts: InitOptions): Promise<void> {
       try {
         const written = await writeHookConfig(opts.projectPath, agentId);
         if (written) {
-          success(`${agentLabel} -> hooks.PreToolUse (alloy _hook-guard)`);
+          success(`${agentLabel} -> ${getHookConfigPath(agentId)}`);
         }
       } catch (e) {
         warn(`${agentLabel} hook 写入失败: ${(e as Error).message}`);

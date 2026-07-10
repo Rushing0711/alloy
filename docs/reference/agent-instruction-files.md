@@ -76,6 +76,28 @@
   - 补充各 agent 官网和 GitHub 地址
   - 删除非目标 agent（Cursor/CodeBuddy/Qoder/Trae/Gemini CLI 等）的调研信息，需要时再调研
 
+## 配置文件对照表(settings.json 对应)
+
+> **用途:** Claude Code 的 settings.json 含 hook + permissions + 其他配置。其他 agent 的对应配置文件不同,此表作为快速参考。
+
+| agent | 项目级配置 | 全局级配置 | hook 机制 | permissions |
+|-------|----------|----------|----------|-------------|
+| Claude Code | `.claude/settings.json` | `~/.claude/settings.json` | `hooks.PreToolUse`(外部脚本,exit 2 阻断) | `permissions.allow/deny`(`Bash(cmd *)`) |
+| Codex | `.codex/settings.local.json`(hook) | `~/.codex/settings.json`(hook)+ `~/.codex/config.toml`(权限) | `hooks.PreToolUse`(同款协议) | `~/.codex/config.toml`(全局,非项目级) |
+| OpenCode | `opencode.json`(权限)+ `.opencode/tools/*.ts`(hook) | `~/.config/opencode/opencode.json`(指令)+ `~/.config/opencode/tools/`(hook) | custom tool 覆盖内置(`takes precedence`) | `opencode.json` 的 `permission` 字段 |
+| Pi | `.pi/permissions.json`(权限)+ `.pi/extensions/*.ts`(hook) | `~/.pi/agent/permissions.json`+ `~/.pi/agent/extensions/` | TS 扩展 `tool_call` 事件(回调 block) | `.pi/permissions.json`(`allow/deny`) |
+
+**关键差异:**
+1. **hook 形态**:Claude Code/Codex 用 settings.json 的 `hooks.PreToolUse`;Pi 用 TS 扩展;OpenCode 用 custom tool 覆盖
+2. **permissions 位置**:Claude Code 在 settings.json;Codex 在 config.toml(仅全局);OpenCode 在 opencode.json;Pi 在 .pi/permissions.json
+3. **全局路径**:Claude Code `~/.claude/`;Codex `~/.codex/`;OpenCode `~/.config/opencode/`(XDG);Pi `~/.pi/agent/`
+
+**alloy init 的 global scope 路径对应(通过 `globalBase` 配置):**
+- claude-code:`~/.claude/skills/`
+- codex:`~/.codex/skills/`
+- opencode:`~/.config/opencode/skills/`(非 `~/.opencode/`)
+- pi:`~/.pi/agent/skills/`(非 `~/.pi/`)
+
 ## 权限/白名单机制调研
 
 > **调研时间：** 2026-07-06（官网验证）

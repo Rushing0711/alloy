@@ -95,10 +95,20 @@ export async function initOpenSpecProject(
     }
   }
 
+  const TOOL_MAP: Record<string, string> = {
+    "claude-code": "claude",
+    "codex": "codex",
+    "opencode": "opencode",
+    "pi": "pi",
+  };
+  const tools = agents && agents.length > 0
+    ? agents.map(a => TOOL_MAP[a.id] ?? "claude").join(",")
+    : "claude";
+
   const profile = createCustomProfile();
   try {
     execSync(
-      `openspec init ${JSON.stringify(targetPath)} --tools claude --profile custom`,
+      `openspec init ${JSON.stringify(targetPath)} --tools ${tools} --profile custom`,
       { stdio: "pipe", timeout: 120_000, env: profile.env },
     );
     console.log(`     ✓ openspec init 完成（${label}）`);

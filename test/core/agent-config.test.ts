@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { writeFile, readFile, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { injectAgentConfigs, hasPermissionsConfig, writePermissionsConfig, ALLOY_PERMISSIONS, getPermissionSupportedAgents, hasHookConfig, writeHookConfig, getHookSupportedAgents } from "../../src/core/agent-config.js";
+import { injectAgentConfigs, hasPermissionsConfig, writePermissionsConfig, ALLOY_PERMISSIONS, getPermissionSupportedAgents, hasHookConfig, writeHookConfig, getHookSupportedAgents, writePiHookExtension, hasPiHookExtension, writeOpenCodeHookTools, hasOpenCodeHookTools } from "../../src/core/agent-config.js";
 import { getPackageRoot } from "../../src/utils/fs.js";
 
 const expectedHookCommand = `node ${getPackageRoot()}/dist/cli/index.js _hook-guard`;
@@ -337,9 +337,102 @@ describe("writeHookConfig", () => {
 });
 
 describe("getHookSupportedAgents", () => {
-  it("返回支持 PreToolUse hook 的 agent id 列表", () => {
+  it("返回支持 hook 闸门的 agent id 列表(4 个)", () => {
     const agents = getHookSupportedAgents();
     expect(agents).toContain("claude-code");
     expect(agents).toContain("codex");
+    expect(agents).toContain("pi");
+    expect(agents).toContain("opencode");
+    expect(agents).toHaveLength(4);
+  });
+});
+
+describe("writePiHookExtension / hasPiHookExtension", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = join(tmpdir(), `alloy-pi-hook-${Date.now()}`);
+    await mkdir(tmpDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("未装时 hasPiHookExtension -> false", async () => {
+    expect(await hasPiHookExtension(tmpDir)).toBe(false);
+  });
+
+  it("writePiHookExtension -> 写 .pi/extensions/alloy-guard.ts + hasPiHookExtension -> true", async () => {
+    await writePiHookExtension(tmpDir);
+    expect(await hasPiHookExtension(tmpDir)).toBe(true);
+    const content = await readFile(join(tmpDir, ".pi", "extensions", "alloy-guard.ts"), "utf-8");
+    expect(content).toContain("_hook-guard");
+    expect(content).toContain("tool_call");
+  });
+
+  it("writePiHookExtension 幂等(重复写不报错)", async () => {
+    await writePiHookExtension(tmpDir);
+    await writePiHookExtension(tmpDir);
+    expect(await hasPiHookExtension(tmpDir)).toBe(true);
+  });
+});
+
+describe("writeOpenCodeHookTools / hasOpenCodeHookTools", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = join(tmpdir(), `alloy-opencode-hook-${Date.now()}`);
+    await mkdir(tmpDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("未装时 hasOpenCodeHookTools -> false", async () => {
+    expect(await hasOpenCodeHookTools(tmpDir)).toBe(false);
+  });
+
+  it("writeOpenCodeHookTools -> 写 write.ts + edit.ts + hasOpenCodeHookTools -> true", async () => {
+    await writeOpenCodeHookTools(tmpDir);
+    expect(await hasOpenCodeHookTools(tmpDir)).toBe(true);
+    const writeContent = await readFile(join(tmpDir, ".opencode", "tools", "write.ts"), "utf-8");
+    expect(writeContent).toContain("_hook-guard");
+    expect(writeContent).toContain("Write");
+    const editContent = await readFile(join(tmpDir, ".opencode", "tools", "edit.ts"), "utf-8");
+    expect(editContent).toContain("_hook-guard");
+    expect(editContent).toContain("Edit");
+  });
+
+  it("writeOpenCodeHookTools 幂等", async () => {
+    await writeOpenCodeHookTools(tmpDir);
+    await writeOpenCodeHookTools(tmpDir);
+    expect(await hasOpenCodeHookTools(tmpDir)).toBe(true);
+  });
+});
+
+describe("hasHookConfig/writeHookConfig 分派(pi/opencode)", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = join(tmpdir(), `alloy-hook-dispatch-${Date.now()}`);
+    await mkdir(tmpDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("hasHookConfig(pi) 调 hasPiHookExtension", async () => {
+    expect(await hasHookConfig(tmpDir, "pi")).toBe(false);
+    await writeHookConfig(tmpDir, "pi");
+    expect(await hasHookConfig(tmpDir, "pi")).toBe(true);
+  });
+
+  it("hasHookConfig(opencode) 调 hasOpenCodeHookTools", async () => {
+    expect(await hasHookConfig(tmpDir, "opencode")).toBe(false);
+    await writeHookConfig(tmpDir, "opencode");
+    expect(await hasHookConfig(tmpDir, "opencode")).toBe(true);
   });
 });

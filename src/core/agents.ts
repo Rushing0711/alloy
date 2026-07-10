@@ -27,6 +27,7 @@ export const KNOWN_AGENTS: AgentInfo[] = [
     label: "OpenCode",
     supportsColonCommands: false,
     commandsDir: ".opencode/commands/",
+    globalBase: ".config/opencode",
     interactiveTool: "question",
     tier: "experimental",
   },
@@ -35,6 +36,7 @@ export const KNOWN_AGENTS: AgentInfo[] = [
     label: "Pi",
     supportsColonCommands: false,
     commandsDir: ".pi/prompts/",
+    globalBase: ".pi/agent",
     interactiveTool: "none",
     tier: "experimental",
   },
@@ -52,6 +54,12 @@ function basePath(scope: "global" | "project", projectPath: string): string {
   return projectPath;
 }
 
+/** 获取 agent 的 base 目录:global scope 用 globalBase(如有),project 用 commandsDir 第一段 */
+function getAgentBase(agent: AgentInfo, scope: "global" | "project"): string {
+  if (scope === "global" && agent.globalBase) return agent.globalBase;
+  return agent.commandsDir.split("/")[0];
+}
+
 /** 反向推导：检查哪些 agent 已有 alloy skill 部署 */
 export function detectDeployedAgents(
   scope: "global" | "project",
@@ -60,8 +68,7 @@ export function detectDeployedAgents(
   const base = basePath(scope, projectPath);
 
   return KNOWN_AGENTS.filter((agent) => {
-    // 从 commandsDir 提取 agent 基目录（如 .claude/ from .claude/commands/）
-    const agentBase = agent.commandsDir.split("/")[0];
+    const agentBase = getAgentBase(agent, scope);
     const skillFile = join(base, agentBase, "skills", "alloy-start", "SKILL.md");
     return existsSync(skillFile);
   });
@@ -74,9 +81,7 @@ export function getSkillTargetDir(
   projectPath: string
 ): string {
   const base = basePath(scope, projectPath);
-  // 从 commandsDir 提取 agent 基目录（如 .claude/ from .claude/commands/）
-  const agentBase = agent.commandsDir.split("/")[0];
-  return join(base, agentBase, "skills");
+  return join(base, getAgentBase(agent, scope), "skills");
 }
 
 export { COMMAND_IDS };

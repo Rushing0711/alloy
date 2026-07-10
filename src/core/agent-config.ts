@@ -220,9 +220,20 @@ function getHookCommand(): string {
   return `node ${alloyCliPath} _hook-guard`;
 }
 
-/** 返回支持 PreToolUse hook 的 agent id 列表 */
+/** 返回支持 hook 闸门的 agent id 列表(claude-code/codex 用 settings.json,pi 用扩展,opencode 用 custom tool) */
 export function getHookSupportedAgents(): string[] {
-  return Object.keys(ALLOY_HOOK_CONFIGS);
+  return ["claude-code", "codex", "pi", "opencode"];
+}
+
+/** 返回 agent 的 hook 配置路径描述(用于 init 执行清单显示) */
+export function getHookConfigPath(agentId: string): string {
+  switch (agentId) {
+    case "claude-code": return ".claude/settings.json (hooks.PreToolUse)";
+    case "codex": return ".codex/settings.json (hooks.PreToolUse)";
+    case "pi": return ".pi/extensions/alloy-guard.ts (tool_call 扩展)";
+    case "opencode": return ".opencode/tools/write.ts+edit.ts (custom tool)";
+    default: return "";
+  }
 }
 
 interface PreToolUseEntry {
@@ -230,8 +241,11 @@ interface PreToolUseEntry {
   hooks?: { type: string; command: string }[];
 }
 
-/** 检测指定 agent 是否已装 alloy _hook-guard(绝对路径版本) */
+/** 检测指定 agent 是否已装 alloy hook(claude-code/codex 查 settings.json,pi 查扩展,opencode 查 tools) */
 export async function hasHookConfig(projectPath: string, agentId: string): Promise<boolean> {
+  if (agentId === "pi") return hasPiHookExtension(projectPath);
+  if (agentId === "opencode") return hasOpenCodeHookTools(projectPath);
+
   const settingsFile = ALLOY_HOOK_CONFIGS[agentId];
   if (!settingsFile) return false;
 
@@ -254,10 +268,15 @@ export async function hasHookConfig(projectPath: string, agentId: string): Promi
 }
 
 /**
- * 写入 alloy _hook-guard 到指定 agent 的 PreToolUse hook(幂等)。
- * 若已有旧版 `alloy _hook-guard`(无绝对路径),替换为绝对路径版本。
+ * 写入 alloy hook 到指定 agent(幂等)。
+ * claude-code/codex:settings.json 的 PreToolUse
+ * pi:.pi/extensions/alloy-guard.ts
+ * opencode:.opencode/tools/write.ts + edit.ts
  */
 export async function writeHookConfig(projectPath: string, agentId: string): Promise<boolean> {
+  if (agentId === "pi") return writePiHookExtension(projectPath);
+  if (agentId === "opencode") return writeOpenCodeHookTools(projectPath);
+
   const settingsFile = ALLOY_HOOK_CONFIGS[agentId];
   if (!settingsFile) return false;
 
@@ -397,5 +416,166 @@ export async function writeStopHookConfig(projectPath: string, agentId: string):
   const dir = join(settingsPath, "..");
   await mkdir(dir, { recursive: true });
   await writeFile(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");
+  return true;
+}
+
+// --- Pi hook 扩展(.pi/extensions/alloy-guard.ts) ---
+
+const PI_EXTENSION_FILE = ".pi/extensions/alloy-guard.ts";
+
+function generatePiExtensionContent(alloyCliPath: string): string {
+  return [
+    "// Alloy hook-guard 扩展:订阅 tool_call 事件,拦截非 apply 阶段写源码",
+    "// 由 alloy init 自动生成。待验证:Pi tool_call 事件 API(field 名/block 方式)",
+    'import { execSync } from "node:child_process";',
+    "",
+    "export default function alloyGuard(pi: any) {",
+    '  pi.on("tool_call", async (event: any) => {',
+    "    const toolName = event?.tool ?? event?.name;",
+    '    if (toolName !== "write" && toolName !== "edit") return;',
+    "",
+    "    const filePath = event?.args?.path ?? event?.args?.file_path;",
+    "    if (!filePath) return;",
+    "",
+    "    const stdin = JSON.stringify({",
+    '      tool_name: toolName === "write" ? "Write" : "Edit",',
+    "      tool_input: { file_path: filePath },",
+    "    });",
+    "",
+    "    try {",
+    `      execSync("node ${alloyCliPath} _hook-guard", {`,
+    "        input: stdin,",
+    '        stdio: ["pipe", "ignore", "pipe"],',
+    "      });",
+    "    } catch (err: any) {",
+    '      const stderr = err.stderr?.toString() ?? "alloy hook 拦截";',
+    "      return { block: true, reason: stderr };",
+    "    }",
+    "  });",
+    "}",
+    "",
+  ].join("\n");
+}
+
+/** 检测 Pi 是否已装 alloy hook 扩展 */
+export async function hasPiHookExtension(projectPath: string): Promise<boolean> {
+  const extPath = join(projectPath, PI_EXTENSION_FILE);
+  try {
+    const content = await readFile(extPath, "utf-8");
+    return content.includes("_hook-guard");
+  } catch {
+    return false;
+  }
+}
+
+/** 写入 Pi hook 扩展(.pi/extensions/alloy-guard.ts) */
+export async function writePiHookExtension(projectPath: string): Promise<boolean> {
+  const alloyCliPath = join(getPackageRoot(), "dist", "cli", "index.js");
+  const extPath = join(projectPath, PI_EXTENSION_FILE);
+  const content = generatePiExtensionContent(alloyCliPath);
+  await mkdir(join(extPath, ".."), { recursive: true });
+  await writeFile(extPath, content, "utf-8");
+  return true;
+}
+
+// --- OpenCode hook 工具(.opencode/tools/write.ts + edit.ts) ---
+
+const OPENCODE_TOOLS_DIR = ".opencode/tools";
+
+function generateOpenCodeWriteToolContent(alloyCliPath: string): string {
+  return [
+    "// Alloy hook-guard write 工具:覆盖内置 write,调 alloy _hook-guard 判定",
+    "// 由 alloy init 自动生成。待验证:OpenCode custom tool API + 能否调原内置 write",
+    'import { tool } from "@opencode-ai/plugin";',
+    'import fs from "node:fs/promises";',
+    'import { execSync } from "node:child_process";',
+    "",
+    "export default tool({",
+    '  description: "Alloy-gated write (overrides built-in)",',
+    "  args: {",
+    "    path: tool.schema.string(),",
+    "    content: tool.schema.string(),",
+    "  },",
+    "  async execute(args: { path: string; content: string }, context: any) {",
+    "    const stdin = JSON.stringify({",
+    '      tool_name: "Write",',
+    "      tool_input: { file_path: args.path },",
+    "    });",
+    "",
+    "    try {",
+    `      execSync("node ${alloyCliPath} _hook-guard", {`,
+    "        input: stdin,",
+    '        stdio: ["pipe", "ignore", "pipe"],',
+    "      });",
+    "      await fs.writeFile(args.path, args.content);",
+    "      return `written: ${args.path}`;",
+    "    } catch (err: any) {",
+    '      const stderr = err.stderr?.toString() ?? "alloy hook 拦截";',
+    "      return `blocked: ${stderr}`;",
+    "    }",
+    "  },",
+    "});",
+    "",
+  ].join("\n");
+}
+
+function generateOpenCodeEditToolContent(alloyCliPath: string): string {
+  return [
+    "// Alloy hook-guard edit 工具:覆盖内置 edit,调 alloy _hook-guard 判定",
+    "// 由 alloy init 自动生成。待验证:OpenCode edit 工具参数(old_string/new_string)",
+    'import { tool } from "@opencode-ai/plugin";',
+    'import fs from "node:fs/promises";',
+    'import { execSync } from "node:child_process";',
+    "",
+    "export default tool({",
+    '  description: "Alloy-gated edit (overrides built-in)",',
+    "  args: {",
+    "    path: tool.schema.string(),",
+    "    old_string: tool.schema.string(),",
+    "    new_string: tool.schema.string(),",
+    "  },",
+    "  async execute(args: { path: string; old_string: string; new_string: string }, context: any) {",
+    "    const stdin = JSON.stringify({",
+    '      tool_name: "Edit",',
+    "      tool_input: { file_path: args.path },",
+    "    });",
+    "",
+    "    try {",
+    `      execSync("node ${alloyCliPath} _hook-guard", {`,
+    "        input: stdin,",
+    '        stdio: ["pipe", "ignore", "pipe"],',
+    "      });",
+    '      const content = await fs.readFile(args.path, "utf-8");',
+    "      const updated = content.replace(args.old_string, args.new_string);",
+    "      await fs.writeFile(args.path, updated);",
+    "      return `edited: ${args.path}`;",
+    "    } catch (err: any) {",
+    '      const stderr = err.stderr?.toString() ?? "alloy hook 拦截";',
+    "      return `blocked: ${stderr}`;",
+    "    }",
+    "  },",
+    "});",
+    "",
+  ].join("\n");
+}
+
+/** 检测 OpenCode 是否已装 alloy hook 工具 */
+export async function hasOpenCodeHookTools(projectPath: string): Promise<boolean> {
+  const writePath = join(projectPath, OPENCODE_TOOLS_DIR, "write.ts");
+  try {
+    const content = await readFile(writePath, "utf-8");
+    return content.includes("_hook-guard");
+  } catch {
+    return false;
+  }
+}
+
+/** 写入 OpenCode hook 工具(.opencode/tools/write.ts + edit.ts) */
+export async function writeOpenCodeHookTools(projectPath: string): Promise<boolean> {
+  const alloyCliPath = join(getPackageRoot(), "dist", "cli", "index.js");
+  const toolsDir = join(projectPath, OPENCODE_TOOLS_DIR);
+  await mkdir(toolsDir, { recursive: true });
+  await writeFile(join(toolsDir, "write.ts"), generateOpenCodeWriteToolContent(alloyCliPath), "utf-8");
+  await writeFile(join(toolsDir, "edit.ts"), generateOpenCodeEditToolContent(alloyCliPath), "utf-8");
   return true;
 }

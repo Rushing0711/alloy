@@ -66,7 +66,7 @@ alloy doctor [path] [options]
 - `--help, -h`：显示帮助
 
 输出含 "Agent 保护层级" 段(检测项目装了哪些 agent + 各 agent 的保护)：
-- ✓ hook 真闸门：装了 PreToolUse hook(Claude Code/Codex,绝对路径正确)
+- ✓ hook 真闸门:装了 hook(Claude Code/Codex 的 PreToolUse,Pi 的 tool_call 扩展,OpenCode 的 custom tool,绝对路径正确)
 - ⚠️ 仅 skill(无 hook,保护降级)：装了 alloy skill 但无 hook(如 Pi/OpenCode,或 Claude Code 未装 hook / hook 配置无效)
 
 ### alloy update
@@ -402,7 +402,10 @@ CLI 自己从 worktree 分支（`worktree-<change-name>`）读 state（用 `git 
 
 ### alloy _hook-guard
 
-PreToolUse hook 适配器（Claude Code/Codex 共用）。从 stdin 读 JSON，判定 Write/Edit 是否允许，exit 0（放行）/ 2（拦截）。由 `alloy init` 自动装到 `.claude/settings.json` / `.codex/settings.json` 的 `hooks.PreToolUse`。
+PreToolUse hook 适配器(Claude Code/Codex 共用,Pi/OpenCode 通过扩展/工具调用)。从 stdin 读 JSON,判定 Write/Edit 是否允许,exit 0(放行)/ 2(拦截)。由 `alloy init` 自动装到:
+- Claude Code/Codex:`.claude/settings.json` / `.codex/settings.json` 的 `hooks.PreToolUse`
+- Pi:`.pi/extensions/alloy-guard.ts`(订阅 tool_call 事件,回调调本命令)
+- OpenCode:`.opencode/tools/write.ts` + `edit.ts`(覆盖内置工具,execute 调本命令)
 
 ```
 alloy _hook-guard
@@ -420,7 +423,7 @@ alloy _hook-guard
 
 **逃生阀**：`ALLOY_FORCE_WRITE=1` 环境变量绕过（仅限修复畸形状态）。
 
-**不直接调用**：本命令由 agent 的 PreToolUse hook 自动触发，agent 不主动调用。
+**不直接调用**:本命令由 agent 的 hook 机制自动触发(Claude Code/Codex 的 PreToolUse hook,Pi 的 tool_call 扩展,OpenCode 的 custom tool),agent 不主动调用。
 
 ### alloy _pre-commit-check
 
@@ -488,6 +491,6 @@ alloy _stop-guard
 15. **内部命令不支持 `--help`**（除 `_spec-audit`）：无参数运行看 usage，或查本文件
 16. **`alloy _state write worktree/branch/created_at` 实际值只能在 worktree 内写**：主仓写实际值会被拒（PRECONDITION_FAIL），写 `null`（清理）或 `skipped`（跳过 worktree）允许。防止 feature 分支写 worktree state 导致 merge 冲突。
 17. **`alloy _state write phase` 被拦截**：phase 推进必须走 `_phase start/complete` 或 `_guard --apply`，确保阶段时间链 + 制品完整性。逃生阀 `ALLOY_FORCE_PHASE=1`（仅限修复畸形状态）
-18. **`alloy _hook-guard` PreToolUse hook 逃生阀**：`ALLOY_FORCE_WRITE=1` 绕过 hook 拦截（仅限修复畸形状态）。hook 由 `alloy init` 自动装到 `.claude/settings.json` / `.codex/settings.json`，拦截非 apply 阶段写源码
+18. **`alloy _hook-guard` hook 逃生阀**:`ALLOY_FORCE_WRITE=1` 绕过 hook 拦截(仅限修复畸形状态)。hook 由 `alloy init` 自动装到 `.claude/settings.json` / `.codex/settings.json`(PreToolUse) / `.pi/extensions/alloy-guard.ts`(tool_call 扩展) / `.opencode/tools/write.ts+edit.ts`(custom tool),拦截非 apply 阶段写源码
 19. **`alloy _guard user-gate require` 后写源码被拦**:pending_gate 期间,hook-guard 拦截非白名单写入(即使 apply 阶段)。需先用问答工具(AskUserQuestion/question,自动 clear pending_gate)或 `alloy _guard user-gate pass <change-dir>` 降级。解决弱模型忘记用问答工具与用户确认的问题
 20. **pre-commit hook 兜底 PreToolUse 盲区**:agent 用 Bash 写文件(`echo > / cat << / tee`)绕过 Write/Edit hook,但 `git commit` 时 pre-commit 检查暂存文件,拦住。逃生阀 `ALLOY_FORCE_WRITE=1`。由 `alloy init` 自动装到 `.git/hooks/pre-commit`
