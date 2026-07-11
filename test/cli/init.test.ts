@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // Mock 所有外部依赖 - 使用 vi.hoisted 确保在 vi.mock 之前可用
-const { mockDetectEnv, mockRunHealthCheck, mockInstallOpenSpecCli, mockInitOpenSpecProject, mockInstallSuperpowers, mockDeploySkills, mockDeploySchema, mockInjectAgentConfigs, mockPromptSelect, mockPromptMultiSelect, mockPromptConfirm, mockPromptInput, mockSpinnerInstance, mockSpinner, mockEnsureGitRepo, mockIsHeadUnborn, mockDetectMainBranch, mockReadProjectConfig, mockWriteProjectConfig, mockExecSync } = vi.hoisted(() => {
+const { mockDetectEnv, mockRunHealthCheck, mockInstallOpenSpecCli, mockInitOpenSpecProject, mockInstallSuperpowers, mockDeploySkills, mockDeploySchema, mockInjectAgentConfigs, mockPromptSelect, mockPromptMultiSelect, mockPromptConfirm, mockPromptInput, mockSpinnerInstance, mockSpinner, mockEnsureGitRepo, mockIsHeadUnborn, mockDetectMainBranch, mockReadProjectConfig, mockWriteProjectConfig, mockExecSync, mockDetectInitMatrix } = vi.hoisted(() => {
   const mockSpinnerInstance = {
     start: vi.fn().mockReturnThis(),
     stop: vi.fn().mockReturnThis(),
@@ -31,6 +31,7 @@ const { mockDetectEnv, mockRunHealthCheck, mockInstallOpenSpecCli, mockInitOpenS
     mockReadProjectConfig: vi.fn(),
     mockWriteProjectConfig: vi.fn(),
     mockExecSync: vi.fn(),
+    mockDetectInitMatrix: vi.fn(),
   };
 });
 
@@ -84,6 +85,15 @@ vi.mock("../../src/cli/utils/state.js", () => ({
 vi.mock("node:child_process", () => ({
   execSync: mockExecSync,
 }));
+// Mock init-matrix:仅 mock detectInitMatrix(避免调用真实检测函数),
+// formatInitMatrix / getBreakingChangeMessage / readPackageVersion 保留真实实现(纯函数,无副作用)
+vi.mock("../../src/core/init-matrix.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/core/init-matrix.js")>();
+  return {
+    ...actual,
+    detectInitMatrix: mockDetectInitMatrix,
+  };
+});
 vi.mock("../../src/utils/format.js", async (importOriginal) => {
   const orig = await importOriginal<typeof import("../../src/utils/format.js")>();
   return { ...orig, spinner: mockSpinner };
@@ -141,6 +151,8 @@ describe("init", () => {
     mockPromptSelect.mockResolvedValue("main");
     mockPromptConfirm.mockResolvedValue(true);  // 默认确认执行
     mockPromptInput.mockResolvedValue("main");
+    // 默认矩阵:空 agents(targetAgents 默认空,无产物状态)
+    mockDetectInitMatrix.mockResolvedValue({ agents: [] });
   });
 
   afterEach(async () => {
@@ -250,7 +262,7 @@ describe("init", () => {
       expect(mockDetectEnv).toHaveBeenCalled();
       expect(mockInstallOpenSpecCli).toHaveBeenCalled();
       expect(mockInitOpenSpecProject).toHaveBeenCalledWith(tmpDir, "project", []);
-      expect(mockInstallSuperpowers).toHaveBeenCalledWith("project", undefined, tmpDir);
+      expect(mockInstallSuperpowers).toHaveBeenCalledWith("project", [], tmpDir, undefined);
       expect(mockDeploySchema).toHaveBeenCalled();
       expect(mockInjectAgentConfigs).toHaveBeenCalled();
       expect(mockRunHealthCheck).toHaveBeenCalled();
@@ -742,6 +754,275 @@ describe("init", () => {
           alloy: expect.objectContaining({ main_branch: "develop" }),
         })
       );
+    });
+  });
+
+  describe("initCommand 矩阵显示 + --force", () => {
+    let defaultOpts: {
+      scope: "project";
+      projectPath: string;
+      targetAgents: never[];
+    };
+
+    beforeEach(() => {
+      defaultOpts = {
+        scope: "project" as const,
+        projectPath: tmpDir,
+        targetAgents: [],
+      };
+    });
+
+    it("执行清单显示 agent 级产物矩阵", async () => {
+      const opts = {
+        ...defaultOpts,
+        targetAgents: [{ id: "claude-code", label: "Claude Code", supportsColonCommands: true, commandsDir: ".claude/commands" }],
+      };
+      mockDetectInitMatrix.mockResolvedValue({
+        agents: [{
+          agentId: "claude-code",
+          agentLabel: "Claude Code",
+          alloySkills: { installed: false, version: null, canUpgrade: false, breaking: false },
+          opsxCommands: { installed: false },
+          hook: { installed: false },
+          permissions: { installed: false },
+          superpowers: { installed: false, version: null, canUpgrade: false, breaking: false },
+        }],
+      });
+
+      await initCommand(opts);
+
+      // 调用 detectInitMatrix
+      expect(mockDetectInitMatrix).toHaveBeenCalledWith(tmpDir, opts.targetAgents, "project");
+      // 输出含矩阵标题
+      expect(consoleLogSpy.mock.calls.some(c => String(c[0]).includes("agent 级产物当前状态"))).toBe(true);
+      // 输出含表头(含 alloy skills / opsx commands 等列)
+      expect(consoleLogSpy.mock.calls.some(c => String(c[0]).includes("alloy skills"))).toBe(true);
+      // 输出含 agent label
+      expect(consoleLogSpy.mock.calls.some(c => String(c[0]).includes("Claude Code"))).toBe(true);
+    });
+
+    it("无 breaking 时确认默认 Yes(promptConfirm default=true)", async () => {
+      const opts = {
+        ...defaultOpts,
+        targetAgents: [{ id: "claude-code", label: "Claude Code", supportsColonCommands: true, commandsDir: ".claude/commands" }],
+      };
+      mockDetectInitMatrix.mockResolvedValue({
+        agents: [{
+          agentId: "claude-code",
+          agentLabel: "Claude Code",
+          alloySkills: { installed: true, version: "0.4.0", canUpgrade: false, breaking: false },
+          opsxCommands: { installed: true },
+          hook: { installed: true },
+          permissions: { installed: true },
+          superpowers: { installed: true, version: "6.1.0", canUpgrade: false, breaking: false },
+        }],
+      });
+
+      await initCommand(opts);
+
+      // promptConfirm 应以 default=true 调用(兼容升级)
+      const confirmCall = mockPromptConfirm.mock.calls.find(c => String(c[0]).includes("确认执行以上操作"));
+      expect(confirmCall).toBeDefined();
+      expect(confirmCall?.[1]).toBe(true);
+    });
+
+    it("有 breaking 时确认默认 No(promptConfirm default=false)", async () => {
+      const opts = {
+        ...defaultOpts,
+        targetAgents: [{ id: "claude-code", label: "Claude Code", supportsColonCommands: true, commandsDir: ".claude/commands" }],
+      };
+      mockDetectInitMatrix.mockResolvedValue({
+        agents: [{
+          agentId: "claude-code",
+          agentLabel: "Claude Code",
+          alloySkills: { installed: true, version: "0.3.0", canUpgrade: true, breaking: true },
+          opsxCommands: { installed: true },
+          hook: { installed: true },
+          permissions: { installed: true },
+          superpowers: { installed: true, version: "5.2.0", canUpgrade: true, breaking: true },
+        }],
+      });
+
+      await initCommand(opts);
+
+      // promptConfirm 应以 default=false 调用(breaking)
+      const confirmCall = mockPromptConfirm.mock.calls.find(c => String(c[0]).includes("确认执行以上操作"));
+      expect(confirmCall).toBeDefined();
+      expect(confirmCall?.[1]).toBe(false);
+    });
+
+    it("有 breaking 时显示 breaking 警告消息", async () => {
+      const opts = {
+        ...defaultOpts,
+        targetAgents: [{ id: "claude-code", label: "Claude Code", supportsColonCommands: true, commandsDir: ".claude/commands" }],
+      };
+      mockDetectInitMatrix.mockResolvedValue({
+        agents: [{
+          agentId: "claude-code",
+          agentLabel: "Claude Code",
+          alloySkills: { installed: true, version: "0.3.0", canUpgrade: true, breaking: true },
+          opsxCommands: { installed: true },
+          hook: { installed: true },
+          permissions: { installed: true },
+          superpowers: { installed: true, version: "5.2.0", canUpgrade: true, breaking: true },
+        }],
+      });
+
+      await initCommand(opts);
+
+      // 输出含 breaking 警告(含旧版本号 0.3.0 和 5.2.0)
+      const output = consoleLogSpy.mock.calls.map(c => String(c[0])).join("\n");
+      expect(output).toContain("breaking");
+      expect(output).toContain("0.3.0");
+      expect(output).toContain("5.2.0");
+    });
+
+    it("--force 跳过确认直接执行", async () => {
+      const opts = {
+        ...defaultOpts,
+        targetAgents: [{ id: "claude-code", label: "Claude Code", supportsColonCommands: true, commandsDir: ".claude/commands" }],
+        force: true,
+      };
+      mockDetectInitMatrix.mockResolvedValue({
+        agents: [{
+          agentId: "claude-code",
+          agentLabel: "Claude Code",
+          alloySkills: { installed: false, version: null, canUpgrade: false, breaking: false },
+          opsxCommands: { installed: false },
+          hook: { installed: false },
+          permissions: { installed: false },
+          superpowers: { installed: false, version: null, canUpgrade: false, breaking: false },
+        }],
+      });
+
+      await initCommand(opts);
+
+      // 不应调用 promptConfirm 做执行清单确认(force 跳过)
+      const confirmCall = mockPromptConfirm.mock.calls.find(c => String(c[0]).includes("确认执行以上操作"));
+      expect(confirmCall).toBeUndefined();
+      // 应继续执行后续步骤
+      expect(mockInstallOpenSpecCli).toHaveBeenCalled();
+    });
+
+    it("--force 时即使 breaking 也直接执行", async () => {
+      const opts = {
+        ...defaultOpts,
+        targetAgents: [{ id: "claude-code", label: "Claude Code", supportsColonCommands: true, commandsDir: ".claude/commands" }],
+        force: true,
+      };
+      mockDetectInitMatrix.mockResolvedValue({
+        agents: [{
+          agentId: "claude-code",
+          agentLabel: "Claude Code",
+          alloySkills: { installed: true, version: "0.3.0", canUpgrade: true, breaking: true },
+          opsxCommands: { installed: true },
+          hook: { installed: true },
+          permissions: { installed: true },
+          superpowers: { installed: true, version: "5.2.0", canUpgrade: true, breaking: true },
+        }],
+      });
+
+      await initCommand(opts);
+
+      // 不应调用执行清单确认
+      const confirmCall = mockPromptConfirm.mock.calls.find(c => String(c[0]).includes("确认执行以上操作"));
+      expect(confirmCall).toBeUndefined();
+      // 应继续执行后续步骤(不被 breaking 阻断)
+      expect(mockInstallOpenSpecCli).toHaveBeenCalled();
+    });
+
+    it("用户在 breaking 确认时拒绝 -> exit 0,不部署", async () => {
+      const opts = {
+        ...defaultOpts,
+        targetAgents: [{ id: "claude-code", label: "Claude Code", supportsColonCommands: true, commandsDir: ".claude/commands" }],
+      };
+      mockDetectInitMatrix.mockResolvedValue({
+        agents: [{
+          agentId: "claude-code",
+          agentLabel: "Claude Code",
+          alloySkills: { installed: true, version: "0.3.0", canUpgrade: true, breaking: true },
+          opsxCommands: { installed: true },
+          hook: { installed: true },
+          permissions: { installed: true },
+          superpowers: { installed: true, version: "5.2.0", canUpgrade: true, breaking: true },
+        }],
+      });
+      mockPromptConfirm.mockResolvedValue(false);
+
+      await initCommand(opts);
+
+      expect(processExitSpy).toHaveBeenCalledWith(0);
+      expect(mockInstallOpenSpecCli).not.toHaveBeenCalled();
+    });
+
+    it("--force 传播到 installSuperpowers(第 4 个参数)", async () => {
+      const opts = {
+        ...defaultOpts,
+        targetAgents: [{ id: "claude-code", label: "Claude Code", supportsColonCommands: true, commandsDir: ".claude/commands" }],
+        force: true,
+      };
+
+      await initCommand(opts);
+
+      // installSuperpowers 应以 force=true 调用
+      expect(mockInstallSuperpowers).toHaveBeenCalledWith("project", opts.targetAgents, tmpDir, true);
+    });
+
+    it("--force 传播到 deploySkills(opts.force=true)", async () => {
+      const opts = {
+        ...defaultOpts,
+        targetAgents: [{ id: "claude-code", label: "Claude Code", supportsColonCommands: true, commandsDir: ".claude/commands" }],
+        force: true,
+      };
+      mockDeploySkills.mockResolvedValue(["/path/to/skill"]);
+
+      await initCommand(opts);
+
+      // deploySkills 接收的 opts 应含 force=true
+      expect(mockDeploySkills).toHaveBeenCalledWith(expect.objectContaining({ force: true }));
+    });
+
+    it("无 --force 时 installSuperpowers 第 4 个参数为 undefined", async () => {
+      const opts = {
+        ...defaultOpts,
+        targetAgents: [{ id: "claude-code", label: "Claude Code", supportsColonCommands: true, commandsDir: ".claude/commands" }],
+      };
+
+      await initCommand(opts);
+
+      expect(mockInstallSuperpowers).toHaveBeenCalledWith("project", opts.targetAgents, tmpDir, undefined);
+    });
+
+    it("Superpowers 部分失败(partialFailures)时 warn 打印失败 agent", async () => {
+      const opts = {
+        ...defaultOpts,
+        targetAgents: [
+          { id: "claude-code", label: "Claude Code", supportsColonCommands: true, commandsDir: ".claude/commands" },
+          { id: "opencode", label: "OpenCode", supportsColonCommands: false, commandsDir: ".opencode/commands" },
+        ],
+      };
+      mockInstallSuperpowers.mockResolvedValue({
+        status: "installed",
+        partialFailures: ["OpenCode"],
+      });
+
+      await initCommand(opts);
+
+      // 应输出包含 OpenCode 的部分失败警告
+      expect(consoleLogSpy.mock.calls.some(c => String(c[0]).includes("OpenCode"))).toBe(true);
+      expect(consoleLogSpy.mock.calls.some(c => String(c[0]).includes("部分安装失败"))).toBe(true);
+    });
+
+    it("Superpowers 全部 installed 无 partialFailures 时不输出部分失败警告", async () => {
+      const opts = {
+        ...defaultOpts,
+        targetAgents: [{ id: "claude-code", label: "Claude Code", supportsColonCommands: true, commandsDir: ".claude/commands" }],
+      };
+      mockInstallSuperpowers.mockResolvedValue({ status: "installed" });
+
+      await initCommand(opts);
+
+      expect(consoleLogSpy.mock.calls.some(c => String(c[0]).includes("部分安装失败"))).toBe(false);
     });
   });
 });

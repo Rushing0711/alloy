@@ -66,6 +66,22 @@ alloy doctor [path] [--json]
 
 详见 00-overview.md"七、安装与初始化"章节。
 
+```
+alloy init [path] [--scope <project|global>] [--agents <id,id,...>] [--force]
+```
+
+选项：
+- `--scope <project|global>`：安装范围，默认 `project`
+- `--agents <id,id,...>`：非交互式指定目标 agent（逗号分隔）。可用 agent：`claude-code, codex, opencode, pi`
+- `--force`：强制覆盖已装产物，跳过执行清单确认（breaking change 也直接执行）
+
+版本管理：
+
+- **`.alloy-version`**：`deploySkills` 时在 `<skills 目标目录>/.alloy-version` 写入当前 alloy 包版本（如 `0.4.0`）。再次 `init` 时读取该文件，用 semver 比对判断升级状态（可升级 / breaking）
+- **agent 级产物状态矩阵**：检测每个目标 agent 的 5 类产物（alloy skills / opsx commands / hook / permissions / Superpowers），表格显示当前状态。版本化产物标注 `✓ {version}` / `⚠️ {version}(可升级)` / `⚠️ {version}(breaking)`；非版本化产物标注 `✓` / `✗`
+- **breaking 判定**：major 变更（如 `1.x -> 2.x`）或 `0.x` 阶段任何 minor 变更（semver 0.x 约定）视为 breaking。Superpowers v5 -> v6 跨 major 视为 breaking
+- **确认逻辑**：`--force` 跳过确认；默认兼容升级默认 Yes、breaking 升级默认 No，用户拒绝则 `exit 0`，项目目录零变化
+
 ## alloy update
 
 详见 00-overview.md"七、安装与初始化 > alloy update"章节。

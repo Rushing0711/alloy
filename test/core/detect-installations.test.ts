@@ -142,7 +142,8 @@ describe("detectAlloySkill", () => {
 // detectSkill
 // ---------------------------------------------------------------------------
 describe("detectSkill", () => {
-  it("非 Claude Code agent 直接返回 NOT_FOUND", () => {
+  it("非 Claude Code agent 检测项目级/用户级,不存在则 NOT_FOUND", () => {
+    vi.mocked(existsSync).mockReturnValue(false);
     const result = detectSkill("superpowers", opencodeAgent, PROJECT);
 
     expect(result).toEqual({
@@ -151,7 +152,8 @@ describe("detectSkill", () => {
       path: null,
       version: null,
     });
-    expect(existsSync).not.toHaveBeenCalled();
+    // 检测了项目级(.opencode/skills)
+    expect(existsSync).toHaveBeenCalledWith(`${PROJECT}/.opencode/skills/superpowers`);
   });
 
   it("找到项目级 skill 时返回 project-skill", () => {

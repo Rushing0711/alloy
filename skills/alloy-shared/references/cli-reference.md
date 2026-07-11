@@ -10,7 +10,7 @@
 
 ### alloy init
 
-项目初始化：检测环境 → 安装依赖 → 部署 schema + skill。
+项目初始化：检测环境 → 采集项目状态 → 展示执行清单 + agent 级产物矩阵 → 确认 → 安装依赖 → 部署 schema + skill。
 
 ```
 alloy init [path] [options]
@@ -19,6 +19,7 @@ alloy init [path] [options]
 选项：
 - `--scope <project|global>`：安装范围，默认 `project`
 - `--agents <id,id,...>`：非交互式模式，指定要安装的 AI 工具（逗号分隔）。可用 agent：`claude-code, codex, opencode, pi`
+- `--force`：强制覆盖已装产物,跳过执行清单确认(breaking change 也直接执行)
 - `--help, -h`：显示帮助
 
 示例：
@@ -26,7 +27,32 @@ alloy init [path] [options]
 alloy init                         # 交互式，当前目录，project 范围
 alloy init /path/to/repo --scope global
 alloy init --agents claude-code,opencode   # 非交互式
+alloy init --force                 # 跳过确认,直接执行(含 breaking change)
 ```
+
+行为细节：
+
+- **执行清单**：展示将部署的文件（skills / opsx commands / schema / hook / permissions / .gitignore / .gitattributes）+ git 操作（是否 `git init`、是否初始 commit），用户确认后执行。仓库已有 commit 时不自动提交，文件留工作目录由用户自行 commit
+- **agent 级产物状态矩阵**：检测每个目标 agent 的 5 类产物当前状态，表格显示：
+
+  ```
+  agent 级产物状态:
+  | agent | alloy skills | opsx commands | hook | permissions | Superpowers |
+  |-------|--------------|---------------|------|-------------|-------------|
+  | Claude Code | ✓ 0.4.0      | ✓ | ✓ | ✓ | ✓ 6.1.1      |
+  | OpenCode    | ⚠️ 0.3.0(breaking) | ✗ | ✗ | ✗ | ✗            |
+  ```
+
+  - 版本化产物（alloy skills / Superpowers）单元格：`✗`（未装）/ `✓ {version}`（已装当前版本）/ `⚠️ {version}(可升级)` / `⚠️ {version}(breaking)`
+  - 非版本化产物（opsx / hook / permissions）：`✓` / `✗`
+- **版本管理（`.alloy-version`）**：`deploySkills` 时在 `<skills 目标目录>/.alloy-version` 写入当前 alloy 包版本（如 `0.4.0`）。再次 `init` 时读取该文件，用 semver 比对判断升级状态：
+  - `semver.lt(旧, 新)` = 可升级
+  - breaking 判定：major 变更（如 `1.x -> 2.x`）或 `0.x` 阶段任何 minor 变更（semver 0.x 约定）视为 breaking
+- **Superpowers 版本检测**：v5 及更早视为 breaking（跨 major `5.x -> 6.x`），提示升级到 v6；v6+ 提示覆盖安装。`npx skills add --agent <id>` 失败（或不支持该 agent）时 fallback 复制 `vendor/superpowers/skills` 到该 agent 的 skills 目录
+- **breaking 提示**：对有版本号且 breaking 的产物输出 `⚠️ breaking: {old} -> {new}(semver 0.x 约定,breaking change)` 或 `⚠️ breaking: {old} -> {new}(major 版本变更)` 警告
+- **确认逻辑**：
+  - `--force`：跳过执行清单确认，直接执行（含 breaking change）
+  - 默认：`promptConfirm` 默认值 = `!hasBreaking`--兼容升级默认 Yes，breaking 升级默认 No。用户拒绝则 `exit 0`，项目目录零变化
 
 ### alloy status
 

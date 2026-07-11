@@ -26,7 +26,7 @@ const USAGE = `
 alloy <command> [options]
 
 Commands:
-  init        [path] [--scope <project|global>] [--agents <id,id,...>]
+  init        [path] [--scope <project|global>] [--agents <id,id,...>] [--force]
               项目初始化：检测环境 → 安装依赖 → 部署 schema + skill
   status      [path|name] [--json]
               查看活跃 change 总览，指定 name 查看详情
@@ -52,6 +52,7 @@ alloy init [path] [options]
   --scope <project|global>  安装范围，默认 project
   --agents <id,id,...>      非交互式模式，指定要安装的 AI 工具（逗号分隔）
                             可用的 agent: claude-code, codex, opencode, pi
+  --force                   强制覆盖已装产物,跳过执行清单确认(breaking change 也直接执行)
   --help, -h                显示本帮助
 `;
     case "status":
@@ -226,6 +227,7 @@ async function main() {
         options: {
           scope: { type: "string" },
           agents: { type: "string" },
+          force: { type: "boolean", default: false },
         },
         strict: true,
         allowPositionals: true,
@@ -254,6 +256,7 @@ async function main() {
         scope,
         projectPath,
         targetAgents,
+        force: values.force as boolean,
       });
       break;
     }

@@ -11,6 +11,7 @@ import { installSuperpowers } from "../../core/superpowers.js";
 import { deploySkills, deploySchema } from "../../core/skills.js";
 import { injectAgentConfigs, hasPermissionsConfig, writePermissionsConfig, getPermissionSupportedAgents, writeHookConfig, getHookSupportedAgents, writeStopHookConfig, getStopHookSupportedAgents, getHookConfigPath } from "../../core/agent-config.js";
 import { KNOWN_AGENTS } from "../../core/agents.js";
+import { detectInitMatrix, formatInitMatrix, getBreakingChangeMessage, readPackageVersion } from "../../core/init-matrix.js";
 import type { AgentInfo, DeployOptions } from "../../core/types.js";
 import { getPackageRoot } from "../../utils/fs.js";
 import { promptSelect, promptMultiSelect, promptConfirm, promptInput } from "../../utils/prompt.js";
@@ -45,7 +46,9 @@ export async function selectTargetAgents(): Promise<AgentInfo[]> {
   return KNOWN_AGENTS.filter((a) => ids.includes(a.id));
 }
 
-export interface InitOptions extends DeployOptions {}
+export interface InitOptions extends DeployOptions {
+  // force 继承自 DeployOptions(init 时跳过执行清单确认 + 传播到 deploySkills/installSuperpowers 跳过内部覆盖确认)
+}
 
 // Alloy + Superpowers 运行时目录（每次逐条检测缺失并补齐）
 const GITIGNORE_RUNTIME_RULES = ["docs/superpowers/", ".claude/worktrees/", ".worktrees/", "worktrees/", ".superpowers/", "skills-lock.json", "*.local.*"];
@@ -345,6 +348,27 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   info("  + .gitignore                      （新建/追加 Alloy 运行时规则）");
   info("  + .gitattributes                  （新建/追加 * text=auto eol=lf，避免 Windows CRLF）");
   info("");
+
+  // agent 级产物状态矩阵(显示每个 agent 的 5 类产物当前状态)
+  const matrix = await detectInitMatrix(opts.projectPath, opts.targetAgents, opts.scope);
+  for (const line of formatInitMatrix(matrix)) {
+    info(line);
+  }
+  info("");
+
+  // breaking 提示(仅对有版本号且 breaking 的产物输出警告)
+  const currentAlloyVersion = readPackageVersion();
+  const hasBreaking = matrix.agents.some(a => a.alloySkills.breaking || a.superpowers.breaking);
+  for (const a of matrix.agents) {
+    if (a.alloySkills.breaking && a.alloySkills.version) {
+      warn(getBreakingChangeMessage(a.alloySkills.version, currentAlloyVersion));
+    }
+    if (a.superpowers.breaking && a.superpowers.version) {
+      warn(getBreakingChangeMessage(a.superpowers.version, "6.0.0"));
+    }
+  }
+
+  info("");
   info("Git 操作：");
   if (willGitInit) {
     info("  + git init                        （当前不是 git 仓库）");
@@ -360,11 +384,16 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   info("");
   info(`主分支: ${confirmedMainBranch}`);
 
-  const confirmed = await promptConfirm("\n确认执行以上操作？", !existingMainBranch);
-  if (!confirmed) {
-    info("✗ 已取消初始化，项目未发生任何变化");
-    process.exit(0);
-    return;
+  // 确认逻辑:--force 跳过确认;否则 兼容升级默认 Yes, 不兼容(breaking)默认 No
+  if (opts.force) {
+    info("--force 模式:跳过执行清单确认,直接执行");
+  } else {
+    const confirmed = await promptConfirm("\n确认执行以上操作？", !hasBreaking);
+    if (!confirmed) {
+      info("✗ 已取消初始化，项目未发生任何变化");
+      process.exit(0);
+      return;
+    }
   }
 
   // ============ 阶段 2：执行（用户确认后）============
@@ -407,10 +436,17 @@ export async function initCommand(opts: InitOptions): Promise<void> {
 
   // 5. 安装 Superpowers
   section("安装 Superpowers...");
-  const claudeAgent = opts.targetAgents.find(a => a.id === "claude-code");
-  const superpowersResult = await installSuperpowers(opts.scope, claudeAgent, opts.projectPath);
+  const superpowersResult = await installSuperpowers(opts.scope, opts.targetAgents, opts.projectPath, opts.force);
   if (superpowersResult.status === "installed") {
-    success("Superpowers 已安装");
+    if (superpowersResult.partialSkipped && superpowersResult.partialSkipped.length > 0) {
+      success(`Superpowers 已安装（${superpowersResult.partialSkipped.join(" / ")} 跳过,保留现有）`);
+    } else {
+      success("Superpowers 已安装");
+    }
+    // 部分失败:warn 打印失败的 agent,避免用户误以为全部成功
+    if (superpowersResult.partialFailures && superpowersResult.partialFailures.length > 0) {
+      warn(`Superpowers 部分安装失败（${superpowersResult.partialFailures.join(" / ")}），请稍后手动运行 alloy init 重试`);
+    }
   } else if (superpowersResult.status === "failed") {
     warn("Superpowers 安装失败，请稍后手动运行 alloy init 重试");
   } else if (superpowersResult.status === "skipped") {
@@ -560,7 +596,7 @@ export async function initCommand(opts: InitOptions): Promise<void> {
         cwd: opts.projectPath,
         stdio: "pipe",
       });
-      success(`✓ 已在 ${confirmedMainBranch} 分支创建初始 commit，main 分支诞生`);
+      success(`已在 ${confirmedMainBranch} 分支创建初始 commit，main 分支诞生`);
     } catch (e) {
       const err = e as { stderr?: Buffer; message: string };
       const stderr = err.stderr?.toString() ?? "";

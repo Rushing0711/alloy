@@ -16,6 +16,8 @@ export interface DeployOptions {
   scope: "global" | "project";
   projectPath: string;
   targetAgents: AgentInfo[];
+  /** 强制覆盖已装产物,跳过覆盖/升级确认(deploySkills/installSuperpowers 内部 promptConfirm 一并跳过) */
+  force?: boolean;
 }
 
 export interface EnvInfo {

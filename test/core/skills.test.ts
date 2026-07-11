@@ -17,7 +17,8 @@ vi.mock("../../src/utils/prompt.js", () => ({
 import { getPackageRoot } from "../../src/utils/fs.js";
 import { detectAlloySkill } from "../../src/core/detect-installations.js";
 import { promptConfirm } from "../../src/utils/prompt.js";
-import { deploySkills, deploySchema } from "../../src/core/skills.js";
+import { deploySkills, deploySchema, detectAlloySkillsVersion } from "../../src/core/skills.js";
+import { KNOWN_AGENTS } from "../../src/core/agents.js";
 import type { DeployOptions } from "../../src/core/types.js";
 
 describe("deploySkills", () => {
@@ -57,6 +58,13 @@ describe("deploySkills", () => {
 
     vi.mocked(getPackageRoot).mockReturnValue(join(tmpDir, "package"));
     vi.mocked(detectAlloySkill).mockReturnValue({ found: false, location: null, path: null, version: null });
+
+    // 创建 package.json(含 version),供 deploySkills 写 .alloy-version 时读取
+    await writeFile(
+      join(tmpDir, "package", "package.json"),
+      JSON.stringify({ name: "@flyin-ai/alloy", version: "0.4.0" }),
+      "utf-8"
+    );
   });
 
   afterEach(async () => {
@@ -155,6 +163,44 @@ describe("deploySkills", () => {
     expect(deployed.length).toBe(9);
   });
 
+  it("force=true 跳过覆盖确认直接部署(不再调用 promptConfirm)", async () => {
+    vi.mocked(detectAlloySkill).mockReturnValue({
+      found: true, location: "project-skill", path: `${projectPath}/.claude/skills/alloy-start/SKILL.md`, version: null,
+    });
+
+    const opts: DeployOptions = {
+      scope: "project",
+      projectPath,
+      targetAgents: [{ id: "claude-code", label: "CC", supportsColonCommands: true, commandsDir: ".claude/commands/" }],
+      force: true,
+    };
+    const deployed = await deploySkills(opts);
+    // 跳过确认,直接部署 9 个 skill
+    expect(deployed.length).toBe(9);
+    // 不应调用 promptConfirm(force 跳过覆盖确认)
+    expect(promptConfirm).not.toHaveBeenCalled();
+  });
+
+  it("force=true 多 agent 均跳过覆盖确认", async () => {
+    vi.mocked(detectAlloySkill).mockReturnValue({
+      found: true, location: "project-skill", path: `${projectPath}/.claude/skills/alloy-start/SKILL.md`, version: null,
+    });
+
+    const opts: DeployOptions = {
+      scope: "project",
+      projectPath,
+      targetAgents: [
+        { id: "claude-code", label: "CC", supportsColonCommands: true, commandsDir: ".claude/commands/" },
+        { id: "opencode", label: "OpenCode", supportsColonCommands: false, commandsDir: ".opencode/commands/" },
+      ],
+      force: true,
+    };
+    const deployed = await deploySkills(opts);
+    // 9 (claude-code) + 9 (opencode) = 18
+    expect(deployed.length).toBe(18);
+    expect(promptConfirm).not.toHaveBeenCalled();
+  });
+
   it("未检测到已有安装时正常部署", async () => {
     vi.mocked(detectAlloySkill).mockReturnValue({ found: false, location: null, path: null, version: null });
 
@@ -194,6 +240,94 @@ describe("deploySkills", () => {
     const statusSkillPath = join(projectPath, ".claude", "skills", "alloy-status", "SKILL.md");
     const content = await readFile(statusSkillPath, "utf-8");
     expect(content).toContain("name: alloy-status");
+  });
+
+  it("deploySkills 写 .alloy-version 到 skills 目录", async () => {
+    const opts: DeployOptions = {
+      scope: "project",
+      projectPath,
+      targetAgents: [{ id: "claude-code", label: "CC", supportsColonCommands: true, commandsDir: ".claude/commands/" }],
+    };
+    await deploySkills(opts);
+    const versionFile = join(projectPath, ".claude", "skills", ".alloy-version");
+    const content = await readFile(versionFile, "utf-8");
+    // 版本来自 fake package.json(0.4.0)
+    expect(content.trim()).toBe("0.4.0");
+  });
+
+  it("deploySkills 多 agent 各写 .alloy-version", async () => {
+    const opts: DeployOptions = {
+      scope: "project",
+      projectPath,
+      targetAgents: [
+        { id: "claude-code", label: "CC", supportsColonCommands: true, commandsDir: ".claude/commands/" },
+        { id: "opencode", label: "OpenCode", supportsColonCommands: false, commandsDir: ".opencode/commands/" },
+      ],
+    };
+    await deploySkills(opts);
+    const ccVersion = await readFile(join(projectPath, ".claude", "skills", ".alloy-version"), "utf-8");
+    const ocVersion = await readFile(join(projectPath, ".opencode", "skills", ".alloy-version"), "utf-8");
+    expect(ccVersion.trim()).toBe("0.4.0");
+    expect(ocVersion.trim()).toBe("0.4.0");
+  });
+});
+
+describe("detectAlloySkillsVersion", () => {
+  let tmpDir: string;
+  let projectPath: string;
+
+  beforeEach(async () => {
+    tmpDir = join(tmpdir(), `alloy-version-detect-${Date.now()}`);
+    projectPath = join(tmpDir, "project");
+    await mkdir(projectPath, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("读 .alloy-version 返回版本", async () => {
+    const agent = KNOWN_AGENTS.find(a => a.id === "claude-code")!;
+    const skillsDir = join(projectPath, ".claude", "skills");
+    await mkdir(skillsDir, { recursive: true });
+    await writeFile(join(skillsDir, ".alloy-version"), "0.4.0\n", "utf-8");
+    expect(await detectAlloySkillsVersion(projectPath, agent)).toBe("0.4.0");
+  });
+
+  it("未装返回 null", async () => {
+    const agent = KNOWN_AGENTS.find(a => a.id === "claude-code")!;
+    expect(await detectAlloySkillsVersion(projectPath, agent)).toBe(null);
+  });
+
+  it("不同 agent 读各自 skills 目录的版本", async () => {
+    const ccAgent = KNOWN_AGENTS.find(a => a.id === "claude-code")!;
+    const ocAgent = KNOWN_AGENTS.find(a => a.id === "opencode")!;
+    await mkdir(join(projectPath, ".claude", "skills"), { recursive: true });
+    await writeFile(join(projectPath, ".claude", "skills", ".alloy-version"), "0.3.0\n", "utf-8");
+    await mkdir(join(projectPath, ".opencode", "skills"), { recursive: true });
+    await writeFile(join(projectPath, ".opencode", "skills", ".alloy-version"), "0.4.0\n", "utf-8");
+    expect(await detectAlloySkillsVersion(projectPath, ccAgent)).toBe("0.3.0");
+    expect(await detectAlloySkillsVersion(projectPath, ocAgent)).toBe("0.4.0");
+  });
+
+  it("global scope 读用户级 skills 目录", async () => {
+    const agent = KNOWN_AGENTS.find(a => a.id === "claude-code")!;
+    // global scope 用 HOME,模拟写一个临时 HOME
+    const fakeHome = join(tmpDir, "home");
+    await mkdir(join(fakeHome, ".claude", "skills"), { recursive: true });
+    await writeFile(join(fakeHome, ".claude", "skills", ".alloy-version"), "0.2.0\n", "utf-8");
+    const originalHome = process.env.HOME;
+    process.env.HOME = fakeHome;
+    try {
+      expect(await detectAlloySkillsVersion(projectPath, agent, "global")).toBe("0.2.0");
+    } finally {
+      // 恢复原始 HOME,避免影响其他测试
+      if (originalHome === undefined) {
+        delete process.env.HOME;
+      } else {
+        process.env.HOME = originalHome;
+      }
+    }
   });
 });
 
