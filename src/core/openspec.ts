@@ -18,7 +18,12 @@ function createCustomProfile(): { env: NodeJS.ProcessEnv; cleanup: () => void } 
   const config = {
     featureFlags: {},
     profile: "custom",
-    delivery: "commands",
+    // delivery: both --同时装 command 和 skill(OpenSpec CLI 默认值)。
+    // 原因:各 agent 的 command/skill 机制不同--
+    //   Claude Code: command 合并进 skill,agent 用 Skill 工具能加载两者
+    //   OpenCode/Pi: command 和 skill 分开,agent 的 skill 工具只加载 SKILL.md
+    // 装 both 后,能用 command 的用 command(Claude Code),能用 skill 的用 skill(OpenCode agent 调 skill 工具)
+    delivery: "both",
     workflows: [
       "propose", "explore", "new", "continue", "apply", "ff",
       "sync", "archive", "bulk-archive", "verify", "onboard",
@@ -70,14 +75,16 @@ export async function installOpenSpecCli(): Promise<"installed" | "skipped" | "f
 export async function initOpenSpecProject(
   projectPath: string,
   scope: "global" | "project",
-  agents?: AgentInfo[]
+  agents?: AgentInfo[],
+  force?: boolean
 ): Promise<"initialized" | "skipped" | "failed"> {
   const home = process.env.HOME || process.env.USERPROFILE || "~";
   const targetPath = scope === "global" ? home : projectPath;
   const label = scope === "global" ? "全局" : "项目";
 
   // 检测已有 OpenSpec 安装（按每个 agent 独立检测，仅检测 skill）
-  if (agents && agents.length > 0) {
+  // force 模式跳过确认（用户已在 display 阶段确认整体计划）
+  if (!force && agents && agents.length > 0) {
     let hasExisting = false;
     for (const agent of agents) {
       const skillDetected = detectSkill("openspec-explore", agent, projectPath);
@@ -96,9 +103,7 @@ export async function initOpenSpecProject(
   }
 
   const TOOL_MAP: Record<string, string> = {
-    "claude-code": "claude",
-    "codex": "codex",
-    "opencode": "opencode",
+    "claude-code": "claude",    "opencode": "opencode",
     "pi": "pi",
   };
   const tools = agents && agents.length > 0
@@ -115,6 +120,40 @@ export async function initOpenSpecProject(
     return "initialized";
   } catch (error) {
     console.error(`     ✗ openspec init 失败: ${(error as Error).message}`);
+    return "failed";
+  } finally {
+    profile.cleanup();
+  }
+}
+
+/**
+ * 刷新 opsx commands（调 openspec update）。
+ * targetPath 与 initOpenSpecProject 一致：scope=global 时 home，project 时 projectPath。
+ */
+export async function updateOpenSpecCommands(
+  projectPath: string,
+  agents: AgentInfo[],
+  scope: "global" | "project"
+): Promise<"updated" | "skipped" | "failed"> {
+  if (agents.length === 0) return "skipped";
+
+  const home = process.env.HOME || process.env.USERPROFILE || "~";
+  const targetPath = scope === "global" ? home : projectPath;
+
+  const TOOL_MAP: Record<string, string> = {
+    "claude-code": "claude",    "opencode": "opencode",
+    "pi": "pi",
+  };
+  const tools = agents.map(a => TOOL_MAP[a.id] ?? "claude").join(",");
+
+  const profile = createCustomProfile();
+  try {
+    execSync(
+      `openspec update ${JSON.stringify(targetPath)} --tools ${tools} --profile custom`,
+      { stdio: "pipe", timeout: 120_000, env: profile.env },
+    );
+    return "updated";
+  } catch {
     return "failed";
   } finally {
     profile.cleanup();

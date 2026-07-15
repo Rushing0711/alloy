@@ -9,6 +9,10 @@ vi.mock("../../src/utils/fs.js", () => ({
   getPackageRoot: vi.fn(),
 }));
 
+vi.mock("../../src/core/compat.js", () => ({
+  loadCompat: vi.fn(),
+}));
+
 vi.mock("../../src/core/skills.js", () => ({
   detectAlloySkillsVersion: vi.fn(),
 }));
@@ -31,12 +35,29 @@ vi.mock("../../src/core/agent-config.js", async () => {
 });
 
 import { getPackageRoot } from "../../src/utils/fs.js";
+import { loadCompat } from "../../src/core/compat.js";
 import { detectAlloySkillsVersion } from "../../src/core/skills.js";
 import { detectSkill } from "../../src/core/detect-installations.js";
 import { hasHookConfig, hasPermissionsConfig } from "../../src/core/agent-config.js";
-import { detectInitMatrix, isBreakingChange, getBreakingChangeMessage, formatInitMatrix } from "../../src/core/init-matrix.js";
+import { detectInitMatrix } from "../../src/core/init-matrix.js";
 import type { AgentInfo } from "../../src/core/types.js";
 import type { InitMatrix } from "../../src/core/init-matrix.js";
+
+// compat.yaml 默认 mock(与仓库 compat.yaml 一致)
+const MOCK_COMPAT = {
+  compatible: {
+    node: ">=18.0.0",
+    git: ">=2.20.0",
+    openspec: ">=1.3.0 <2.0.0",
+    superpowers: ">=5.0.0 <7.0.0",
+    alloy: ">=0.3.0",
+    schema: 1,
+  },
+  install: {
+    openspec: "@fission-ai/openspec@1",
+    superpowers: "obra/superpowers@6",
+  },
+};
 
 const claudeAgent: AgentInfo = {
   id: "claude-code",
@@ -79,6 +100,7 @@ beforeEach(async () => {
   );
   vi.mocked(getPackageRoot).mockReturnValue(fakePackageDir);
   // 默认 mock:所有检测返回未装
+  vi.mocked(loadCompat).mockResolvedValue(MOCK_COMPAT);
   vi.mocked(detectAlloySkillsVersion).mockResolvedValue(null);
   vi.mocked(detectSkill).mockReturnValue({ found: false, location: null, path: null, version: null });
   vi.mocked(hasHookConfig).mockResolvedValue(false);
@@ -113,14 +135,17 @@ describe("detectInitMatrix - 基础结构", () => {
     expect(matrix.agents).toHaveLength(0);
   });
 
-  it("包含全部 5 类产物字段", async () => {
+  it("包含全部 4 类产物字段 + 项目级 opsx 汇总", async () => {
     const matrix = await detectInitMatrix(projectPath, [claudeAgent], "project");
     const status = matrix.agents[0];
     expect(status).toHaveProperty("alloySkills");
-    expect(status).toHaveProperty("opsxCommands");
     expect(status).toHaveProperty("hook");
     expect(status).toHaveProperty("permissions");
     expect(status).toHaveProperty("superpowers");
+    // 项目级 opsx 汇总(不按 agent 维度)
+    expect(matrix).toHaveProperty("opsxCommands");
+    expect(matrix.opsxCommands).toHaveProperty("installed");
+    expect(matrix.opsxCommands).toHaveProperty("paths");
     // alloySkills 子字段
     expect(status.alloySkills).toHaveProperty("installed");
     expect(status.alloySkills).toHaveProperty("version");
@@ -147,12 +172,22 @@ describe("detectInitMatrix - alloy skills", () => {
     expect(s.breaking).toBe(false);
   });
 
-  it("alloy skills 已装版本低时 canUpgrade=true, breaking=true(0.x breaking)", async () => {
+  it("alloy 0.3 -> 0.4 是兼容升级(0.3 满足 compat.yaml >=0.3.0),canUpgrade=true, breaking=false", async () => {
     vi.mocked(detectAlloySkillsVersion).mockResolvedValue("0.3.0");
     const matrix = await detectInitMatrix(projectPath, [claudeAgent], "project");
     const s = matrix.agents[0].alloySkills;
     expect(s.installed).toBe(true);
     expect(s.version).toBe("0.3.0");
+    expect(s.canUpgrade).toBe(true);
+    expect(s.breaking).toBe(false);
+  });
+
+  it("alloy 0.2 -> 0.4 是 breaking(0.2 不满足 compat.yaml >=0.3.0)", async () => {
+    vi.mocked(detectAlloySkillsVersion).mockResolvedValue("0.2.0");
+    const matrix = await detectInitMatrix(projectPath, [claudeAgent], "project");
+    const s = matrix.agents[0].alloySkills;
+    expect(s.installed).toBe(true);
+    expect(s.version).toBe("0.2.0");
     expect(s.canUpgrade).toBe(true);
     expect(s.breaking).toBe(true);
   });
@@ -209,7 +244,7 @@ describe("detectInitMatrix - superpowers", () => {
     expect(s.breaking).toBe(false);
   });
 
-  it("superpowers 已装 v5 时 canUpgrade=true, breaking=true(5->6 breaking)", async () => {
+  it("Superpowers 5.x 满足 compat.yaml(>=5.0.0 <7.0.0),canUpgrade=true, breaking=false", async () => {
     vi.mocked(detectSkill).mockReturnValue({
       found: true, location: "user-plugin", path: "/fake/skills/brainstorming", version: "5.2.0",
     });
@@ -218,6 +253,31 @@ describe("detectInitMatrix - superpowers", () => {
     expect(s.installed).toBe(true);
     expect(s.version).toBe("5.2.0");
     expect(s.canUpgrade).toBe(true);
+    expect(s.breaking).toBe(false);
+  });
+
+  it("Superpowers 4.x 不满足 compat.yaml(>=5.0.0),breaking=true", async () => {
+    vi.mocked(detectSkill).mockReturnValue({
+      found: true, location: "user-plugin", path: "/fake/skills/brainstorming", version: "4.2.0",
+    });
+    const matrix = await detectInitMatrix(projectPath, [claudeAgent], "project");
+    const s = matrix.agents[0].superpowers;
+    expect(s.installed).toBe(true);
+    expect(s.version).toBe("4.2.0");
+    expect(s.canUpgrade).toBe(true);
+    expect(s.breaking).toBe(true);
+  });
+
+  it("Superpowers 7.x 不满足 compat.yaml(<7.0.0),breaking=true", async () => {
+    vi.mocked(detectSkill).mockReturnValue({
+      found: true, location: "user-plugin", path: "/fake/skills/brainstorming", version: "7.1.0",
+    });
+    const matrix = await detectInitMatrix(projectPath, [claudeAgent], "project");
+    const s = matrix.agents[0].superpowers;
+    expect(s.installed).toBe(true);
+    expect(s.version).toBe("7.1.0");
+    // 7.x 高于 6.0.0,spCanUpgrade=false(当前 install.superpowers 锁 6.x)
+    expect(s.canUpgrade).toBe(false);
     expect(s.breaking).toBe(true);
   });
 
@@ -294,19 +354,19 @@ describe("detectInitMatrix - hook / permissions / opsx", () => {
 
   it("opsxCommands 未装时 installed=false", async () => {
     const matrix = await detectInitMatrix(projectPath, [claudeAgent], "project");
-    expect(matrix.agents[0].opsxCommands.installed).toBe(false);
+    expect(matrix.opsxCommands.installed).toBe(false);
   });
 
   it("opsxCommands 已装时 installed=true(project scope, claude-code)", async () => {
     await mkdir(join(projectPath, ".claude", "commands", "opsx"), { recursive: true });
     const matrix = await detectInitMatrix(projectPath, [claudeAgent], "project");
-    expect(matrix.agents[0].opsxCommands.installed).toBe(true);
+    expect(matrix.opsxCommands.installed).toBe(true);
   });
 
   it("opsxCommands 已装时 installed=true(project scope, opencode)", async () => {
     await mkdir(join(projectPath, ".opencode", "commands", "opsx"), { recursive: true });
     const matrix = await detectInitMatrix(projectPath, [opencodeAgent], "project");
-    expect(matrix.agents[0].opsxCommands.installed).toBe(true);
+    expect(matrix.opsxCommands.installed).toBe(true);
   });
 });
 
@@ -321,22 +381,22 @@ describe("detectInitMatrix - scope 行为", () => {
     process.env.HOME = fakeHome;
     try {
       const matrix = await detectInitMatrix(projectPath, [claudeAgent], "global");
-      expect(matrix.agents[0].opsxCommands.installed).toBe(true);
+      expect(matrix.opsxCommands.installed).toBe(true);
     } finally {
       if (originalHome === undefined) delete process.env.HOME;
       else process.env.HOME = originalHome;
     }
   });
 
-  it("global scope 用 globalBase 作为 agentBase(opencode)", async () => {
+  it("global scope 用 commandsDir 推导 agentBase(opencode 非 globalBase)", async () => {
     const fakeHome = join(tmpDir, "home-oc");
-    // opencode 的 globalBase = ".config/opencode"
-    await mkdir(join(fakeHome, ".config", "opencode", "commands", "opsx"), { recursive: true });
+    // opencode 的 commandsDir = ".opencode/commands/",OpenSpec CLI 部署到 ~/.opencode/commands/opsx-*.md
+    await mkdir(join(fakeHome, ".opencode", "commands", "opsx"), { recursive: true });
     const originalHome = process.env.HOME;
     process.env.HOME = fakeHome;
     try {
       const matrix = await detectInitMatrix(projectPath, [opencodeAgent], "global");
-      expect(matrix.agents[0].opsxCommands.installed).toBe(true);
+      expect(matrix.opsxCommands.installed).toBe(true);
     } finally {
       if (originalHome === undefined) delete process.env.HOME;
       else process.env.HOME = originalHome;
@@ -350,214 +410,27 @@ describe("detectInitMatrix - scope 行为", () => {
     process.env.HOME = fakeHome;
     try {
       const matrix = await detectInitMatrix(projectPath, [claudeAgent], "project");
-      expect(matrix.agents[0].opsxCommands.installed).toBe(false);
+      expect(matrix.opsxCommands.installed).toBe(false);
     } finally {
       if (originalHome === undefined) delete process.env.HOME;
       else process.env.HOME = originalHome;
     }
   });
-});
 
-// ---------------------------------------------------------------------------
-// isBreakingChange
-// ---------------------------------------------------------------------------
-describe("isBreakingChange", () => {
-  it("major 变更视为 breaking", () => {
-    expect(isBreakingChange("5.1.0", "6.0.0")).toBe(true);
-  });
-
-  it("0.x 之间视为 breaking", () => {
-    expect(isBreakingChange("0.3.0", "0.4.0")).toBe(true);
-  });
-
-  it("minor/patch 兼容", () => {
-    expect(isBreakingChange("6.1.0", "6.2.0")).toBe(false);
-    expect(isBreakingChange("6.1.0", "6.1.1")).toBe(false);
+  it("global scope 跳过项目级 Superpowers(项目级已装也只查用户级)", async () => {
+    // 项目级已装 Superpowers
+    await mkdir(join(projectPath, ".claude", "skills", "brainstorming"), { recursive: true });
+    await writeFile(
+      join(projectPath, ".claude", "skills", "brainstorming", "SKILL.md"),
+      "---\nname: brainstorming\nversion: 6.1.0\n---\n",
+      "utf-8"
+    );
+    // 用户级未装 -> scope=global 应返回未装(不受项目级影响)
+    vi.mocked(detectSkill).mockReturnValue({ found: false, location: null, path: null, version: null });
+    const matrix = await detectInitMatrix(projectPath, [claudeAgent], "global");
+    expect(matrix.agents[0].superpowers.installed).toBe(false);
+    // 确认传了 scope=global 给 detectSkill
+    expect(detectSkill).toHaveBeenCalledWith("brainstorming", claudeAgent, projectPath, "global");
   });
 });
 
-// ---------------------------------------------------------------------------
-// getBreakingChangeMessage
-// ---------------------------------------------------------------------------
-describe("getBreakingChangeMessage", () => {
-  it("0.x breaking 含 semver 0.x 约定提示", () => {
-    const msg = getBreakingChangeMessage("0.3.0", "0.4.0");
-    expect(msg).toContain("breaking");
-    expect(msg).toContain("0.3.0");
-    expect(msg).toContain("0.4.0");
-  });
-
-  it("major 变更提示 major 版本变更", () => {
-    const msg = getBreakingChangeMessage("5.1.0", "6.0.0");
-    expect(msg).toContain("breaking");
-    expect(msg).toContain("5.1.0");
-    expect(msg).toContain("6.0.0");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// formatInitMatrix
-// ---------------------------------------------------------------------------
-describe("formatInitMatrix", () => {
-  it("格式化矩阵为多行", () => {
-    const matrix: InitMatrix = {
-      agents: [{
-        agentId: "opencode",
-        agentLabel: "OpenCode",
-        alloySkills: { installed: true, version: "0.3.0", canUpgrade: true, breaking: true },
-        opsxCommands: { installed: true },
-        hook: { installed: true },
-        permissions: { installed: false },
-        superpowers: { installed: true, version: "5.1.0", canUpgrade: true, breaking: true },
-      }],
-    };
-    const lines = formatInitMatrix(matrix);
-    expect(lines.join("\n")).toContain("OpenCode");
-    expect(lines.join("\n")).toContain("⚠️");
-    expect(lines.join("\n")).toContain("0.3.0");
-  });
-
-  it("表头包含全部 6 列", () => {
-    const matrix: InitMatrix = { agents: [] };
-    const lines = formatInitMatrix(matrix);
-    // 第二行为表头(第一行为标题),含 agent + 5 类产物列
-    expect(lines[1]).toContain("agent");
-    expect(lines[1]).toContain("alloy skills");
-    expect(lines[1]).toContain("opsx commands");
-    expect(lines[1]).toContain("hook");
-    expect(lines[1]).toContain("permissions");
-    expect(lines[1]).toContain("Superpowers");
-  });
-
-  it("空 agent 列表仅返回标题+表头+分隔行", () => {
-    const matrix: InitMatrix = { agents: [] };
-    const lines = formatInitMatrix(matrix);
-    expect(lines).toHaveLength(3);
-  });
-
-  it("未安装产物显示 ✗", () => {
-    const matrix: InitMatrix = {
-      agents: [{
-        agentId: "claude-code",
-        agentLabel: "Claude Code",
-        alloySkills: { installed: false, version: null, canUpgrade: false, breaking: false },
-        opsxCommands: { installed: false },
-        hook: { installed: false },
-        permissions: { installed: false },
-        superpowers: { installed: false, version: null, canUpgrade: false, breaking: false },
-      }],
-    };
-    const lines = formatInitMatrix(matrix);
-    const row = lines[3];
-    expect(row).toContain("✗"); // ✗
-    expect(row).not.toContain("⚠️"); // 不含 ⚠️
-  });
-
-  it("已装当前版本显示 ✓ 和版本号", () => {
-    const matrix: InitMatrix = {
-      agents: [{
-        agentId: "claude-code",
-        agentLabel: "Claude Code",
-        alloySkills: { installed: true, version: "0.4.0", canUpgrade: false, breaking: false },
-        opsxCommands: { installed: true },
-        hook: { installed: true },
-        permissions: { installed: true },
-        superpowers: { installed: true, version: "6.1.0", canUpgrade: false, breaking: false },
-      }],
-    };
-    const lines = formatInitMatrix(matrix);
-    const row = lines[3];
-    expect(row).toContain("✓"); // ✓
-    expect(row).toContain("0.4.0");
-    expect(row).toContain("6.1.0");
-    expect(row).not.toContain("⚠️"); // 不含 ⚠️
-  });
-
-  it("可升级非 breaking 显示 (可升级) 标签", () => {
-    const matrix: InitMatrix = {
-      agents: [{
-        agentId: "claude-code",
-        agentLabel: "Claude Code",
-        alloySkills: { installed: true, version: "6.1.0", canUpgrade: true, breaking: false },
-        opsxCommands: { installed: false },
-        hook: { installed: false },
-        permissions: { installed: false },
-        superpowers: { installed: false, version: null, canUpgrade: false, breaking: false },
-      }],
-    };
-    const lines = formatInitMatrix(matrix);
-    const row = lines[3];
-    expect(row).toContain("⚠️");
-    expect(row).toContain("(可升级)");
-    expect(row).not.toContain("(breaking)");
-  });
-
-  it("可升级且 breaking 显示 (breaking) 标签", () => {
-    const matrix: InitMatrix = {
-      agents: [{
-        agentId: "opencode",
-        agentLabel: "OpenCode",
-        alloySkills: { installed: true, version: "0.3.0", canUpgrade: true, breaking: true },
-        opsxCommands: { installed: false },
-        hook: { installed: false },
-        permissions: { installed: false },
-        superpowers: { installed: true, version: "5.1.0", canUpgrade: true, breaking: true },
-      }],
-    };
-    const lines = formatInitMatrix(matrix);
-    const row = lines[3];
-    expect(row).toContain("⚠️");
-    expect(row).toContain("(breaking)");
-    expect(row).toContain("0.3.0");
-    expect(row).toContain("5.1.0");
-  });
-
-  it("已装但无版本号显示 ✓ 不带版本", () => {
-    const matrix: InitMatrix = {
-      agents: [{
-        agentId: "claude-code",
-        agentLabel: "Claude Code",
-        alloySkills: { installed: true, version: null, canUpgrade: false, breaking: false },
-        opsxCommands: { installed: false },
-        hook: { installed: false },
-        permissions: { installed: false },
-        superpowers: { installed: false, version: null, canUpgrade: false, breaking: false },
-      }],
-    };
-    const lines = formatInitMatrix(matrix);
-    const row = lines[3];
-    expect(row).toContain("✓");
-    // ✓ 后跟空格,无版本号内容
-    expect(row).toMatch(/✓\s*\|/);
-  });
-
-  it("多 agent 输出多行数据行", () => {
-    const matrix: InitMatrix = {
-      agents: [
-        {
-          agentId: "claude-code",
-          agentLabel: "Claude Code",
-          alloySkills: { installed: true, version: "0.4.0", canUpgrade: false, breaking: false },
-          opsxCommands: { installed: true },
-          hook: { installed: true },
-          permissions: { installed: true },
-          superpowers: { installed: true, version: "6.1.0", canUpgrade: false, breaking: false },
-        },
-        {
-          agentId: "opencode",
-          agentLabel: "OpenCode",
-          alloySkills: { installed: false, version: null, canUpgrade: false, breaking: false },
-          opsxCommands: { installed: false },
-          hook: { installed: false },
-          permissions: { installed: false },
-          superpowers: { installed: false, version: null, canUpgrade: false, breaking: false },
-        },
-      ],
-    };
-    const lines = formatInitMatrix(matrix);
-    // 标题 + 表头 + 分隔 + 2 行数据
-    expect(lines).toHaveLength(5);
-    expect(lines[3]).toContain("Claude Code");
-    expect(lines[4]).toContain("OpenCode");
-  });
-});

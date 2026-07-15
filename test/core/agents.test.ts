@@ -15,8 +15,8 @@ import {
 } from "../../src/core/agents.js";
 
 describe("KNOWN_AGENTS", () => {
-  it("应包含 4 个 agent 定义", () => {
-    expect(KNOWN_AGENTS).toHaveLength(4);
+  it("应包含 3 个 agent 定义", () => {
+    expect(KNOWN_AGENTS).toHaveLength(3);
   });
 
   it("每个 agent 应有必需字段", () => {
@@ -40,12 +40,6 @@ describe("KNOWN_AGENTS", () => {
     expect(opencode).toBeDefined();
     expect(opencode?.supportsColonCommands).toBe(false);
     expect(opencode?.commandsDir).toBe(".opencode/commands/");
-  });
-
-  it("codex agent 应标记为 globalOnly", () => {
-    const codex = KNOWN_AGENTS.find((a) => a.id === "codex");
-    expect(codex).toBeDefined();
-    expect(codex?.globalOnly).toBe(true);
   });
 });
 
@@ -141,32 +135,18 @@ describe("CLAUDE_CODE_AGENT", () => {
   });
 });
 
-describe("agent tier", () => {
-  it("claude-code 应为 stable", () => {
-    const claudeCode = KNOWN_AGENTS.find((a) => a.id === "claude-code");
-    expect(claudeCode?.tier).toBe("stable");
-  });
-
-  it("其他 3 个 agent 应为 experimental", () => {
-    const experimental = KNOWN_AGENTS.filter((a) => a.id !== "claude-code");
-    expect(experimental).toHaveLength(3);
-    for (const a of experimental) {
-      expect(a.tier).toBe("experimental");
-    }
-  });
-});
-
-describe("detectAgent(运行时 agent 检测)", () => {
-  const originalAiAgent = process.env.AI_AGENT;
-  const originalClaudecode = process.env.CLAUDECODE;
+describe("detectAgent(运行时 agent 检测,A+B 组合)", () => {
+  const originalEnv = { ...process.env };
 
   afterEach(() => {
-    if (originalAiAgent === undefined) delete process.env.AI_AGENT;
-    else process.env.AI_AGENT = originalAiAgent;
-    if (originalClaudecode === undefined) delete process.env.CLAUDECODE;
-    else process.env.CLAUDECODE = originalClaudecode;
+    // 恢复 env
+    for (const k of ["AI_AGENT", "CLAUDECODE", "OPENCODE", "PI_CODING_AGENT"]) {
+      if (k in originalEnv) process.env[k] = originalEnv[k];
+      else delete process.env[k];
+    }
   });
 
+  // 0 层:AI_AGENT 通用规范(格式 <agent-id>_<version>_agent)
   it("AI_AGENT=claude-code_2-1-153_agent -> claude-code", () => {
     process.env.AI_AGENT = "claude-code_2-1-153_agent";
     delete process.env.CLAUDECODE;
@@ -179,27 +159,43 @@ describe("detectAgent(运行时 agent 检测)", () => {
     expect(detectAgent()).toBe("opencode");
   });
 
-  it("AI_AGENT=codex_0-5-0_agent -> codex", () => {
-    process.env.AI_AGENT = "codex_0-5-0_agent";
+  it("AI_AGENT 是已知 3 个之外的值 -> null(走兜底)", () => {
+    process.env.AI_AGENT = "some-unknown-agent_1-0-0_agent";
     delete process.env.CLAUDECODE;
-    expect(detectAgent()).toBe("codex");
+    expect(detectAgent()).toBe(null);
   });
 
-  it("AI_AGENT 无 _agent 后缀 -> 原样返回", () => {
-    process.env.AI_AGENT = "some-unknown-agent";
-    delete process.env.CLAUDECODE;
-    expect(detectAgent()).toBe("some-unknown-agent");
-  });
-
-  it("无 AI_AGENT + CLAUDECODE=1 -> claude-code(回退)", () => {
+  // A 层:agent 运行时自注入 env
+  it("A 层:CLAUDECODE=1 -> claude-code", () => {
     delete process.env.AI_AGENT;
     process.env.CLAUDECODE = "1";
+    delete process.env.OPENCODE;
+    delete process.env.PI_CODING_AGENT;
     expect(detectAgent()).toBe("claude-code");
   });
 
-  it("无任何标记环境变量 -> unknown", () => {
+  it("A 层:OPENCODE=1 -> opencode", () => {
     delete process.env.AI_AGENT;
     delete process.env.CLAUDECODE;
-    expect(detectAgent()).toBe("unknown");
+    process.env.OPENCODE = "1";
+    delete process.env.PI_CODING_AGENT;
+    expect(detectAgent()).toBe("opencode");
+  });
+
+  it("A 层:PI_CODING_AGENT=true -> pi", () => {
+    delete process.env.AI_AGENT;
+    delete process.env.CLAUDECODE;
+    delete process.env.OPENCODE;
+    process.env.PI_CODING_AGENT = "true";
+    expect(detectAgent()).toBe("pi");
+  });
+
+  // 兜底
+  it("无任何标识 env -> null(走兜底,按工具参数名兼容取)", () => {
+    delete process.env.AI_AGENT;
+    delete process.env.CLAUDECODE;
+    delete process.env.OPENCODE;
+    delete process.env.PI_CODING_AGENT;
+    expect(detectAgent()).toBe(null);
   });
 });

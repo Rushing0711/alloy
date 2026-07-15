@@ -1,11 +1,9 @@
 import { mkdir, cp, readFile, writeFile } from "node:fs/promises";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { getPackageRoot } from "../utils/fs.js";
 import type { AgentInfo, DeployOptions } from "./types.js";
-import { getSkillTargetDir } from "./agents.js";
-import { detectAlloySkill } from "./detect-installations.js";
-import { promptConfirm } from "../utils/prompt.js";
+import { getSkillTargetDir, getCommandsTargetDir } from "./agents.js";
 
 /** 读取当前 alloy 包版本(从 package.json) */
 function readPackageVersion(): string {
@@ -28,33 +26,12 @@ export async function deploySkills(opts: DeployOptions): Promise<string[]> {
   );
 
   for (const agent of opts.targetAgents) {
-    // 检测已有 Alloy skills
-    const detected = detectAlloySkill(agent, opts.projectPath);
-    if (detected.found) {
-      const locationLabel = ({
-        "project-skill": "项目级",
-        "user-skill": "用户级",
-      } as Record<string, string>)[detected.location!] || detected.location;
-      console.log(`     ℹ Alloy skills 已部署（${locationLabel}：${detected.path}）`);
-      if (opts.force) {
-        // --force 跳过覆盖确认,直接重装
-        console.log(`     --force 模式:直接覆盖 ${agent.label} 的 Alloy skills`);
-      } else {
-        const overwrite = await promptConfirm(`     是否覆盖 ${agent.label} 的 Alloy skills？`, false);
-        if (!overwrite) {
-          console.log(`     ✓ 跳过 ${agent.label} 的 Alloy skills 部署`);
-          continue;
-        }
-      }
-    }
-
-    // Codex: project 模式跳过
-    if (agent.globalOnly && opts.scope === "project") {
-      console.log(`     ⚠ Codex commands 仅全局安装有效，跳过`);
-      continue;
-    }
-
     const targetDir = getSkillTargetDir(agent, opts.scope, opts.projectPath);
+
+    // 只检查目标 scope 目录(非全局),避免用户有全局安装时误报"覆盖更新"
+    if (existsSync(join(targetDir, "alloy-start", "SKILL.md"))) {
+      console.log(`     ℹ ${agent.label} Alloy skills 覆盖更新`);
+    }
     await mkdir(targetDir, { recursive: true });
 
     // 每个 skill 目录整体拷贝到 <targetDir>/<skill-name>/
@@ -126,4 +103,64 @@ export async function deploySchema(opts: DeployOptions): Promise<string> {
   }
 
   return schemaTarget;
+}
+
+/** OpenCode command wrapper 覆盖的 alloy 流程 id(start/plan/apply/...) */
+const OPENCODE_COMMAND_IDS = [
+  "start", "plan", "apply", "archive",
+  "finish", "fix", "status", "discard",
+] as const;
+
+/** 生成 OpenCode command wrapper 内容:薄包装,指示 agent 调 skill 工具加载对应 skill */
+function buildOpenCodeCommandWrapper(skillName: string, description: string): string {
+  return `---
+description: ${description}
+---
+
+加载并执行 \`${skillName}\` skill。
+
+调用 \`skill({ name: "${skillName}" })\` 工具加载完整 SKILL.md 内容,然后严格按其流程指引执行。
+`;
+}
+
+/**
+ * 为 OpenCode 部署 command wrapper,让 /alloy-start 等 slash command 能触发 skill。
+ *
+ * 背景:OpenCode 的 / 只列 commands 目录的文件,skills 通过 agent 调 skill 工具按需加载,
+ * 不在 / 列表里。alloy init 已把 alloy-* 装到 .opencode/skills/,但 /alloy 没提示。
+ * 补装 wrapper 到 .opencode/commands/alloy-*.md,wrapper 内容指示 agent 调
+ * skill({ name }) 加载对应 skill,从而 /alloy-start 能间接触发 skill。
+ *
+ * 范围:只对 OpenCode(agent.id === "opencode")。其他 agent 的 skills 触发机制不同,不需要。
+ * 路径:project -> <projectPath>/.opencode/commands/;global -> ~/.config/opencode/commands/
+ */
+export async function deployOpenCodeCommands(opts: DeployOptions): Promise<string[]> {
+  const deployed: string[] = [];
+  const opencodeAgents = opts.targetAgents.filter((a) => a.id === "opencode");
+  if (opencodeAgents.length === 0) return deployed;
+
+  const packageRoot = getPackageRoot();
+  const skillsSourceDir = join(packageRoot, "skills");
+  const opencode = opencodeAgents[0];
+  const commandsDir = getCommandsTargetDir(opencode, opts.scope, opts.projectPath);
+  await mkdir(commandsDir, { recursive: true });
+
+  for (const id of OPENCODE_COMMAND_IDS) {
+    const skillName = `alloy-${id}`;
+    // 读 skill 的 description 作为 command 的 description(单一真相源)
+    let description = `Alloy ${id} 流程`;
+    try {
+      const skillMd = await readFile(join(skillsSourceDir, skillName, "SKILL.md"), "utf-8");
+      const m = skillMd.match(/^description:\s*(.+)$/m);
+      if (m) description = m[1].trim();
+    } catch {
+      // skill 源文件缺失,用默认 description
+    }
+
+    const wrapperPath = join(commandsDir, `${skillName}.md`);
+    await writeFile(wrapperPath, buildOpenCodeCommandWrapper(skillName, description), "utf-8");
+    deployed.push(wrapperPath);
+  }
+
+  return deployed;
 }

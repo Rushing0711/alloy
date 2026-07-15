@@ -1,33 +1,38 @@
 # Alloy 交互风格指南
 
-Alloy 各阶段需要用户输入时，**优先使用平台原生的交互式选择工具**。纯文本 "(a)(b)(c)" 只是换了格式的开放式提问——用户还是要打字。原生交互组件让用户用箭头选、空格勾、Enter 提交，一次按键完成决策。
+Alloy 各阶段需要用户输入时，**优先使用平台原生的交互式选择工具**。纯文本 "1.2.3." 只是换了格式的开放式提问——用户还是要打字。原生交互组件让用户用箭头选、空格勾、Enter 提交，一次按键完成决策。
 
 ```
-[HARD_STOP] NO PLAIN-TEXT (a)(b)(c) INSTEAD OF 平台原生交互工具
-所有 🔴 USER_GATE / 🔴 STOP 首次呈现即必须调用平台原生交互工具,禁"先文本展示 (a)/(b) 再等待用户打字"。
-- Claude Code 平台：必须用 `AskUserQuestion`
-- 其他平台（Codex / Copilot CLI / Gemini CLI 等）：按下方 §平台工具对照 降级为结构化文本选项
-违反字面 = 违反精神：哪怕"就一个问题用文本快"、"先文本展示再问"、"长流程偶尔一次用文本"——也算违反 Iron Law。
+[HARD_STOP] NO PLAIN-TEXT 1.2.3. INSTEAD OF 平台原生交互工具
+所有 🔴 USER_GATE / 🔴 STOP 首次呈现即必须调用平台原生交互工具,禁"先文本展示 1./2. 再等待用户打字"。
+- Claude Code：必须用 `AskUserQuestion`
+- OpenCode：必须用 `question` 工具
+- Pi：必须用 extension `ctx.ui`(通过 alloy ask-question 扩展)
+- Copilot CLI / Gemini CLI 等无原生交互工具的平台：降级为结构化文本选项
+违反字面 = 违反精神：哪怕"就一个问题用文本快"、"先文本展示再问"、"长流程偶尔一次用文本"、"平台有工具但我习惯输出 1.2."--也算违反 Iron Law。
 ```
 
-**核心原则：遇到 🔴 USER_GATE / 🔴 STOP，第一反应是调用平台原生交互工具,不是输出文本。** Agent 容易习惯性"先文本展示再等用户打字"——这是 Iron Law 违规,首次呈现即必须用平台交互工具。
+**核心原则：遇到 🔴 USER_GATE / 🔴 STOP，第一反应是调用平台原生交互工具,不是输出文本。** Agent 容易习惯性"先文本展示再等用户打字"--这是 Iron Law 违规,首次呈现即必须用平台交互工具。
+
+**OpenCode agent 常见误区：** OpenCode 运行时内置 `question` 工具(schema 见 [packages/schema/src/v1/question.ts](https://github.com/anomalyco/opencode/blob/dev/packages/schema/src/v1/question.ts))。Agent 看到 SKILL.md 里"1./2."选项文本模板时,容易直接输出文本让用户打字--这违反 Iron Law。OpenCode 上必须调 `question` 工具,字段名是 `multiple`(非 `multiSelect`),可选 `custom`(默认 true,审查场景设 false 禁自定义文本)。完整调用示例见下方 §审查窗口标准模式。
 
 ## 平台工具对照
 
 | 平台 | 交互式选择工具 | 能力 |
 |------|-------------|------|
 | **Claude Code** | `AskUserQuestion` | radio（单选）、checkbox（多选）、preview（代码对比） |
-| **Codex** | 无等价工具 | 降级为结构化文本选项 |
+| **OpenCode** | `question` | options(label+description)、`multiple: true`(多选)、`custom: true`(自定义文本,默认开) |
+| **Pi** | extension `ctx.ui`(select/confirm/input/notify/custom) | 需装 alloy ask-question 扩展(通过 `ctx.ui` 实现) |
 | **Copilot CLI** | 无等价工具 | 降级为结构化文本选项 |
 | **Gemini CLI** | 查平台工具映射 | 查 GEMINI.md 中的工具映射 |
 
-**降级策略：** 当平台无原生交互工具时，使用清晰的文本选项格式——但必须结构化（每选项一行，带编号和简短说明），不要让用户猜要输入什么。
+**降级策略：** 当平台无原生交互工具时，使用清晰的文本选项格式——但必须结构化（每选项一行，带编号和简短说明），不要让用户猜要输入什么。Claude Code(`AskUserQuestion`) / OpenCode(`question`) / Pi(`ctx.ui`) 有等价工具,**必须用工具,不可降级文本**;Copilot CLI/Gemini CLI 无等价工具降级文本。
 
 ## 选择类型与工具映射
 
 | 场景 | `AskUserQuestion` 配置 | 示例 |
 |------|----------------------|------|
-| **审查确认** (a/b 二元) | `multiSelect: false`，2 个 option | (a) 确认，锁定并继续 / (b) 需要调整 |
+| **审查确认** (a/b 二元) | `multiSelect: false`，2 个 option | 1. 确认，锁定并继续 / 2. 需要调整 |
 | **多选一** (3-4 选项) | `multiSelect: false`，3-4 个 option | 分支选择、策略选择、技术方案选型 |
 | **范围确认** (独立选项) | `multiSelect: true`，空格勾选 | 功能范围、carry-forward items、边界确认 |
 | **方案对比** (含代码差异) | `multiSelect: false` + `preview` 字段 | 架构方案 A vs B，preview 展示代码结构差异 |
@@ -39,31 +44,58 @@ Alloy 各阶段需要用户输入时，**优先使用平台原生的交互式选
 1. **先展示内容**——用 markdown 文本展示制品完整内容（审查窗口本身，不能被交互工具替代）
 2. **再让用户确认**：
 
-**Claude Code（推荐）：**
+**Claude Code（`AskUserQuestion`）：**
 ```
 AskUserQuestion: {
   questions: [{
     question: "确认并锁定 <制品名>？",
     header: "<制品名>",
     options: [
-      { label: "(a) 确认，锁定并继续", description: "hash 锁定 + commit，进入下一制品" },
-      { label: "(b) 需要调整", description: "说明修改点" }
+      { label: "1. 确认，锁定并继续", description: "hash 锁定 + commit，进入下一制品" },
+      { label: "2. 需要调整", description: "说明修改点" }
     ],
     multiSelect: false
   }]
 }
 ```
 
-**其他平台（降级）：**
+**OpenCode（`question` 工具，字段名差异：`multiple` 非 `multiSelect`，可选 `custom`）：**
 ```
-> → (a) 确认，锁定 <制品名> 并继续
-> → (b) 需要调整 — 说明修改点
-> 请输入 a 或 b：
+question: {
+  questions: [{
+    question: "确认并锁定 <制品名>？",
+    header: "<制品名>",
+    options: [
+      { label: "1. 确认，锁定并继续", description: "hash 锁定 + commit，进入下一制品" },
+      { label: "2. 需要调整", description: "说明修改点" }
+    ],
+    multiple: false,
+    custom: false
+  }]
+}
+```
+
+**Pi（`ctx.ui` select，通过 alloy ask-question 扩展）：**
+```
+ctx.ui.select({
+  title: "确认并锁定 <制品名>？",
+  options: [
+    { label: "1. 确认，锁定并继续", value: "1" },
+    { label: "2. 需要调整", value: "2" }
+  ]
+})
+```
+
+**Copilot CLI / Gemini CLI（无原生工具,降级文本）：**
+```
+> -> 1. 确认，锁定 <制品名> 并继续
+> -> 2. 需要调整 - 说明修改点
+> 请输入 1 或 2：
 ```
 
 **硬规则：技能文件中用 `🔴 STOP` 标记确认点，不写 JSON 块。** Agent 遇到 🔴 STOP 时自动用 AskUserQuestion（支持的平台）或降级为结构化文本选项（不支持的平台）。两个格式给出相同选项、相同数量。
 
-**反例：** 审查窗口只用文本 "(a) 确认 (b) 调整" 而不给明确的输入提示——用户不知道是要打字、复制粘贴还是直接说"确认"。
+**反例：** 审查窗口只用文本 "1. 确认 2. 调整" 而不给明确的输入提示——用户不知道是要打字、复制粘贴还是直接说"确认"。
 
 ## 🔴 STOP 标记规则
 
@@ -74,18 +106,18 @@ AskUserQuestion: {
 2. 选项从确认事项的上下文推导（通常是"确认/调整"或"选项A/选项B"）
 3. 跳过任何 🔴 STOP = 违反技能 Iron Law
 
-**Why:** 纯文本确认（"Y/n"、"(a)/(b)"）是软交互——agent 可自行判断"用户大概同意"后跳过。AskUserQuestion 是硬交互——agent 必须等用户物理选择才能继续。
+**Why:** 纯文本确认（"Y/n"、"1./2."）是软交互——agent 可自行判断"用户大概同意"后跳过。AskUserQuestion 是硬交互——agent 必须等用户物理选择才能继续。
 
 ## 沉默 ≠ 授权（USER_GATE 通用禁令，跨 skill 适用）
 
-**[HARD_STOP]** 所有 🔴 USER_GATE / 🔴 STOP **必须**单独调用 AskUserQuestion 等用户物理选择，下列行为全部禁止：
+**[HARD_STOP]** 所有 🔴 USER_GATE / 🔴 STOP **必须**单独调用平台原生交互工具(Claude Code `AskUserQuestion` / OpenCode `question` / Pi `ctx.ui` / 无工具平台降级文本) 等用户物理选择，下列行为全部禁止：
 
 | 反模式 | 现实 |
 |--------|------|
 | **批量打包**：N 条候选 → 1 个"全部确认"问题 | 单次确认承担不了 N 项独立的污染风险（典型：archive memory 候选必须逐条问，§5.2.2） |
-| **基于内容跳过**：diff 短 / 无 conflict / "看起来明显合理" → 自动跳过 USER_GATE | 内容质量不是授权来源，用户的 (a) 选择才是。哪怕 1 行 diff 也必须问 |
+| **基于内容跳过**：diff 短 / 无 conflict / "看起来明显合理" → 自动跳过 USER_GATE | 内容质量不是授权来源，用户的选项 1 选择才是。哪怕 1 行 diff 也必须问 |
 | **沉默推断**：用户长时间不回复 → 选默认项继续 | USER_GATE 没有默认项；超时不算授权，必须等到物理选择 |
-| **改写选项**：把"(a) 确认 / (b) 调整"改成"(a) 确认（推荐）"后默认选 (a) | 推荐文案不等于已选，必须用户主动确认 |
+| **改写选项**：把"1. 确认 / 2. 调整"改成"1. 确认（推荐）"后默认选 1 | 推荐文案不等于已选，必须用户主动确认 |
 | **降级为文本**：在支持 AskUserQuestion 的平台用纯文本提示自循环判断 | 平台支持时强制 AskUserQuestion，降级仅限不支持的平台（见上方对照表） |
 
 **违反字面 = 违反精神：** 哪怕"用户上次同意过"、"内容看起来无争议"、"流程已经很顺了"，也算违反 Iron Law。**USER_GATE 的物理实现是 AskUserQuestion 工具调用本身——没调用就是没问。**

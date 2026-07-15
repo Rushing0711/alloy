@@ -162,6 +162,24 @@ describe("alloy _hook-guard", () => {
       const result = evaluateHook(stdin, ["started"], {}, undefined, ["gate-a"]);
       expect(result.message).toContain("alloy _guard user-gate pass");
     });
+
+    it("Claude Code(CLAUDECODE=1)拦截消息含 AskUserQuestion", () => {
+      const stdin = JSON.stringify({ tool_name: "Write", tool_input: { file_path: "src/foo.ts" } });
+      const result = evaluateHook(stdin, ["started"], { CLAUDECODE: "1" }, undefined, ["gate-a"]);
+      expect(result.message).toContain("AskUserQuestion");
+    });
+
+    it("OpenCode(OPENCODE=1)拦截消息含 question", () => {
+      const stdin = JSON.stringify({ tool_name: "Write", tool_input: { file_path: "src/foo.ts" } });
+      const result = evaluateHook(stdin, ["started"], { OPENCODE: "1" }, undefined, ["gate-a"]);
+      expect(result.message).toContain("question");
+    });
+
+    it("Pi(PI_CODING_AGENT=true)拦截消息含 ctx.ui", () => {
+      const stdin = JSON.stringify({ tool_name: "Write", tool_input: { file_path: "src/foo.ts" } });
+      const result = evaluateHook(stdin, ["started"], { PI_CODING_AGENT: "true" }, undefined, ["gate-a"]);
+      expect(result.message).toContain("ctx.ui");
+    });
   });
 
   describe("collectPhases(文件系统扫描)", () => {

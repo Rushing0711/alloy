@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import semver from "semver";
 import { detectAlloySkillsVersion } from "./skills.js";
+import { getSkillTargetDir } from "./agents.js";
 import {
   hasHookConfig,
   getHookSupportedAgents,
@@ -10,33 +11,38 @@ import {
   getPermissionSupportedAgents,
 } from "./agent-config.js";
 import { detectSkill } from "./detect-installations.js";
+import { loadCompat } from "./compat.js";
 import { getPackageRoot } from "../utils/fs.js";
 import type { AgentInfo } from "./types.js";
 
-/** 单个 agent 的 5 类产物状态 */
+/** 单个 agent 的 4 类产物状态(opsx 为项目级资源,不按 agent 维度展示) */
 export interface AgentProductStatus {
   agentId: string;
   agentLabel: string;
   alloySkills: {
     installed: boolean;
     version: string | null;
+    location: "project" | "global" | null;
+    path: string | null;
     canUpgrade: boolean;
     breaking: boolean;
   };
-  opsxCommands: { installed: boolean };
   hook: { installed: boolean };
   permissions: { installed: boolean | null };
   superpowers: {
     installed: boolean;
     version: string | null;
+    location: "project-skill" | "user-skill" | "user-plugin" | null;
+    path: string | null;
     canUpgrade: boolean;
     breaking: boolean;
   };
 }
 
-/** init 矩阵:所有目标 agent 的产物状态集合 */
+/** init 矩阵:所有目标 agent 的产物状态集合 + 项目级 opsx 汇总 */
 export interface InitMatrix {
   agents: AgentProductStatus[];
+  opsxCommands: { installed: boolean; paths: string[] };
 }
 
 /** 读取当前 alloy 包版本(从 package.json) */
@@ -47,13 +53,17 @@ export function readPackageVersion(): string {
 }
 
 /**
- * 检测 init 矩阵:每个 agent 的 5 类产物状态。
+ * 检测 init 矩阵:每个 agent 的 4 类产物状态 + 项目级 opsx 汇总。
  *
  * - alloySkills: 通过 .alloy-version 检测版本,判断升级/breaking
- * - opsxCommands: 检测 <base>/<agentBase>/commands/opsx 目录
  * - hook: 检测 PreToolUse hook 配置(仅支持 hook 的 agent)
  * - permissions: 检测 permissions.allow 配置(仅支持项目级 permissions 的 agent)
- * - superpowers: 检测 brainstorming skill(detectSkill 仅对 claude-code 有效)
+ * - superpowers: 检测 brainstorming skill。所有 agent 都读 ~/.agents/skills/(共享),
+ *   Claude Code 额外通过 ~/.claude/skills/ 符号链接读取。~/.agents/skills/ 存在时
+ *   所有 agent 都算"已装"(显示"✓ 全局共享"),详见 docs/reference/agent-instruction-files.md §7 FAQ
+ * - opsxCommands(项目级汇总): 所有目标 agent 的 opsx 路径都存在才算 installed。
+ *   OpenSpec CLI 不支持 global,alloy 用 targetPath=home 模拟;Pi 的全局路径
+ *   ~/.pi/prompts/ 非 Pi 实际读取的 ~/.pi/agent/prompts/,是已知限制
  *
  * scope=global 时,opsx 检测 base 为 HOME;hook/permissions 始终检测 projectPath(项目级配置)。
  *
@@ -67,6 +77,10 @@ export async function detectInitMatrix(
   scope: "global" | "project"
 ): Promise<InitMatrix> {
   const currentAlloyVersion = readPackageVersion();
+  // 读取 compat.yaml(alloy 包根目录),用于 breaking 判断
+  const compat = await loadCompat(getPackageRoot());
+  const alloyConstraint = compat.compatible.alloy;        // ">=0.3.0"
+  const spConstraint = compat.compatible.superpowers;     // ">=5.0.0 <7.0.0"
   const home = process.env.HOME || process.env.USERPROFILE || "~";
   const base = scope === "global" ? home : projectPath;
   const hookSupportedAgents = getHookSupportedAgents();
@@ -80,25 +94,32 @@ export async function detectInitMatrix(
         : agent.commandsDir.split("/")[0];
 
     // --- alloy skills 版本检测 ---
+    // 严格按 scope 检测:project 只查项目级,global 只查全局(不 fallback)
+    // 理由:scope 选择决定安装位置,检测也应按 scope;即使另一处已装,仍按本次 scope 安装(版本可能不同)
     const skillsVersion = await detectAlloySkillsVersion(projectPath, agent, scope);
+    const alloyLocation: "project" | "global" | null =
+      skillsVersion !== null ? (scope === "global" ? "global" : "project") : null;
+    const alloyPath: string | null =
+      skillsVersion !== null ? getSkillTargetDir(agent, scope, projectPath) : null;
     const alloyInstalled = skillsVersion !== null;
     const alloyCanUpgrade =
       alloyInstalled && semver.lt(skillsVersion!, currentAlloyVersion);
-    // 0.x 版本任何升级都是 breaking(semver 0.x 约定);1.x+ 仅跨 major 为 breaking
+    // breaking:已装版本不满足 compat.yaml 的 alloy 约束(废弃 0.x 约定/跨 major 判断)
     const alloyBreaking =
-      alloyCanUpgrade &&
-      (semver.major(skillsVersion!) !== semver.major(currentAlloyVersion) ||
-        semver.lt(skillsVersion!, "1.0.0"));
+      alloyInstalled && !semver.satisfies(skillsVersion!, alloyConstraint);
 
     // --- Superpowers 检测 ---
-    // detectSkill 内部仅对 claude-code 有效,其他 agent 返回 NOT_FOUND
-    const superpowersDetected = detectSkill("brainstorming", agent, projectPath);
+    // 所有 agent 都读 ~/.agents/skills/(共享),Claude Code 额外读 ~/.claude/skills/(符号链接)
+    // scope=global 时只查用户级路径(传 scope 给 detectSkill 跳过项目级)
+    const superpowersDetected = detectSkill("brainstorming", agent, projectPath, scope);
     const spInstalled = superpowersDetected.found;
     const spVersion = superpowersDetected.version;
-    // 5.x -> 6.x 是 breaking 升级(跨 major)
+    // canUpgrade:已装版本低于当前 install.superpowers 目标版本(6.x)
     const spCanUpgrade =
       spInstalled && spVersion !== null ? semver.lt(spVersion, "6.0.0") : false;
-    const spBreaking = spCanUpgrade;
+    // breaking:已装版本不满足 compat.yaml 的 superpowers 约束(含低于最低和高于最高)
+    const spBreaking =
+      spInstalled && spVersion !== null ? !semver.satisfies(spVersion, spConstraint) : false;
 
     // --- hook 检测(仅对支持 hook 闸门的 agent) ---
     const hookInstalled = hookSupportedAgents.includes(agent.id)
@@ -110,145 +131,82 @@ export async function detectInitMatrix(
       ? await hasPermissionsConfig(projectPath, agent.id)
       : null;
 
-    // --- opsx commands 检测(claude-code 是 opsx/ 目录,opencode 等是 opsx-*.md 扁平文件) ---
-    const commandsDir = join(base, agentBase, "commands");
-    const opsxInstalled = existsSync(join(commandsDir, "opsx")) ||
-      existsSync(join(commandsDir, "opsx-explore.md"));
-
     agents.push({
       agentId: agent.id,
       agentLabel: agent.label,
       alloySkills: {
         installed: alloyInstalled,
         version: skillsVersion,
+        location: alloyLocation,
+        path: alloyPath,
         canUpgrade: alloyCanUpgrade,
         breaking: alloyBreaking,
       },
-      opsxCommands: { installed: opsxInstalled },
       hook: { installed: hookInstalled },
       permissions: { installed: permInstalled },
       superpowers: {
         installed: spInstalled,
         version: spVersion,
+        location: superpowersDetected.location,
+        path: superpowersDetected.path,
         canUpgrade: spCanUpgrade,
         breaking: spBreaking,
       },
     });
   }
-  return { agents };
+  // 项目级 opsx 汇总:所有目标 agent 的 opsx 路径都存在才算 installed
+  const opsxCommands = detectOpsxCommands(targetAgents, base, home);
+  return { agents, opsxCommands };
 }
 
 /**
- * 判断版本变更是否为 breaking。
+ * 项目级 opsx commands 汇总检测。
  *
- * semver 约定:
- * - major 变更(1.x -> 2.x)视为 breaking
- * - 0.x 阶段任何 minor 变更(0.3 -> 0.4)视为 breaking(0.x 约定)
- * - 同 major(>=1) 下 minor/patch 变更兼容
+ * OpenSpec CLI 一次性给所有目标 agent 装 commands(`openspec init --tools a,b,c,d`),
+ * 所以 opsx 不是 per-agent 产物,而是项目级资源。检测逻辑:所有目标 agent 的 opsx 路径
+ * 都存在才算 installed(任一缺失则 action=install,重跑 openspec init 覆盖安装)。
  *
- * @param oldVersion 旧版本号
- * @param newVersion 新版本号
+ * 路径推导(与 OpenSpec CLI adapter 对齐): * - Claude Code: <base>/.claude/commands/opsx/ 或 <base>/.claude/commands/opsx-explore.md
+ * - OpenCode: <base>/.opencode/commands/opsx-*.md
+ * - Pi: <base>/.pi/prompts/opsx-*.md(scope=global 时 base=home,但 Pi 实际读 ~/.pi/agent/prompts/,已知限制)
+ *
+ * @param targetAgents 目标 agent 列表
+ * @param base 检测 base(scope=global 时为 home,project 时为 projectPath)
+ * @param home HOME 路径
  */
-export function isBreakingChange(oldVersion: string, newVersion: string): boolean {
-  const oldMajor = semver.major(oldVersion);
-  const newMajor = semver.major(newVersion);
-  if (oldMajor !== newMajor) return true;
-  if (oldMajor === 0) return true; // 0.x 约定 breaking
-  return false;
-}
-
-/**
- * 生成 breaking change 提示消息。
- *
- * @param oldVersion 旧版本号
- * @param newVersion 新版本号
- */
-export function getBreakingChangeMessage(oldVersion: string, newVersion: string): string {
-  if (semver.major(oldVersion) === 0 && semver.major(newVersion) === 0) {
-    return `⚠️ breaking: ${oldVersion} -> ${newVersion}(semver 0.x 约定,breaking change)`;
+function detectOpsxCommands(
+  targetAgents: AgentInfo[],
+  base: string,
+  home: string
+): { installed: boolean; paths: string[] } {
+  if (targetAgents.length === 0) {
+    return { installed: false, paths: [] };
   }
-  return `⚠️ breaking: ${oldVersion} -> ${newVersion}(major 版本变更)`;
-}
-
-/**
- * 格式化单个版本化产物单元(alloySkills / superpowers)为单元格内容。
- *
- * 显示规则:
- * - 未安装: ✗
- * - 可升级且 breaking: ⚠️ {version}(breaking)
- * - 可升级非 breaking: ⚠️ {version}(可升级)
- * - 已装当前版本: ✓ {version}(version 为 null 时仅 ✓)
- *
- * @param status 版本化产物状态
- */
-function formatCell(status: {
-  installed: boolean;
-  version: string | null;
-  canUpgrade: boolean;
-  breaking: boolean;
-}): string {
-  if (!status.installed) return "✗";
-  if (status.canUpgrade) {
-    return status.breaking
-      ? `⚠️ ${status.version}(breaking)`
-      : `⚠️ ${status.version}(可升级)`;
+  const paths: string[] = [];
+  let allInstalled = true;
+  for (const agent of targetAgents) {
+    let opsxPath: string | null = null;
+    let opsxInstalled: boolean;
+    const agentBase = agent.commandsDir.split("/")[0];
+    const commandsSubdir = agent.commandsDir.split("/")[1] || "commands";
+    const commandsDir = join(base, agentBase, commandsSubdir);
+    const opsxDir = join(commandsDir, "opsx");
+    const opsxFile = join(commandsDir, "opsx-explore.md");
+    if (existsSync(opsxDir)) {
+      opsxInstalled = true;
+      opsxPath = opsxDir;
+    } else if (existsSync(opsxFile)) {
+      opsxInstalled = true;
+      opsxPath = opsxFile;
+    } else {
+      opsxInstalled = false;
+    }
+    if (opsxInstalled && opsxPath) {
+      paths.push(opsxPath);
+    } else {
+      allInstalled = false;
+    }
   }
-  return `✓ ${status.version ?? ""}`.trim();
+  return { installed: allInstalled, paths };
 }
 
-/**
- * 格式化 init 矩阵为多行显示(markdown 表格)。
- *
- * 输出结构:
- * 1. 标题行: "agent 级产物状态:"
- * 2. 表头行: 6 列(agent + 5 类产物)
- * 3. 分隔行
- * 4+. 每个 agent 一行
- *
- * 产物列单元格格式见 formatCell;opsx/hook/permissions 仅显示 ✓/✗。
- *
- * @param matrix init 矩阵
- * @returns 多行字符串数组
- */
-/** 计算字符串显示宽度(中文/全角占 2,英文占 1) */
-function displayWidth(s: string): number {
-  let w = 0;
-  for (const ch of s) {
-    w += /[一-鿿　-〿＀-￯]/.test(ch) ? 2 : 1;
-  }
-  return w;
-}
-
-/** 按显示宽度 padEnd(中文补偿) */
-function padEndDisplay(s: string, width: number): string {
-  const pad = width - displayWidth(s);
-  return pad > 0 ? s + " ".repeat(pad) : s;
-}
-
-export function formatInitMatrix(matrix: InitMatrix): string[] {
-  const lines: string[] = [];
-  lines.push("agent 级产物当前状态:");
-
-  const headers = ["agent", "alloy skills", "opsx commands", "hook", "permissions", "Superpowers"];
-  const rows = matrix.agents.map(a => [
-    a.agentLabel,
-    formatCell(a.alloySkills),
-    a.opsxCommands.installed ? "✓" : "✗",
-    a.hook.installed ? "✓" : "✗",
-    a.permissions.installed === null ? "-" : (a.permissions.installed ? "✓" : "✗"),
-    formatCell(a.superpowers),
-  ]);
-
-  // 计算每列最大显示宽度
-  const colWidths = headers.map((h, i) => {
-    const maxRow = Math.max(...rows.map(r => displayWidth(r[i])), 0);
-    return Math.max(displayWidth(h), maxRow);
-  });
-
-  lines.push("| " + headers.map((h, i) => padEndDisplay(h, colWidths[i])).join(" | ") + " |");
-  lines.push("| " + colWidths.map(w => "-".repeat(w)).join(" | ") + " |");
-  for (const row of rows) {
-    lines.push("| " + row.map((cell, i) => padEndDisplay(cell, colWidths[i])).join(" | ") + " |");
-  }
-  return lines;
-}

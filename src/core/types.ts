@@ -1,5 +1,7 @@
+export type AgentId = "claude-code" | "opencode" | "pi";
+
 export interface AgentInfo {
-  id: string;
+  id: AgentId;
   label: string;
   supportsColonCommands: boolean;
   commandsDir: string;
@@ -9,7 +11,6 @@ export interface AgentInfo {
   interactiveTool?: "askuserquestion" | "question" | "partial" | "none";
   settingsFile?: string;
   settingsContent?: Record<string, unknown>;
-  tier?: "stable" | "experimental";
 }
 
 export interface DeployOptions {
@@ -22,11 +23,12 @@ export interface DeployOptions {
 
 export interface EnvInfo {
   nodeVersion: string;
+  gitVersion: string;
   gitInstalled: boolean;
 }
 
 export interface CompatConfig {
-  compatible: { node: string; openspec: string; superpowers: string; alloy: string; schema: number };
+  compatible: { node: string; git: string; openspec: string; superpowers: string; alloy: string; schema: number };
   install: { openspec: string; superpowers: string };
 }
 
@@ -104,5 +106,9 @@ export interface ProjectConfig {
   schema: "alloy";
   alloy: {
     main_branch?: string;
+    /** init 时选择的 scope,update 读取。project | global */
+    install_scope?: "project" | "global";
+    /** init 时选择的目标 agent id 列表,update 读取 */
+    target_agents?: string[];
   };
 }

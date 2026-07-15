@@ -33,6 +33,9 @@ Alloy 是一套融合 OpenSpec 和 Superpowers 的开发工作流工具。入口
 | `alloy doctor` | `[path]` | 诊断：版本兼容性、文件一致性 |
 | | `--json` | JSON 格式输出 |
 | `alloy update` | `[path]` | 自动检测 scope，重新部署 skill + schema。用户模式（npm 发布版）检查 npm registry 新版本；开发模式（本地 .git 存在）直接部署本地 dist |
+| `alloy clean` | `[path]` | 清理 init 装的产物。交互问 scope(project/global),按 scope 清理 alloy skills(+.alloy-version)/opsx/superpowers/hook/permissions 等。只清 alloy 注入部分,保留用户配置。不清 shell 补全(completion 是 alloy CLI 功能) |
+| | `--scope <project\|global>` | 清理范围,不传则交互式选择 |
+| | `--force` | 跳过确认 |
 | `alloy completion` | `[bash\|zsh\|pwsh\|powershell] [--install]` | 生成 shell 补全脚本，--install 自动注册 |
 | `alloy --version`, `-v` | | 版本号 |
 | `alloy --help`, `-h` | | 帮助 |
@@ -270,7 +273,7 @@ openspec status --change <change-name>
 
 ### 平台兼容
 
-v1 支持 8 个 AI 编码平台：Claude Code、CodeBuddy、Qoder（冒号版命令）、Cursor、OpenCode、Codex、Trae、Pi（横线版命令）。`alloy init` 交互式选择安装目标，冒号版和横线版自动生成到各平台目录。平台定义见 `src/core/agents.ts`。
+v1 支持 7 个 AI 编码平台：Claude Code、CodeBuddy、Qoder（冒号版命令）、Cursor、OpenCode、Trae、Pi（横线版命令）。`alloy init` 交互式选择安装目标，冒号版和横线版自动生成到各平台目录。平台定义见 `src/core/agents.ts`。
 
 ### 扩展点
 
@@ -356,7 +359,7 @@ install:
 
 `--scope` 控制 Alloy 和 Superpowers skill 文件的安装位置。OpenSpec CLI 始终全局安装（npm 包），`openspec/` 目录始终在项目内创建——全局共享的 skill 文件与项目级的需求追踪目录是分开的。
 
-Claude Code 的 skill 加载合并全局和项目两个来源，同名 skill **项目级优先于全局**。
+各 agent 的 skill 加载机制合并全局和项目两个来源(Claude Code `.claude/skills/`、OpenCode `.opencode/skills/`、Pi `.pi/skills/`),同名 skill **项目级优先于全局**。
 
 ```
 alloy init --scope project（默认）:
@@ -431,7 +434,7 @@ $ alloy init
 11. **安装 Superpowers** — `npx skills add obra/superpowers -y --agent claude-code`（project scope 不加 `-g`）
 12. **部署 Alloy skill + schema** — 从包复制 `skills/alloy-*/` 到各平台目录，写入 `openspec/schemas/alloy/`
 13. **更新 .gitignore** — 追加 6 条规则（`docs/superpowers/` `.claude/worktrees/` `.worktrees/` `worktrees/` `.superpowers/` `*.local.*`）
-14. **注入 agent 专有配置** — 写入 Claude Code 的 `.claude/settings.json`（`worktree.baseRef: head`）等专有配置。不再注入指令文件（CLAUDE.md / AGENTS.md / .cursor/rules/alloy.mdc）——alloy 规则通过 skill md 自我承载
+14. **注入 agent 专有配置** - 写入各 agent 的专有配置:Claude Code `.claude/settings.json`(`worktree.baseRef: head`)、OpenCode `opencode.json`+`.opencode/plugins/alloy-guard.ts`、Pi `.pi/settings.json`+`.pi/extensions/alloy-guard.ts` 等。不再注入指令文件(CLAUDE.md / AGENTS.md / .cursor/rules/alloy.mdc)--alloy 规则通过 skill md 自我承载
 15. **写入 main_branch 配置** — `openspec/config.yaml` 写入 `alloy.main_branch: <确认值>`
 16. **若 HEAD unborn：创建初始 commit 锁定 main 分支** — `git add .claude/ .gitignore openspec/config.yaml openspec/schemas/` + `git commit -m "chore: alloy init 项目初始化"`。在 main 分支创建第一个 commit，让 main 引用文件诞生，后续 `/alloy-start` 切到 feature 分支后 main 保留。若 HEAD 已有 commit 则不自动提交，文件留工作目录，提示用户自行 commit
 17. **兼容性检查** — 根据 `compat.yaml` 校验版本
@@ -442,13 +445,22 @@ $ alloy init
 ### alloy update
 
 ```
-alloy update [path]
-  → 自动检测 scope（project/global）
-  → 开发模式（包根目录有 .git）→ 直接重新部署本地 commands + schema
-  → 用户模式（npm 发布版）→ 查 npm registry 检查版本，有新版询问确认后升级 CLI
-  → 重新部署 commands + schema
-  → 更新 CLAUDE.md 中的 Alloy 标记区域（若存在）
+alloy update [path] [--force]
+  → 读 openspec/config.yaml 的 install_scope + target_agents
+  → 缺字段 → 提示跑 alloy init
+  → detectInitMatrix + plan + displayAndConfirm(展示矩阵,与 init 一致)
+  → [--force 跳过确认]
+  → [用户模式] alloy CLI 升级 + OpenSpec CLI 升级 + Superpowers 升级(scope 逻辑)
+  → [开发模式] 跳过 npm/npx 升级
+  → 刷新 opsx commands(openspec update)
+  → execute(mode="update"):刷新 skills/schema/hook/permissions/pre-commit/.gitignore/.gitattributes/settings.json
+  → 跳过一次性步骤(git init/初始 commit/shell 补全)
+  → 兼容性检查
 ```
+
+Superpowers 升级的 scope 逻辑:
+- scope=project: 直接 `npx skills add`(不带 -g)
+- scope=global: 先扫所有 agent,任一 plugin 形态就整体跳过并提示"plugin 无法通过 alloy update 升级,请手动 /plugin update";否则 `npx skills add -g`
 
 ---
 
@@ -487,7 +499,7 @@ alloy update [path]
 | 29 | `_guard --apply` 后补 commit | guard 校验 hash 一致性后自动推进 phase，但 phase 变更必须 commit（否则 worktree 清理或 squash merge 时未提交的变更会丢失）。每个阶段末尾 guard + commit 是固定模式 |
 | 30 | 归档 commit 在 worktree 清理之前 | `/opsx:archive` 执行 `mv` 移动目录但不 git commit。如果在 worktree 中，变更必须先 commit 到 worktree 分支，否则 worktree merge 时会丢失归档操作。顺序：归档 commit → worktree 清理 → 完成时间 commit → guard commit |
 | 31 | 技能使用审计持久化 | `alloy _skill log` 在每个技能加载后立即记录到 `skill_usage[]`，retrospective §4 自动读取生成全周期技能审计表。解决之前 retrospective 靠 Agent 自报（不准、会漏）的问题 |
-| 32 | 交互降级策略 | 技能文件中 `AskUserQuestion` JSON 块必须附带降级文本格式。Agent 执行时检测平台能力——支持则用原生交互组件，不支持则自动降级为结构化文本选项。确保同一流程在 8 个平台体验一致 |
+| 32 | 交互降级策略 | 技能文件中 USER_GATE 交互工具调用必须附带降级文本格式(Claude Code `AskUserQuestion`/OpenCode `question`/Pi `ctx.ui` 有原生工具,其他平台降级文本)。Agent 执行时检测平台能力--支持则用原生交互组件,不支持则自动降级为结构化文本选项。确保同一流程在多平台体验一致 |
 | 33 | HOME 目录拒绝初始化 | 主目录写入 openspec/、.gitignore 等会污染环境；可能将整个 home 变为 git 仓库。init 入口硬拦截 |
 | 34 | git init 前置到 alloy init | 守门前移，符合"CLI 守门 / Skill 信任"原则（决策 #15）。`/alloy-start` 不再兜底 git init，仅校验 |
 | 35 | `/alloy-start` 环境完整性检测扩展为完整集 | 入口检测 git/config/schema/commands 四项基础设施，任一缺失引导 `alloy init`。Skill 预检（具体技能加载）保持独立 |

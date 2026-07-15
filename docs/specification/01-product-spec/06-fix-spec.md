@@ -38,7 +38,7 @@ behaviors:
 
 ## Step 2: 根因诊断 (superpowers:systematic-debugging)
 
-├── 诊断结论：需改 spec / 命中关键词 → USER_GATE 选 (b)/(c) → 自动接续 /alloy-start <原始描述>（agent invoke Skill 工具，不让用户手动输）
+├── 诊断结论：需改 spec / 命中关键词 → USER_GATE 选 2/3. → 自动接续 /alloy-start <原始描述>（agent invoke Skill 工具，不让用户手动输）
 └── 诊断结论：代码 bug → 用户确认后进入 Step 3
 
 ## Step 3: 分支选择 + 修复（确认是代码 bug 后）

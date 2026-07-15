@@ -207,8 +207,9 @@ export async function runHealthCheck(
 
     for (const agent of KNOWN_AGENTS) {
       const agentBase = agent.commandsDir.split("/")[0];
-      const skillsDir = scope === "global" && !agent.globalOnly
-        ? join(home, agentBase, "skills")
+      const globalBase = agent.globalBase ?? agentBase;
+      const skillsDir = scope === "global"
+        ? join(home, globalBase, "skills")
         : join(projectPath, agentBase, "skills");
       const status = checkSkillsIntegrity(skillsDir);
       if (status.status === "pass") {

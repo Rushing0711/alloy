@@ -210,6 +210,55 @@ describe("detectSkill", () => {
       version: null,
     });
   });
+
+  it("scope=global 时跳过项目级,只查用户级(项目级已装也返回 user-skill 或 NOT_FOUND)", () => {
+    // 项目级和用户级都存在,但 scope=global 应跳过项目级
+    vi.mocked(existsSync).mockImplementation((p) =>
+      p === `${PROJECT}/.claude/skills/superpowers` ||
+      p === `${HOME}/.claude/skills/superpowers`
+    );
+
+    const result = detectSkill("superpowers", claudeAgent, PROJECT, "global");
+
+    expect(result.found).toBe(true);
+    expect(result.location).toBe("user-skill");
+    expect(result.path).toBe(`${HOME}/.claude/skills/superpowers`);
+  });
+
+  it("scope=global 时项目级已装但用户级未装,返回 NOT_FOUND", () => {
+    vi.mocked(existsSync).mockImplementation((p) =>
+      p === `${PROJECT}/.claude/skills/superpowers`
+    );
+
+    const result = detectSkill("superpowers", claudeAgent, PROJECT, "global");
+
+    expect(result.found).toBe(false);
+  });
+
+  it("scope=project 时只查项目级(项目级存在返回 project-skill)", () => {
+    vi.mocked(existsSync).mockImplementation((p) =>
+      p === `${PROJECT}/.claude/skills/superpowers`
+    );
+
+    const result = detectSkill("superpowers", claudeAgent, PROJECT, "project");
+
+    expect(result.found).toBe(true);
+    expect(result.location).toBe("project-skill");
+  });
+
+  it("scope=project 时项目级未装但用户级已装,返回 NOT_FOUND(不 fallback 用户级)", () => {
+    // 用户级存在,但 scope=project 应只查项目级,不 fallback
+    vi.mocked(existsSync).mockImplementation((p) =>
+      p === `${HOME}/.claude/skills/superpowers`
+    );
+
+    const result = detectSkill("superpowers", claudeAgent, PROJECT, "project");
+
+    expect(result.found).toBe(false);
+    expect(result.location).toBe(null);
+    // 确认没查用户级
+    expect(existsSync).not.toHaveBeenCalledWith(`${HOME}/.claude/skills/superpowers`);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 
 `alloy _guard branch-position` 返回异常时的修复选项。
 
-**交互规则：** 所有选项确认点均为 🔴 STOP——必须用 AskUserQuestion 等用户选择，不可自行决定。
+**交互规则：** 所有选项确认点均为 🔴 STOP——必须用平台原生交互工具等用户选择，不可自行决定。
 
 ## 异常结果与修复路径
 
@@ -10,7 +10,7 @@
 
 `.alloy.yaml` 未记录 feature_branch。这通常是 start 阶段数据写入失败——null 是状态异常，不是设计的容错。
 
-🔴 STOP: 选择修复方式——(a) 手动指定分支名 (b) 使用当前分支作为 feature_branch (c) 放弃，回退 start 阶段修复
+🔴 STOP: 选择修复方式——1. 手动指定分支名 2. 使用当前分支作为 feature_branch 3. 放弃，回退 start 阶段修复
 
 用户选择后：`alloy _state write openspec/changes/<name> feature_branch <用户确认的分支>`
 
@@ -20,16 +20,16 @@
 
 当前分支与 feature_branch 记录不一致：
 
-🔴 STOP: 选择处理方式——(a) 切换到 feature_branch（推荐） (b) 使用当前分支（更新 feature_branch 记录）
+🔴 STOP: 选择处理方式——1. 切换到 feature_branch（推荐） 2. 使用当前分支（更新 feature_branch 记录）
 
-选 (a)：`git checkout <feature_branch>` → 重新运行 `alloy _guard branch-position`
-选 (b)：`alloy _state write openspec/changes/<name> feature_branch <current_branch>` → 继续
+选 1：`git checkout <feature_branch>` → 重新运行 `alloy _guard branch-position`
+选 2：`alloy _state write openspec/changes/<name> feature_branch <current_branch>` → 继续
 
 ### feature-lost:\<feature\>
 
 feature_branch 记录在 .alloy.yaml 但本地不存在：
 
-🔴 STOP: 选择修复方式——(a) 从远程拉取 (b) 手动指定其他分支 (c) 放弃，回退 start 阶段修复
+🔴 STOP: 选择修复方式——1. 从远程拉取 2. 手动指定其他分支 3. 放弃，回退 start 阶段修复
 
 ## 跨文件复用
 

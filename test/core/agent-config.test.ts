@@ -197,6 +197,48 @@ describe("writePermissionsConfig", () => {
     expect(settings.worktree.baseRef).toBe("head");
     expect(settings.permissions.allow).toContain("Bash(alloy *)");
   });
+
+  it("OpenCode: 文件不存在时创建,含 $schema 在第一行", async () => {
+    await writePermissionsConfig(tmpDir, "opencode");
+
+    const raw = await readFile(join(tmpDir, "opencode.json"), "utf-8");
+    const settings = JSON.parse(raw);
+    expect(settings.$schema).toBe("https://opencode.ai/config.json");
+    expect(settings.permission.bash["alloy *"]).toBe("allow");
+    // $schema 应在第一行(OpenCode 惯例,IDE 优先识别)
+    expect(raw.indexOf('"$schema"')).toBeLessThan(raw.indexOf('"permission"'));
+  });
+
+  it("OpenCode: 已有 $schema 时不覆盖(尊重用户自定义 URL)", async () => {
+    const customSchema = "https://example.com/custom-schema.json";
+    await writeFile(
+      join(tmpDir, "opencode.json"),
+      JSON.stringify({ $schema: customSchema, permission: { bash: { "existing *": "allow" } } }),
+      "utf-8"
+    );
+
+    await writePermissionsConfig(tmpDir, "opencode");
+
+    const settings = JSON.parse(await readFile(join(tmpDir, "opencode.json"), "utf-8"));
+    expect(settings.$schema).toBe(customSchema);
+    expect(settings.permission.bash["existing *"]).toBe("allow");
+    expect(settings.permission.bash["alloy *"]).toBe("allow");
+  });
+
+  it("OpenCode: 已有 opencode.json 但无 $schema 时补上", async () => {
+    await writeFile(
+      join(tmpDir, "opencode.json"),
+      JSON.stringify({ permission: { bash: { "existing *": "allow" } } }),
+      "utf-8"
+    );
+
+    await writePermissionsConfig(tmpDir, "opencode");
+
+    const settings = JSON.parse(await readFile(join(tmpDir, "opencode.json"), "utf-8"));
+    expect(settings.$schema).toBe("https://opencode.ai/config.json");
+    expect(settings.permission.bash["existing *"]).toBe("allow");
+    expect(settings.permission.bash["alloy *"]).toBe("allow");
+  });
 });
 
 describe("getPermissionSupportedAgents", () => {
@@ -269,19 +311,8 @@ describe("writeHookConfig", () => {
     const settings = JSON.parse(await readFile(join(tmpDir, ".claude/settings.json"), "utf-8"));
     const preToolUse = settings.hooks.PreToolUse;
     expect(Array.isArray(preToolUse)).toBe(true);
-    const alloyEntry = preToolUse.find((e: { matcher: string }) => e.matcher === "Write|Edit");
+    const alloyEntry = preToolUse.find((e: { matcher: string }) => e.matcher === "Write|Edit|AskUserQuestion");
     expect(alloyEntry).toBeTruthy();
-    expect(alloyEntry.hooks.some((h: { command: string }) => h.command === expectedHookCommand)).toBe(true);
-  });
-
-  it("Codex: 写入 .codex/settings.json", async () => {
-    const written = await writeHookConfig(tmpDir, "codex");
-    expect(written).toBe(true);
-
-    const settings = JSON.parse(await readFile(join(tmpDir, ".codex/settings.json"), "utf-8"));
-    const preToolUse = settings.hooks.PreToolUse;
-    expect(Array.isArray(preToolUse)).toBe(true);
-    const alloyEntry = preToolUse.find((e: { matcher: string }) => e.matcher === "Write|Edit");
     expect(alloyEntry.hooks.some((h: { command: string }) => h.command === expectedHookCommand)).toBe(true);
   });
 
@@ -297,7 +328,7 @@ describe("writeHookConfig", () => {
     const settings = JSON.parse(await readFile(join(tmpDir, ".claude/settings.json"), "utf-8"));
     const preToolUse = settings.hooks.PreToolUse;
     const alloyEntries = preToolUse.filter((e: { matcher: string; hooks: { command: string }[] }) =>
-      e.matcher === "Write|Edit" && e.hooks.some((h) => h.command === expectedHookCommand)
+      e.matcher === "Write|Edit|AskUserQuestion" && e.hooks.some((h) => h.command === expectedHookCommand)
     );
     expect(alloyEntries).toHaveLength(1);
   });
@@ -329,7 +360,7 @@ describe("writeHookConfig", () => {
     await writeHookConfig(tmpDir, "claude-code");
 
     const settings = JSON.parse(await readFile(join(tmpDir, ".claude/settings.json"), "utf-8"));
-    const entry = settings.hooks.PreToolUse.find((e: { matcher: string }) => e.matcher === "Write|Edit");
+    const entry = settings.hooks.PreToolUse.find((e: { matcher: string }) => e.matcher === "Write|Edit|AskUserQuestion");
     expect(entry.hooks).toHaveLength(2);
     expect(entry.hooks.some((h: { command: string }) => h.command === "other-hook")).toBe(true);
     expect(entry.hooks.some((h: { command: string }) => h.command === expectedHookCommand)).toBe(true);
@@ -337,13 +368,12 @@ describe("writeHookConfig", () => {
 });
 
 describe("getHookSupportedAgents", () => {
-  it("返回支持 hook 闸门的 agent id 列表(4 个)", () => {
+  it("返回支持 hook 闸门的 agent id 列表(3 个)", () => {
     const agents = getHookSupportedAgents();
     expect(agents).toContain("claude-code");
-    expect(agents).toContain("codex");
     expect(agents).toContain("pi");
     expect(agents).toContain("opencode");
-    expect(agents).toHaveLength(4);
+    expect(agents).toHaveLength(3);
   });
 });
 
@@ -394,15 +424,17 @@ describe("writeOpenCodeHookTools / hasOpenCodeHookTools", () => {
     expect(await hasOpenCodeHookTools(tmpDir)).toBe(false);
   });
 
-  it("writeOpenCodeHookTools -> 写 write.ts + edit.ts + hasOpenCodeHookTools -> true", async () => {
+  it("writeOpenCodeHookTools -> 写 alloy-guard.ts plugin + hasOpenCodeHookTools -> true", async () => {
     await writeOpenCodeHookTools(tmpDir);
     expect(await hasOpenCodeHookTools(tmpDir)).toBe(true);
-    const writeContent = await readFile(join(tmpDir, ".opencode", "tools", "write.ts"), "utf-8");
-    expect(writeContent).toContain("_hook-guard");
-    expect(writeContent).toContain("Write");
-    const editContent = await readFile(join(tmpDir, ".opencode", "tools", "edit.ts"), "utf-8");
-    expect(editContent).toContain("_hook-guard");
-    expect(editContent).toContain("Edit");
+    const pluginContent = await readFile(join(tmpDir, ".opencode", "plugins", "alloy-guard.ts"), "utf-8");
+    expect(pluginContent).toContain("_hook-guard");
+    expect(pluginContent).toContain("tool.execute.before");
+    expect(pluginContent).toContain("session.idle");
+    expect(pluginContent).toContain("Write");
+    expect(pluginContent).toContain("Edit");
+    // OpenCode write/edit 工具参数名是 filePath(驼峰),plugin 必须取这个字段才能拦截
+    expect(pluginContent).toContain("args?.filePath");
   });
 
   it("writeOpenCodeHookTools 幂等", async () => {

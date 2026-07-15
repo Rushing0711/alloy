@@ -273,8 +273,8 @@ describe("runHealthCheck", () => {
     // 所有 agent 的 skills/alloy-plan/SKILL.md 缺失，但 skills/ 源码目录完整
     vi.mocked(existsSync).mockImplementation((path: any) => {
       const pathStr = String(path);
-      // agent 目录(.claude/.codex/.opencode/.pi)下的 skills/alloy-plan 缺失
-      if (/\.(claude|codex|opencode|pi)\/skills\/alloy-plan\/SKILL\.md/.test(pathStr)) {
+      // agent 目录(.claude/.opencode/.pi/.agents)下的 skills/alloy-plan 缺失
+      if (/\.(claude|opencode|pi|agents)\/skills\/alloy-plan\/SKILL\.md/.test(pathStr)) {
         return false;
       }
       return true;

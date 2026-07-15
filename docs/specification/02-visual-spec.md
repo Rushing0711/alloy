@@ -97,8 +97,8 @@ Alloy 终端输出使用四种基础格式，覆盖所有阶段的进度提示�
 > [制品完整内容]
 >
 > → 下一个：tasks（依赖 specs + design）
-> → (a) 确认，锁定 specs 并继续 tasks
-> → (b) 需要调整 — 说明修改点
+> → 1. 确认，锁定 specs 并继续 tasks
+> → 2. 需要调整 — 说明修改点
 ```
 
 ### 4. `→` 前缀行
@@ -196,13 +196,13 @@ Alloy 终端输出使用四种基础格式，覆盖所有阶段的进度提示�
 
 ## 三、制品审查窗口
 
-Plan、Apply 阶段每个制品生成后展示审查窗口。审查窗口使用块引用格式（终端有底色渲染），仅在用户选 (a) 后才 hash 锁定并 commit。
+Plan、Apply 阶段每个制品生成后展示审查窗口。审查窗口使用块引用格式（终端有底色渲染），仅在用户选 1 后才 hash 锁定并 commit。
 
 **规则（所有制品通用）：**
 - 首行 `> 制品 [N/M] <name> ✓ 完成`
 - `[N/M]` 是**阶段内局部编号**（plan 阶段 M=5，apply 阶段 M=2），不是全局编号
 - 中间展示制品完整内容
-- `→ 下一个：<下一制品名>` + `→ (a)` `→ (b)`
+- `→ 下一个：<下一制品名>` + `→ 1` `→ 2`
 - 审查窗口只展示制品内容，不打印 OpenSpec schema 的 instructions 模板
 - **不要输出全局制品进度**（如"0/8 artifacts 完成"或"N/8 制品完成"）。全局进度由 `alloy status` 命令管理
 
@@ -225,8 +225,8 @@ Plan、Apply 阶段每个制品生成后展示审查窗口。审查窗口使用�
 >
 > → 下一个：specs（依赖 proposal）
 >
-> → (a) 确认，锁定 design 并继续 specs
-> → (b) 需要调整 — 说明修改点
+> → 1. 确认，锁定 design 并继续 specs
+> → 2. 需要调整 — 说明修改点
 ```
 
 ### Apply 阶段 — 2 个审查窗口
@@ -245,8 +245,8 @@ Plan、Apply 阶段每个制品生成后展示审查窗口。审查窗口使用�
 >
 > → 下一个：retrospective
 >
-> → (a) 确认，锁定 verify 并继续 retrospective
-> → (b) 需要调整 — 说明修改点
+> → 1. 确认，锁定 verify 并继续 retrospective
+> → 2. 需要调整 — 说明修改点
 ```
 
 ### 例外
@@ -522,26 +522,53 @@ Alloy · Bug 修复
 
 ```
 
-**Claude Code：**
+**Claude Code（`AskUserQuestion`）：**
 ```
 AskUserQuestion: {
   questions: [{
     question: "确认以上诊断结论？",
     header: "诊断确认",
     options: [
-      { label: "(a) 确认，进入修复", description: "根因确认无误，进入修复路径" },
-      { label: "(b) 重新诊断", description: "回到 Step 2 重新分析" }
+      { label: "1. 确认，进入修复", description: "根因确认无误，进入修复路径" },
+      { label: "2. 重新诊断", description: "回到 Step 2 重新分析" }
     ],
     multiSelect: false
   }]
 }
 ```
 
-**其他平台（降级为文本选项）：**
+**OpenCode（`question` 工具，字段名 `multiple` 非 `multiSelect`，可选 `custom`）：**
 ```
-> → (a) 确认，进入修复 — 根因确认无误，进入修复路径
-> → (b) 重新诊断 — 回到 Step 2 重新分析
-> 请输入 a 或 b：
+question: {
+  questions: [{
+    question: "确认以上诊断结论？",
+    header: "诊断确认",
+    options: [
+      { label: "1. 确认，进入修复", description: "根因确认无误，进入修复路径" },
+      { label: "2. 重新诊断", description: "回到 Step 2 重新分析" }
+    ],
+    multiple: false,
+    custom: false
+  }]
+}
+```
+
+**Pi（`ctx.ui` select，通过 alloy ask-question 扩展）：**
+```
+ctx.ui.select({
+  title: "确认以上诊断结论？",
+  options: [
+    { label: "1. 确认，进入修复", value: "1" },
+    { label: "2. 重新诊断", value: "2" }
+  ]
+})
+```
+
+**无原生交互工具的平台（Copilot CLI / Gemini CLI,降级为文本选项）：**
+```
+> -> 1. 确认，进入修复 - 根因确认无误，进入修复路径
+> -> 2. 重新诊断 - 回到 Step 2 重新分析
+> 请输入 1 或 2：
 ```
 
 ```

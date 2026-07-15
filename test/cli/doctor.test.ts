@@ -278,22 +278,14 @@ describe("detectAgentProtection", () => {
     expect(pi!.hookConfigured).toBe(false);
   });
 
-  it("Codex 装了 skill + hook -> protectionLevel = hook", async () => {
-    await installSkill(".codex");
-    await writeHookConfig(tmpDir, "codex");
-    const result = await detectAgentProtection(tmpDir);
-    const codex = result.find((a) => a.agentId === "codex");
-    expect(codex!.protectionLevel).toBe("hook");
-  });
-
   it("多个 agent 装了 skill -> 都显示", async () => {
     await installSkill(".claude");
-    await installSkill(".codex");
+    await installSkill(".opencode");
     await installSkill(".pi");
     const result = await detectAgentProtection(tmpDir);
     const ids = result.map((a) => a.agentId);
     expect(ids).toContain("claude-code");
-    expect(ids).toContain("codex");
+    expect(ids).toContain("opencode");
     expect(ids).toContain("pi");
   });
 });

@@ -1,9 +1,23 @@
 // src/cli/commands/internal/stop-guard.ts
 import { readFileSync } from "node:fs";
+import { detectAgent } from "../../../core/agents.js";
+import type { AgentId } from "../../../core/types.js";
 
 interface StopHookInput {
   last_assistant_message?: string;
   stop_hook_active?: boolean;
+}
+
+/**
+ * 根据 agent 返回 USER_GATE 应用的交互工具提示。
+ */
+function getAgentToolHint(agent: AgentId | null): string {
+  switch (agent) {
+    case "claude-code": return "AskUserQuestion 工具";
+    case "opencode": return "question 工具";
+    case "pi": return "ctx.ui select(alloy ask-question 扩展)";
+    default: return "平台原生交互工具(AskUserQuestion / question / ctx.ui)";
+  }
 }
 
 /**
@@ -36,7 +50,7 @@ export function isUserGateTextOutput(text: string): boolean {
  */
 export function evaluateStopGuard(
   rawStdin: string,
-  env: Record<string, string>
+  env: Record<string, string | undefined>
 ): { exitCode: number; message?: string } {
   // 逃生阀
   if (env.ALLOY_FORCE_STOP === "1") return { exitCode: 0 };
@@ -56,11 +70,14 @@ export function evaluateStopGuard(
   const lastMessage = input.last_assistant_message ?? "";
   if (!lastMessage) return { exitCode: 0 };
 
+  // 感知当前 agent(见 agents.ts detectAgent)
+  const agent = detectAgent(env);
+
   if (isUserGateTextOutput(lastMessage)) {
+    const toolHint = getAgentToolHint(agent);
     return {
       exitCode: 2,
-      message:
-        "⛔ [alloy stop-guard] 检测到你在 USER_GATE 用纯文本输出 (a)/(b) 选项。alloy 流程要求 USER_GATE 首次呈现必须是 AskUserQuestion 工具调用,不能让用户回复 a/b。请立即改用 AskUserQuestion 工具提问。如确需绕过(仅限修复畸形状态),设置 ALLOY_FORCE_STOP=1。",
+      message: `⛔ [alloy stop-guard] 检测到你在 USER_GATE 用纯文本输出 (a)/(b) 选项。alloy 流程要求 USER_GATE 首次呈现必须是 ${toolHint} 调用,不能让用户回复 a/b。请立即改用 ${toolHint} 提问。如确需绕过(仅限修复畸形状态),设置 ALLOY_FORCE_STOP=1。`,
     };
   }
 
@@ -91,7 +108,7 @@ function readStdin(): string {
  */
 export async function stopGuardCommand(args: string[]): Promise<void> {
   const raw = readStdin();
-  const result = evaluateStopGuard(raw, process.env as Record<string, string>);
+  const result = evaluateStopGuard(raw, process.env);
   if (result.message) {
     process.stderr.write(result.message);
   }

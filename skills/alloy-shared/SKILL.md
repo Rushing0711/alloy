@@ -22,3 +22,4 @@ Alloy 共享背景知识。本 skill 不直接执行，只被其他 alloy skill 
 | 改 spec 后同步 | references/spec-sync.md | spec 同步规则 |
 | 校验分支状态 | references/branch-validation.md | 分支校验逻辑 |
 | 调用 alloy CLI 命令前查正确用法 | references/cli-reference.md | CLI 命令速查（语法/参数/选项/易错点） |
+| 调用 opsx command(explore/new/continue/verify/archive)前查触发方式 | references/opsx-commands.md | opsx command 多 agent 触发规则(冒号 vs 横线) |

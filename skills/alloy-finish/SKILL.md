@@ -28,7 +28,7 @@ phase != archived / 分支不存在 / merge 精确确认未通过 / spec 已归�
 
 **核心原则：只做代码合入，不碰 spec。** spec 已归档封存，任何 spec 级变更应走新 change（[HARD_STOP]）。
 
-**交互规则：** `🔴 STOP` 等价 `USER_GATE`，首次呈现即必须调用平台原生交互工具--禁"先文本展示 (a)/(b) 再等待用户打字"。Claude Code 用 `AskUserQuestion`；其他平台按 `alloy-shared/references/interaction-style.md` §平台工具对照 降级为结构化文本选项。含"沉默 ≠ 授权"通用禁令--禁批量打包、禁基于内容跳过、禁 agent 回填精确字符串。跳过任何 USER_GATE = 违反 Iron Law。
+**交互规则：** `🔴 STOP` 等价 `USER_GATE`，首次呈现即必须调用平台原生交互工具--禁"先文本展示 1./2. 再等待用户打字"。Claude Code 用 `AskUserQuestion`,OpenCode 用 `question` 工具(字段名 `multiple` 非 `multiSelect`,可选 `custom`),Pi 用 extension `ctx.ui`(通过 alloy ask-question 扩展);Copilot CLI / Gemini CLI 无原生交互工具,降级为结构化文本选项。三平台调用示例见 `alloy-shared/references/interaction-style.md` §审查窗口标准模式。含"沉默 ≠ 授权"通用禁令--禁批量打包、禁基于内容跳过、禁 agent 回填精确字符串。跳过任何 USER_GATE = 违反 Iron Law。
 
 **状态符号：** `⛔` = HARD_STOP / PRECONDITION_FAIL，`🔴` = USER_GATE，`⚠️` = WARN（视觉规范 §七）。
 
@@ -52,7 +52,7 @@ phase != archived / 分支不存在 / merge 精确确认未通过 / spec 已归�
 | "feature_branch 看起来像 main，应该没事" | branch -D 变量未替换或与主分支同名 = 强删主分支引用，灾难性。必须 PRECONDITION_FAIL（task #25）。 |
 | "另一个 change 也在 finish，并行做完更快" | 多 change 并行 finish = squash 顺序与 archive 顺序错配，主分支提交历史错乱。必须串行（task #14）。 |
 | "phase 已经推进到 finished 了，merge 失败让用户自己回退太麻烦" | 推进早于不可逆操作 + 失败 -> 用户手动按 §5.2.3 路径 B 回退 phase。agent 不得自动 reset --hard 清场（§3.5.1）。 |
-| "先文本列 (a)/(b) 选项让用户思考，再调 AskUserQuestion 双保险" | ⛔ HARD_STOP：双重呈现违规--首次呈现必须是 AskUserQuestion 工具调用,不是文本。哪怕"先展示选项让用户思考"、"文本+工具双保险",也算违反。常见模式:thinking 决策"用 AskUserQuestion"但执行时先输出纯文本选项(决策->执行断裂)。 |
+| "先文本列 1./2. 选项让用户思考，再调 AskUserQuestion 双保险" | ⛔ HARD_STOP：双重呈现违规--首次呈现必须是平台原生交互工具调用,不是文本。哪怕"先展示选项让用户思考"、"文本+工具双保险",也算违反。常见模式:thinking 决策"用 AskUserQuestion"但执行时先输出纯文本选项(决策->执行断裂)。 |
 
 ---
 
@@ -87,7 +87,7 @@ alloy _phase start "$CHANGE_DIR" finish
 
 **0. Skill 预检（PRECONDITION_FAIL）：** skill: finishing-a-development-branch
 
-读取 `alloy-shared/references/skill-precheck.md` 检测。不可用 -> 输出 `⛔ PRECONDITION_FAIL: skill 缺失`，引导 `alloy init` 后退出。**不存在降级处理**--agent 不得自行模拟 finishing-a-development-branch 行为。
+调 `alloy _precheck --skill "finishing-a-development-branch"` 检测(多 agent 适配,详见 `alloy-shared/references/skill-precheck.md`)。不可用 -> 输出 `⛔ PRECONDITION_FAIL: skill 缺失`，引导 `alloy init` 后退出。**不存在降级处理**--agent 不得自行模拟 finishing-a-development-branch 行为。
 
 **1. phase 检查（PRECONDITION_FAIL）：**
 ```bash
@@ -145,16 +145,16 @@ echo "✓ checkpoint tag 已全部清理"
 
 **REQUIRED SUB-SKILL:** Use superpowers:finishing-a-development-branch
 
-🔴 USER_GATE（必须 AskUserQuestion 工具调用,首次呈现即调--禁先文本列选项）: 选择处理方式
+🔴 USER_GATE（必须平台原生交互工具调用,首次呈现即调--禁先文本列选项）: 选择处理方式
 
-> ⛔ [HARD_STOP] 必须用 AskUserQuestion 工具调用--禁先文本输出"1. 本地 merge / 2. 创建 PR / 3. 保持分支"再调工具。
-> 违反字面 = 违反精神:哪怕"先展示选项让用户思考"、"文本+工具双保险",也算违反--首次呈现必须是 AskUserQuestion 工具调用,不是文本。
+> ⛔ [HARD_STOP] 必须用平台原生交互工具调用--禁先文本输出"1. 本地 merge / 2. 创建 PR / 3. 保持分支"再调工具。
+> 违反字面 = 违反精神:哪怕"先展示选项让用户思考"、"文本+工具双保险",也算违反--首次呈现必须是平台原生交互工具调用,不是文本。
 > 常见违规模式:agent 先输出"1. 本地 merge / 2. 创建 PR / 3. 保持分支"文本,再调 AskUserQuestion--这是双重呈现,违反首次呈现原则。
 
 选项:
-- (a) 本地 merge -- 合入基础分支
-- (b) 创建 PR -- 提交代码审查
-- (c) 保持分支 -- 暂不处理
+- 1. 本地 merge -- 合入基础分支
+- 2. 创建 PR -- 提交代码审查
+- 3. 保持分支 -- 暂不处理
 
 > ⛔ [HARD_STOP] 禁增设第 4 选项"放弃工作"--放弃走 `/alloy-discard <name>` 独立命令,不在 finish 阶段。
 > 违反字面 = 违反精神：哪怕"用户想放弃,顺便在 finish 里给选项方便",也算违反--finish 是封存阶段（merge/PR/保持）,放弃是独立流程（删分支+删 change 目录）,混在一起 = 职责不清。引导用户运行 `/alloy-discard` 而非在 finish 增设选项。
@@ -233,9 +233,9 @@ else
     echo "  失败原因可能：远端无法访问 / 本地 main 偏离 / 凭证过期"
     echo ""
     echo "  🔴 USER_GATE: 选择处理方式"
-    echo "    (a) 重试--用户手动修复后再次运行 /alloy-finish"
-    echo "    (b) 跳过 pull 直接 squash（仅当用户确认 main 已是最新--风险自负）"
-    echo "    (c) 中止 finish--保持当前分支，回退 phase："
+    echo "    1. 重试--用户手动修复后再次运行 /alloy-finish"
+    echo "    2. 跳过 pull 直接 squash（仅当用户确认 main 已是最新--风险自负）"
+    echo "    3. 中止 finish--保持当前分支，回退 phase："
     echo "        alloy _state set \"$CHANGE_DIR\" phase archived"
     echo ""
     echo "  禁止：agent 自动运行 git reset --hard origin/<main_branch> 强制对齐。"
@@ -255,12 +255,14 @@ git merge --squash <feature_branch>
 # 2. COMMIT_LOG 范围必须 <main_branch>..<feature_branch>,禁 git log <feature_branch>（会包含 main 历史）
 # 违反字面 = 违反精神：哪怕"feat 更准确描述内容",也禁--合入 commit 用 chore 是惯例
 COMMIT_LOG=$(git log <main_branch>..<feature_branch> --format="* %s")
-git commit -m "$(cat <<EOF
+# 用 -F 文件方式提交,避免 heredoc + 变量展开在部分 agent 平台(Claude Code Bash 用 eval)触发 "command too long"
+cat > .git/squash-merge-msg.txt <<EOF
 chore(<name>): 合入 main（squash merge）
 
 ${COMMIT_LOG}
 EOF
-)"
+git commit -F .git/squash-merge-msg.txt
+rm -f .git/squash-merge-msg.txt
 
 # [task #13 备注] squash merge 产生新 commit hash，但 retrospective.md / verify.md / plans.md 等
 # 制品 hash 已在 archive 阶段被 alloy _record 锁定到 records--records 记录的是制品文件 SHA-256，
@@ -308,11 +310,11 @@ PR 审查反馈的处理规范：
 - **spec 变更 = 新 change（HARD_STOP）** -- 当前 spec 已归档封存。当代码修改可能影响 spec 行为时，必须 🔴 USER_GATE：
 
   > AskUserQuestion: PR 审查反馈是否需要 spec 级修改？
-  > (a) 不需要--仅代码调整不影响行为
-  > (b) 需要--退出 finish，运行 /alloy-start <new-name> 开新 change
-  > (c) 暂不决定--保持 PR 不合入，等待澄清
+  > 1. 不需要--仅代码调整不影响行为
+  > 2. 需要--退出 finish，运行 /alloy-start <new-name> 开新 change
+  > 3. 暂不决定--保持 PR 不合入，等待澄清
   >
-  > 选 (b)：[HARD_STOP] 禁止 agent 直接修改已归档 spec。退出 skill。
+  > 选 2：[HARD_STOP] 禁止 agent 直接修改已归档 spec。退出 skill。
 
 > ⛔ [HARD_STOP §3.5.1] PR 推送（`git push`）失败时禁自动 `git push --force` / `git push --force-with-lease` / `git reset --hard` / `git checkout .` 清场。
 > 违反字面 = 违反精神：哪怕"远端分歧了覆盖一下",也算违反--force push 会覆盖别人推送的提交,必须报告推送失败现场让用户决策（手动 pull rebase 或调整 commit）。PR 创建委托给 `superpowers:finishing-a-development-branch` 技能,但推送失败禁令在本 skill 同样适用。

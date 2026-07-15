@@ -55,8 +55,8 @@ alloy doctor [path] [--json]
      └── git worktree list 中有孤立 worktree → ⚠️ 提示清理
 
   3. Agent 保护层级(检测项目装了哪些 agent + 各 agent 的保护):
-     - hook 真闸门:装了 PreToolUse hook(Claude Code/Codex,绝对路径正确)
-     - 仅 skill(无 hook,保护降级):装了 alloy skill 但无 hook(Pi/OpenCode 等,或 Claude Code 未装 hook / hook 配置无效)
+     - hook 真闸门:装了 PreToolUse 等价 hook(Claude Code 的 PreToolUse,OpenCode 的 plugin tool.execute.before,Pi 的 tool_call 扩展,绝对路径正确)
+     - 仅 skill(无 hook,保护降级):装了 alloy skill 但无 hook(任一 agent 未装 hook 或 hook 配置无效)
      - 检测逻辑:遍历 KNOWN_AGENTS,<agentDir>/skills/alloy-start/SKILL.md 存在 = 装了 skill;hasHookConfig 严格检测绝对路径 hook
 
 --json: 以 JSON 格式输出 healthResults + consistencyWarnings + agentProtection
@@ -70,17 +70,40 @@ alloy doctor [path] [--json]
 alloy init [path] [--scope <project|global>] [--agents <id,id,...>] [--force]
 ```
 
-选项：
-- `--scope <project|global>`：安装范围，默认 `project`
-- `--agents <id,id,...>`：非交互式指定目标 agent（逗号分隔）。可用 agent：`claude-code, codex, opencode, pi`
-- `--force`：强制覆盖已装产物，跳过执行清单确认（breaking change 也直接执行）
+选项:
+- `--scope <project|global>`:安装范围,默认 `project`(交互式选择)
+- `--agents <id,id,...>`:非交互式指定目标 agent(逗号分隔)。可用 agent:`claude-code, opencode, pi`
+- `--force`:强制跳过所有确认(含 breaking 双重确认),直接执行
 
-版本管理：
+4 阶段流程:
 
-- **`.alloy-version`**：`deploySkills` 时在 `<skills 目标目录>/.alloy-version` 写入当前 alloy 包版本（如 `0.4.0`）。再次 `init` 时读取该文件，用 semver 比对判断升级状态（可升级 / breaking）
-- **agent 级产物状态矩阵**：检测每个目标 agent 的 5 类产物（alloy skills / opsx commands / hook / permissions / Superpowers），表格显示当前状态。版本化产物标注 `✓ {version}` / `⚠️ {version}(可升级)` / `⚠️ {version}(breaking)`；非版本化产物标注 `✓` / `✗`
-- **breaking 判定**：major 变更（如 `1.x -> 2.x`）或 `0.x` 阶段任何 minor 变更（semver 0.x 约定）视为 breaking。Superpowers v5 -> v6 跨 major 视为 breaking
-- **确认逻辑**：`--force` 跳过确认；默认兼容升级默认 Yes、breaking 升级默认 No，用户拒绝则 `exit 0`，项目目录零变化
+1. **采集(collect)**:无交互,只读检测
+   - Node 18+ / Git 2.20+ 硬校验(compat.yaml),不满足 exit(1)
+   - 目录拒绝:$HOME + $HOME 下隐藏目录(以 . 开头),不满足 exit(1)
+   - git 仓库状态:是否存在 / HEAD 是否 unborn / 已有 main_branch(从 openspec/config.yaml)
+   - OpenSpec CLI 版本:是否需升级(不满足 compat.yaml)
+
+2. **选择**:3 个交互
+   - 范围(scope):Project / Global,默认 Project
+   - 目标 agent(targetAgents):多选,3 个 agent(claude-code/opencode/pi)
+   - 主分支名(mainBranch):已配置跳过,否则检测值/自定义
+
+3. **规划 + 展示 + 确认**:无交互规划 + 1 个确认
+   - agent 矩阵(动作标注):agent × 5 类产物(OpenSpec Commands / Superpowers Skills / Alloy Skills / hooks / permissions),标注将装/将升级/breaking/skip
+   - 项目资源列表:openspec/ / .gitignore / .gitattributes / pre-commit / settings.json / shell 补全 / git init / 初始 commit
+   - breaking 警告(如有):不满足 compat.yaml 约束的产物
+   - 确认逻辑:无 breaking 默认 Yes;有 breaking 双重确认默认 No;--force 跳过
+
+4. **执行(execute)**:幂等
+   - 按 ActionPlan 执行,每步检测已有 -> 决定动作
+   - 硬错误(git init/OpenSpec CLI/openspec init 失败)exit(1)
+   - 软错误(Superpowers 部分失败/permissions/补全失败)warn 继续
+   - OpenCode command wrapper:目标 agent 含 opencode 时,额外在 `.opencode/commands/`(project)或 `~/.config/opencode/commands/`(global)装 8 个 `alloy-{start,plan,apply,archive,finish,fix,status,discard}.md` wrapper。OpenCode 的 `/` 只列 commands,skills 不在 `/` 列表(需 agent 调 `skill({ name })` 工具加载);wrapper 内容指示 agent 调 skill 工具加载对应 alloy skill,从而 `/alloy-start` 等 slash command 能间接触发 skill
+
+版本管理:
+- **`.alloy-version`**:`deploySkills` 时写入当前 alloy 包版本。再次 `init` 时用 semver.satisfies 判断兼容性(compat.yaml `compatible.alloy`)
+- **compat.yaml 为准**:所有版本兼容性判断用 `semver.satisfies(version, constraint)`,废弃 semver 约定(0.x breaking/跨 major breaking)
+- **breaking 判定**:不满足 compat.yaml 约束(含低于最低和高于最高)= breaking
 
 ## alloy update
 
@@ -105,6 +128,8 @@ alloy init [path] [--scope <project|global>] [--agents <id,id,...>] [--force]
 | `alloy _archive` | `<change-dir>` | 归档原子命令:调用 openspec archive CLI + 校验 Delta Spec promote + 校验目录移动。agent 禁自行 mkdir/cp/mv 模拟 |
 | `alloy _worktree-cleanup` | `<change-dir>` | worktree 清理原子命令:merge worktree 分支到 feature + remove worktree + branch -d + worktree_merged_at 记录。CLI 自己从 worktree 分支(`worktree-<change-name>`)读 state(用 `git show`),不依赖 agent 传参。agent 禁自行 git merge / worktree remove / branch -d 模拟。worktree remove 失败时,untracked 文件自动 `--force`(未进 git,删除不丢 commit);tracked 文件修改(非 .alloy.yaml)HARD_STOP 保护用户代码 |
 | `alloy _spec-audit` | — | spec 审计工具,检测 skill frontmatter 与 spec 的 behaviors 字段漂移。详见 `alloy _spec-audit --help` |
-| `alloy _hook-guard` | - | hook 适配器(Claude Code/Codex 的 PreToolUse,Pi 的 tool_call 扩展,OpenCode 的 custom tool)。从 stdin 读 JSON,判定 Write/Edit 是否允许,exit 0(放行)/2(拦截)。由 `alloy init` 自动装到 `.claude/settings.json`/`.codex/settings.json`(PreToolUse)/`.pi/extensions/alloy-guard.ts`(tool_call 扩展)/`.opencode/tools/write.ts+edit.ts`(custom tool)。拦截 alloy 项目非 apply/finishing/finished 阶段写源码(含无活跃 change,`src/`/`scripts/` 等),白名单放行(`openspec/`/`.alloy.yaml`/`.claude/`/`docs/`/`*.md` 等)。逃生阀 `ALLOY_FORCE_WRITE=1` |
+| `alloy _hook-guard` | - | hook 适配器(Claude Code 的 PreToolUse,OpenCode 的 plugin tool.execute.before,Pi 的 tool_call 扩展)。从 stdin 读 JSON,判定 Write/Edit 是否允许,exit 0(放行)/2(拦截)。由 `alloy init` 自动装到 `.claude/settings.json`(PreToolUse)/`.opencode/plugins/alloy-guard.ts`(plugin)/`.pi/extensions/alloy-guard.ts`(tool_call 扩展)。拦截 alloy 项目非 apply/finishing/finished 阶段写源码(含无活跃 change,`src/`/`scripts/` 等),白名单放行(`openspec/`/`.alloy.yaml`/`.claude/`/`docs/`/`*.md` 等)。逃生阀 `ALLOY_FORCE_WRITE=1` |
 | `alloy _pre-commit-check` | - | git pre-commit hook 适配器。读暂存文件(`git diff --cached --name-only`)+ 调 guardCheck 判定,exit 0(放行)/1(拦截)。由 `alloy init` 自动装到 `.git/hooks/pre-commit`。兜底 PreToolUse hook 盲区(agent 用 Bash 写文件绕过 Write/Edit)。逃生阀 `ALLOY_FORCE_WRITE=1` |
-| `alloy _stop-guard` | - | Stop hook 适配器(仅 Claude Code)。从 stdin 读 `last_assistant_message`,检测 USER_GATE 文本输出模式(🔴 USER_GATE 或 (a)/(b)+确认/选项/选择),命中 exit 2 + stderr 阻止 agent 结束,stderr 反馈给 agent 改用 AskUserQuestion。解决弱模型用文本输出代替 AskUserQuestion 的盲区(hook-guard 管不到,不写源码不触发)。由 `alloy init` 自动装到 `.claude/settings.json` 的 `hooks.Stop`。逃生阀 `ALLOY_FORCE_STOP=1` |
+| `alloy _stop-guard` | - | Stop hook 适配器(Claude Code 的 settings.json Stop hook,OpenCode 的 plugin session.idle,Pi 的 agent_settled 扩展)。从 stdin 读 `last_assistant_message`,检测 USER_GATE 文本输出模式(🔴 USER_GATE 或 1./2.+确认/选项/选择),命中 exit 2 + stderr 阻止 agent 结束,stderr 反馈给 agent 改用平台原生交互工具。解决弱模型用文本输出代替平台原生交互工具的盲区(hook-guard 管不到,不写源码不触发)。由 `alloy init` 自动装到 `.claude/settings.json` 的 `hooks.Stop`,OpenCode plugin 的 `session.idle`,Pi extension 的 `agent_settled` 事件。逃生阀 `ALLOY_FORCE_STOP=1` |
+| `alloy _precheck` | `--cmd <空格分隔>` `--skill <空格分隔>` | Skill/Command 预检(多 agent 适配)。读 `openspec/config.yaml` 的 `target_agents`,对每个 agent 检测对应路径:cmd 查横线格式(`opsx-explore.md`)或斜杠格式(`opsx/explore.md`)两种文件名;skill 复用 `detectSkill`(查 project skill -> user skill -> user plugin)。全部就绪 exit 0,任一缺失 exit 1 + 引导 `alloy init`。被 alloy-start/plan/apply/archive/finish/fix 在 PRECONDITION_FAIL 步骤调用,替代原 skill-precheck.md 写死 `.claude/` 路径的 bash 脚本(只支持 Claude Code) |
+| `alloy _infra-commit` | `[--message <msg>]` | 基础设施 commit(多 agent 适配)。读 `target_agents`,动态推导 agent 目录(`.claude/`/`.opencode/`/`.pi/` + 共享 `.agents/`)+ 项目资源(`.gitignore`/`.gitattributes`/`openspec/`/`opencode.json`/`CLAUDE.md`/`AGENTS.md`),逐个 `git add`(文件不存在跳过)+ `git commit`(幂等,无暂存跳过)。被 alloy-start 在 change 创建后调用,替代原 SKILL.md 写死 `git add .claude/` 的 bash(只支持 Claude Code) |

@@ -37,7 +37,7 @@ import { loadCompat } from "../../src/core/compat.js";
 import { getPackageRoot } from "../../src/utils/fs.js";
 import { detectSkill } from "../../src/core/detect-installations.js";
 import { promptConfirm } from "../../src/utils/prompt.js";
-import { installOpenSpecCli, initOpenSpecProject } from "../../src/core/openspec.js";
+import { installOpenSpecCli, initOpenSpecProject, updateOpenSpecCommands } from "../../src/core/openspec.js";
 import type { AgentInfo } from "../../src/core/types.js";
 
 const MOCK_CONFIG = {
@@ -208,6 +208,19 @@ describe("initOpenSpecProject — 检测逻辑", () => {
     expect(execSync).toHaveBeenCalled();
   });
 
+  it("force=true 时跳过已有安装检测,直接初始化", async () => {
+    vi.mocked(detectSkill).mockReturnValue({
+      found: true, location: "user-skill", path: "/home/.claude/skills/openspec-explore", version: null,
+    });
+
+    const result = await initOpenSpecProject("/fake/project", "project", [claudeAgent], true);
+
+    expect(result).toBe("initialized");
+    expect(detectSkill).not.toHaveBeenCalled();
+    expect(promptConfirm).not.toHaveBeenCalled();
+    expect(execSync).toHaveBeenCalled();
+  });
+
   it("多 agent 时遍历所有 agent 检测", async () => {
     const cursorAgent: AgentInfo = {
       id: "cursor", label: "Cursor", supportsColonCommands: false, commandsDir: ".cursor/commands/",
@@ -224,5 +237,57 @@ describe("initOpenSpecProject — 检测逻辑", () => {
 
     expect(result).toBe("skipped");
     expect(detectSkill).toHaveBeenCalledTimes(2);
+  });
+});
+
+const opencodeAgent: AgentInfo = {
+  id: "opencode",
+  label: "OpenCode",
+  supportsColonCommands: false,
+  commandsDir: ".opencode/commands/",
+};
+
+describe("updateOpenSpecCommands", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(execSync).mockReturnValue(Buffer.from(""));
+    vi.mocked(mkdtempSync).mockReturnValue("/tmp/alloy-openspec-profile-XXXXX");
+  });
+
+  it("scope=project 时调 openspec update <projectPath> --tools <agents>", async () => {
+    vi.mocked(execSync).mockReturnValue("");
+
+    const result = await updateOpenSpecCommands(
+      "/test/project",
+      [claudeAgent, opencodeAgent],
+      "project"
+    );
+
+    expect(result).toBe("updated");
+    expect(execSync).toHaveBeenCalledWith(
+      expect.stringMatching(/openspec update .* --tools claude,opencode --profile custom/),
+      expect.any(Object)
+    );
+  });
+
+  it("scope=global 时 targetPath 为 home", async () => {
+    vi.mocked(execSync).mockReturnValue("");
+    const originalHome = process.env.HOME;
+    process.env.HOME = "/fake/home";
+    try {
+      await updateOpenSpecCommands("/test/project", [claudeAgent], "global");
+      expect(execSync).toHaveBeenCalledWith(
+        expect.stringContaining('openspec update "/fake/home"'),
+        expect.any(Object)
+      );
+    } finally {
+      process.env.HOME = originalHome;
+    }
+  });
+
+  it("execSync 抛错时返回 failed", async () => {
+    vi.mocked(execSync).mockImplementation(() => { throw new Error("boom"); });
+    const result = await updateOpenSpecCommands("/test", [claudeAgent], "project");
+    expect(result).toBe("failed");
   });
 });

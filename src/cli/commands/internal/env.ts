@@ -2,7 +2,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
-import { KNOWN_AGENTS } from "../../../core/agents.js";
+import { detectDeployedAgents } from "../../../core/agents.js";
 
 /**
  * alloy _env check — 只读环境完整性检测
@@ -44,18 +44,11 @@ export async function envCheckCommand(): Promise<void> {
     missing.push("openspec/schemas/alloy/schema.yaml");
   }
 
-  // 4. Alloy skills--按 agent 命名规则检测 alloy-start/SKILL.md
-  //    复用 KNOWN_AGENTS，避免与 agents.ts 漂移
-  let cmdFound = false;
-  for (const agent of KNOWN_AGENTS) {
-    const agentBase = agent.commandsDir.split("/")[0];
-    const skillFile = join(projectPath, agentBase, "skills", "alloy-start", "SKILL.md");
-    if (existsSync(skillFile)) {
-      cmdFound = true;
-      break;
-    }
-  }
-  if (!cmdFound) {
+  // 4. Alloy skills--复用 detectDeployedAgents,与 init 部署路径(getSkillTargetDir)
+  //    共用同一真相源。
+  //    手写 commandsDir.split("/")[0] 推导会误判,必须走统一函数。
+  const deployedAgents = detectDeployedAgents("project", projectPath);
+  if (deployedAgents.length === 0) {
     missing.push("Alloy skills（未找到 alloy-start/SKILL.md，init 未为当前 agent 部署）");
   }
 

@@ -11,6 +11,7 @@ vi.mock("node:child_process", () => ({
 }));
 
 import { archiveCommand } from "../../../src/cli/commands/internal/archive.js";
+import { writeState, createInitialState } from "../../../src/cli/utils/state.js";
 
 describe("alloy _archive", () => {
   let tmpDir: string;
@@ -166,8 +167,11 @@ describe("alloy _archive", () => {
       if (cmd.startsWith("openspec archive")) {
         return "";
       }
-      if (cmd.includes("git rev-parse --show-toplevel")) {
+      if (cmd === "git rev-parse --show-toplevel") {
         return tmpDir;
+      }
+      if (cmd === "git rev-parse --git-dir" || cmd === "git rev-parse --git-common-dir") {
+        return ".git";
       }
       return "";
     });
@@ -184,5 +188,157 @@ describe("alloy _archive", () => {
     expect(exitSpy).not.toHaveBeenCalledWith(1);
 
     exitSpy.mockRestore();
+  });
+
+  it("在 worktree 内执行时 PRECONDITION_FAIL(归档变更会落在 worktree 分支)", async () => {
+    // mock:git-dir 与 git-common-dir 不同 -> 在 worktree 内
+    execSyncMock.mockImplementation((cmd: string) => {
+      if (cmd === "git rev-parse --show-toplevel") {
+        return tmpDir;
+      }
+      if (cmd === "git rev-parse --git-dir") {
+        return join(tmpDir, ".git", "worktrees", "foo");
+      }
+      if (cmd === "git rev-parse --git-common-dir") {
+        return join(tmpDir, ".git");
+      }
+      return "";
+    });
+
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await archiveCommand([changeDir]);
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errSpy.mock.calls.some(c => String(c[0]).includes("PRECONDITION_FAIL"))).toBe(true);
+    expect(errSpy.mock.calls.some(c => String(c[0]).includes("worktree 内"))).toBe(true);
+    // 验证未调用 openspec archive CLI(防御检查在 CLI 之前)
+    expect(execSyncMock).not.toHaveBeenCalledWith(
+      expect.stringMatching(/^openspec archive\s/),
+      expect.anything()
+    );
+
+    exitSpy.mockRestore();
+    errSpy.mockRestore();
+  });
+
+  it("worktree 未清理时 PRECONDITION_FAIL(worktree 分支变更未合入 feature)", async () => {
+    // 写 .alloy.yaml:worktree 非 null,worktree_merged_at 为 null
+    const state = createInitialState();
+    state.phase = "applying";
+    state.worktree = ".worktrees/test-change";
+    state.worktree_branch = "worktree-test-change";
+    state.worktree_created_at = "2026-07-14 14:00:00";
+    state.worktree_merged_at = null;
+    await writeState(changeDir, state);
+
+    // mock:不在 worktree 内(git-dir == git-common-dir),通过检查 1
+    execSyncMock.mockImplementation((cmd: string) => {
+      if (cmd === "git rev-parse --show-toplevel") {
+        return tmpDir;
+      }
+      if (cmd === "git rev-parse --git-dir" || cmd === "git rev-parse --git-common-dir") {
+        return ".git";
+      }
+      return "";
+    });
+
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await archiveCommand([changeDir]);
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errSpy.mock.calls.some(c => String(c[0]).includes("PRECONDITION_FAIL"))).toBe(true);
+    expect(errSpy.mock.calls.some(c => String(c[0]).includes("worktree 未清理"))).toBe(true);
+    expect(execSyncMock).not.toHaveBeenCalledWith(
+      expect.stringMatching(/^openspec archive\s/),
+      expect.anything()
+    );
+
+    exitSpy.mockRestore();
+    errSpy.mockRestore();
+  });
+
+  it("worktree 已清理时通过防御检查(worktree_merged_at 非 null)", async () => {
+    // 写 .alloy.yaml:worktree 非 null,worktree_merged_at 非 null(已清理)
+    const state = createInitialState();
+    state.phase = "archiving";
+    state.worktree = ".worktrees/test-change";
+    state.worktree_branch = "worktree-test-change";
+    state.worktree_created_at = "2026-07-14 14:00:00";
+    state.worktree_merged_at = "2026-07-14 15:00:00";
+    await writeState(changeDir, state);
+
+    // mock:不在 worktree 内
+    execSyncMock.mockImplementation((cmd: string) => {
+      if (cmd.startsWith("openspec archive")) {
+        return "";
+      }
+      if (cmd === "git rev-parse --show-toplevel") {
+        return tmpDir;
+      }
+      if (cmd === "git rev-parse --git-dir" || cmd === "git rev-parse --git-common-dir") {
+        return ".git";
+      }
+      return "";
+    });
+
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await archiveCommand([changeDir]);
+
+    // 验证调用了 openspec archive CLI(说明防御检查通过)
+    expect(execSyncMock).toHaveBeenCalledWith(
+      expect.stringMatching(/^openspec archive\s/),
+      expect.anything()
+    );
+    // 验证错误信息不是"worktree 未清理"(可能是"归档目录不存在"因为没创建 archive 目录)
+    expect(errSpy.mock.calls.some(c => String(c[0]).includes("worktree 未清理"))).toBe(false);
+    expect(errSpy.mock.calls.some(c => String(c[0]).includes("worktree 内"))).toBe(false);
+
+    exitSpy.mockRestore();
+    errSpy.mockRestore();
+  });
+
+  it("无 worktree 的 change 通过防御检查(worktree 字段为 null)", async () => {
+    // 写 .alloy.yaml:worktree 为 null(从未用 worktree)
+    const state = createInitialState();
+    state.phase = "archiving";
+    state.worktree = null;
+    state.worktree_merged_at = null;
+    await writeState(changeDir, state);
+
+    // mock:不在 worktree 内
+    execSyncMock.mockImplementation((cmd: string) => {
+      if (cmd.startsWith("openspec archive")) {
+        return "";
+      }
+      if (cmd === "git rev-parse --show-toplevel") {
+        return tmpDir;
+      }
+      if (cmd === "git rev-parse --git-dir" || cmd === "git rev-parse --git-common-dir") {
+        return ".git";
+      }
+      return "";
+    });
+
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await archiveCommand([changeDir]);
+
+    // 验证调用了 openspec archive CLI(说明防御检查通过)
+    expect(execSyncMock).toHaveBeenCalledWith(
+      expect.stringMatching(/^openspec archive\s/),
+      expect.anything()
+    );
+    expect(errSpy.mock.calls.some(c => String(c[0]).includes("worktree 未清理"))).toBe(false);
+    expect(errSpy.mock.calls.some(c => String(c[0]).includes("worktree 内"))).toBe(false);
+
+    exitSpy.mockRestore();
+    errSpy.mockRestore();
   });
 });

@@ -34,7 +34,6 @@ Alloy 0.4.0 已融合 OpenSpec（需求追踪）+ Superpowers（流程方法论�
 | 优先级 | Agent | 官网 | GitHub | hook 机制 | 适配成本 |
 |--------|-------|------|--------|----------|---------|
 | P0 | Claude Code | code.claude.com | 无公开仓库 | PreToolUse 外部脚本 | 基准 |
-| P0 | Codex | chatgpt.com/codex | 无公开仓库（npm） | 同款协议（白送） | 0 |
 | P1 | Pi | pi.dev | github.com/earendil-works/pi | TS 扩展 `tool_call` 事件 | 中 |
 | P1 | OpenCode | opencode.ai | github.com/anomalyco/opencode | custom tool 覆盖 write/edit | 中 |
 
@@ -51,7 +50,7 @@ Alloy 0.4.0 已融合 OpenSpec（需求追踪）+ Superpowers（流程方法论�
 
 ### 关键洞察
 
-1. **Claude Code + Codex 同款协议是关键杠杆**：一份适配器两个 agent 白送，覆盖主流闭源 CLI
+1. **Claude Code 同款协议是关键杠杆**：适配器覆盖主流闭源 CLI
 2. **Pi 是开源锚点**：唯一"开源 + 有真 hook + 符合标准"的 agent，对冲 Claude Code 生态绑定
 3. **OpenCode 用 custom tool 覆盖实现等价闸门**：无独立 hook，但覆盖内置 write/edit 能动态判定 + block
 4. **不让步原则**：无 hook 能力的 agent 只走 skill 层，不假装有闸门
@@ -69,7 +68,7 @@ Alloy 0.4.0 已融合 OpenSpec（需求追踪）+ Superpowers（流程方法论�
 
 ### 实现计划
 
-**P0（Claude Code + Codex，一份适配器）：**
+**P0（Claude Code）：**
 
 1. `src/core/hook-guard.ts` -- 平台无关判定逻辑（纯函数）
    - 输入：`(filePath, phase, state)`
@@ -78,14 +77,12 @@ Alloy 0.4.0 已融合 OpenSpec（需求追踪）+ Superpowers（流程方法论�
    - 白名单：`.alloy.yaml`、`.claude/`、`openspec/`（按阶段细分）、根目录 `.md`
    - 拦截规则：`open`/`design`/`archive` 阶段禁写源码；`build` 但 `design_doc` 空防空跳
 
-2. `src/core/platforms/claude-code.ts` -- Claude Code/Codex 共用适配器
+2. `src/core/platforms/claude-code.ts` -- Claude Code 适配器
    - stdin JSON 解析（`tool_input.file_path`）
    - exit code 映射（0 = 放行，2 = 阻断）
-   - 唯一差异：`skillsDir`（`.claude` vs `.codex`）
 
 3. `alloy init` 自动写 hook 配置
    - Claude Code：`.claude/settings.local.json` 的 `hooks.PreToolUse`
-   - Codex：`.codex/settings.local.json`（同款格式）
    - matcher：`Write|Edit`
 
 4. `alloy _state set phase` 加硬拦截
@@ -111,7 +108,6 @@ Alloy 0.4.0 已融合 OpenSpec（需求追踪）+ Superpowers（流程方法论�
 
 - OpenCode 覆盖后的 custom tool 能否调原内置工具（避免自己实现 fs 逻辑）
 - Pi 的 `tool_call` 事件回调能否同步 block
-- Codex 的 `settings.local.json` hook 是否完全兼容 Claude Code 全部生命周期钩子
 
 ---
 
@@ -157,7 +153,7 @@ Alloy 0.4.0 已融合 OpenSpec（需求追踪）+ Superpowers（流程方法论�
 |------|------|
 | Library | `compress(messages)` 内联，Python 或 TypeScript |
 | Proxy | `headroom proxy --port 8787`，零代码改动，任何语言 |
-| Agent wrap | `headroom wrap claude\|codex\|copilot\|cursor\|aider\|opencode\|cline\|continue\|...` 一行命令 |
+| Agent wrap | `headroom wrap claude\|copilot\|cursor\|aider\|opencode\|cline\|continue\|...` 一行命令 |
 | MCP server | `headroom_compress` / `headroom_retrieve` / `headroom_stats` |
 | Cross-agent memory | 跨 agent 共享存储，自动去重 |
 | `headroom learn` | 挖掘失败会话，写修正到 `CLAUDE.local.md` / `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` |
@@ -166,10 +162,10 @@ Alloy 0.4.0 已融合 OpenSpec（需求追踪）+ Superpowers（流程方法论�
 
 ### 对 Alloy 的价值
 
-1. **agent wrap**：headroom 已支持 `wrap claude|codex|opencode` -- Alloy 3 个闸门层 agent 直接可用，Pi 可走 proxy 模式
+1. **agent wrap**：headroom 已支持 `wrap claude|opencode` -- Alloy 2 个闸门层 agent 直接可用，Pi 可走 proxy 模式
 2. **MCP server**：Alloy 可作为 MCP client 调用，精准压缩长文档
 3. **headroom learn**：与 Alloy 指令文件机制互补，自动从失败中学习
-4. **cross-agent memory**：Alloy 多 agent 场景（用户同时用 Claude Code + Codex）共享上下文
+4. **cross-agent memory**：Alloy 多 agent 场景（用户同时用 Claude Code + OpenCode）共享上下文
 5. **output token reduction**：减少模型写回，整体成本下降
 
 ### 集成方式（候选）
@@ -197,7 +193,7 @@ Alloy 0.4.0 已融合 OpenSpec（需求追踪）+ Superpowers（流程方法论�
 
 1. **phase 自洽性校验**：不只看 `phase` 字段，还查产物（`phase: build` + `design_doc` 空 = 非法空跳）。参考 Comet 的"阶段进入自洽性校验表"
 2. **cross-agent memory**：headroom 提供，Alloy 多 agent 场景共享上下文
-3. **多 agent 并行**：用户同时用 Claude Code + Codex，Alloy 协调状态同步
+3. **多 agent 并行**：用户同时用 Claude Code + OpenCode，Alloy 协调状态同步
 4. **skill marketplace**：参考 Superpowers marketplace，社区共享 Alloy skill
 5. **dashboard 可视化**：参考 Comet `comet dashboard`，浏览器看 phase 进度 / eval 结果 / token 节省
 
@@ -213,7 +209,7 @@ Alloy 0.4.0 已融合 OpenSpec（需求追踪）+ Superpowers（流程方法论�
 | 阶段 | 主题 | 产出 | 状态 |
 |------|------|------|------|
 | 阶段 1 | 主题 1 | agent 调研文档 | ✅ 完成 |
-| 阶段 2 | 主题 2 P0 | Claude Code + Codex 真闸门 | 待实现 |
+| 阶段 2 | 主题 2 P0 | Claude Code 真闸门 | 待实现 |
 | 阶段 3 | 主题 2 P1 | Pi + OpenCode 真闸门 | 待实现 |
 | 阶段 4 | 主题 4 D+A | headroom 集成（doctor + init wrap） | 待规划 |
 | 阶段 5 | 主题 3 | eval 框架 | 待规划 |
@@ -231,7 +227,7 @@ Alloy 0.4.0 已融合 OpenSpec（需求追踪）+ Superpowers（流程方法论�
 
 本分支合并后，按优先级开 feature 分支：
 
-- `feature/hook-guard-claude-code` -- 主题 2 P0（含 Codex 白送）
+- `feature/hook-guard-claude-code` -- 主题 2 P0
 - `feature/hook-guard-pi` -- 主题 2 P1（Pi）
 - `feature/hook-guard-opencode` -- 主题 2 P1（OpenCode）
 - `feature/headroom-integration` -- 主题 4 D+A

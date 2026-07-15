@@ -21,6 +21,7 @@ import { phaseCommand } from "./commands/internal/phase.js";
 import { envCheckCommand } from "./commands/internal/env.js";
 import { checkpointCommand } from "./commands/internal/checkpoint.js";
 import { retroCommand } from "./commands/internal/retro.js";
+import type { AgentInfo } from "../core/types.js";
 
 const USAGE = `
 alloy <command> [options]
@@ -32,8 +33,10 @@ Commands:
               查看活跃 change 总览，指定 name 查看详情
   doctor      [path] [--json]
               诊断：版本兼容性、文件一致性
-  update      [path]
-              从 alloy 包重新部署 skill + schema
+  update      [path] [--force]
+              刷新 init 写过的所有产物到当前 alloy 版本
+  clean       [path] [--scope <project|global>] [--force]
+              清理 init 装的产物(alloy skills/opsx/superpowers/hook/permissions 等)
   completion  [bash|zsh|pwsh|powershell] [--install]
               生成 shell 补全脚本，--install 自动注册
 
@@ -51,7 +54,7 @@ alloy init [path] [options]
 选项:
   --scope <project|global>  安装范围，默认 project
   --agents <id,id,...>      非交互式模式，指定要安装的 AI 工具（逗号分隔）
-                            可用的 agent: claude-code, codex, opencode, pi
+                            可用的 agent: claude-code, opencode, pi
   --force                   强制覆盖已装产物,跳过执行清单确认(breaking change 也直接执行)
   --help, -h                显示本帮助
 `;
@@ -79,11 +82,24 @@ alloy doctor [path] [options]
       return `
 alloy update [path] [options]
 
-自动检测 scope（project/global），从 alloy 包重新部署 skill + schema。
-用户模式下会检查 npm registry 是否有新版本。
+刷新 init 写过的所有产物到当前 alloy 版本。从 openspec/config.yaml 读 install_scope + target_agents,复用 init 的矩阵展示 + execute 流程。用户模式额外升级 alloy CLI + OpenSpec CLI + Superpowers;开发模式跳过 npm/npx 升级。
 
 选项:
-  --help, -h    显示本帮助
+  --force, -f    跳过确认（执行清单 / 升级 alloy CLI），自动化场景使用
+  --help, -h     显示本帮助
+`;
+    case "clean":
+      return `
+alloy clean [path] [options]
+
+清理 alloy init 装的产物。交互问 scope(project/global),按 scope 清理所有 init 装的产物
+(alloy skills / OpenSpec Commands / Superpowers / Shell 补全 / hook / permissions / .gitignore 等)。
+展示将删除/修改的清单 + 确认,--force 跳过。只清 alloy 注入的部分,保留用户配置。
+
+选项:
+  --scope <project|global>  清理范围,不传则交互式选择
+  --force, -f               跳过确认
+  --help, -h                显示本帮助
 `;
     case "completion":
       return `
@@ -122,6 +138,11 @@ alloy _spec-audit [选项]
   1  存在不一致
 `;
     default:
+      // internal 命令(_ 前缀)在 main switch 注册但无独立 help 文档
+      // 不报"未知命令"--避免 agent 用 --help 探测时误判命令不存在
+      if (cmd.startsWith("_")) {
+        return `alloy ${cmd}\n\n此命令为 internal 命令,无独立 help 文档。详细用法见 skills/alloy-shared/references/cli-reference.md。\n运行 alloy ${cmd}(不带参数)可看简要用法。`;
+      }
       return `未知命令: ${cmd}\n使用 alloy --help 查看可用命令。`;
   }
 }
@@ -233,12 +254,11 @@ async function main() {
         allowPositionals: true,
       });
       const projectPath = positionals[0] ?? process.cwd();
-      const { initCommand, selectScope, selectTargetAgents } = await import("./commands/init.js");
-      const scope = await selectScope(values.scope as string | undefined);
+      const { initCommand } = await import("./commands/init/init.js");
 
-      let targetAgents;
+      // --agents 非交互式解析:把逗号分隔的 id 转成 AgentInfo[](空则交给 initCommand 交互式选择)
+      let targetAgents: AgentInfo[] = [];
       if (values.agents) {
-        // 非交互式模式：从 --agents 选项解析
         const { KNOWN_AGENTS } = await import("../core/agents.js");
         const agentIds = (values.agents as string).split(",").map((s: string) => s.trim());
         targetAgents = KNOWN_AGENTS.filter((a: { id: string }) => agentIds.includes(a.id));
@@ -247,13 +267,10 @@ async function main() {
           console.error(`可用的 agent: ${KNOWN_AGENTS.map((a: { id: string }) => a.id).join(", ")}`);
           process.exit(1);
         }
-      } else {
-        // 交互式模式
-        targetAgents = await selectTargetAgents();
       }
 
       await initCommand({
-        scope,
+        scope: values.scope as "global" | "project" | undefined,
         projectPath,
         targetAgents,
         force: values.force as boolean,
@@ -305,16 +322,43 @@ async function main() {
       break;
     }
     case "update": {
-      const { positionals } = parseArgs({
+      const { values, positionals } = parseArgs({
         args: restArgs,
-        options: {},
+        options: {
+          force: { type: "boolean", default: false },
+        },
+        short: {
+          f: "force",
+        },
         strict: true,
         allowPositionals: true,
       });
       const results = await updateCommand(
-        positionals[0] ?? process.cwd()
+        positionals[0] ?? process.cwd(),
+        values.force
       );
       for (const r of results) console.log(`  ${r}`);
+      break;
+    }
+    case "clean": {
+      const { values, positionals } = parseArgs({
+        args: restArgs,
+        options: {
+          scope: { type: "string" },
+          force: { type: "boolean", default: false },
+        },
+        short: {
+          f: "force",
+        },
+        strict: true,
+        allowPositionals: true,
+      });
+      const { cleanCommand } = await import("./commands/clean.js");
+      await cleanCommand({
+        projectPath: positionals[0] ?? process.cwd(),
+        scope: values.scope as "global" | "project" | undefined,
+        force: values.force as boolean,
+      });
       break;
     }
     case "completion": {
@@ -430,6 +474,16 @@ async function main() {
     case "_stop-guard": {
       const { stopGuardCommand } = await import("./commands/internal/stop-guard.js");
       await stopGuardCommand(restArgs);
+      break;
+    }
+    case "_precheck": {
+      const { precheckCommand } = await import("./commands/internal/precheck.js");
+      await precheckCommand(restArgs);
+      break;
+    }
+    case "_infra-commit": {
+      const { infraCommitCommand } = await import("./commands/internal/infra-commit.js");
+      await infraCommitCommand(restArgs);
       break;
     }
     default:

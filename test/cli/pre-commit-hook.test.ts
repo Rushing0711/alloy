@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
 
-import { ensurePreCommitHook } from "../../src/cli/commands/init.js";
+import { ensurePreCommitHook } from "../../src/cli/commands/init/execute.js";
 
 describe("ensurePreCommitHook", () => {
   let tmpDir: string;

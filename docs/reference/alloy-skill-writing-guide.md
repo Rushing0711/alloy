@@ -131,7 +131,7 @@ behaviors:
 
 ### 4.4 平台降级
 
-非 CC 平台（Gemini CLI、Codex 等）没有 AskUserQuestion 工具，降级到 02-visual-spec §十的块引用文本选项格式：
+非 CC 平台（Gemini CLI 等）没有 AskUserQuestion 工具，降级到 02-visual-spec §十的块引用文本选项格式：
 
 ```
 > → (a) 选项 1 — 描述

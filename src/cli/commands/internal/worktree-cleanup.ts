@@ -2,7 +2,7 @@
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { readState, writeState } from "../../utils/state.js";
+import { readState, writeState, formatTimestamp } from "../../utils/state.js";
 
 function gitExec(cmd: string, opts: { cwd?: string } = {}): { ok: boolean; stdout: string; stderr: string } {
   try {
@@ -99,7 +99,7 @@ export async function worktreeCleanupCommand(args: string[]): Promise<void> {
     if (!wtList.includes(worktreePath)) {
       console.log(`ℹ️ worktree 目录不存在: ${worktreePath}（可能已清理）`);
       console.log("  仅记录 worktree_merged_at");
-      const mergedAt = new Date().toISOString().replace("T", " ").slice(0, 19);
+      const mergedAt = formatTimestamp();
       try {
         const state = await readState(changeDir);
         state.worktree_merged_at = mergedAt;
@@ -136,21 +136,110 @@ export async function worktreeCleanupCommand(args: string[]): Promise<void> {
     return;
   }
 
+  // 2.5 merge 前工作目录检查
+  // 原因:alloy _guard user-gate require 设置 pending_gate 不 commit(临时状态设计),
+  // worktree 创建前在 feature 分支设了 pending_gate 后,EnterWorktree 进 worktree,
+  // ExitWorktree 回主仓时未 commit 修改仍在,git merge 会因工作目录不干净而拒绝。
+  // 若只有 .alloy.yaml 未 commit(alloy 临时状态),自动 commit 后 merge;
+  // 若有其他文件未 commit,HARD_STOP(非状态文件需用户决策)。
+  // 注意:用 `git diff --name-only HEAD` 而非 `git status --porcelain --name-only`--
+  //   git status 没有 --name-only 选项(只有 git diff 有),用错会导致命令失败(exit 129)、
+  //   dirtyFiles 为空、自动 commit 逻辑被静默跳过,merge 会因工作目录不干净失败
+  //   ("would be overwritten by merge")。
+  const dirtyResult = gitExec("git diff --name-only HEAD");
+  if (!dirtyResult.ok) {
+    console.error("⛔ [HARD_FAIL] 检查工作目录状态失败,无法判断是否有未 commit 修改");
+    console.error(`  ${dirtyResult.stderr}`);
+    process.exit(1);
+    return;
+  }
+  const dirtyFiles = dirtyResult.stdout
+    .split("\n").map(l => l.trim()).filter(Boolean);
+  if (dirtyFiles.length > 0) {
+    const nonAlloyFiles = dirtyFiles.filter(f => !f.endsWith(".alloy.yaml"));
+    if (nonAlloyFiles.length > 0) {
+      console.error("⛔ [HARD_STOP] 工作目录有非 .alloy.yaml 的未 commit 修改,拒绝 merge");
+      console.error("  原因:非状态文件需用户决策,不能自动 commit");
+      console.error("  未 commit 文件:");
+      for (const f of nonAlloyFiles) {
+        console.error(`    ${f}`);
+      }
+      console.error("  修复:先 commit 或 stash 这些文件,再重新运行 alloy _worktree-cleanup");
+      process.exit(1);
+      return;
+    }
+    // 只有 .alloy.yaml 未 commit(alloy 临时状态,如 pending_gate),自动 commit
+    console.log(`ℹ️ 工作目录有 .alloy.yaml 未 commit 修改(alloy 临时状态),自动 commit 后 merge`);
+    for (const f of dirtyFiles) {
+      gitExec(`git add "${f}"`);
+    }
+    const commitResult = gitExec('git commit -m "chore: 提交 .alloy.yaml 临时状态 merge 前置"');
+    if (!commitResult.ok) {
+      console.error("⛔ [HARD_FAIL] 自动 commit .alloy.yaml 失败");
+      console.error(`  ${commitResult.stderr}`);
+      process.exit(1);
+      return;
+    }
+  }
+
   // 3. git merge worktree 分支到 feature
   console.log(`ℹ️ merge worktree 分支 ${worktreeBranch} -> feature 分支 ${featureBranch}`);
   const mergeResult = gitExec(`git merge ${worktreeBranch} --no-edit`);
   if (!mergeResult.ok) {
-    console.error("⛔ [HARD_STOP] git merge 失败--worktree 工作未合入 feature 分支");
-    console.error("  冲突现场：");
-    console.error(gitExec("git status --short").stdout);
-    console.error("");
-    console.error("  合法路径：");
-    console.error("    1) 用户手动解决冲突后 git add + git commit，再重新运行 /alloy-archive");
-    console.error("    2) 用户决定放弃 worktree 工作（确认无未保存改动后）");
-    console.error("");
-    console.error("  禁止：agent 自动运行 git merge --abort / git reset --hard / git checkout . / git stash（§3.5.1）");
-    process.exit(1);
-    return;
+    // merge 冲突:检查冲突文件类型
+    // .alloy.yaml 是状态文件,worktree 分支版本总是最新(含 phase 推进/skill_usage 等),自动取 worktree 版本(--theirs)
+    // 非 .alloy.yaml 冲突(代码/制品)需用户决策,HARD_STOP
+    const conflictFiles = gitExec("git diff --name-only --diff-filter=U").stdout
+      .split("\n").map(l => l.trim()).filter(Boolean);
+
+    if (conflictFiles.length === 0) {
+      // merge 失败但无冲突文件(可能是工作目录不干净等其他原因)
+      console.error("⛔ [HARD_STOP] git merge 失败--worktree 工作未合入 feature 分支");
+      console.error("  冲突现场：");
+      console.error(gitExec("git status --short").stdout);
+      console.error("");
+      console.error("  合法路径：");
+      console.error("    1) 用户手动解决冲突后 git add + git commit，再重新运行 /alloy-archive");
+      console.error("    2) 用户决定放弃 worktree 工作（确认无未保存改动后）");
+      console.error("");
+      console.error("  禁止：agent 自动运行 git merge --abort / git reset --hard / git checkout . / git stash（§3.5.1）");
+      process.exit(1);
+      return;
+    }
+
+    const nonAlloyConflicts = conflictFiles.filter(f => !f.endsWith(".alloy.yaml"));
+    if (nonAlloyConflicts.length > 0) {
+      // 含非 .alloy.yaml 冲突(代码/制品),需用户手动解决
+      console.error("⛔ [HARD_STOP] git merge 失败--含非 .alloy.yaml 冲突,需用户手动解决");
+      console.error("  冲突文件(非状态文件):");
+      for (const f of nonAlloyConflicts) {
+        console.error(`    ${f}`);
+      }
+      console.error("");
+      console.error("  合法路径：");
+      console.error("    1) 用户手动解决冲突后 git add + git commit，再重新运行 /alloy-archive");
+      console.error("    2) 用户决定放弃 worktree 工作（确认无未保存改动后）");
+      console.error("");
+      console.error("  禁止：agent 自动运行 git merge --abort / git reset --hard / git checkout . / git stash（§3.5.1）");
+      process.exit(1);
+      return;
+    }
+
+    // 只有 .alloy.yaml 冲突:自动取 worktree 分支版本(--theirs,worktree 内是最新状态)
+    console.log(`ℹ️ .alloy.yaml merge 冲突--自动取 worktree 分支版本(状态文件,worktree 内是最新)`);
+    for (const f of conflictFiles) {
+      gitExec(`git checkout --theirs "${f}"`);
+      gitExec(`git add "${f}"`);
+    }
+    const conflictCommitResult = gitExec("git commit --no-edit");
+    if (!conflictCommitResult.ok) {
+      console.error("⛔ [HARD_STOP] 自动解决 .alloy.yaml 冲突后 commit 失败");
+      console.error(`  ${conflictCommitResult.stderr}`);
+      console.error("  请手动 git commit 后重新运行 alloy _worktree-cleanup");
+      process.exit(1);
+      return;
+    }
+    console.log("✓ .alloy.yaml 冲突已自动解决(取 worktree 分支版本)");
   }
 
   // 4. git worktree remove
@@ -220,7 +309,7 @@ export async function worktreeCleanupCommand(args: string[]): Promise<void> {
   }
 
   // 6. 记录 worktree_merged_at + commit（merge 后 change-dir 在 feature 分支存在）
-  const mergedAt = new Date().toISOString().replace("T", " ").slice(0, 19);
+  const mergedAt = formatTimestamp();
   try {
     const state = await readState(changeDir);
     state.worktree_merged_at = mergedAt;

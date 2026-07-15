@@ -58,7 +58,7 @@ fi
 
 - `start.md` 步骤 3 ②：默认 `feature/<change-name>`，用户自定义时强制走白名单校验
 - `fix.md` 场景 3：固定 `fix/<desc>`（不再用 `hotfix/`）。用户自定义时同样校验
-- `apply.md` worktree 路径占用 (b) 重命名分支：用户输入新分支名后校验
+- `apply.md` worktree 路径占用 2. 重命名分支：用户输入新分支名后校验
 
 ## Why
 

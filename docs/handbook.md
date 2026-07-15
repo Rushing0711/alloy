@@ -456,7 +456,7 @@ openspec/
     │   ├── discard.md
     │   └── status.md
     │
-    └── 横线版（自动生成，供 Cursor / OpenCode / Codex / Trae / Pi 使用）
+    └── 横线版（自动生成，供 Cursor / OpenCode / Trae / Pi 使用）
         ├── alloy-start.md
         ├── alloy-plan.md
         ├── ...
@@ -489,8 +489,8 @@ alloy doctor --json       # JSON 格式输出
 ### 环境重置
 
 ```bash
-# 删除 Alloy 相关文件
-rm -rf .claude/skills/alloy-*/
+# 删除 Alloy 相关文件(多 agent 适配:清各 agent 的 skills 目录)
+rm -rf .claude/skills/alloy-*/ .opencode/skills/alloy-*/ .pi/skills/alloy-*/ .agents/skills/alloy-*/
 rm -rf openspec/
 rm -f .alloy.yaml
 
@@ -506,7 +506,7 @@ alloy init
 
 - Node.js ≥ 18.0.0
 - git ≥ 2.0.0
-- Claude Code（推荐）
+- Claude Code / OpenCode / Pi(3 个 agent 均支持,alloy init 时选择)
 
 ### Commit 消息格式
 

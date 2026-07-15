@@ -1,56 +1,57 @@
-# Skill 预检脚本
+# Skill 预检
 
-所有 alloy 阶段命令共享的技能/命令可用性检测脚本。各命令传入自己的技能列表即可。
+所有 alloy 阶段命令共享的技能/命令可用性检测。各命令在 SKILL.md 里声明所需依赖,预检时调 `alloy _precheck` CLI(多 agent 适配)。
 
 ## 使用方式
 
-在命令中按以下格式声明所需依赖，然后执行下方预检脚本：
+在 SKILL.md 里按以下格式声明所需依赖:
 
 ```
-Skill 预检——确认以下可用：
+Skill 预检--确认以下可用：
   cmd: opsx/explore opsx/new
   skill: brainstorming
 ```
 
-## 预检脚本
+## 预检调用
 
-将上面声明的 cmd 和 skill 列表填入脚本中的对应位置：
+把声明的 cmd 和 skill 列表传入 `alloy _precheck`:
 
 ```bash
-MISSING=0
-
-# 检测 openspec CLI（alloy 核心依赖,opsx 命令需调用 openspec 二进制）
-if command -v openspec >/dev/null 2>&1; then
-  echo "  ✓ openspec CLI"
-else
-  echo "  ✗ openspec CLI — 未安装"
-  echo "    安装: npm install -g @fission-ai/openspec@1"
-  MISSING=$((MISSING+1))
-fi
-
-# 检测 command（project → user）
-for cmd in <cmd列表>; do
-  if test -f ".claude/commands/$cmd.md"; then echo "  ✓ ${cmd//\//:}（项目级 command）"
-  elif test -f "$HOME/.claude/commands/$cmd.md"; then echo "  ✓ ${cmd//\//:}（用户级 command）"
-  else echo "  ✗ ${cmd//\//:} — 未找到"; MISSING=$((MISSING+1)); fi
-done
-
-# 检测 skill（project skill → user skill → user plugin）
-# plugin 路径扫描任意 marketplace（obra/superpowers-marketplace、anthropics/claude-plugins-official 等）
-for skill in <skill列表>; do
-  if test -d ".claude/skills/$skill"; then echo "  ✓ superpowers:$skill（项目级 skill）"
-  elif test -d "$HOME/.claude/skills/$skill"; then echo "  ✓ superpowers:$skill（用户级 skill）"
-  elif ls -d "$HOME"/.claude/plugins/cache/*/superpowers/*/skills/"$skill" >/dev/null 2>&1; then echo "  ✓ superpowers:$skill（用户级 plugin）"
-  else echo "  ✗ superpowers:$skill — 未找到"; MISSING=$((MISSING+1)); fi
-done
-
-if [ "$MISSING" -gt 0 ]; then echo ""; echo "  需要先完成环境初始化。请运行: alloy init"; exit 1; fi
+alloy _precheck --cmd "opsx/explore opsx/new" --skill "brainstorming"
 ```
 
-## 检测优先级
+- `--cmd`:空格分隔的 cmd 列表(声明格式,如 `opsx/explore`;CLI 内部归一化为 `opsx-explore.md` 或 `opsx/explore.md` 两种文件名都查)
+- `--skill`:空格分隔的 skill 列表(如 `brainstorming`)
 
-项目级 command → 项目级 skill → 用户级 command → 用户级 skill → 用户级 plugin
+CLI 读 `openspec/config.yaml` 的 `target_agents`,对每个 agent 检测对应路径:
+- Claude Code: `.claude/commands/` + `~/.claude/commands/`
+- OpenCode: `.opencode/commands/` + `~/.config/opencode/commands/`
+- Pi: `.pi/prompts/` + `~/.pi/agent/prompts/`
 
-任一不可用 → 引导 `alloy init` → STOP。
+skill 检测复用 `detectSkill`(已多 agent 适配,查 project skill -> user skill -> user plugin)。
 
-**如果某命令只有 command 或只有 skill 依赖，省略对应的 for 循环即可。**
+## 输出
+
+- 全部就绪:exit 0,输出 ✓ 清单
+- 任一缺失:exit 1,输出 ✗ 清单 + 引导 `alloy init`
+
+## SKILL.md 里的调用模板
+
+```bash
+# Skill 预检(⛔ PRECONDITION_FAIL):多 agent 适配,调 alloy _precheck
+if ! alloy _precheck --cmd "opsx/explore opsx/new" --skill "brainstorming"; then
+  echo "⛔ [PRECONDITION_FAIL] skill/cmd 缺失,请按提示运行 alloy init"
+  exit 1
+fi
+```
+
+**任一不可用 -> 引导 `alloy init` -> STOP。不存在降级。**
+
+## 为什么下沉为 CLI
+
+原 skill-precheck.md 写死 `.claude/commands/` 路径 + `opsx/explore` 斜杠格式,只支持 Claude Code。扩展到 4 个 agent 时:
+1. 路径不同(各 agent commands/skills 目录不同)
+2. cmd 文件名格式不同(Claude Code 支持子目录 `opsx/explore.md`,其他 agent 是横线 `opsx-explore.md`)
+3. skill 检测路径不同(OpenCode/Pi 读 `.agents/skills/` 共享目录 + 各自的 agent 目录)
+
+bash 脚本写死路径不可维护。下沉为 CLI(TypeScript 实现)后,路径推导集中在 `agents.ts`/`getCommandsTargetDir`/`detectSkill`,多 agent 适配有测试覆盖,skill md 只负责声明依赖 + 调 CLI。

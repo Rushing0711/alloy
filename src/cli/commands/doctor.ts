@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { runHealthCheck } from "../../core/health.js";
-import { KNOWN_AGENTS } from "../../core/agents.js";
+import { KNOWN_AGENTS, detectAgent } from "../../core/agents.js";
 import { getHookSupportedAgents, hasHookConfig } from "../../core/agent-config.js";
 import type { HealthCheckResult } from "../../core/types.js";
 import { findActiveChanges } from "../utils/state.js";
@@ -26,7 +26,7 @@ export interface AgentProtectionInfo {
 
 /**
  * 检测项目装了哪些 agent + 各 agent 的保护层级。
- * - hook:有 PreToolUse hook 真闸门(Claude Code/Codex,绝对路径正确)
+ * - hook:有 PreToolUse hook 真闸门(Claude Code,绝对路径正确)
  * - skill-only:装了 alloy skill 但无 hook(如 Pi/OpenCode,或 Claude Code 未装 hook / hook 配置无效)
  * - none:没装 alloy(不返回)
  */
@@ -210,6 +210,12 @@ export function formatDoctorResult(
 }
 
 export function printDoctorResult(result: DoctorResult): void {
+  const agent = detectAgent();
+  if (agent) {
+    const label = KNOWN_AGENTS.find((a) => a.id === agent)?.label ?? agent;
+    check("当前 agent", label, "pass");
+  }
+
   section("健康检查");
   for (const r of result.healthResults) {
     check(r.name, `${r.current}（要求 ${r.required}）`, r.status);

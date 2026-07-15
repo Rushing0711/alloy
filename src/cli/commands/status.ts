@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { findActiveChanges, readState, AlloyState } from "../utils/state.js";
 import { color, table } from "../../utils/format.js";
 import { section, check } from "../../utils/output.js";
+import { detectAgent } from "../../core/agents.js";
 
 const ARTIFACTS = [
   "draft",
@@ -69,6 +70,19 @@ export async function printStatusDetail(
   }
 }
 
+const AGENT_LABELS: Record<string, string> = {
+  "claude-code": "Claude Code",  "opencode": "OpenCode",
+  "pi": "Pi",
+};
+
+/** 生成"当前 agent"行。detectAgent 返回 null 时(终端直接运行,非 agent 上下文)返回空字符串 */
+function currentAgentLine(): string {
+  const agent = detectAgent();
+  if (!agent) return "";
+  const label = AGENT_LABELS[agent] ?? agent;
+  return `${color.dim("当前 agent：")}${color.cyan(label)}`;
+}
+
 export async function statusCommand(
   projectPath: string,
   changeName?: string
@@ -84,8 +98,11 @@ export async function statusCommand(
 
 async function overviewMode(changesDir: string): Promise<string> {
   const changes = await findActiveChanges(changesDir);
+  const agentLine = currentAgentLine();
   if (changes.size === 0) {
-    return "无活跃 change。使用 /alloy-start <topic> 开始新工作流。";
+    const lines = ["无活跃 change。使用 /alloy-start <topic> 开始新工作流。"];
+    if (agentLine) lines.unshift(agentLine);
+    return lines.join("\n");
   }
 
   const rows: string[][] = [];
@@ -109,10 +126,10 @@ async function overviewMode(changesDir: string): Promise<string> {
     if (step) nextSteps.push(step);
   }
 
-  const lines: string[] = [
-    color.bold("活跃 Change："),
-    table(["名称", "阶段", "制品"], rows),
-  ];
+  const lines: string[] = [];
+  if (agentLine) lines.push(agentLine);
+  lines.push(color.bold("活跃 Change："));
+  lines.push(table(["名称", "阶段", "制品"], rows));
 
   if (nextSteps.length > 0) {
     lines.push(`下一步：${nextSteps.join("；")}`);

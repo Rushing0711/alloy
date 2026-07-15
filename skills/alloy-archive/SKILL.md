@@ -3,13 +3,13 @@ name: alloy-archive
 description: 归档阶段--将 change 归档。手动调用 /alloy-archive。
 spec: 01-product-spec/04-archive-spec.md
 behaviors:
-  preconditions: 6
+  preconditions: 7
   hard_stops:    12
   user_gates:    3
   warns:         1
   artifacts: [delta-spec, archive]
   transitions_to: archived
-  external_calls: [opsx:archive]
+  external_calls: [alloy _archive]
 ---
 
 # alloy-archive
@@ -44,7 +44,7 @@ verify.md FAIL / merge 冲突 / git status dirty 任一存在 = 拒绝归档
 | "spec 合并看起来没问题，直接继续" | 没看过的 spec 变更 = 代码与规格可能已分叉。审查只需 1 分钟，修复分叉需要 1 小时。 |
 | "merge 冲突了，git merge --abort 一下让流程继续" | 冲突 = 代码状态未达预期，自动 abort = 隐藏真问题。退出 skill 让用户处理是唯一合法路径（§3.5.1）。 |
 | "另一个 change 也在 archive，等一下吧" | 多 change 并行 archive = Delta Spec 合并顺序敏感。先归档晚开始的 = 主 spec 状态错乱。必须串行。 |
-| "先文本列 (a)/(b) 选项让用户思考，再调 AskUserQuestion 双保险" | ⛔ HARD_STOP：双重呈现违规--首次呈现必须是 AskUserQuestion 工具调用,不是文本。哪怕"先展示选项让用户思考"、"文本+工具双保险",也算违反。常见模式:thinking 决策"用 AskUserQuestion"但执行时先输出纯文本选项(决策->执行断裂)。 |
+| "先文本列 1./2. 选项让用户思考，再调 AskUserQuestion 双保险" | ⛔ HARD_STOP：双重呈现违规--首次呈现必须是平台原生交互工具调用,不是文本。哪怕"先展示选项让用户思考"、"文本+工具双保险",也算违反。常见模式:thinking 决策"用 AskUserQuestion"但执行时先输出纯文本选项(决策->执行断裂)。 |
 
 ---
 
@@ -72,7 +72,7 @@ alloy _phase start openspec/changes/<name> archive
 
 **0. Skill 预检：** cmd: opsx/archive
 
-读取 `alloy-shared/references/skill-precheck.md` 检测。不可用 -> 引导 `alloy init` -> STOP。
+调 `alloy _precheck --cmd "opsx/archive"` 检测(多 agent 适配,详见 `alloy-shared/references/skill-precheck.md`)。不可用 -> 引导 `alloy init` -> STOP。
 
 **1. Worktree 清洁度（PRECONDITION_FAIL）：** archive 会 commit 归档变更并合并 worktree--未 commit 的非 spec/changes 路径变更会污染结果。
 
@@ -126,28 +126,30 @@ fi
 
 ---
 
-### [Step 2/3] Worktree 清理 + /opsx:archive
+### [Step 2/3] Worktree 清理 + alloy _archive
 
 ```
-[Step 2/3] Worktree 清理(先 merge worktree -> feature)-> /opsx:archive(在 feature 分支)
+[Step 2/3] Worktree 清理(先 merge worktree -> feature)-> alloy _archive(在 feature 分支)
 先退出 worktree 并合并到 feature,再在 feature 分支执行归档--避免 archive 目录移动导致 merge 冲突
 ```
 
-**流程顺序调整说明：** worktree 清理必须在 /opsx:archive 之前--archive 操作会移动 `openspec/changes/<name>/` 到 `archive/`,若在 worktree 分支执行,merge 到 feature 时目录移动 + tasks.md 勾选导致三方合并冲突。先 merge worktree 到 feature(只有 apply 的代码/制品 commit,无目录移动),再在 feature 分支做 archive,冲突消除。
+**流程顺序调整说明：** worktree 清理必须在 `alloy _archive` 之前--archive 操作会移动 `openspec/changes/<name>/` 到 `archive/`,若在 worktree 分支执行,merge 到 feature 时目录移动 + tasks.md 勾选导致三方合并冲突。先 merge worktree 到 feature(只有 apply 的代码/制品 commit,无目录移动),再在 feature 分支做 archive,冲突消除。
 
 **Worktree 清理（如果 apply 期间使用了 worktree）：**
 
 > ⛔ [HARD_STOP] worktree 清理流程的环境切换:
-> 1. **在 worktree 里**：读 state(worktree / feature_branch / worktree_branch 三字段) + 展示 worktree 分支 commit 列表（.alloy.yaml 在 worktree 里,ExitWorktree 后主仓读不到--此时 archive 尚未执行,change 目录还在原路径 openspec/changes/<name>/）
+> 1. **在 worktree 里**：读 state(worktree / feature_branch / worktree_branch 三字段) + 展示 worktree 分支 commit 列表（.alloy.yaml 在 worktree 里,退出 worktree 后主仓读不到--此时 archive 尚未执行,change 目录还在原路径 openspec/changes/<name>/）
 > 2. **USER_GATE**：确认清理 worktree
-> 3. **ExitWorktree**：回主仓（merge/remove/branch-d 必须在主仓执行,worktree 里 HEAD 是 worktree 分支,merge 自己没意义;worktree remove 删自己 cwd 会失败）
+> 3. **退出 worktree 回主仓**(多 agent 适配,见下方):
+>    - **Claude Code**: 调 `ExitWorktree` 工具(`action: "keep"`)
+>    - **OpenCode/Pi**: 无 `ExitWorktree` 工具,用 `cd <主仓路径>` 切回主仓(这些 agent 用 `git worktree add` 创建 worktree,`cd` 切换是合法路径)
 > 4. **`alloy _worktree-cleanup <change-dir>`**：原子完成 merge + remove + branch -d + worktree_mergedat 记录（CLI 自己从 worktree 分支读 state,不传参;用原路径 openspec/changes/<name>,此时 archive 尚未执行）
 >
-> 违反字面 = 违反精神：哪怕"在 worktree 里 merge 效率高"、"cd 主仓替代 ExitWorktree",也算违反--worktree 里 merge 自己到自己没意义,cd 不解绑 session,后续命令仍可能在 worktree 执行。
+> 违反字面 = 违反精神：哪怕"在 worktree 里 merge 效率高"、"cd 主仓替代退出 worktree"(Claude Code)",也算违反--worktree 里 merge 自己到自己没意义,Claude Code 的 cd 不解绑 session。
 > 常见违规模式:
 > - 在 worktree 里执行 `git merge worktree-<name>`（HEAD 是 worktree 分支,merge 自己）
 > - 在 worktree 里执行 `git worktree remove`（删除自己 cwd,后续命令失败）
-> - 用 `cd /主仓` 替代 ExitWorktree（cd 不解绑 session）
+> - **Claude Code** 用 `cd /主仓` 替代 `ExitWorktree`（cd 不解绑 session,后续命令仍可能在 worktree 执行）
 > - 跳过 USER_GATE 直接清理（merge 结果用户有权审查）
 
 **① 在 worktree 里读 state + 展示 commit 列表：**
@@ -165,7 +167,7 @@ FEATURE_BRANCH=$(alloy _state read "$CHANGE_DIR" feature_branch 2>/dev/null)
 WORKTREE_BRANCH=$(alloy _state read "$CHANGE_DIR" worktree_branch 2>/dev/null)
 ```
 
-`WORKTREE_PATH` 为空 / null / skipped -> 未使用 worktree,跳过整个 worktree 清理段,直接进 /opsx:archive。
+`WORKTREE_PATH` 为空 / null / skipped -> 未使用 worktree,跳过整个 worktree 清理段,直接进 `alloy _archive`。
 
 > ⛔ [HARD_STOP] agent 必须在 worktree 里读取这三个字段并记住--ExitWorktree 后主仓的 change 目录还没 merge,读不到 state。
 > 这三个字段用于展示给用户（USER_GATE 审查 worktree 信息）。`alloy _worktree-cleanup` 自己从 worktree 分支读 state（用 `git show worktree-<name>:<change-dir>/.alloy.yaml`）,不依赖 agent 传参--解决 agent 在 feature 分支读 state 为 null 的问题。
@@ -178,24 +180,34 @@ git log --oneline -10 "$WORKTREE_BRANCH" 2>/dev/null
 
 **② USER_GATE 确认清理：**
 
-> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级:
+> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级。
+
+⛔ [HARD_STOP] 必须执行以下命令设置 pending_gate(不是说明,是必跑命令):
+
 ```bash
 alloy _guard user-gate require "$CHANGE_DIR" archive:worktree-cleanup
 ```
 
-🔴 USER_GATE（必须 AskUserQuestion）: 确认清理 worktree?
+🔴 USER_GATE（必须平台原生交互工具）: 确认清理 worktree?
 
 > 选项:
-> - (a) 确认并清理--merge worktree 分支到 feature + remove worktree + branch -d
-> - (b) 需要检查--退出 skill 让用户审查
+> - 1. 确认并清理--merge worktree 分支到 feature + remove worktree + branch -d
+> - 2. 需要检查--退出 skill 让用户审查
 
-> 用户选 (a) 后继续步骤 ③;选 (b) 退出 skill。
+> 用户选 1 后继续步骤 ③;选 2 退出 skill。
 
-**③ ExitWorktree 回主仓：**
+**③ 退出 worktree 回主仓(多 agent 适配):**
 
-调用 `ExitWorktree` 工具,**必须用 `action: "keep"`**--禁用 `action: "remove"`。
+**Claude Code:** 调用 `ExitWorktree` 工具,**必须用 `action: "keep"`**--禁用 `action: "remove"`。
 
-> ⛔ [HARD_STOP] ExitWorktree action 必须是 `keep`,不能是 `remove`。
+**OpenCode/Pi:** 无 `ExitWorktree` 工具,用 `cd <主仓路径>` 切回主仓。主仓路径 = git 仓库根目录(`git rev-parse --show-toplevel` 在 worktree 内返回主仓路径)。
+
+```bash
+# OpenCode/Pi:cd 回主仓
+cd "$(git rev-parse --git-common-dir)/.."  # git-common-dir 指向主仓 .git
+```
+
+> ⛔ [HARD_STOP] Claude Code 必须用 `ExitWorktree` 工具,action 必须是 `keep`,不能是 `remove`。
 > 原因:`remove` 会直接销毁 worktree + 丢弃 worktree 分支的 commit,跳过 `alloy _worktree-cleanup` 的 merge 步骤,worktree 工作永久丢失。
 > 上方 USER_GATE "确认清理 worktree" 是授权 `alloy _worktree-cleanup` 执行 merge+remove+branch-d,**不是授权 ExitWorktree 直接 remove**。
 > 违反字面 = 违反精神:哪怕"反正要清理,直接 remove 省事"、"用户已确认清理,remove 等价",也算违反--
@@ -207,8 +219,11 @@ alloy _guard user-gate require "$CHANGE_DIR" archive:worktree-cleanup
 > - agent 看到 ExitWorktree 安全闸门提示"未合并 commit 将丢失"后,选 discard_changes: true 强制丢弃--这是绕过 USER_GATE,违规
 > - agent 把 USER_GATE "确认清理 worktree" 等同于 "授权 ExitWorktree remove"--语义错位,USER_GATE 授权的是 _worktree-cleanup 流程
 
-> ⛔ [HARD_STOP] 必须调 `ExitWorktree` 工具--禁用 `cd /主仓` / `git -C /主仓` 绕过。
-> ExitWorktree 解绑 session cwd,后续 CLI 命令在主仓执行。
+> ⛔ [HARD_STOP] 退出 worktree 的方式按 agent:
+> - **Claude Code**: 必须调 `ExitWorktree` 工具--禁用 `cd /主仓` / `git -C /主仓` 绕过。`ExitWorktree` 解绑 session cwd,后续 CLI 命令在主仓执行。Claude Code 的 `cd` 不解绑 session,后续命令仍可能在 worktree 执行。
+> - **OpenCode/Pi**: 用 `cd <主仓路径>` 切回主仓(这些 agent 无 `ExitWorktree` 工具,`cd` 是唯一合法路径)。
+>
+> 两种方式都必须确保后续命令在主仓 feature 分支执行(步骤 ④ 的 `alloy _worktree-cleanup` 会校验)。
 
 **④ 调用原子 CLI 完成清理（传入 change-dir,CLI 自己从 worktree 分支读 state）:**
 
@@ -231,21 +246,28 @@ alloy _worktree-cleanup "$CHANGE_DIR"
 
 CLI 失败 -> ⛔ `[HARD_STOP]` 按 CLI 输出的指引处理（冲突 / 未跟踪文件 / branch -d 失败）,禁 agent 自动 git 自救（§3.5.1）。
 
-未使用 worktree 时跳过步骤 ①-④,直接进 /opsx:archive。
+未使用 worktree 时跳过步骤 ①-④,直接进 `alloy _archive`。
 
 ---
 
-**/opsx:archive（在 feature 分支执行）:**
+**`alloy _archive`(在 feature 分支执行,已下沉为原子 CLI):**
+
+> archive 阶段已下沉为 `alloy _archive` 原子命令(调 openspec archive CLI + 校验 Delta Spec promote + 校验目录移动)。不调 `/opsx:archive` slash command,不跑 `openspec archive` CLI--用 `alloy _archive` 统一封装。详见 `alloy-shared/references/opsx-commands.md`。
 
 **[HARD_STOP] 禁止 agent 跳过 `alloy _archive` 自行归档。**
 **违反字面 = 违反精神：哪怕"openspec/specs/ 为空（新项目首 change）"、"看起来没有主 spec 可 sync"、"change 的 specs/ 内容简单直接 mv 过去"--也必须调用 `alloy _archive` 让 openspec archive CLI 执行。**
 **新项目首 change 的 delta specs 必须作为初始主 spec 写入 openspec/specs/，不可跳过。**
 **agent 自行 `mv openspec/changes/<name> openspec/changes/archive/...` = 绕过 CLI = delta specs 永久丢失 promote 机会。**
 
+**[PRECONDITION_FAIL] `alloy _archive` 内置 worktree 防御检查--跳过步骤 ② worktree 清理直接归档会被拒绝:**
+- 检查 1:当前在 worktree 内(`git rev-parse --git-dir` ≠ `--git-common-dir`)-> 拒绝
+- 检查 2:.alloy.yaml 的 `worktree` 非 null 且 `worktree_merged_at` 为 null -> 拒绝
+- 拦截后提示"先调 `alloy _worktree-cleanup` 合并 worktree 分支到 feature"--回到步骤 ② 重新执行,不可在 worktree 内或未清理时强跑。
+
 调用 `alloy _archive`，传入 change dir。该命令原子完成：调用 `openspec archive` CLI + 校验 Delta Spec promote + 校验目录移动。agent 禁自行 mkdir/cp/mv 模拟。
 
 ```bash
-alloy _skill log openspec/changes/<name> archive opsx:archive
+alloy _skill log openspec/changes/<name> archive alloy:_archive
 alloy _archive openspec/changes/<name>
 ```
 
@@ -260,42 +282,11 @@ alloy _archive openspec/changes/<name>
 
 合并完成后，**必须先采集 diff 写入 AskUserQuestion 上下文**，沉默不算授权--agent 不可基于"看起来没问题"自动通过。**`git diff openspec/specs/` 为空 ≠ 无需 sync--可能 sync 根本未发生（见上方 PRECONDITION_FAIL）**。空 diff 必须先回到上方硬校验确认 change 无 specs/ 才算合法跳过。
 
-```bash
-SPEC_DIFF=$(git diff --stat openspec/specs/)
-SPEC_DIFF_FULL=$(git diff openspec/specs/ | head -200)  # 截 200 行防爆量
-```
+> ⛔ [HARD_STOP] USER_GATE 及后续命令必须用归档后路径 `$ARCHIVE_DIR`。
+> `alloy _archive` 执行后 `openspec/changes/<name>` 已移到 `openspec/changes/archive/<date>-<name>/`,原路径 `$CHANGE_DIR` 不存在,`_guard user-gate require` 内部 `readState` 会 ENOENT 失败。
+> 步骤:先解析 `$ARCHIVE_DIR`(下方 `ls -d` 命令),再设 USER_GATE。
 
-> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级:
-```bash
-alloy _guard user-gate require "$CHANGE_DIR" archive:delta-spec-review
-```
-
-🔴 USER_GATE（必须 AskUserQuestion，问题模板）：
-
-> Delta Spec 合并结果：
-> ```
-> [SPEC_DIFF stat 摘要]
-> ```
-> 前 200 行 diff：
-> ```
-> [SPEC_DIFF_FULL]
-> ```
-> 选项：
-> (a) 确认并继续提交归档变更
-> (b) 调整 spec 合并内容--退出 skill，回到 `/opsx:archive` 参数调整或手动修正 spec 后重新运行
-
-**违反字面 = 违反精神：** 哪怕 diff 看似"明显合理"或"diff 为空"，没经过用户明确选择 (a) = 不算授权。禁止 agent 基于"diff 短"、"无 conflict"或"specs/ 原本为空"自动跳过此 USER_GATE。
-
-**归档变更提交（HARD_STOP §5.2.1 git add 限路径）：** **禁止 `git add -A` 无路径--只 add `openspec/specs/ openspec/changes/` 两个明确路径，避免把无关 working tree 变更卷入归档 commit（§5.2.1）。**
-
-```bash
-git add openspec/specs/ openspec/changes/
-git diff --cached --quiet || git commit -m "chore(<name>): 归档目录移动"
-```
-
-`git commit` 失败 -> ⛔ `[HARD_STOP] 归档 commit 失败，archive 中止。检查 git 状态后重试。`
-
-**解析归档后路径（后续命令统一用 `$ARCHIVE_DIR`）：** change 目录在 archive 阶段已移到 `openspec/changes/archive/<YYYY-MM-DD>-<name>/`,后续 `_state write` / `_phase complete` 都必须用归档后路径,用原路径 `openspec/changes/<name>` 会因目录已移走而失败。
+**解析归档后路径（后续所有命令统一用 `$ARCHIVE_DIR`）：** change 目录在 archive 阶段已移到 `openspec/changes/archive/<YYYY-MM-DD>-<name>/`,后续 `_state write` / `_phase complete` / `_guard user-gate require` 都必须用归档后路径,用原路径 `openspec/changes/<name>` 会因目录已移走而失败。
 
 ```bash
 ARCHIVE_DIR=$(ls -d openspec/changes/archive/*-<name> 2>/dev/null | sort -r | head -1)
@@ -306,6 +297,44 @@ if [ -z "$ARCHIVE_DIR" ]; then
   exit 1
 fi
 ```
+
+```bash
+SPEC_DIFF=$(git diff --stat openspec/specs/)
+SPEC_DIFF_FULL=$(git diff openspec/specs/ | head -200)  # 截 200 行防爆量
+```
+
+> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级。
+
+⛔ [HARD_STOP] 必须执行以下命令设置 pending_gate(不是说明,是必跑命令):
+
+```bash
+alloy _guard user-gate require "$ARCHIVE_DIR" archive:delta-spec-review
+```
+
+🔴 USER_GATE（必须平台原生交互工具，问题模板）：
+
+> Delta Spec 合并结果：
+> ```
+> [SPEC_DIFF stat 摘要]
+> ```
+> 前 200 行 diff：
+> ```
+> [SPEC_DIFF_FULL]
+> ```
+> 选项：
+> 1. 确认并继续提交归档变更
+> 2. 调整 spec 合并内容--退出 skill，回到 `alloy _archive` 参数调整或手动修正 spec 后重新运行
+
+**违反字面 = 违反精神：** 哪怕 diff 看似"明显合理"或"diff 为空"，没经过用户明确选择 1 = 不算授权。禁止 agent 基于"diff 短"、"无 conflict"或"specs/ 原本为空"自动跳过此 USER_GATE。
+
+**归档变更提交（HARD_STOP §5.2.1 git add 限路径）：** **禁止 `git add -A` 无路径--只 add `openspec/specs/ openspec/changes/` 两个明确路径，避免把无关 working tree 变更卷入归档 commit（§5.2.1）。**
+
+```bash
+git add openspec/specs/ openspec/changes/
+git diff --cached --quiet || git commit -m "chore(<name>): 归档目录移动"
+```
+
+`git commit` 失败 -> ⛔ `[HARD_STOP] 归档 commit 失败，archive 中止。检查 git 状态后重试。`
 
 **记录完成时间并推进 phase--原子命令 `alloy _phase complete` 内部完成 completed_at 写入 + phase 推进 + git add 限路径 + commit：**
 
@@ -328,7 +357,8 @@ alloy _verify phase-exit archive "$ARCHIVE_DIR" && alloy _phase complete "$ARCHI
 
 ```bash
 # 用户须手动回滚 phase：
-alloy _state set "$ARCHIVE_DIR" phase applied
+# phase 字段受管(_state write 拦截),需逃生阀 ALLOY_FORCE_PHASE=1
+ALLOY_FORCE_PHASE=1 alloy _state write "$ARCHIVE_DIR" phase applied
 git checkout HEAD~1 -- "$ARCHIVE_DIR/.alloy.yaml"  # 撤销 phase commit 中的状态变更
 git reset HEAD~1                                  # 退回 phase commit
 ```
@@ -350,22 +380,28 @@ git reset HEAD~1                                  # 退回 phase commit
 -> 代码合入由 /alloy-finish 处理
 ```
 
-archive 不做代码合并--代码合入由 `/alloy-finish` 处理。
+> ⛔ [HARD_STOP] 输出完成框后**必须立刻**设 USER_GATE + 问用户下一步--完成框是阶段宣告,不是流程结束。跳过下方 gate 直接进 finish = 违规(3 个 agent 实测踩坑:输出完成框后误判"archive 已结束",跳过 gate)。
+> 违反字面 = 违反精神：哪怕"用户肯定要进 finish"、"gate 是形式主义",也算违反--gate 是流程节点,不是可选步骤。
 
-> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级:
+> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级。
+
+⛔ [HARD_STOP] 必须执行以下命令设置 pending_gate(不是说明,是必跑命令):
+
 ```bash
-alloy _guard user-gate require "$CHANGE_DIR" archive:phase-complete
+alloy _guard user-gate require "$ARCHIVE_DIR" archive:phase-complete
 ```
 
-🔴 USER_GATE（必须 AskUserQuestion）: archive 阶段完成,下一步?
+🔴 USER_GATE（必须平台原生交互工具）: archive 阶段完成,下一步?
 
 > 选项:
-> - (a) 进入 finish 阶段--加载 `alloy-finish` skill 推进代码合入
-> - (b) 暂停--查看归档结果 / 检查 spec / 查看状态(`alloy status`)
-> - (c) 其他--用户自定义下一步
+> - 1. 进入 finish 阶段--加载 `alloy-finish` skill 推进代码合入
+> - 2. 暂停--查看归档结果 / 检查 spec / 查看状态(`alloy status`)
+> - 3. 其他--用户自定义下一步
 
-> 用户选 (a) 后,agent **必须直接用 `Skill` 工具加载 `alloy-finish`**(传入 change name),进入 finish 阶段--禁提示"请运行 /alloy-finish"让用户手动输入。
-> 用户选 (b) 后,agent 停止,输出"已暂停。需要时运行 /alloy-finish <name> 继续。"
-> 用户选 (c) 后,agent 停止,等用户后续命令。
+archive 不做代码合并--代码合入由 `/alloy-finish` 处理。
+
+> 用户选 1 后,agent **必须直接用 `Skill` 工具加载 `alloy-finish`**(传入 change name),进入 finish 阶段--禁提示"请运行 /alloy-finish"让用户手动输入。
+> 用户选 2 后,agent 停止,输出"已暂停。需要时运行 /alloy-finish <name> 继续。"
+> 用户选 3 后,agent 停止,等用户后续命令。
 > ⛔ 禁止：纯文本输出"运行 /alloy-finish 进入收尾阶段"让用户手动输入--用户已在 USER_GATE 授权,应直接加载 finish skill。
-> ⛔ 禁止：用户选 (a) 后,agent 提示"请运行 /alloy-finish"让用户手动输入。常见违规模式:agent 输出"好的,请输入 /alloy-finish hello-script 进入收尾阶段"。
+> ⛔ 禁止：用户选 1 后,agent 提示"请运行 /alloy-finish"让用户手动输入。常见违规模式:agent 输出"好的,请输入 /alloy-finish hello-script 进入收尾阶段"。

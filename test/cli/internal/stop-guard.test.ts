@@ -114,4 +114,32 @@ describe("evaluateStopGuard(纯逻辑,exit 2 + stderr 模式)", () => {
     const result = evaluateStopGuard(stdin, {});
     expect(result.message).toContain("ALLOY_FORCE_STOP");
   });
+
+  // 各 agent 提示语差异化
+  it("Claude Code(CLAUDECODE=1)提示含 AskUserQuestion", () => {
+    const stdin = JSON.stringify({
+      last_assistant_message: "🔴 USER_GATE\n(a) 确认\n(b) 调整",
+    });
+    const result = evaluateStopGuard(stdin, { CLAUDECODE: "1" });
+    expect(result.exitCode).toBe(2);
+    expect(result.message).toContain("AskUserQuestion");
+  });
+
+  it("OpenCode(OPENCODE=1)提示含 question 工具", () => {
+    const stdin = JSON.stringify({
+      last_assistant_message: "🔴 USER_GATE\n(a) 确认\n(b) 调整",
+    });
+    const result = evaluateStopGuard(stdin, { OPENCODE: "1" });
+    expect(result.exitCode).toBe(2);
+    expect(result.message).toContain("question 工具");
+  });
+
+  it("Pi(PI_CODING_AGENT=true)提示含 ctx.ui", () => {
+    const stdin = JSON.stringify({
+      last_assistant_message: "🔴 USER_GATE\n(a) 确认\n(b) 调整",
+    });
+    const result = evaluateStopGuard(stdin, { PI_CODING_AGENT: "true" });
+    expect(result.exitCode).toBe(2);
+    expect(result.message).toContain("ctx.ui");
+  });
 });

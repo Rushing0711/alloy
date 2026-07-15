@@ -36,10 +36,10 @@ behaviors:
 apply 阶段不允许任何需求变更——plan 已锁定，统一走 discard 重开。
 
 用户提出需求/设计变更时：
-1. AskUserQuestion 展示选项：
-   - (a) 放弃当前 change，开新 change 处理变更（执行 `/alloy-discard` + `/alloy-start`）
-   - (b) 取消变更，继续当前 apply
-2. 选 (a) 引导用户运行 discard 命令；选 (b) 继续 apply。
+1. 平台原生交互工具展示选项：
+   - 1. 放弃当前 change，开新 change 处理变更（执行 `/alloy-discard` + `/alloy-start`）
+   - 2. 取消变更，继续当前 apply
+2. 选 1 引导用户运行 discard 命令；选 2 继续 apply。
 
 详见 apply.md "需求变更闸门"段落。
 

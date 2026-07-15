@@ -3,6 +3,8 @@ import { readFileSync, readdirSync, existsSync } from "node:fs";
 import type { Dirent } from "node:fs";
 import { join, relative, isAbsolute } from "node:path";
 import { guardCheck } from "../../../core/hook-guard.js";
+import { detectAgent } from "../../../core/agents.js";
+import type { AgentId } from "../../../core/types.js";
 
 interface HookInput {
   tool_name: string;
@@ -140,6 +142,16 @@ function readStdin(): string {
 /** 问答工具名(Claude Code 的 AskUserQuestion / OpenCode 的 question) */
 const ASK_TOOLS = new Set(["AskUserQuestion", "question", "ask"]);
 
+/** 根据 agent 返回 USER_GATE 应用的交互工具提示 */
+function getAgentToolHint(agent: AgentId | null): string {
+  switch (agent) {
+    case "claude-code": return "AskUserQuestion";
+    case "opencode": return "question";
+    case "pi": return "ctx.ui select(alloy ask-question 扩展)";
+    default: return "问答工具(AskUserQuestion/question)";
+  }
+}
+
 /**
  * 纯逻辑判定:给定 stdin + phases + env,返回 exitCode + message。
  * 不涉及 process.exit / process.cwd,便于测试。
@@ -204,10 +216,12 @@ export function evaluateHook(
   }
 
   // 拦截:自适应消息(user-gate vs 无活跃 change vs 非 apply)
+  const agent = detectAgent(env);
+  const toolHint = getAgentToolHint(agent);
   const message = result.reason.includes("user-gate")
     ? [
         `⛔ [alloy hook] ${result.reason}`,
-        "  请先用问答工具(AskUserQuestion/question)与用户确认,",
+        `  请先用 ${toolHint} 与用户确认,`,
         "  或调 alloy _guard user-gate pass <change-dir> 手动降级。",
         "  如确需紧急绕过,设置 ALLOY_FORCE_WRITE=1。",
       ].join("\n")
@@ -231,10 +245,10 @@ export function evaluateHook(
 /**
  * alloy _hook-guard
  *
- * PreToolUse hook 适配器(Claude Code/Codex 共用)。
+ * PreToolUse hook 适配器(Claude Code 用)。
  * 从 stdin 读 JSON,判定是否允许 Write/Edit,exit 0(放行)/ 2(拦截)。
  *
- * Claude Code/Codex 的 settings.json 配置:
+ * Claude Code 的 settings.json 配置:
  *   hooks.PreToolUse: [{ matcher: "Write|Edit", hooks: [{ type: "command", command: "alloy _hook-guard" }] }]
  */
 export async function hookGuardCommand(args: string[]): Promise<void> {

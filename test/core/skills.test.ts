@@ -7,17 +7,9 @@ import { tmpdir } from "node:os";
 vi.mock("../../src/utils/fs.js", () => ({
   getPackageRoot: vi.fn(),
 }));
-vi.mock("../../src/core/detect-installations.js", () => ({
-  detectAlloySkill: vi.fn(),
-}));
-vi.mock("../../src/utils/prompt.js", () => ({
-  promptConfirm: vi.fn(),
-}));
 
 import { getPackageRoot } from "../../src/utils/fs.js";
-import { detectAlloySkill } from "../../src/core/detect-installations.js";
-import { promptConfirm } from "../../src/utils/prompt.js";
-import { deploySkills, deploySchema, detectAlloySkillsVersion } from "../../src/core/skills.js";
+import { deploySkills, deploySchema, detectAlloySkillsVersion, deployOpenCodeCommands } from "../../src/core/skills.js";
 import { KNOWN_AGENTS } from "../../src/core/agents.js";
 import type { DeployOptions } from "../../src/core/types.js";
 
@@ -57,7 +49,6 @@ describe("deploySkills", () => {
     await writeFile(join(startReferencesDir, "apply-worktree.md"), "# apply worktree\n", "utf-8");
 
     vi.mocked(getPackageRoot).mockReturnValue(join(tmpDir, "package"));
-    vi.mocked(detectAlloySkill).mockReturnValue({ found: false, location: null, path: null, version: null });
 
     // 创建 package.json(含 version),供 deploySkills 写 .alloy-version 时读取
     await writeFile(
@@ -104,16 +95,6 @@ describe("deploySkills", () => {
     expect(content).toContain("name: alloy-start");
   });
 
-  it("Codex project 模式跳过部署", async () => {
-    const opts: DeployOptions = {
-      scope: "project",
-      projectPath,
-      targetAgents: [{ id: "codex", label: "Codex", supportsColonCommands: false, commandsDir: ".codex/prompts/", globalOnly: true }],
-    };
-    const deployed = await deploySkills(opts);
-    expect(deployed.length).toBe(0);
-  });
-
   it("多 agent 同时部署", async () => {
     const opts: DeployOptions = {
       scope: "project",
@@ -132,11 +113,10 @@ describe("deploySkills", () => {
     expect(opencodeFiles.length).toBe(9);
   });
 
-  it("检测到已有安装且用户拒绝覆盖时跳过该 agent", async () => {
-    vi.mocked(detectAlloySkill).mockReturnValue({
-      found: true, location: "project-skill", path: `${projectPath}/.claude/skills/alloy-start/SKILL.md`, version: null,
-    });
-    vi.mocked(promptConfirm).mockResolvedValue(false);
+  it("检测到已有安装时直接覆盖(不问确认,用户已在 display 阶段确认)", async () => {
+    // 预创建目标 skill 目录,模拟已有安装
+    await mkdir(join(projectPath, ".claude", "skills", "alloy-start"), { recursive: true });
+    await writeFile(join(projectPath, ".claude", "skills", "alloy-start", "SKILL.md"), "existing", "utf-8");
 
     const opts: DeployOptions = {
       scope: "project",
@@ -144,15 +124,14 @@ describe("deploySkills", () => {
       targetAgents: [{ id: "claude-code", label: "CC", supportsColonCommands: true, commandsDir: ".claude/commands/" }],
     };
     const deployed = await deploySkills(opts);
-    expect(deployed.length).toBe(0);
-    expect(promptConfirm).toHaveBeenCalledWith("     是否覆盖 CC 的 Alloy skills？", false);
+    expect(deployed.length).toBe(9);
   });
 
-  it("检测到已有安装且用户确认覆盖时继续部署", async () => {
-    vi.mocked(detectAlloySkill).mockReturnValue({
-      found: true, location: "user-skill", path: "/home/.claude/skills/alloy-start/SKILL.md", version: null,
-    });
-    vi.mocked(promptConfirm).mockResolvedValue(true);
+  it("检测到已有安装(user-skill)时正常部署(只检查目标 scope,全局安装不影响)", async () => {
+    // 只预创建全局 skill,项目级无安装 → 不应显示"覆盖更新"
+    const homeDir = join(tmpDir, "home");
+    await mkdir(join(homeDir, ".claude", "skills", "alloy-start"), { recursive: true });
+    await writeFile(join(homeDir, ".claude", "skills", "alloy-start", "SKILL.md"), "existing", "utf-8");
 
     const opts: DeployOptions = {
       scope: "project",
@@ -164,9 +143,9 @@ describe("deploySkills", () => {
   });
 
   it("force=true 跳过覆盖确认直接部署(不再调用 promptConfirm)", async () => {
-    vi.mocked(detectAlloySkill).mockReturnValue({
-      found: true, location: "project-skill", path: `${projectPath}/.claude/skills/alloy-start/SKILL.md`, version: null,
-    });
+    // 预创建目标 skill 目录,模拟已有安装
+    await mkdir(join(projectPath, ".claude", "skills", "alloy-start"), { recursive: true });
+    await writeFile(join(projectPath, ".claude", "skills", "alloy-start", "SKILL.md"), "existing", "utf-8");
 
     const opts: DeployOptions = {
       scope: "project",
@@ -175,16 +154,15 @@ describe("deploySkills", () => {
       force: true,
     };
     const deployed = await deploySkills(opts);
-    // 跳过确认,直接部署 9 个 skill
     expect(deployed.length).toBe(9);
-    // 不应调用 promptConfirm(force 跳过覆盖确认)
-    expect(promptConfirm).not.toHaveBeenCalled();
   });
 
   it("force=true 多 agent 均跳过覆盖确认", async () => {
-    vi.mocked(detectAlloySkill).mockReturnValue({
-      found: true, location: "project-skill", path: `${projectPath}/.claude/skills/alloy-start/SKILL.md`, version: null,
-    });
+    // 预创建两个 agent 的目标 skill 目录
+    await mkdir(join(projectPath, ".claude", "skills", "alloy-start"), { recursive: true });
+    await writeFile(join(projectPath, ".claude", "skills", "alloy-start", "SKILL.md"), "existing", "utf-8");
+    await mkdir(join(projectPath, ".opencode", "skills", "alloy-start"), { recursive: true });
+    await writeFile(join(projectPath, ".opencode", "skills", "alloy-start", "SKILL.md"), "existing", "utf-8");
 
     const opts: DeployOptions = {
       scope: "project",
@@ -196,14 +174,10 @@ describe("deploySkills", () => {
       force: true,
     };
     const deployed = await deploySkills(opts);
-    // 9 (claude-code) + 9 (opencode) = 18
     expect(deployed.length).toBe(18);
-    expect(promptConfirm).not.toHaveBeenCalled();
   });
 
   it("未检测到已有安装时正常部署", async () => {
-    vi.mocked(detectAlloySkill).mockReturnValue({ found: false, location: null, path: null, version: null });
-
     const opts: DeployOptions = {
       scope: "project",
       projectPath,
@@ -211,7 +185,6 @@ describe("deploySkills", () => {
     };
     const deployed = await deploySkills(opts);
     expect(deployed.length).toBe(9);
-    expect(promptConfirm).not.toHaveBeenCalled();
   });
 
   it("skill 目录含 references/ 整体拷贝", async () => {
@@ -427,5 +400,135 @@ describe("deploySchema", () => {
     expect(specsStat.isDirectory()).toBe(true);
     const changesStat = await stat(join(projectPath, "openspec", "changes"));
     expect(changesStat.isDirectory()).toBe(true);
+  });
+});
+
+describe("deployOpenCodeCommands", () => {
+  let tmpDir: string;
+  let sourceDir: string;
+  let projectPath: string;
+
+  // deployOpenCodeCommands 覆盖的 8 个流程 id(不含 alloy-shared,shared 不直接调用)
+  const commandIds = ["start", "plan", "apply", "archive", "finish", "fix", "status", "discard"];
+
+  // 用 KNOWN_AGENTS 的真实 opencode agent(含 globalBase,路径推导与生产一致)
+  const opencodeAgent = KNOWN_AGENTS.find((a) => a.id === "opencode")!;
+
+  beforeEach(async () => {
+    tmpDir = join(tmpdir(), `alloy-oc-cmd-test-${Date.now()}`);
+    sourceDir = join(tmpDir, "package", "skills");
+    projectPath = join(tmpDir, "project");
+    await mkdir(sourceDir, { recursive: true });
+    await mkdir(projectPath, { recursive: true });
+
+    // 创建 8 个 skill 目录,每个 SKILL.md 含 description
+    for (const id of commandIds) {
+      const skillDir = join(sourceDir, `alloy-${id}`);
+      await mkdir(skillDir, { recursive: true });
+      await writeFile(
+        join(skillDir, "SKILL.md"),
+        `---\nname: alloy-${id}\ndescription: Alloy ${id} 流程--测试描述\n---\n# alloy-${id}`,
+        "utf-8"
+      );
+    }
+
+    vi.mocked(getPackageRoot).mockReturnValue(join(tmpDir, "package"));
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+    vi.clearAllMocks();
+  });
+
+  it("project scope:生成 8 个 wrapper 到 .opencode/commands/", async () => {
+    const opts: DeployOptions = {
+      scope: "project",
+      projectPath,
+      targetAgents: [opencodeAgent],
+    };
+    const paths = await deployOpenCodeCommands(opts);
+    expect(paths.length).toBe(8);
+    for (const id of commandIds) {
+      const expected = join(projectPath, ".opencode", "commands", `alloy-${id}.md`);
+      expect(paths).toContain(expected);
+    }
+  });
+
+  it("global scope:生成到 ~/.config/opencode/commands/", async () => {
+    const fakeHome = join(tmpDir, "home");
+    await mkdir(fakeHome, { recursive: true });
+    const originalHome = process.env.HOME;
+    process.env.HOME = fakeHome;
+    try {
+      const opts: DeployOptions = {
+        scope: "global",
+        projectPath,
+        targetAgents: [opencodeAgent],
+      };
+      const paths = await deployOpenCodeCommands(opts);
+      expect(paths.length).toBe(8);
+      for (const id of commandIds) {
+        const expected = join(fakeHome, ".config", "opencode", "commands", `alloy-${id}.md`);
+        expect(paths).toContain(expected);
+      }
+    } finally {
+      process.env.HOME = originalHome;
+    }
+  });
+
+  it("wrapper 内容含 skill({ name }) 调用 + description", async () => {
+    const opts: DeployOptions = {
+      scope: "project",
+      projectPath,
+      targetAgents: [opencodeAgent],
+    };
+    await deployOpenCodeCommands(opts);
+    const startWrapper = await readFile(join(projectPath, ".opencode", "commands", "alloy-start.md"), "utf-8");
+    // 含 frontmatter description(从 SKILL.md 读)
+    expect(startWrapper).toContain("description: Alloy start 流程--测试描述");
+    // 含 skill 工具调用指示
+    expect(startWrapper).toContain('skill({ name: "alloy-start" })');
+  });
+
+  it("非 opencode agent 不生成 wrapper(返回空)", async () => {
+    const claudeAgent = KNOWN_AGENTS.find((a) => a.id === "claude-code")!;
+    const opts: DeployOptions = {
+      scope: "project",
+      projectPath,
+      targetAgents: [claudeAgent],
+    };
+    const paths = await deployOpenCodeCommands(opts);
+    expect(paths.length).toBe(0);
+  });
+
+  it("多 agent 时只对 opencode 生成 wrapper", async () => {
+    const claudeAgent = KNOWN_AGENTS.find((a) => a.id === "claude-code")!;
+    const opts: DeployOptions = {
+      scope: "project",
+      projectPath,
+      targetAgents: [claudeAgent, opencodeAgent],
+    };
+    const paths = await deployOpenCodeCommands(opts);
+    expect(paths.length).toBe(8);
+    // 全部在 .opencode/commands/
+    expect(paths.every(p => p.includes(join(".opencode", "commands")))).toBe(true);
+  });
+
+  it("SKILL.md 缺 description 时用默认描述", async () => {
+    // 覆盖 alloy-start 的 SKILL.md,去掉 description
+    await writeFile(
+      join(sourceDir, "alloy-start", "SKILL.md"),
+      `---\nname: alloy-start\n---\n# alloy-start`,
+      "utf-8"
+    );
+    const opts: DeployOptions = {
+      scope: "project",
+      projectPath,
+      targetAgents: [opencodeAgent],
+    };
+    await deployOpenCodeCommands(opts);
+    const startWrapper = await readFile(join(projectPath, ".opencode", "commands", "alloy-start.md"), "utf-8");
+    // 使用默认 description
+    expect(startWrapper).toContain("description: Alloy start 流程");
   });
 });

@@ -7,7 +7,7 @@ plan 阶段的制品回溯清理——两条路径：边界内重新生成、全
 
 ## 边界内重新生成（规格边界内调整，不改 data model / API / 功能边界）
 
-**判断规则：** 由 agent 判断变更是否触犯规格边界（不是让用户分类，见 plan.md 选 (b) Step 0）。**不越界**（纯展示样式、文案、不改数据契约和功能边界）走此路径重新生成当前制品；**越界**（改 Capabilities / data model 字段 / API 契约 / 核心功能行为）必须走下面的全新变更路径，**禁止使用 `alloy _artifact reset`**。
+**判断规则：** 由 agent 判断变更是否触犯规格边界（不是让用户分类，见 plan.md 选 2 Step 0）。**不越界**（纯展示样式、文案、不改数据契约和功能边界）走此路径重新生成当前制品；**越界**（改 Capabilities / data model 字段 / API 契约 / 核心功能行为）必须走下面的全新变更路径，**禁止使用 `alloy _artifact reset`**。
 
 使用 `alloy _artifact reset` 一步完成 hash 清除 + 文件删除：
 

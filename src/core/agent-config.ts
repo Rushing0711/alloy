@@ -70,6 +70,8 @@ export const ALLOY_PERMISSIONS: {
     // 文件读写(alloy 工作区)
     "Read(~/.claude/**)",
     "Edit(openspec/**)",
+    // 交互工具(alloy USER_GATE 依赖 AskUserQuestion)
+    "AskUserQuestion",
   ],
   deny: [
     // 危险命令(永远拒绝)
@@ -95,11 +97,11 @@ export const ALLOY_PERMISSIONS: {
  *
  * 不含的 agent:
  * - OpenCode:工具级权限(非命令模式),不够精确,不自动配置
- * - Codex:全局配置,非项目级
  */
 const ALLOY_PERMISSION_CONFIGS: Record<string, string> = {
   "claude-code": ".claude/settings.json",
   "pi": ".pi/permissions.json",
+  "opencode": "opencode.json",
 };
 
 /** 返回支持项目级 permissions 的 agent id 列表 */
@@ -147,7 +149,7 @@ export async function injectAgentConfigs(opts: DeployOptions): Promise<void> {
   }
 }
 
-/** 检测指定 agent 是否已有 permissions.allow 配置 */
+/** 检测指定 agent 是否已有 permissions 配置(claude-code/pi:permissions.allow;opencode:permission.bash) */
 export async function hasPermissionsConfig(projectPath: string, agentId: string): Promise<boolean> {
   const settingsFile = ALLOY_PERMISSION_CONFIGS[agentId];
   if (!settingsFile) return false;
@@ -156,11 +158,29 @@ export async function hasPermissionsConfig(projectPath: string, agentId: string)
   try {
     const raw = await readFile(settingsPath, "utf-8");
     const settings = JSON.parse(raw);
+    if (agentId === "opencode") {
+      const bash = settings?.permission?.bash;
+      return !!(bash && typeof bash === "object" && Object.keys(bash).length > 0);
+    }
     const permissions = settings.permissions;
     return !!(permissions && Array.isArray(permissions.allow) && permissions.allow.length > 0);
   } catch {
     return false;
   }
+}
+
+/** 把 alloy 的 Bash(cmd *) allow/deny 转为 opencode 的 { "cmd *": "allow"|"deny" } 格式 */
+function toOpenCodeBashPermissions(allow: string[], deny: string[]): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const entry of allow) {
+    const match = entry.match(/^Bash\((.+)\)$/);
+    if (match) result[match[1]] = "allow";
+  }
+  for (const entry of deny) {
+    const match = entry.match(/^Bash\((.+)\)$/);
+    if (match) result[match[1]] = "deny";
+  }
+  return result;
 }
 
 /** 写入 alloy 推荐的 permissions 到指定 agent 的配置文件(幂等合并,不覆盖用户自定义条目) */
@@ -177,16 +197,30 @@ export async function writePermissionsConfig(projectPath: string, agentId: strin
     // 文件不存在或解析失败
   }
 
-  // 幂等合并 permissions.allow / permissions.deny
-  const existingPermissions = (settings.permissions ?? {}) as { allow?: string[]; deny?: string[] };
-  const existingAllow = existingPermissions.allow ?? [];
-  const existingDeny = existingPermissions.deny ?? [];
-
-  // 合并:去重(用户自定义条目保留,alloy 推荐条目补充)
-  const mergedAllow = Array.from(new Set([...existingAllow, ...ALLOY_PERMISSIONS.allow]));
-  const mergedDeny = Array.from(new Set([...existingDeny, ...ALLOY_PERMISSIONS.deny]));
-
-  settings.permissions = { allow: mergedAllow, deny: mergedDeny };
+  if (agentId === "opencode") {
+    // $schema: OpenCode 运行时会自动补这个字段(为 IDE 提供 JSON Schema 补全/校验)。
+    // alloy init 主动写,避免 init 后 OpenCode 第一次运行时补 $schema 导致 working tree 脏 + 补充提交。
+    // 幂等:已有 $schema 不覆盖(尊重用户可能自定义的 URL)。新建时放第一行(OpenCode 惯例)。
+    if (!settings.$schema) {
+      const newSettings: Record<string, unknown> = { $schema: "https://opencode.ai/config.json" };
+      for (const key of Object.keys(settings)) {
+        newSettings[key] = settings[key];
+      }
+      settings = newSettings;
+    }
+    const alloyBashPerms = toOpenCodeBashPermissions(ALLOY_PERMISSIONS.allow, ALLOY_PERMISSIONS.deny);
+    const existingPerm = (settings.permission ?? {}) as { bash?: Record<string, string> };
+    const existingBash = existingPerm.bash ?? {};
+    const mergedBash = { ...alloyBashPerms, ...existingBash };
+    settings.permission = { ...existingPerm, bash: mergedBash };
+  } else {
+    const existingPermissions = (settings.permissions ?? {}) as { allow?: string[]; deny?: string[] };
+    const existingAllow = existingPermissions.allow ?? [];
+    const existingDeny = existingPermissions.deny ?? [];
+    const mergedAllow = Array.from(new Set([...existingAllow, ...ALLOY_PERMISSIONS.allow]));
+    const mergedDeny = Array.from(new Set([...existingDeny, ...ALLOY_PERMISSIONS.deny]));
+    settings.permissions = { allow: mergedAllow, deny: mergedDeny };
+  }
 
   const dir = join(settingsPath, "..");
   await mkdir(dir, { recursive: true });
@@ -200,14 +234,16 @@ import { getPackageRoot } from "../utils/fs.js";
 
 /**
  * 支持 PreToolUse hook 的 agent 配置--alloy init 可项目级注入。
- * Claude Code / Codex 共用同款协议(外部脚本 + exit 2 阻断)。
+ * Claude Code 用同款协议(外部脚本 + exit 2 阻断)。
  */
 const ALLOY_HOOK_CONFIGS: Record<string, string> = {
   "claude-code": ".claude/settings.json",
-  "codex": ".codex/settings.json",
 };
 
-const ALLOY_HOOK_MATCHER = "Write|Edit";
+// matcher 含 AskUserQuestion:问答工具调用时触发 hook-guard,自动 clearAllPendingGates。
+// 旧 matcher 只有 Write|Edit,问答工具不触发 -> pending_gate 残留。alloy init/update 升级到新 matcher。
+const LEGACY_HOOK_MATCHER = "Write|Edit";
+const ALLOY_HOOK_MATCHER = "Write|Edit|AskUserQuestion";
 
 /**
  * hook command 用绝对路径,不依赖 PATH/alias。
@@ -220,18 +256,17 @@ function getHookCommand(): string {
   return `node ${alloyCliPath} _hook-guard`;
 }
 
-/** 返回支持 hook 闸门的 agent id 列表(claude-code/codex 用 settings.json,pi 用扩展,opencode 用 custom tool) */
+/** 返回支持 hook 闸门的 agent id 列表(claude-code 用 settings.json,pi 用扩展,opencode 用 plugin) */
 export function getHookSupportedAgents(): string[] {
-  return ["claude-code", "codex", "pi", "opencode"];
+  return ["claude-code", "pi", "opencode"];
 }
 
 /** 返回 agent 的 hook 配置路径描述(用于 init 执行清单显示) */
 export function getHookConfigPath(agentId: string): string {
   switch (agentId) {
     case "claude-code": return ".claude/settings.json (hooks.PreToolUse)";
-    case "codex": return ".codex/settings.json (hooks.PreToolUse)";
-    case "pi": return ".pi/extensions/alloy-guard.ts (tool_call 扩展)";
-    case "opencode": return ".opencode/tools/write.ts+edit.ts (custom tool)";
+    case "pi": return ".pi/extensions/alloy-guard.ts (tool_call + agent_settled 扩展)";
+    case "opencode": return ".opencode/plugins/alloy-guard.ts (tool.execute.before + session.idle 插件)";
     default: return "";
   }
 }
@@ -241,7 +276,7 @@ interface PreToolUseEntry {
   hooks?: { type: string; command: string }[];
 }
 
-/** 检测指定 agent 是否已装 alloy hook(claude-code/codex 查 settings.json,pi 查扩展,opencode 查 tools) */
+/** 检测指定 agent 是否已装 alloy hook(claude-code 查 settings.json,pi 查扩展,opencode 查 plugin) */
 export async function hasHookConfig(projectPath: string, agentId: string): Promise<boolean> {
   if (agentId === "pi") return hasPiHookExtension(projectPath);
   if (agentId === "opencode") return hasOpenCodeHookTools(projectPath);
@@ -257,8 +292,9 @@ export async function hasHookConfig(projectPath: string, agentId: string): Promi
     if (!Array.isArray(preToolUse)) return false;
 
     const hookCommand = getHookCommand();
+    // 兼容旧 matcher(Write|Edit)和新 matcher(Write|Edit|AskUserQuestion)
     return preToolUse.some((entry: PreToolUseEntry) =>
-      entry?.matcher === ALLOY_HOOK_MATCHER &&
+      (entry?.matcher === ALLOY_HOOK_MATCHER || entry?.matcher === LEGACY_HOOK_MATCHER) &&
       Array.isArray(entry.hooks) &&
       entry.hooks.some((h) => h?.command === hookCommand)
     );
@@ -269,9 +305,9 @@ export async function hasHookConfig(projectPath: string, agentId: string): Promi
 
 /**
  * 写入 alloy hook 到指定 agent(幂等)。
- * claude-code/codex:settings.json 的 PreToolUse
+ * claude-code:settings.json 的 PreToolUse
  * pi:.pi/extensions/alloy-guard.ts
- * opencode:.opencode/tools/write.ts + edit.ts
+ * opencode:.opencode/plugins/alloy-guard.ts
  */
 export async function writeHookConfig(projectPath: string, agentId: string): Promise<boolean> {
   if (agentId === "pi") return writePiHookExtension(projectPath);
@@ -296,11 +332,14 @@ export async function writeHookConfig(projectPath: string, agentId: string): Pro
 
   const hookCommand = getHookCommand();
 
-  // 找同 matcher 的 entry
-  let entry = preToolUse.find((e) => e?.matcher === ALLOY_HOOK_MATCHER);
+  // 找同 matcher 的 entry(兼容旧 matcher,升级到新 matcher)
+  let entry = preToolUse.find((e) => e?.matcher === ALLOY_HOOK_MATCHER || e?.matcher === LEGACY_HOOK_MATCHER);
   if (!entry) {
     entry = { matcher: ALLOY_HOOK_MATCHER, hooks: [] };
     preToolUse.push(entry);
+  } else if (entry.matcher === LEGACY_HOOK_MATCHER) {
+    // 旧 matcher 升级为含 AskUserQuestion 的新 matcher
+    entry.matcher = ALLOY_HOOK_MATCHER;
   }
   if (!Array.isArray(entry.hooks)) entry.hooks = [];
 
@@ -326,11 +365,14 @@ export async function writeHookConfig(projectPath: string, agentId: string): Pro
 
 /**
  * 支持 Stop hook 的 agent 配置。
- * 仅 Claude Code 已确认支持 Stop hook + last_assistant_message。
- * OpenCode/Codex/Pi 的 Stop hook 能力待确认(确认后加入此处)。
+ * Claude Code 用同款协议(外部脚本 + exit 2,settings.json 的 hooks.Stop)。
+ * Pi 用 extension agent_settled 事件(与 PreToolUse 的 tool_call 同一个 .pi/extensions/alloy-guard.ts)。
+ * OpenCode 用 plugin session.idle(与 PreToolUse 的 tool.execute.before 同一个 .opencode/plugins/alloy-guard.ts)。
  */
 const ALLOY_STOP_HOOK_CONFIGS: Record<string, string> = {
   "claude-code": ".claude/settings.json",
+  "pi": ".pi/extensions/alloy-guard.ts",
+  "opencode": ".opencode/plugins/alloy-guard.ts",
 };
 
 function getStopHookCommand(): string {
@@ -349,6 +391,25 @@ interface StopHookEntry {
 
 /** 检测指定 agent 是否已装 alloy _stop-guard */
 export async function hasStopHookConfig(projectPath: string, agentId: string): Promise<boolean> {
+  // Pi: Stop hook 在 extension(与 PreToolUse 同一个文件),查 _stop-guard 标记
+  if (agentId === "pi") {
+    try {
+      const content = await readFile(join(projectPath, PI_EXTENSION_FILE), "utf-8");
+      return content.includes("_stop-guard");
+    } catch {
+      return false;
+    }
+  }
+  // OpenCode: Stop hook 在 plugin(与 PreToolUse 同一个文件),查 _stop-guard 标记
+  if (agentId === "opencode") {
+    try {
+      const content = await readFile(join(projectPath, OPENCODE_PLUGIN_FILE), "utf-8");
+      return content.includes("_stop-guard");
+    } catch {
+      return false;
+    }
+  }
+
   const settingsFile = ALLOY_STOP_HOOK_CONFIGS[agentId];
   if (!settingsFile) return false;
 
@@ -377,6 +438,17 @@ export async function hasStopHookConfig(projectPath: string, agentId: string): P
  * 与 writeHookConfig 写同一个 settings.json,先后调用互不影响(各自维护 hooks.Stop / hooks.PreToolUse)。
  */
 export async function writeStopHookConfig(projectPath: string, agentId: string): Promise<boolean> {
+  // Pi: Stop hook 合并到 PreToolUse 的 extension(同一文件加 agent_settled 事件)
+  // writePiHookExtension 生成含 tool_call + agent_settled 的完整 extension
+  if (agentId === "pi") {
+    return writePiHookExtension(projectPath);
+  }
+  // OpenCode: Stop hook 合并到 PreToolUse 的 plugin(同一文件加 session.idle hook)
+  // writeOpenCodeHookTools 生成含 tool.execute.before + session.idle 的完整 plugin
+  if (agentId === "opencode") {
+    return writeOpenCodeHookTools(projectPath);
+  }
+
   const settingsFile = ALLOY_STOP_HOOK_CONFIGS[agentId];
   if (!settingsFile) return false;
 
@@ -425,11 +497,12 @@ const PI_EXTENSION_FILE = ".pi/extensions/alloy-guard.ts";
 
 function generatePiExtensionContent(alloyCliPath: string): string {
   return [
-    "// Alloy hook-guard 扩展:订阅 tool_call 事件,拦截非 apply 阶段写源码",
-    "// 由 alloy init 自动生成。待验证:Pi tool_call 事件 API(field 名/block 方式)",
+    "// Alloy hook-guard 扩展:订阅 tool_call(PreToolUse) + agent_settled(Stop) 事件",
+    "// 由 alloy init 自动生成。",
     'import { execSync } from "node:child_process";',
     "",
     "export default function alloyGuard(pi: any) {",
+    "  // PreToolUse:拦截非白名单写入(Write/Edit)",
     '  pi.on("tool_call", async (event: any) => {',
     "    const toolName = event?.tool ?? event?.name;",
     '    if (toolName !== "write" && toolName !== "edit") return;',
@@ -450,6 +523,17 @@ function generatePiExtensionContent(alloyCliPath: string): string {
     "    } catch (err: any) {",
     '      const stderr = err.stderr?.toString() ?? "alloy hook 拦截";',
     "      return { block: true, reason: stderr };",
+    "    }",
+    "  });",
+    "",
+    "  // Stop:agent 完全停止后调 _stop-guard(检测文本输出代替 AskUserQuestion)",
+    '  pi.on("agent_settled", async () => {',
+    "    try {",
+    `      execSync("node ${alloyCliPath} _stop-guard", {`,
+    '        stdio: ["pipe", "ignore", "pipe"],',
+    "      });",
+    "    } catch {",
+    "      // _stop-guard 检测到问题时 exit 1,这里忽略(已在 stderr 提示)",
     "    }",
     "  });",
     "}",
@@ -478,104 +562,94 @@ export async function writePiHookExtension(projectPath: string): Promise<boolean
   return true;
 }
 
-// --- OpenCode hook 工具(.opencode/tools/write.ts + edit.ts) ---
+// --- OpenCode hook 插件(.opencode/plugins/alloy-guard.ts) ---
 
-const OPENCODE_TOOLS_DIR = ".opencode/tools";
+const OPENCODE_PLUGIN_FILE = ".opencode/plugins/alloy-guard.ts";
 
-function generateOpenCodeWriteToolContent(alloyCliPath: string): string {
+function generateOpenCodePluginContent(alloyCliPath: string): string {
   return [
-    "// Alloy hook-guard write 工具:覆盖内置 write,调 alloy _hook-guard 判定",
-    "// 由 alloy init 自动生成。待验证:OpenCode custom tool API + 能否调原内置 write",
-    'import { tool } from "@opencode-ai/plugin";',
-    'import fs from "node:fs/promises";',
+    "// Alloy hook-guard 插件:tool.execute.before(PreToolUse) + session.idle(Stop)",
+    "// 由 alloy init 自动生成。plugin 方案替代早期 custom tool 覆盖--可拦截所有工具(含 question),消除盲区",
     'import { execSync } from "node:child_process";',
     "",
-    "export default tool({",
-    '  description: "Alloy-gated write (overrides built-in)",',
-    "  args: {",
-    "    path: tool.schema.string(),",
-    "    content: tool.schema.string(),",
-    "  },",
-    "  async execute(args: { path: string; content: string }, context: any) {",
-    "    const stdin = JSON.stringify({",
-    '      tool_name: "Write",',
-    "      tool_input: { file_path: args.path },",
-    "    });",
+    "export const AlloyGuard = async (ctx: any) => {",
+    "  return {",
+    "    // PreToolUse:工具执行前拦截。throw 阻止工具运行。",
+    '    "tool.execute.before": async (input: any, output: any) => {',
+    "      const toolName = input?.tool;",
+    "      const args = output?.args ?? input?.args ?? {};",
     "",
-    "    try {",
-    `      execSync("node ${alloyCliPath} _hook-guard", {`,
-    "        input: stdin,",
-    '        stdio: ["pipe", "ignore", "pipe"],',
+    "      // 检测问答工具(question) -> 通过 _hook-guard 触发 clearAllPendingGates",
+    "      // _hook-guard 内部检测到问答工具(ASK_TOOLS)会自动 clear,无需单独子命令",
+    '      if (toolName === "question") {',
+    "        try {",
+    '          const stdin = JSON.stringify({ tool_name: "question" });',
+    `          execSync("node ${alloyCliPath} _hook-guard", {`,
+    "            input: stdin,",
+    '            stdio: ["pipe", "ignore", "pipe"],',
+    "          });",
+    "        } catch {",
+    "          // clear 失败不阻断问答",
+    "        }",
+    "        return;",
+    "      }",
+    "",
+    "      // 只拦截 write/edit",
+    '      if (toolName !== "write" && toolName !== "edit") return;',
+    "",
+    "      // OpenCode write/edit 工具参数名是 filePath(驼峰),优先取;兼容 path/file_path",
+    "      const filePath = args?.filePath ?? args?.path ?? args?.file_path;",
+    "      if (!filePath) return;",
+    "",
+    "      const stdin = JSON.stringify({",
+    '        tool_name: toolName === "write" ? "Write" : "Edit",',
+    "        tool_input: { file_path: filePath },",
     "      });",
-    "      await fs.writeFile(args.path, args.content);",
-    "      return `written: ${args.path}`;",
-    "    } catch (err: any) {",
-    '      const stderr = err.stderr?.toString() ?? "alloy hook 拦截";',
-    "      return `blocked: ${stderr}`;",
-    "    }",
-    "  },",
-    "});",
+    "",
+    "      try {",
+    `        execSync("node ${alloyCliPath} _hook-guard", {`,
+    "          input: stdin,",
+    '          stdio: ["pipe", "ignore", "pipe"],',
+    "        });",
+    "      } catch (err: any) {",
+    '        const stderr = err.stderr?.toString() ?? "alloy hook 拦截";',
+    "        throw new Error(stderr);",
+    "      }",
+    "    },",
+    "",
+    "    // Stop:session 空闲时调 _stop-guard(检测文本输出代替问答)",
+    '    "session.idle": async () => {',
+    "      try {",
+    `        execSync("node ${alloyCliPath} _stop-guard", {`,
+    '          stdio: ["pipe", "ignore", "pipe"],',
+    "        });",
+    "      } catch {",
+    "        // _stop-guard 检测到问题时 exit 1,这里忽略(已在 stderr 提示)",
+    "      }",
+    "    },",
+    "  };",
+    "};",
     "",
   ].join("\n");
 }
 
-function generateOpenCodeEditToolContent(alloyCliPath: string): string {
-  return [
-    "// Alloy hook-guard edit 工具:覆盖内置 edit,调 alloy _hook-guard 判定",
-    "// 由 alloy init 自动生成。待验证:OpenCode edit 工具参数(old_string/new_string)",
-    'import { tool } from "@opencode-ai/plugin";',
-    'import fs from "node:fs/promises";',
-    'import { execSync } from "node:child_process";',
-    "",
-    "export default tool({",
-    '  description: "Alloy-gated edit (overrides built-in)",',
-    "  args: {",
-    "    path: tool.schema.string(),",
-    "    old_string: tool.schema.string(),",
-    "    new_string: tool.schema.string(),",
-    "  },",
-    "  async execute(args: { path: string; old_string: string; new_string: string }, context: any) {",
-    "    const stdin = JSON.stringify({",
-    '      tool_name: "Edit",',
-    "      tool_input: { file_path: args.path },",
-    "    });",
-    "",
-    "    try {",
-    `      execSync("node ${alloyCliPath} _hook-guard", {`,
-    "        input: stdin,",
-    '        stdio: ["pipe", "ignore", "pipe"],',
-    "      });",
-    '      const content = await fs.readFile(args.path, "utf-8");',
-    "      const updated = content.replace(args.old_string, args.new_string);",
-    "      await fs.writeFile(args.path, updated);",
-    "      return `edited: ${args.path}`;",
-    "    } catch (err: any) {",
-    '      const stderr = err.stderr?.toString() ?? "alloy hook 拦截";',
-    "      return `blocked: ${stderr}`;",
-    "    }",
-    "  },",
-    "});",
-    "",
-  ].join("\n");
-}
-
-/** 检测 OpenCode 是否已装 alloy hook 工具 */
+/** 检测 OpenCode 是否已装 alloy hook 插件 */
 export async function hasOpenCodeHookTools(projectPath: string): Promise<boolean> {
-  const writePath = join(projectPath, OPENCODE_TOOLS_DIR, "write.ts");
+  const pluginPath = join(projectPath, OPENCODE_PLUGIN_FILE);
   try {
-    const content = await readFile(writePath, "utf-8");
+    const content = await readFile(pluginPath, "utf-8");
     return content.includes("_hook-guard");
   } catch {
     return false;
   }
 }
 
-/** 写入 OpenCode hook 工具(.opencode/tools/write.ts + edit.ts) */
+/** 写入 OpenCode hook 插件(.opencode/plugins/alloy-guard.ts) */
 export async function writeOpenCodeHookTools(projectPath: string): Promise<boolean> {
   const alloyCliPath = join(getPackageRoot(), "dist", "cli", "index.js");
-  const toolsDir = join(projectPath, OPENCODE_TOOLS_DIR);
-  await mkdir(toolsDir, { recursive: true });
-  await writeFile(join(toolsDir, "write.ts"), generateOpenCodeWriteToolContent(alloyCliPath), "utf-8");
-  await writeFile(join(toolsDir, "edit.ts"), generateOpenCodeEditToolContent(alloyCliPath), "utf-8");
+  const pluginPath = join(projectPath, OPENCODE_PLUGIN_FILE);
+  const content = generateOpenCodePluginContent(alloyCliPath);
+  await mkdir(join(pluginPath, ".."), { recursive: true });
+  await writeFile(pluginPath, content, "utf-8");
   return true;
 }

@@ -1,9 +1,10 @@
 // src/cli/commands/internal/archive.ts
 import { execSync } from "node:child_process";
 import { realpathSync } from "node:fs";
-import { basename, relative } from "node:path";
+import { basename, relative, resolve } from "node:path";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { readState } from "../../utils/state.js";
 
 function findGitRoot(changeDir: string): { root: string; relPath: string } | null {
   try {
@@ -42,6 +43,47 @@ export async function archiveCommand(args: string[]): Promise<void> {
     console.error(`[FAIL] 不在 git 仓库中: ${changeDir}`);
     process.exit(1);
     return;
+  }
+
+  // 防御检查 1:禁止在 worktree 内执行
+  // 原因:在 worktree 内归档,openspec archive CLI 的变更(目录移动 + spec promote)会落在 worktree 分支,
+  // 后续 finish 阶段 squash merge feature 分支时,这些变更不会被合入 main,导致归档丢失
+  try {
+    const gitDir = execSync("git rev-parse --git-dir", {
+      cwd: gitRoot.root,
+      encoding: "utf-8",
+    }).trim();
+    const commonDir = execSync("git rev-parse --git-common-dir", {
+      cwd: gitRoot.root,
+      encoding: "utf-8",
+    }).trim();
+    const gitDirAbs = resolve(gitRoot.root, gitDir);
+    const commonDirAbs = resolve(gitRoot.root, commonDir);
+    if (gitDirAbs !== commonDirAbs) {
+      console.error("⛔ [PRECONDITION_FAIL] 当前在 worktree 内,禁止执行 alloy _archive");
+      console.error("  原因:在 worktree 内归档,变更会落在 worktree 分支,后续 finish 阶段 squash merge feature 分支时丢失");
+      console.error("  修复:先退出 worktree 回主仓,执行 alloy _worktree-cleanup 合并 worktree 分支到 feature,再执行 alloy _archive");
+      process.exit(1);
+      return;
+    }
+  } catch {
+    // git 命令失败,忽略--后续 openspec archive CLI 会报错
+  }
+
+  // 防御检查 2:worktree 未清理拒绝执行
+  // 原因:worktree 分支的变更未合入 feature 分支,此时归档会导致 worktree 分支与 feature 分支内容不一致
+  try {
+    const state = await readState(changeDir);
+    if (state.worktree && !state.worktree_merged_at) {
+      console.error("⛔ [PRECONDITION_FAIL] worktree 未清理,禁止执行 alloy _archive");
+      console.error(`  .alloy.yaml 记录 worktree=${state.worktree},但 worktree_merged_at 为 null`);
+      console.error("  原因:worktree 分支的变更未合入 feature 分支,此时归档会导致变更丢失");
+      console.error("  修复:先执行 alloy _worktree-cleanup 合并 worktree 分支到 feature,再执行 alloy _archive");
+      process.exit(1);
+      return;
+    }
+  } catch {
+    // .alloy.yaml 不存在,跳过此检查--后续 openspec archive CLI 会报错
   }
 
   // 检测 change 是否含 specs/ 目录，决定是否传 --skip-specs

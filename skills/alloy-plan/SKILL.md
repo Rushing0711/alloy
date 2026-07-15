@@ -28,7 +28,7 @@ behaviors:
 
 **核心原则：按 schema DAG 依赖顺序逐一产出制品，每步有审查闸门，不跳过上游直接产下游。** 5 制品（proposal/design/specs/tasks/plans）以 hash-lock + 单独 commit 入 records，禁直接编辑，禁互相替代。
 
-**交互规则：** `🔴 STOP` 等价 `USER_GATE`，首次呈现即必须调用平台原生交互工具——禁"先文本展示 (a)/(b) 再等待用户打字"。Claude Code 用 `AskUserQuestion`；其他平台按 `alloy-shared/references/interaction-style.md` §平台工具对照 降级为结构化文本选项。含"沉默 ≠ 授权"通用禁令——禁批量打包、禁基于内容跳过、禁 agent 回填精确字符串。跳过任何 USER_GATE = 违反 Iron Law。
+**交互规则：** `🔴 STOP` 等价 `USER_GATE`，首次呈现即必须调用平台原生交互工具——禁"先文本展示 1./2. 再等待用户打字"。Claude Code 用 `AskUserQuestion`,OpenCode 用 `question` 工具(字段名 `multiple` 非 `multiSelect`,可选 `custom`),Pi 用 extension `ctx.ui`(通过 alloy ask-question 扩展);Copilot CLI / Gemini CLI 无原生交互工具,降级为结构化文本选项。三平台调用示例见 `alloy-shared/references/interaction-style.md` §审查窗口标准模式。含"沉默 ≠ 授权"通用禁令——禁批量打包、禁基于内容跳过、禁 agent 回填精确字符串。跳过任何 USER_GATE = 违反 Iron Law。
 
 **状态符号：** `⛔` = HARD_STOP / PRECONDITION_FAIL，`🔴` = USER_GATE，`⚠️` = WARN（视觉规范 §七）。
 
@@ -53,7 +53,7 @@ behaviors:
 | "rollback 失败了，git reset --hard 清场重来" | ⛔ HARD_STOP：rollback 失败时禁 reset --hard / checkout . / stash drop（§3.5.1 git 自救禁令）。退出 skill 让用户处理。 |
 | "phase 推进失败但 plans 已生成，git reset 回退一下" | ⛔ HARD_STOP：phase 推进路径 B 降级——手动 `alloy _state set` 回退 phase，禁 git reset 清场（§5.2.3）。 |
 | "用户在等，分类先按轻量修正走，错了再说" | 分类不清 = 默认需求变更（references/rollback.md 已写）。USER_GATE 必须用户明确选择。 |
-| "先文本列 (a)/(b) 选项让用户思考，再调 AskUserQuestion 双保险" | ⛔ HARD_STOP：双重呈现违规——首次呈现必须是 AskUserQuestion 工具调用,不是文本。哪怕"先展示选项让用户思考"、"文本+工具双保险",也算违反。常见模式:thinking 决策"用 AskUserQuestion"但执行时先输出纯文本选项(决策→执行断裂)。 |
+| "先文本列 1./2. 选项让用户思考，再调 AskUserQuestion 双保险" | ⛔ HARD_STOP：双重呈现违规——首次呈现必须是平台原生交互工具调用,不是文本。哪怕"先展示选项让用户思考"、"文本+工具双保险",也算违反。常见模式:thinking 决策"用 AskUserQuestion"但执行时先输出纯文本选项(决策→执行断裂)。 |
 | "这个项目很小，不需要那么正式" | 小项目和大项目的闸门完全一样。不存在"规模分级的保护等级"。 |
 | "想确保 skill_usage 落地，_skill log 后单独 commit 一下" | ⛔ HARD_STOP：`_artifact commit` 的 git add 含 .alloy.yaml，会一起 commit。单独 commit 产生冗余的"记录技能使用"commit，与制品 commit 分离。 |
 | "plans 锁定后的提示用户已知，省了吧" | ⛔ HARD_STOP：回退后上下文已变，用户需重新知道 apply 阶段的变更边界。提示必须输出，禁省略。 |
@@ -85,7 +85,7 @@ alloy _phase start openspec/changes/<name> plan
 3. **git 仓库检查**（⛔ PRECONDITION_FAIL）：`git rev-parse --git-dir`，失败 → 引导初始化或退出。
 
 4. **Skill 预检**（⛔ PRECONDITION_FAIL）：cmd: opsx/continue, skill: writing-plans
-   读取 `alloy-shared/references/skill-precheck.md` 检测。任一不可用 → 引导 `alloy init`，不存在降级。
+   调 `alloy _precheck --cmd "opsx/continue" --skill "writing-plans"` 检测(多 agent 适配,详见 `alloy-shared/references/skill-precheck.md`)。任一不可用 → 引导 `alloy init`，不存在降级。
 
 5. **draft 来源验证**（⛔ PRECONDITION_FAIL，task #16）：用 hash 链验证 draft 完整性，**禁用 commit msg 字符串解析**：
 
@@ -97,8 +97,8 @@ alloy _phase start openspec/changes/<name> plan
      echo "  禁止：agent 自动接受不一致的 draft 继续生成下游制品"
      echo ""
      echo "🔴 USER_GATE: 选择处理路径"
-     echo "  (a) 回溯到 /alloy-start 重新确认 draft"
-     echo "  (b) 强制继续——下游制品将基于不可信 draft 生成（不推荐）"
+     echo "  1. 回溯到 /alloy-start 重新确认 draft"
+     echo "  2. 强制继续——下游制品将基于不可信 draft 生成（不推荐）"
    fi
    ```
 
@@ -156,7 +156,7 @@ draft.md 来源已在 Step 0 完成 hash 验证（task #16）。本步聚焦 pha
 
 **每个制品必须通过 `/opsx:continue` 生成。禁止手动编写制品文件。**
 
-使用 Skill 工具加载 `opsx:continue`，传入 change name。`/opsx:continue` 自动获取 schema 指令并生成制品——不要自行编写，不要一次生成多个。
+调 `skill({ name: "openspec-continue-change" })` 加载 opsx skill(详见 `alloy-shared/references/opsx-commands.md` 命名映射表),传入 change name。`opsx:continue` 自动获取 schema 指令并生成制品--不要自行编写,不要一次生成多个。
 
 **⛔ HARD_STOP：每次调用 `/opsx:continue` 生成制品前必须 `_skill log`。** 跳过 = skill_usage 缺失 = count 不反映实际调用次数。
 > count 语义是"技能实际调用次数"——plan 阶段每生成一个制品调用一次 opsx:continue，count 应累加。
@@ -184,6 +184,9 @@ alloy _progress artifacts openspec/changes/<name>
 > ⛔ [HARD_STOP] 禁用 `openspec status` 检测制品状态——openspec CLI 不识别 alloy 的 hash 锁定,会误报制品未 commit（如 specs 状态显示 "ready" 但 alloy 已 hash-lock）,导致重复 `_skill log` + 重复 `opsx:continue`。
 > 违反字面 = 违反精神：哪怕"openspec status 看起来也能用",也会因不识别 hash 锁定而误判。必须用 `alloy _progress artifacts`。
 
+> ⛔ [HARD_STOP] `opsx:continue` 是 skill(`openspec-continue-change`),**不是 openspec CLI 子命令**。禁止跑 `openspec continue`--该命令不存在,会报 `error: unknown command 'continue'`。必须调 `skill({ name: "openspec-continue-change" })` 加载 skill,skill 内部会调正确的 openspec CLI 子命令。
+> 违反字面 = 违反精神:哪怕"openspec continue 看起来是对应 CLI",也是 agent 脑补的错误映射。详见 `alloy-shared/references/opsx-commands.md`。
+
 > [N/M] 是阶段内局部编号（M=5），不输出全局制品进度。全局进度由 `alloy status` 管理。
 
 ### 逐个制品审查流程
@@ -198,7 +201,7 @@ alloy _progress artifacts openspec/changes/<name>
 > [展示制品完整内容]
 > 🔴 USER_GATE: 确认锁定 <artifact>（确认并继续 / 需要调整）
 
-- **选 (a)：** hash 锁定 + commit——原子命令 `alloy _artifact commit` 内部完成 hash 计算 + records 写入（自动刷新 updated_at）+ git add 限路径 + commit：
+- **选 1：** hash 锁定 + commit——原子命令 `alloy _artifact commit` 内部完成 hash 计算 + records 写入（自动刷新 updated_at）+ git add 限路径 + commit：
   ```bash
   alloy _artifact commit openspec/changes/<name> <artifact>
   ```
@@ -223,7 +226,7 @@ alloy _progress artifacts openspec/changes/<name>
 
   生成下一制品前校验上游 hash：`alloy _record check openspec/changes/<name> <upstream>`，失败 → ⛔ PRECONDITION_FAIL（上游被破坏，必须修复后才能继续生成下游）。
 
-- **选 (b)：** 用户提出修改后，**agent 先判断是否触犯规格边界，给出判断 + 理由 + 建议，再由用户决断**：
+- **选 2：** 用户提出修改后，**agent 先判断是否触犯规格边界，给出判断 + 理由 + 建议，再由用户决断**：
 
   > [HARD_STOP] 无论变更大小，禁止用 Edit/Write 直接编辑已生成的制品文件。
   > 违反字面 = 违反精神：哪怕"只加一个字段""只改一行样式描述"，直接编辑都会让制品 hash 与 records 失配。修改只能通过"重新生成"（reset + /opsx:continue）或"回 brainstorming"实现。
@@ -239,29 +242,29 @@ alloy _progress artifacts openspec/changes/<name>
 
   例：列表加斑马线 = 不越界（纯展示）；增加截止日期 = 越界（新增 dueDate 字段，影响 data model + API 契约）。
 
-  **Step 1 — 🔴 USER_GATE（AskUserQuestion）：用户基于 agent 判断决断**
+  **Step 1 — 🔴 USER_GATE（平台原生交互工具）：用户基于 agent 判断决断**
 
   **情况一：agent 判断不越界**
   > 我判断这是规格边界内的调整：\<变更描述\>（理由：\<不触犯 data model / API / 功能边界\>）。建议重新生成 \<artifact\> 制品，下游已锁定制品不变。
-  > (a) 确认——重新生成当前制品
-  > (b) 我认为这其实越界了——转越界流程（回 brainstorming）
-  > (c) 取消调整，继续当前审查
+  > 1. 确认——重新生成当前制品
+  > 2. 我认为这其实越界了——转越界流程（回 brainstorming）
+  > 3. 取消调整，继续当前审查
 
-  选 (a)：`alloy _artifact reset openspec/changes/<name> <artifact>` → `/opsx:continue` 重新生成 → **diff 审查窗口（见下方"重新生成 diff USER_GATE"）** → 重新审查。下游已锁定制品保持不变。
-  选 (b)：转入下方"越界变更检查点流程"。
-  选 (c)：回到审查窗口，重新展示制品内容。
+  选 1：`alloy _artifact reset openspec/changes/<name> <artifact>` → `/opsx:continue` 重新生成 → **diff 审查窗口（见下方"重新生成 diff USER_GATE"）** → 重新审查。下游已锁定制品保持不变。
+  选 2：转入下方"越界变更检查点流程"。
+  选 3：回到审查窗口，重新展示制品内容。
 
   **情况二：agent 判断越界**
   > 我判断这触犯规格边界：\<变更描述\>（理由：\<新增字段 / 改 API / 改功能行为，影响上游 proposal/design\>）。当前制品链不含此变更，建议回 brainstorming 重新沟通以保证所有制品一致。
-  > (a) 继续变更——回 brainstorming 重新沟通（自动保存当前进度为检查点）
-  > (b) 放弃变更——保持当前制品，继续当前 plan
+  > 1. 继续变更——回 brainstorming 重新沟通（自动保存当前进度为检查点）
+  > 2. 放弃变更——保持当前制品，继续当前 plan
 
-  选 (a)：进入下方"越界变更检查点流程"。
-  选 (b)：保持当前制品不动，继续当前 plan（用户放弃了此次变更）。
+  选 1：进入下方"越界变更检查点流程"。
+  选 2：保持当前制品不动，继续当前 plan（用户放弃了此次变更）。
 
   ---
 
-  **越界变更检查点流程**（情况二选 (a)，或情况一选 (b) 后进入）：
+  **越界变更检查点流程**（情况二选 1，或情况一选 2 后进入）：
 
     **[HARD_STOP] 禁止 agent 自行 `git stash` / `git reset` / 手动 `git tag` 处理未提交变更。**
     **违反字面 = 违反精神：git stash 绕过 CLI 校验 + 用户无法追踪 stash 去向，git reset 违反 §3.5.1。**
@@ -298,10 +301,10 @@ alloy _progress artifacts openspec/changes/<name>
        ```
        筛选 `alloy-checkpoint-<name>-brainstorming-*` 的 tag，展示给用户。
 
-    4. **🔴 USER_GATE（AskUserQuestion）：用户选回到哪个 brainstorming 检查点**
+    4. **🔴 USER_GATE（平台原生交互工具）：用户选回到哪个 brainstorming 检查点**
        > 检测到越界变更，选择回到哪个 brainstorming 检查点重新沟通：
-       > (a) brainstorming-<N>（最新）—— 基于最新 draft 继续沟通
-       > (b) brainstorming-<N-1> —— 回到上一版 draft（丢弃最新 draft）
+       > 1. brainstorming-<N>（最新）—— 基于最新 draft 继续沟通
+       > 2. brainstorming-<N-1> —— 回到上一版 draft（丢弃最新 draft）
        > ...
        > (z) 放弃变更——保持当前，继续 plan
 
@@ -367,13 +370,13 @@ alloy _progress artifacts openspec/changes/<name>
     5. 用户选定后 → 🔴 USER_GATE 确认如何处理当前进度：
        > 你选择了放弃变更，回到进度快照 \<tag 名\>（含 \<该 tag 锁定的制品\>）。
        > 当前进度（\<当前已锁定制品\>）如何处理？
-       > (a) 保存当前为 progress 检查点 + 跳到所选 progress-<ts>
-       > (b) 放弃当前 + 跳到所选 progress-<ts>
-       > (c) 取消——保持当前，不切换
+       > 1. 保存当前为 progress 检查点 + 跳到所选 progress-<ts>
+       > 2. 放弃当前 + 跳到所选 progress-<ts>
+       > 3. 取消——保持当前，不切换
 
-    选 (a)：先 `alloy _checkpoint create --kind progress --reason "放弃变更前保存当前"` → 再 `alloy _checkpoint switch <tag>`。
-    选 (b)：先废弃未 commit 信息（git restore）→ 直接 `alloy _checkpoint switch <tag>`。
-    选 (c)：不切换，继续当前。
+    选 1：先 `alloy _checkpoint create --kind progress --reason "放弃变更前保存当前"` → 再 `alloy _checkpoint switch <tag>`。
+    选 2：先废弃未 commit 信息（git restore）→ 直接 `alloy _checkpoint switch <tag>`。
+    选 3：不切换，继续当前。
 
     > 切换后 phase/records/phase_timings 自动回到 tag 状态（progress-<ts> 含打点时的完整状态）。
     > **切换后必须读取 records 状态，从第一个缺失制品开始 plan/apply：**
@@ -397,7 +400,7 @@ alloy _progress artifacts openspec/changes/<name>
 
   **无论哪条路径，都不直接编辑已生成的制品文件**（违反字面 = 违反精神：制品禁直接编辑）。
 
-**重新生成 diff USER_GATE（HARD_STOP，task L3）：** 不越界路径（情况一选 (a)）reset + 重新生成后、重新审查前，必须采集 diff 并让用户物理确认——agent 不得基于 `/opsx:continue` 返回成功直接进入审查窗口。
+**重新生成 diff USER_GATE（HARD_STOP，task L3）：** 不越界路径（情况一选 1）reset + 重新生成后、重新审查前，必须采集 diff 并让用户物理确认——agent 不得基于 `/opsx:continue` 返回成功直接进入审查窗口。
 
 ```bash
 # 重新生成后，先 diff 再审查
@@ -405,18 +408,18 @@ DIFF_OLD=$(git show HEAD:"openspec/changes/<name>/<artifact>.md" 2>/dev/null)
 DIFF_NEW=$(cat "openspec/changes/<name>/<artifact>.md" 2>/dev/null)
 ```
 
-🔴 USER_GATE（必须 AskUserQuestion）：
+🔴 USER_GATE（必须平台原生交互工具）：
 
 > 重新生成 diff：
 > ```
 > [git diff HEAD -- openspec/changes/<name>/<artifact>.md | head -100]
 > ```
 > 确认变更仍在规格边界内（不改 data model / API / 功能边界）：
-> (a) 确认——边界内调整，继续锁 hash
-> (b) 发现越界变更——放弃重新生成，转越界流程（回 brainstorming）
-> (c) 放弃调整——回退到 reset 前状态（`git checkout HEAD -- openspec/changes/<name>/<artifact>.md`）
+> 1. 确认——边界内调整，继续锁 hash
+> 2. 发现越界变更——放弃重新生成，转越界流程（回 brainstorming）
+> 3. 放弃调整——回退到 reset 前状态（`git checkout HEAD -- openspec/changes/<name>/<artifact>.md`）
 
-**[HARD_STOP]** agent 不得基于 "diff 看起来没改功能" 自动选 (a)——必须用户物理选择（interaction-style.md "沉默 ≠ 授权"）。diff 必须截前 100 行防爆量，但禁 agent 基于 "diff 短" 跳过调用。（违反字面 = 违反精神：制品禁直接编辑）。
+**[HARD_STOP]** agent 不得基于 "diff 看起来没改功能" 自动选 1——必须用户物理选择（interaction-style.md "沉默 ≠ 授权"）。diff 必须截前 100 行防爆量，但禁 agent 基于 "diff 短" 跳过调用。（违反字面 = 违反精神：制品禁直接编辑）。
 
 **审查窗口只展示制品内容，不打印 schema instructions 模板。**
 
@@ -456,7 +459,7 @@ strategy + reason 字段（此为 plan 阶段推荐快照，非最终决策）�
 请跳过 writing-plans checklist 中的「Invoke implementation skill」步骤
 （apply 阶段才加载 SDD/EP）。
 
-**交互风格：** 使用 AskUserQuestion，不用纯文本 (a)(b)(c)。
+**交互风格：** 使用 AskUserQuestion，不用纯文本 1.2.3.。
 ```
 
 ```bash
@@ -517,9 +520,9 @@ alloy _record scan "openspec/changes/<name>"
 
 > scan 退出码 0 = 全部 hash 一致,1 = 有断裂（✗ 输出具体制品 + 问题：文件缺失 / 无 record / hash 不匹配）。
 > scan 失败时 ⛔ HARD_STOP,🔴 USER_GATE：
-> - (a) 回溯到对应制品重新审查（scan 输出哪个制品 hash 不匹配,让用户决定回退到哪个制品重新生成）
-> - (b) 显示 git log 让用户排查（`git log --oneline openspec/changes/<name>/`）
-> - (c) 中止 plan 阶段退出 skill
+> - 1. 回溯到对应制品重新审查（scan 输出哪个制品 hash 不匹配,让用户决定回退到哪个制品重新生成）
+> - 2. 显示 git log 让用户排查（`git log --oneline openspec/changes/<name>/`）
+> - 3. 中止 plan 阶段退出 skill
 >
 > 禁止：agent 自动补 `_record write` 修复 hash——必须 🔴 USER_GATE 让用户选择处理路径。
 
@@ -547,24 +550,24 @@ alloy _state set openspec/changes/<name> phase started
 
 **plans 完成后不要自动进入 apply** — 给用户空间审视完整规划。
 
-🔴 USER_GATE（必须 AskUserQuestion 工具调用）: plan 阶段完成,下一步?
+🔴 USER_GATE（必须平台原生交互工具调用）: plan 阶段完成,下一步?
 
-> ⛔ [HARD_STOP] 必须用 `AskUserQuestion` 工具调用——禁纯文本列选项 / 禁直接 `Skill` 加载下一阶段 / 禁纯文本"运行 /alloy-apply"提示 / 禁提示用户手动输入命令。
+> ⛔ [HARD_STOP] 必须用平台原生交互工具调用——禁纯文本列选项 / 禁直接 `Skill` 加载下一阶段 / 禁纯文本"运行 /alloy-apply"提示 / 禁提示用户手动输入命令。
 > 违反字面 = 违反精神:哪怕"纯文本效果一样"、"直接 Skill 更流畅"、"用户已授权提示一下也行",也算违反——AskUserQuestion 强制结构化选项,避免 agent 用模糊措辞让用户回 yes 蒙混过关（§4.1）。
 > 常见违规模式:
 > - 纯文本输出"运行 /alloy-apply 进入执行阶段"让用户手动输入
-> - 纯文本列"(a) 进入 apply / (b) 暂停 / (c) 其他"让用户回复
-> - 用户选 (a) 后提示"请运行 /alloy-apply"让用户手动输入——应直接 Skill 加载
+> - 纯文本列"1. 进入 apply / 2. 暂停 / 3. 其他"让用户回复
+> - 用户选 1 后提示"请运行 /alloy-apply"让用户手动输入——应直接 Skill 加载
 > 非 Claude Code 平台按 `alloy-shared/references/interaction-style.md` §平台工具对照 降级。
 
 > 选项:
-> - (a) 进入 apply 阶段——加载 `alloy-apply` skill 推进执行
-> - (b) 暂停——审视规划制品,或查看状态(`alloy status`)
-> - (c) 其他——用户自定义下一步
+> - 1. 进入 apply 阶段——加载 `alloy-apply` skill 推进执行
+> - 2. 暂停——审视规划制品,或查看状态(`alloy status`)
+> - 3. 其他——用户自定义下一步
 
-> 用户选 (a) 后,agent **必须直接用 `Skill` 工具加载 `alloy-apply`**(传入 change name),进入 apply 阶段——用户已在 USER_GATE 授权,再让用户输入命令 = 多此一举。
-> 用户选 (b) 后,agent 停止,输出"已暂停。需要时运行 /alloy-apply <name> 继续。"
-> 用户选 (c) 后,agent 停止,等用户后续命令。
+> 用户选 1 后,agent **必须直接用 `Skill` 工具加载 `alloy-apply`**(传入 change name),进入 apply 阶段——用户已在 USER_GATE 授权,再让用户输入命令 = 多此一举。
+> 用户选 2 后,agent 停止,输出"已暂停。需要时运行 /alloy-apply <name> 继续。"
+> 用户选 3 后,agent 停止,等用户后续命令。
 
 > **提示：apply 阶段早期的需求变更处理**
 > apply 阶段早期（worktree 未创建 + SDD/EP 未启动）仍可回退到 brainstorming 处理需求变更，走检查点回退流程。

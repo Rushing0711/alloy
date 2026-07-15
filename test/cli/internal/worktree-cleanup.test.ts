@@ -14,6 +14,7 @@ const writeStateMock = vi.fn();
 vi.mock("../../../src/cli/utils/state.js", () => ({
   readState: (...args: unknown[]) => readStateMock(...args),
   writeState: (...args: unknown[]) => writeStateMock(...args),
+  formatTimestamp: () => "2026-07-14 16:34:43",
 }));
 
 import { worktreeCleanupCommand } from "../../../src/cli/commands/internal/worktree-cleanup.js";
@@ -321,6 +322,121 @@ describe("alloy _worktree-cleanup", () => {
     expect(exitSpy).toHaveBeenCalledWith(1);
     expect(execSyncMock.mock.calls.some(c => String(c[0]).includes("git worktree remove --force"))).toBe(false);
     expect(execSyncMock.mock.calls.some(c => String(c[0]).includes("git branch -d"))).toBe(false);
+    exitSpy.mockRestore();
+    errSpy.mockRestore();
+  });
+
+  it("merge 前工作目录有 .alloy.yaml 未 commit -> 自动 commit 后 merge", async () => {
+    mockBranchAndState((cmd) => {
+      if (cmd.includes("git worktree list")) return "/path/to/wt\n";
+      if (cmd === "git rev-parse --git-dir") return "/main/.git\n";
+      if (cmd === "git rev-parse --git-common-dir") return "/main/.git\n";
+      if (cmd === "git branch --show-current") return "feature/test\n";
+      if (cmd === "git diff --name-only HEAD") return "openspec/changes/test/.alloy.yaml\n";
+      if (cmd === 'git add "openspec/changes/test/.alloy.yaml"') return "";
+      if (cmd === 'git commit -m "chore: 提交 .alloy.yaml 临时状态 merge 前置"') return "";
+      if (cmd === "git merge worktree-test --no-edit") return "Merge made by the 'ort' strategy.\n";
+      if (cmd === "git worktree remove \"/path/to/wt\"") return "";
+      if (cmd === "git branch -d worktree-test") return "Deleted branch worktree-test\n";
+      return "";
+    });
+    readStateMock.mockResolvedValue({ worktree: "/path/to/wt", feature_branch: "feature/test" });
+    writeStateMock.mockResolvedValue(undefined);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(require("node:fs"), "existsSync").mockReturnValue(true);
+
+    await worktreeCleanupCommand([CHANGE_DIR]);
+
+    // 验证自动 commit 了 .alloy.yaml
+    expect(execSyncMock.mock.calls.some(c => String(c[0]).includes('git commit -m "chore: 提交 .alloy.yaml'))).toBe(true);
+    // 验证 merge 执行了(自动 commit 后继续 merge)
+    expect(execSyncMock.mock.calls.some(c => String(c[0]).includes("git merge worktree-test"))).toBe(true);
+    expect(logSpy.mock.calls.some(c => String(c[0]).includes("worktree 清理完成"))).toBe(true);
+    logSpy.mockRestore();
+  });
+
+  it("merge 前工作目录有非 .alloy.yaml 未 commit -> HARD_STOP", async () => {
+    mockBranchAndState((cmd) => {
+      if (cmd.includes("git worktree list")) return "/path/to/wt\n";
+      if (cmd === "git rev-parse --git-dir") return "/main/.git\n";
+      if (cmd === "git rev-parse --git-common-dir") return "/main/.git\n";
+      if (cmd === "git branch --show-current") return "feature/test\n";
+      if (cmd === "git diff --name-only HEAD") return "openspec/changes/test/.alloy.yaml\nsrc/foo.ts\n";
+      return "";
+    });
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(require("node:fs"), "existsSync").mockReturnValue(true);
+
+    await worktreeCleanupCommand([CHANGE_DIR]);
+
+    expect(errSpy.mock.calls.some(c => String(c[0]).includes("非 .alloy.yaml 的未 commit 修改"))).toBe(true);
+    expect(errSpy.mock.calls.some(c => String(c[0]).includes("src/foo.ts"))).toBe(true);
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    // 验证未执行 merge
+    expect(execSyncMock.mock.calls.some(c => String(c[0]).includes("git merge worktree-test"))).toBe(false);
+    exitSpy.mockRestore();
+    errSpy.mockRestore();
+  });
+
+  it("merge 冲突只有 .alloy.yaml -> 自动取 worktree 版本解决", async () => {
+    mockBranchAndState((cmd) => {
+      if (cmd.includes("git worktree list")) return "/path/to/wt\n";
+      if (cmd === "git rev-parse --git-dir") return "/main/.git\n";
+      if (cmd === "git rev-parse --git-common-dir") return "/main/.git\n";
+      if (cmd === "git branch --show-current") return "feature/test\n";
+      if (cmd === "git merge worktree-test --no-edit") {
+        throw Object.assign(new Error("merge conflict"), {
+          stdout: Buffer.from(""), stderr: Buffer.from("CONFLICT"),
+        });
+      }
+      if (cmd === "git diff --name-only --diff-filter=U") return "openspec/changes/test/.alloy.yaml\n";
+      if (cmd === 'git checkout --theirs "openspec/changes/test/.alloy.yaml"') return "";
+      if (cmd === 'git add "openspec/changes/test/.alloy.yaml"') return "";
+      if (cmd === "git commit --no-edit") return "";
+      if (cmd === "git worktree remove \"/path/to/wt\"") return "";
+      if (cmd === "git branch -d worktree-test") return "Deleted branch worktree-test\n";
+      return "";
+    });
+    readStateMock.mockResolvedValue({ worktree: "/path/to/wt", feature_branch: "feature/test" });
+    writeStateMock.mockResolvedValue(undefined);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(require("node:fs"), "existsSync").mockReturnValue(true);
+
+    await worktreeCleanupCommand([CHANGE_DIR]);
+
+    expect(execSyncMock.mock.calls.some(c => String(c[0]).includes("git checkout --theirs"))).toBe(true);
+    expect(execSyncMock.mock.calls.some(c => String(c[0]).includes("git worktree remove"))).toBe(true);
+    expect(execSyncMock.mock.calls.some(c => String(c[0]).includes("git branch -d"))).toBe(true);
+    expect(logSpy.mock.calls.some(c => String(c[0]).includes("冲突已自动解决"))).toBe(true);
+    logSpy.mockRestore();
+  });
+
+  it("merge 冲突含非 .alloy.yaml -> HARD_STOP", async () => {
+    mockBranchAndState((cmd) => {
+      if (cmd.includes("git worktree list")) return "/path/to/wt\n";
+      if (cmd === "git rev-parse --git-dir") return "/main/.git\n";
+      if (cmd === "git rev-parse --git-common-dir") return "/main/.git\n";
+      if (cmd === "git branch --show-current") return "feature/test\n";
+      if (cmd === "git merge worktree-test --no-edit") {
+        throw Object.assign(new Error("merge conflict"), {
+          stdout: Buffer.from(""), stderr: Buffer.from("CONFLICT"),
+        });
+      }
+      if (cmd === "git diff --name-only --diff-filter=U") return "openspec/changes/test/.alloy.yaml\nsrc/foo.ts\n";
+      return "";
+    });
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(require("node:fs"), "existsSync").mockReturnValue(true);
+
+    await worktreeCleanupCommand([CHANGE_DIR]);
+
+    expect(errSpy.mock.calls.some(c => String(c[0]).includes("非 .alloy.yaml 冲突"))).toBe(true);
+    expect(errSpy.mock.calls.some(c => String(c[0]).includes("src/foo.ts"))).toBe(true);
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(execSyncMock.mock.calls.some(c => String(c[0]).includes("git checkout --theirs"))).toBe(false);
+    expect(execSyncMock.mock.calls.some(c => String(c[0]).includes("git worktree remove"))).toBe(false);
     exitSpy.mockRestore();
     errSpy.mockRestore();
   });

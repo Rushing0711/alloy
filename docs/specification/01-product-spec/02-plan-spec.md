@@ -49,16 +49,16 @@ change 目录存在且 .alloy.yaml phase=started（/alloy-start 已完成）
 每步生成后有审查窗口，可确认或要求修改
 始终分步，不提供一键生成
 
-审查期间可沟通调整。用户选 (b) 说明修改点后，AI 内部评估修改性质，然后呈现两步 USER_GATE：
+审查期间可沟通调整。用户选 2 说明修改点后，AI 内部评估修改性质，然后呈现两步 USER_GATE：
 
 **Step 1（是否创建检查点当前进度）：**
-- (a) 创建检查点——`alloy _checkpoint create` 在当前 HEAD 打带注释 tag（alloy-checkpoint-<name>-<ts>），保护当前 commit 不被遗忘
-- (b) 不创建检查点——直接进入 Step 2，当前 commit 链可能被切走后遗忘
+- 1. 创建检查点——`alloy _checkpoint create` 在当前 HEAD 打带注释 tag（alloy-checkpoint-<name>-<ts>），保护当前 commit 不被遗忘
+- 2. 不创建检查点——直接进入 Step 2，当前 commit 链可能被切走后遗忘
 
 **Step 2（选择去向）：**
-- (a) 回到某个检查点——`alloy _checkpoint list` 列出可恢复 tag，用户选择后 `alloy _checkpoint switch` 切换分支
-- (b) 重新沟通——清理 plan 制品回到 brainstorming
-- (c) 取消，继续当前审查
+- 1. 回到某个检查点——`alloy _checkpoint list` 列出可恢复 tag，用户选择后 `alloy _checkpoint switch` 切换分支
+- 2. 重新沟通——清理 plan 制品回到 brainstorming
+- 3. 取消，继续当前审查
 
 plan 阶段处理"构建什么"，任何需求/设计层面的调整统一回到 brainstorming 重新审视
 （在当前 change 内，不创建新 change），不做就地修补。plan 完成后不允许手动修改制品文件。

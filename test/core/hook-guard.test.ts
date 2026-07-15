@@ -99,11 +99,6 @@ describe("hook-guard guardCheck", () => {
       expect(result.allowed).toBe(true);
     });
 
-    it("放行 .codex/", () => {
-      const result = guardCheck({ filePath: ".codex/settings.json", phases: ["planning"] });
-      expect(result.allowed).toBe(true);
-    });
-
     it("放行 .md 文件(任意位置)", () => {
       const result = guardCheck({ filePath: "README.md", phases: ["started"] });
       expect(result.allowed).toBe(true);
@@ -121,6 +116,11 @@ describe("hook-guard guardCheck", () => {
 
     it("放行 .gitattributes", () => {
       const result = guardCheck({ filePath: ".gitattributes", phases: ["started"] });
+      expect(result.allowed).toBe(true);
+    });
+
+    it("放行 opencode.json(OpenCode 配置在项目根,alloy init 注入 permissions)", () => {
+      const result = guardCheck({ filePath: "opencode.json", phases: ["started"] });
       expect(result.allowed).toBe(true);
     });
 

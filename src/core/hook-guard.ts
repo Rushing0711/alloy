@@ -3,7 +3,7 @@
 /**
  * hook-guard:平台无关的文件写入判定逻辑(纯函数)。
  *
- * 被 PreToolUse hook 适配器(Claude Code/Codex)调用,拦截 agent 在非 apply 阶段写源码的行为。
+ * 被 PreToolUse hook 适配器(Claude Code)调用,拦截 agent 在非 apply 阶段写源码的行为。
  * 解决问题:agent 在 explore/start 阶段直接写代码,跳过 alloy 流程(plan/apply/archive)。
  *
  * 判定规则:
@@ -40,20 +40,23 @@ const APPLY_PHASES = new Set(["applying", "applied", "finishing", "finished"]);
  * 非 apply 阶段白名单(允许写的路径模式)
  * - openspec/:change 产物(proposal/design/specs/tasks/plans/verify/retrospective)
  * - .alloy.yaml:state 文件(由 _state 命令写)
- * - .claude/、.codex/:agent 配置
+ * - .claude/、.agents/、.opencode/、.pi/:agent 配置 + 共享 skills 运行时(npx skills add 装到 .agents/skills/)
  * - docs/:文档
  * - *.md:markdown 文件(任意位置,含 README/CLAUDE.md/AGENTS.md)
  * - .gitignore、.gitattributes:git 配置
+ * - opencode.json:OpenCode 项目配置(在项目根,不在 .opencode/ 目录下;alloy init 注入 permissions)
  */
 const NON_APPLY_WHITELIST: RegExp[] = [
   /^openspec\//,
   /^\.alloy\.yaml$/,
-  /^\.claude\//,
-  /^\.codex\//,
+  /^\.claude\//,  /^\.agents\//,
+  /^\.opencode\//,
+  /^\.pi\//,
   /^docs\//,
   /\.md$/,
   /^\.gitignore$/,
   /^\.gitattributes$/,
+  /^opencode\.json$/,
 ];
 
 export function guardCheck(input: GuardInput): GuardResult {

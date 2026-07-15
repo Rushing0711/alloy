@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { ensureGitignore } from "../../src/cli/commands/init.js";
+import { ensureGitignore } from "../../src/cli/commands/init/execute.js";
 
 describe("ensureGitignore", () => {
   let tmpDir: string;

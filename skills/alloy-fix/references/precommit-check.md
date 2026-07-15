@@ -48,10 +48,10 @@ echo "✓ pre-commit 校验通过：$REQUIRED_SKILLS 均已加载"
 > 已加载 superpowers:verification-before-completion（独立验证修复结果）？
 >
 > 选项：
-> (a) 已加载两个 skill，继续 merge 确认
-> (b) 未加载——返回 Step 3 重做
+> 1. 已加载两个 skill，继续 merge 确认
+> 2. 未加载——返回 Step 3 重做
 
-**[HARD_STOP]** agent 不得基于"diff 包含测试代码"或"自己已经测过"自动选 (a)——必须用户物理选择。否则违反 interaction-style.md "沉默 ≠ 授权"通用禁令。
+**[HARD_STOP]** agent 不得基于"diff 包含测试代码"或"自己已经测过"自动选 1——必须用户物理选择。否则违反 interaction-style.md "沉默 ≠ 授权"通用禁令。
 
 ## Why
 
