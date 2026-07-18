@@ -100,6 +100,14 @@ export interface AlloyState {
   skill_usage: SkillUsageEntry[];
   feature_branch?: string | null;
   pending_gate?: string | null;
+  /**
+   * 已通过的 USER_GATE 列表(require + clear 都算通过)。
+   * 写入时机:_guard user-gate pass / hook-guard clearAllPendingGates / Pi 自动通过。
+   * 检查时机:_guard user-gate require(检查前置 gate,如 sdd-ep-choice 检查 worktree-choice)、
+   * _phase complete(检查 <phase>:phase-complete 是否已通过,防 agent 跳过 gate 直接推进)。
+   * 防 agent 跳过闸门(SKILL.md HARD_STOP 对 agent 不够强,需 CLI 层硬约束)。
+   */
+  gate_history?: string[];
 }
 
 export interface ProjectConfig {

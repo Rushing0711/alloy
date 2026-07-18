@@ -195,7 +195,8 @@ alloy _guard user-gate require "$CHANGE_DIR" archive:worktree-cleanup
 > - 1. 确认并清理--merge worktree 分支到 feature + remove worktree + branch -d
 > - 2. 需要检查--退出 skill 让用户审查
 
-> 用户选 1 后继续步骤 ③;选 2 退出 skill。
+> 用户选 1 后继续步骤 ③;选 2 agent **必须先调 `alloy _guard user-gate reset openspec/changes/<name> archive:worktree-cleanup`**(把 gate 从 gate_history 移除 + 重新设为 pending_gate),再退出 skill。
+> 原因:hook-guard 检测到问答工具调用时无条件 clear pending_gate + 加入 gate_history,用户选"需要检查"本意是拒绝通过 gate,语义被吞了。reset 恢复 gate 状态,用户重新调 /alloy-archive 时 agent 调 require(幂等)+ 问答工具重新询问。
 
 **③ 退出 worktree 回主仓(多 agent 适配):**
 
@@ -339,7 +340,8 @@ alloy _guard user-gate require "$ARCHIVE_DIR" archive:delta-spec-review
 > ```
 > 选项：
 > 1. 确认并继续提交归档变更
-> 2. 调整 spec 合并内容--退出 skill，回到 `alloy _archive` 参数调整或手动修正 spec 后重新运行
+> 2. 调整 spec 合并内容--agent **必须先调 `alloy _guard user-gate reset "$ARCHIVE_DIR" archive:delta-spec-review`**(把 gate 从 gate_history 移除 + 重新设为 pending_gate),再退出 skill,回到 `alloy _archive` 参数调整或手动修正 spec 后重新运行
+> 原因:hook-guard 检测到问答工具调用时无条件 clear pending_gate + 加入 gate_history,用户选"调整"本意是拒绝通过 gate,语义被吞了。reset 恢复 gate 状态,重新运行后 agent 调 require(幂等)+ 问答工具重新询问。
 
 **违反字面 = 违反精神：** 哪怕 diff 看似"明显合理"或"diff 为空"，没经过用户明确选择 1 = 不算授权。禁止 agent 基于"diff 短"、"无 conflict"或"specs/ 原本为空"自动跳过此 USER_GATE。
 
@@ -421,7 +423,8 @@ archive 不做代码合并--代码合入由 `/alloy-finish` 处理。
 - Pi: `read .pi/skills/alloy-finish/SKILL.md`(read 后按 SKILL.md 指引执行,change name 通过上下文传入)**
 
 > ⛔ [HARD_STOP] 禁止输出"请运行 /alloy-finish"让用户手动输入命令--用户已在 USER_GATE 授权,阶段转换已触发,再让用户输入命令 = 违反 Iron Law。
-> 用户选 2 后,agent 停止,输出"已暂停。需要时运行 /alloy-finish <name> 继续。"
-> 用户选 3 后,agent 停止,等用户后续命令。
+> 用户选 2 后,agent **必须先调 `alloy _guard user-gate reset "$ARCHIVE_DIR" archive:phase-complete`**(把 gate 从 gate_history 移除 + 重新设为 pending_gate),再停止,输出"已暂停。需要时运行 /alloy-finish <name> 继续。"
+>   原因:hook-guard 检测到问答工具调用时无条件 clear pending_gate + 加入 gate_history,用户选"暂停"本意是拒绝通过 gate,语义被吞了。reset 恢复 gate 状态,用户"继续"时 agent 调 require(幂等)+ 问答工具重新询问。
+> 用户选 3 后,agent 同样调 reset,再停止,等用户后续命令。
 > ⛔ 禁止：纯文本输出"运行 /alloy-finish 进入收尾阶段"让用户手动输入--用户已在 USER_GATE 授权,应直接加载 finish skill。
 > ⛔ 禁止：用户选 1 后,agent 提示"请运行 /alloy-finish"让用户手动输入。常见违规模式:agent 输出"好的,请输入 /alloy-finish hello-script 进入收尾阶段"。

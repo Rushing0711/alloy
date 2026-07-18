@@ -5,7 +5,7 @@ spec: 01-product-spec/05-finish-spec.md
 behaviors:
   preconditions: 6
   hard_stops:    8
-  user_gates:    5
+  user_gates:    6
   warns:         2
   artifacts: []
   transitions_to: finished
@@ -217,7 +217,23 @@ alloy _guard user-gate require "$CHANGE_DIR" finish:confirm-merge
 > ⛔ [HARD_STOP] 即使用户说"我同意了"、"可以，合吧"、"口头确认过"，也不算确认--必须用户在问答工具中选"确认合并"选项。
 > 违反字面 = 违反精神："y" / "好" / "可以" / "ok" 全部不算确认（§Iron Law）。
 
-用户选"确认合并"后执行：
+用户选"取消"后,agent **必须先调 `alloy _guard user-gate reset "$CHANGE_DIR" finish:confirm-merge`**(把 gate 从 gate_history 移除 + 重新设为 pending_gate),再退出 skill,保持当前分支。
+> 原因:hook-guard 检测到问答工具调用时无条件 clear pending_gate + 加入 gate_history,用户选"取消"本意是拒绝通过 gate,语义被吞了。reset 恢复 gate 状态,用户重新调 /alloy-finish 时 agent 调 require(幂等)+ 问答工具重新询问。
+
+用户选"确认合并"后,**不能立即执行 squash merge**--必须二次确认防手滑(沿用 `alloy init` breaking 升级的双重确认模式):
+
+🔴 USER_GATE(必须平台原生交互工具调用,首次呈现即调--禁先文本列选项): 二次确认执行 squash merge
+
+> ⛔ [HARD_STOP] 二次确认是防手滑的最后一道防线:首次选"确认合并"可能是误触,必须再调一次问答工具让用户主动选"确认执行"。
+> 违反字面 = 违反精神:哪怕"用户刚确认过"、"二次确认繁琐"、"已经展示过 commit 摘要",也算违反--二次确认不可跳过。
+
+选项:
+- 1. 确认执行 -- 立即执行 squash merge(不可逆)
+- 2. 取消 -- 退出 skill,保持当前分支
+
+用户选"取消"后,agent **必须先调 `alloy _guard user-gate reset "$CHANGE_DIR" finish:confirm-merge`**(把 gate 从 gate_history 移除 + 重新设为 pending_gate),再退出 skill,保持当前分支。
+
+用户选"确认执行"后执行 squash merge:
 ```bash
 ARCHIVE_DIR=$(ls -d openspec/changes/archive/*-<name> 2>/dev/null | sort -r | head -1)
 CHANGE_DIR="${ARCHIVE_DIR:-openspec/changes/<name>}"

@@ -198,14 +198,12 @@ async function phaseStart(args: string[]): Promise<void> {
     return process.exit(1);
   }
 
-  // 进入新阶段时,自动 clear 上阶段的 phase-complete gate。
-  // 原因:_phase complete <prev> 推进到 -ed 时设了 <prev>:phase-complete gate,
-  // 但 hook-guard 的 clearAllPendingGates 只在问答工具调用时触发--
-  // 如果 agent 在阶段转换时没调问答工具(如直接 _phase start <next>),
-  // 上阶段的 phase-complete gate 会残留,pre-commit hook 拦截新阶段写文件。
-  // 逻辑上,进入新阶段 = 上阶段已确认完成,phase-complete gate 应自动 clear。
-  // 只 clear 上阶段的 phase-complete gate,其他 gate(如 lock-xxx)不动--
-  // 那些是当前阶段内部的 gate,不应被 phase start 清掉。
+  // 进入新阶段时,检查上阶段的 phase-complete gate 是否已通过(在 gate_history)。
+  // 原因:SKILL.md 要求阶段转换前设 phase-complete gate + 用户确认(问答工具 clear -> gate_history),
+  // 但实测 agent 会跳过 phase-complete gate 直接 _phase start <next>,剥夺用户决策权。
+  // CLI 层硬约束:上阶段 phase-complete gate 必须在 gate_history,否则 HARD_STOP。
+  // 覆盖阶段:plan(检查 start:phase-complete)/ apply(plan) / archive(apply) / finish(archive)。
+  // start 无上阶段,不检查。
   const prevPhaseMap: Record<string, string> = {
     plan: "start",
     apply: "plan",
@@ -217,10 +215,28 @@ async function phaseStart(args: string[]): Promise<void> {
     try {
       const state = await readState(changeDir);
       const prevGate = `${prevPhase}:phase-complete`;
+      const history = state.gate_history ?? [];
+      if (!history.includes(prevGate)) {
+        console.error(`⛔ [HARD_STOP] 进入 ${phase} 阶段前未通过 ${prevGate} gate`);
+        console.error("");
+        console.error("  原因:agent 可能跳过了上阶段 phase-complete gate,直接 _phase start");
+        console.error("  SKILL.md 要求阶段转换前设 phase-complete gate + 问答工具确认,用户需确认进入下一阶段");
+        console.error("");
+        console.error("  合法路径:");
+        console.error(`    1. alloy _guard user-gate require ${changeDir} ${prevGate}`);
+        console.error("    2. 问答工具确认(Claude Code AskUserQuestion / OpenCode question / Pi alloy-question)");
+        console.error("       -> hook-guard 检测到问答工具调用,自动 clear pending_gate + 加入 gate_history");
+        console.error(`    3. alloy _phase start ${changeDir} ${phase}`);
+        console.error("");
+        console.error("  违反字面 = 违反精神:哪怕'用户已口头同意'、'流程很顺不用确认',也算违反--");
+        console.error("  phase-complete gate 必须用问答工具物理确认,口头同意不算授权。");
+        return process.exit(1);
+      }
+      // 上阶段 phase-complete gate 已通过,如果 pending_gate 残留是 prevGate,自动 clear(防御性)
       if (state.pending_gate === prevGate) {
-        state.pending_gate = null;
-        await writeState(changeDir, state);
-        console.log(`ℹ️ 自动 clear 上阶段 gate: ${prevGate}(进入 ${phase} 阶段 = 上阶段已确认完成)`);
+        const { setPendingGate } = await import("../../utils/state.js");
+        await setPendingGate(changeDir, null);
+        console.log(`ℹ️ 自动 clear 残留 gate: ${prevGate}(已通过 gate_history,但 pending_gate 未 clear)`);
       }
     } catch {
       // state 读失败让后续 ensureStartedAt 报错,这里不重复报

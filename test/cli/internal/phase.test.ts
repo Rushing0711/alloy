@@ -32,6 +32,11 @@ describe("alloy _phase complete", () => {
       "    completed_at: null",
       "records: []",
       "skill_usage: []",
+      "gate_history:",
+      "  - start:phase-complete",
+      "  - plan:phase-complete",
+      "  - apply:phase-complete",
+      "  - archive:phase-complete",
     ].join("\n");
     await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
   });
@@ -136,6 +141,8 @@ describe("alloy _phase complete", () => {
       "    completed_at: null",
       "records: []",
       "skill_usage: []",
+      "gate_history:",
+      "  - plan:phase-complete",
     ].join("\n");
     await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
 
@@ -209,8 +216,8 @@ describe("alloy _phase complete", () => {
     // 用一个独立于 tmpDir（git 仓库）的目录
     const isolatedDir = join(tmpdir(), `alloy-phase-nogit-${Date.now()}`, "change");
     await mkdir(isolatedDir, { recursive: true });
-    // 放一个 .alloy.yaml 让 readState 能过，但 findGitRoot 会失败
-    await writeFile(join(isolatedDir, ".alloy.yaml"), "phase: started\nrecords: []\n", "utf-8");
+    // 放一个 .alloy.yaml 让 readState 能过(含 gate_history 让 phase-complete 检查通过),但 findGitRoot 会失败
+    await writeFile(join(isolatedDir, ".alloy.yaml"), "phase: started\nrecords: []\ngate_history:\n  - start:phase-complete\n", "utf-8");
 
     const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -491,6 +498,11 @@ describe("alloy _phase complete gate 下沉检查", () => {
       "records: []",
       "skill_usage: []",
       "pending_gate: null",
+      "gate_history:",
+      "  - start:phase-complete",
+      "  - plan:phase-complete",
+      "  - apply:phase-complete",
+      "  - archive:phase-complete",
     ].join("\n");
     await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
   });
@@ -602,7 +614,7 @@ describe("alloy _phase complete gate 下沉检查", () => {
   });
 });
 
-describe("alloy _phase start 自动 clear 上阶段 phase-complete gate", () => {
+describe("alloy _phase start 检查上阶段 phase-complete gate(防跳过闸门)", () => {
   let tmpDir: string;
   let changeDir: string;
 
@@ -621,8 +633,8 @@ describe("alloy _phase start 自动 clear 上阶段 phase-complete gate", () => 
     vi.clearAllMocks();
   });
 
-  it("进入 plan 阶段:自动 clear start:phase-complete gate", async () => {
-    // 模拟 start 阶段完成后,pending_gate 残留 start:phase-complete
+  it("进入 plan 阶段:start:phase-complete 在 gate_history -> 放行 + clear 残留 pending_gate", async () => {
+    // 模拟 start 阶段完成 + 用户确认(phase-complete gate 在 gate_history),pending_gate 残留
     const yaml = [
       "phase: started",
       "schema_version: 1",
@@ -636,6 +648,8 @@ describe("alloy _phase start 自动 clear 上阶段 phase-complete gate", () => 
       "records: []",
       "skill_usage: []",
       "pending_gate: start:phase-complete",
+      "gate_history:",
+      "  - start:phase-complete",
     ].join("\n");
     await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
 
@@ -649,7 +663,7 @@ describe("alloy _phase start 自动 clear 上阶段 phase-complete gate", () => 
     expect(after.pending_gate).toBeNull();
   });
 
-  it("进入 apply 阶段:自动 clear plan:phase-complete gate", async () => {
+  it("进入 apply 阶段:plan:phase-complete 在 gate_history -> 放行", async () => {
     const yaml = [
       "phase: planned",
       "schema_version: 1",
@@ -662,7 +676,9 @@ describe("alloy _phase start 自动 clear 上阶段 phase-complete gate", () => 
       '    completed_at: "2020-01-01 11:00:00"',
       "records: []",
       "skill_usage: []",
-      "pending_gate: plan:phase-complete",
+      "pending_gate: null",
+      "gate_history:",
+      "  - plan:phase-complete",
     ].join("\n");
     await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
 
@@ -691,6 +707,8 @@ describe("alloy _phase start 自动 clear 上阶段 phase-complete gate", () => 
       "records: []",
       "skill_usage: []",
       "pending_gate: plan:lock-proposal",
+      "gate_history:",
+      "  - plan:phase-complete",
     ].join("\n");
     await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
 
@@ -719,6 +737,8 @@ describe("alloy _phase start 自动 clear 上阶段 phase-complete gate", () => 
       "records: []",
       "skill_usage: []",
       "pending_gate: null",
+      "gate_history:",
+      "  - start:phase-complete",
     ].join("\n");
     await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
 
@@ -730,5 +750,73 @@ describe("alloy _phase start 自动 clear 上阶段 phase-complete gate", () => 
     const after = await readState(changeDir);
     expect(after.phase).toBe("planning");
     expect(after.pending_gate).toBeNull();
+  });
+
+  it("进入 plan 阶段:start:phase-complete 不在 gate_history -> HARD_STOP exit 1", async () => {
+    // 模拟 agent 跳过 start:phase-complete gate,直接 _phase start plan
+    const yaml = [
+      "phase: started",
+      "schema_version: 1",
+      "worktree: null",
+      'created_at: "2020-01-01 00:00:00"',
+      'updated_at: "2020-01-01 00:00:00"',
+      "phase_timings:",
+      "  start:",
+      '    started_at: "2020-01-01 10:00:00"',
+      '    completed_at: "2020-01-01 11:00:00"',
+      "records: []",
+      "skill_usage: []",
+      "pending_gate: null",
+      // 故意不写 gate_history(模拟 agent 跳过 start:phase-complete gate)
+    ].join("\n");
+    await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
+
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await phaseCommand(["start", changeDir, "plan"]);
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errSpy.mock.calls.some(c => String(c[0]).includes("进入 plan 阶段前未通过 start:phase-complete gate"))).toBe(true);
+    // 验证 phase 未推进
+    const after = await readState(changeDir);
+    expect(after.phase).toBe("started");
+
+    exitSpy.mockRestore();
+    errSpy.mockRestore();
+  });
+
+  it("进入 archive 阶段:apply:phase-complete 不在 gate_history -> HARD_STOP exit 1", async () => {
+    // 模拟 agent 跳过 apply:phase-complete gate,直接 _phase start archive(本轮 OpenCode 实测踩坑)
+    const yaml = [
+      "phase: applied",
+      "schema_version: 1",
+      "worktree: null",
+      'created_at: "2020-01-01 00:00:00"',
+      'updated_at: "2020-01-01 00:00:00"',
+      "phase_timings:",
+      "  apply:",
+      '    started_at: "2020-01-01 10:00:00"',
+      '    completed_at: "2020-01-01 11:00:00"',
+      "records: []",
+      "skill_usage: []",
+      "pending_gate: null",
+      // 故意不写 gate_history(模拟 agent 跳过 apply:phase-complete gate)
+    ].join("\n");
+    await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
+
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await phaseCommand(["start", changeDir, "archive"]);
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errSpy.mock.calls.some(c => String(c[0]).includes("进入 archive 阶段前未通过 apply:phase-complete gate"))).toBe(true);
+    // 验证 phase 未推进
+    const after = await readState(changeDir);
+    expect(after.phase).toBe("applied");
+
+    exitSpy.mockRestore();
+    errSpy.mockRestore();
   });
 });

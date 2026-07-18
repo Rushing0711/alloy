@@ -29,6 +29,7 @@ export function createInitialState(startedAt?: string, featureBranch?: string): 
     records: [],
     skill_usage: [],
     pending_gate: null,
+    gate_history: [],
   };
 }
 
@@ -98,6 +99,120 @@ export async function setPendingGate(
     newContent = withNewline + `pending_gate: ${value}\n`;
   }
   await writeFile(yamlPath, newContent, "utf-8");
+}
+
+/**
+ * 精准追加 gate 到 .alloy.yaml 的 gate_history 字段,不触发 writeState 全量重写。
+ *
+ * 原因:与 setPendingGate 同理,writeState 全量重序列化会破坏 worktree_created_at 等字段引号格式。
+ *
+ * 幂等:gate 已存在不重复追加。
+ *
+ * 写入时机:
+ * - _guard user-gate pass(手动通过)
+ * - hook-guard clearAllPendingGates(问答工具调用自动 clear)
+ * - Pi 自动通过(PI_CODING_AGENT=true 时 worktree-choice/sdd-ep-choice)
+ *
+ * 检查时机:
+ * - _guard user-gate require apply:sdd-ep-choice 时检查 apply:worktree-choice 是否在 gate_history
+ * - _phase complete <phase> 时检查 <phase>:phase-complete 是否在 gate_history
+ */
+export async function addClearedGate(
+  changePath: string,
+  gate: string
+): Promise<void> {
+  const yamlPath = join(changePath, ".alloy.yaml");
+  const content = await readFile(yamlPath, "utf-8");
+
+  // 解析当前 gate_history(用 parseYaml 读,不用 readState 避免旧字段兼容逻辑)
+  const state = parseYaml(content) as AlloyState;
+  const history = state.gate_history ?? [];
+  if (history.includes(gate)) return; // 幂等
+
+  const lines = content.split("\n");
+  let gateIdx = -1;
+  let lastElemIdx = -1;
+
+  // 找 gate_history 行 + 后续 - elem 行
+  for (let i = 0; i < lines.length; i++) {
+    if (/^gate_history:/.test(lines[i])) {
+      gateIdx = i;
+      for (let j = i + 1; j < lines.length; j++) {
+        if (/^\s+-\s+/.test(lines[j])) {
+          lastElemIdx = j;
+        } else {
+          break;
+        }
+      }
+      break;
+    }
+  }
+
+  const newElem = `  - ${gate}`;
+  if (gateIdx === -1) {
+    // gate_history 不存在,追加新段
+    const withNewline = content.endsWith("\n") ? content : content + "\n";
+    await writeFile(yamlPath, withNewline + "gate_history:\n" + newElem + "\n", "utf-8");
+  } else if (lastElemIdx === -1) {
+    // gate_history 存在但无元素(可能是 "gate_history: []" 或 "gate_history:")
+    // 替换 gate_history 行为 "gate_history:" + 插入新元素
+    lines[gateIdx] = "gate_history:";
+    lines.splice(gateIdx + 1, 0, newElem);
+    await writeFile(yamlPath, lines.join("\n"), "utf-8");
+  } else {
+    // 在最后一个元素后追加
+    lines.splice(lastElemIdx + 1, 0, newElem);
+    await writeFile(yamlPath, lines.join("\n"), "utf-8");
+  }
+}
+
+/**
+ * 精准从 .alloy.yaml 的 gate_history 字段移除 gate,不触发 writeState 全量重写。
+ *
+ * 用途:用户在 USER_GATE 选"暂停/取消"后,agent 调 reset 恢复 gate 状态。
+ * hook-guard 检测到问答工具调用时,无条件 clear pending_gate + 加入 gate_history,
+ * 但用户选"暂停"本意是拒绝通过 gate,语义被吞了。agent 调 reset 把 gate 从
+ * gate_history 移除 + 重新设为 pending_gate,恢复"等待用户确认"状态。
+ *
+ * 幂等:gate 不在 gate_history 时,只设 pending_gate,不报错。
+ */
+export async function removeClearedGate(
+  changePath: string,
+  gate: string
+): Promise<void> {
+  const yamlPath = join(changePath, ".alloy.yaml");
+  const content = await readFile(yamlPath, "utf-8");
+
+  const lines = content.split("\n");
+  let gateIdx = -1;
+  let firstElemIdx = -1;
+  let lastElemIdx = -1;
+  let targetElemIdx = -1;
+
+  for (let i = 0; i < lines.length; i++) {
+    if (/^gate_history:/.test(lines[i])) {
+      gateIdx = i;
+      for (let j = i + 1; j < lines.length; j++) {
+        if (/^\s+-\s+/.test(lines[j])) {
+          if (firstElemIdx === -1) firstElemIdx = j;
+          lastElemIdx = j;
+          const elemMatch = lines[j].match(/^\s+-\s+(.+)$/);
+          if (elemMatch && elemMatch[1].trim() === gate) {
+            targetElemIdx = j;
+          }
+        } else {
+          break;
+        }
+      }
+      break;
+    }
+  }
+
+  if (gateIdx !== -1 && targetElemIdx !== -1) {
+    lines.splice(targetElemIdx, 1);
+    await writeFile(yamlPath, lines.join("\n"), "utf-8");
+  }
+  // gate 不在 gate_history(gateIdx=-1 或 targetElemIdx=-1):只设 pending_gate,不动 gate_history
 }
 
 export async function findActiveChanges(

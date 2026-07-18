@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, basename } from "node:path";
 import { execSync } from "node:child_process";
-import { readState, writeState, readProjectConfig, setPendingGate } from "../../utils/state.js";
+import { readState, writeState, readProjectConfig, setPendingGate, addClearedGate, removeClearedGate } from "../../utils/state.js";
 import { assertInWorktree } from "../../utils/worktree-guard.js";
 import { computeArtifactHash, ARTIFACT_FILES } from "../../../core/artifacts.js";
 
@@ -341,19 +341,23 @@ async function worktreeStatusGuard(args: string[]): Promise<void> {
 }
 
 /**
- * alloy _guard user-gate <require|pass> <change-dir> [<gate-id>]
+ * alloy _guard user-gate <require|pass|reset> <change-dir> [<gate-id>]
  *
  * USER_GATE 闸门:配合 hook-guard 拦截 agent 跳过用户确认。
  * - require:设置 pending_gate,后续 Write/Edit 非白名单被 hook 拦截,直到问答工具调用或手动 pass
  * - pass:清除 pending_gate(手动降级 / 无问答工具的 agent)
+ * - reset:把 gate 从 gate_history 移除 + 重新设为 pending_gate(用户选"暂停/取消"后恢复 gate 状态)
  *
- * hook-guard 检测到 AskUserQuestion/question/alloy-question 工具调用时,自动 clear 所有 pending_gate。
+ * hook-guard 检测到 AskUserQuestion/question/alloy-question 工具调用时,自动 clear 所有 pending_gate
+ * + 加入 gate_history。但用户选"暂停/取消"本意是拒绝通过 gate,hook-guard 无条件 clear 把语义吞了。
+ * agent 在用户选"暂停/取消"后调 reset,把 gate 从 gate_history 移除 + 重新设为 pending_gate,
+ * 恢复"等待用户确认"状态。用户"继续"时,agent 调 require(幂等)+ 问答工具重新询问。
  *
  * 实现细节(2026-07-17 修复):
  * - 用 setPendingGate 精准替换 pending_gate 行,不触发 writeState 全量重写
  *   原因:writeState 全量重序列化会破坏 agent 手动加的 worktree_created_at 引号格式,
  *   产生 diff 噪音;且 readState + writeState 会读错文件(worktree 内执行但读主仓)
- * - require/pass 不自动 commit,pending_gate 作为临时状态留在工作区 dirty
+ * - require/pass/reset 不自动 commit,pending_gate 作为临时状态留在工作区 dirty
  *   原因:USER_GATE 独占 commit 噪音大(chore: 设 USER_GATE xxx);pending_gate 由下一个
  *   _artifact commit / _phase complete 等命令的 git add .alloy.yaml 一起 commit,
  *   合并到有意义的 commit(如 artifact 锁定 / 阶段推进)
@@ -383,7 +387,33 @@ async function userGateGuard(args: string[]): Promise<void> {
         console.log("  -> 走 EP 路径:加载 executing-plans skill,在当前 session 顺序执行");
         console.log("  详见 docs/reference/agent-instruction-files.md 第 12 章 Subagent");
       }
+      // Pi 自动通过也写入 gate_history,供后续 gate 前置检查(如 sdd-ep-choice 检查 worktree-choice)
+      try {
+        await addClearedGate(changeDir, gateId);
+      } catch {
+        // .alloy.yaml 不存在或读写失败,不阻断--后续命令会报错
+      }
       return;
+    }
+    // 前置 gate 检查:防止 agent 跳过前置 gate 直接设后续 gate
+    // 规则:后续 gate require 时,前置 gate 必须已在 gate_history(已通过)
+    // 覆盖:apply:sdd-ep-choice 检查 apply:worktree-choice(SKILL.md L227 HARD_STOP 但 agent 仍跳过)
+    if (gateId === "apply:sdd-ep-choice") {
+      try {
+        const state = await readState(changeDir);
+        const history = state.gate_history ?? [];
+        if (!history.includes("apply:worktree-choice")) {
+          console.error("⛔ [HARD_STOP] 前置 gate 未通过:apply:worktree-choice");
+          console.error(`  当前 gate: ${gateId}`);
+          console.error("  原因:apply 阶段必须先让用户确认 worktree 选择(创建/跳过),再设执行策略 gate");
+          console.error("  SKILL.md L227 HARD_STOP 要求 worktree-choice gate 必跑,但 agent 可能跳过");
+          console.error("  修复:先调 alloy _guard user-gate require <change-dir> apply:worktree-choice + 问答工具确认,再设 sdd-ep-choice");
+          process.exit(1);
+          return;
+        }
+      } catch {
+        // state 读失败,让后续 assertInWorktree / setPendingGate 报错
+      }
     }
     // worktree cwd 守卫:worktree 模式下必须在 worktree 内执行
     // 否则 pending_gate 写到主仓 .alloy.yaml,且 .alloy.yaml/制品 commit 进 feature 分支,破坏 worktree 隔离
@@ -409,11 +439,42 @@ async function userGateGuard(args: string[]): Promise<void> {
     // 精准替换 pending_gate 行为 null,不触发 writeState 全量重写
     // 不自动 commit:pending_gate 作为临时状态,由下一个 _artifact commit / _phase complete 一起 commit
     await setPendingGate(changeDir, null);
+    // 把 cleared gate 加入 gate_history,供后续 gate 前置检查 + _phase complete 检查
+    if (cleared) {
+      try {
+        await addClearedGate(changeDir, cleared);
+      } catch {
+        // gate_history 写失败不阻断 pass(pending_gate 已 clear)
+      }
+    }
     console.log(`✓ user-gate 已通过: ${cleared ?? "(无)"} (${changeDir})`);
     return;
   }
 
-  console.error(`未知操作: ${action} (支持: require, pass)`);
+  if (action === "reset") {
+    const gateId = args[2];
+    if (!changeDir || !gateId) {
+      console.error("用法: alloy _guard user-gate reset <change-dir> <gate-id>");
+      process.exit(1);
+      return;
+    }
+    // worktree cwd 守卫:worktree 模式下必须在 worktree 内执行(与 require 对称)
+    await assertInWorktree(changeDir);
+    // 把 gate 从 gate_history 移除(hook-guard 自动 clear 时误加入的)
+    try {
+      await removeClearedGate(changeDir, gateId);
+    } catch {
+      // gate_history 读写失败不阻断 reset(pending_gate 仍可设)
+    }
+    // 重新设为 pending_gate,恢复"等待用户确认"状态
+    await setPendingGate(changeDir, gateId);
+    console.log(`✓ user-gate 已 reset: ${gateId} (${changeDir})`);
+    console.log("  gate 已从 gate_history 移除 + 重新设为 pending_gate");
+    console.log("  用途:用户选暂停/取消后恢复 gate 状态,用户'继续'时重新询问");
+    return;
+  }
+
+  console.error(`未知操作: ${action} (支持: require, pass, reset)`);
   process.exit(1);
 }
 

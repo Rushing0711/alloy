@@ -394,7 +394,8 @@ dirty 时 -> 🔴 USER_GATE:检测到未提交变更,如何处理?
     - 1. 确认并继续 -- 锁定 draft,进入 start 阶段 finalize
     - 2. 需要调整 -- 回到 brainstorming 重新讨论
 
-    选确认 -> 步骤 10；选调整 -> 回到步骤 4 brainstorming。
+    选确认 -> 步骤 10；选调整 -> agent **必须先调 `alloy _guard user-gate reset openspec/changes/<name> start:lock-draft`**(把 gate 从 gate_history 移除 + 重新设为 pending_gate),再回到步骤 4 brainstorming。
+    > 原因:hook-guard 检测到问答工具调用时无条件 clear pending_gate + 加入 gate_history,用户选"需要调整"本意是拒绝通过 gate,语义被吞了。reset 恢复 gate 状态,重新讨论后 agent 调 require(幂等)+ 问答工具重新询问。
 
 6. **提交--仅用户确认锁定后,执行 start 阶段 finalize（原子命令，合并 artifact commit + checkpoint + verify + phase complete，3 次 LLM 往返 -> 1 次）：**
 
@@ -471,8 +472,9 @@ alloy _guard user-gate require openspec/changes/<name> start:phase-complete
 
 > ⛔ [HARD_STOP] 禁止输出"请运行 /alloy-xxx"让用户手动输入命令--用户已在 USER_GATE 授权,阶段转换已触发,再让用户输入命令 = 违反 Iron Law。
 > 违反字面 = 违反精神:哪怕"提示一下更友好"、"用户可能想暂停",也算违反--用户要暂停会在 USER_GATE 选"暂停",选"进入"就是授权直接加载。
-> 用户选 2 后,agent 停止,输出"已暂停。需要时运行 /alloy-plan <name> 继续。"
-> 用户选 3 后,agent 停止,等用户后续命令。
+> 用户选 2 后,agent **必须先调 `alloy _guard user-gate reset openspec/changes/<name> start:phase-complete`**(把 gate 从 gate_history 移除 + 重新设为 pending_gate),再停止,输出"已暂停。需要时运行 /alloy-plan <name> 继续。"
+>   原因:hook-guard 检测到问答工具调用时无条件 clear pending_gate + 加入 gate_history,用户选"暂停"本意是拒绝通过 gate,语义被吞了。reset 恢复 gate 状态,用户"继续"时 agent 调 require(幂等)+ 问答工具重新询问。
+> 用户选 3 后,agent 同样调 reset,再停止,等用户后续命令。
 
 > **§5.2.3 路径 B 边界说明：** start 是 phase 推进起点（无前序 phase），phase=started 写入失败时降级路径只有"重跑 /alloy-start"——不存在 phase 回退场景。本阶段无 §5.2.3 适用空间。
 

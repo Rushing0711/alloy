@@ -245,7 +245,8 @@ alloy _guard user-gate require openspec/changes/<name> plan:lock-<artifact>
 
   生成下一制品前校验上游 hash：`alloy _record check openspec/changes/<name> <upstream>`，失败 → ⛔ PRECONDITION_FAIL（上游被破坏，必须修复后才能继续生成下游）。
 
-- **选 2：** 用户提出修改后，**agent 先判断是否触犯规格边界，给出判断 + 理由 + 建议，再由用户决断**：
+- **选 2：** agent **必须先调 `alloy _guard user-gate reset openspec/changes/<name> plan:lock-<artifact>`**(把 gate 从 gate_history 移除 + 重新设为 pending_gate)。然后用户提出修改后，**agent 先判断是否触犯规格边界，给出判断 + 理由 + 建议，再由用户决断**：
+> 原因:hook-guard 检测到问答工具调用时无条件 clear pending_gate + 加入 gate_history,用户选"需要调整"本意是拒绝通过 gate,语义被吞了。reset 恢复 gate 状态,重新生成后 agent 调 require(幂等)+ 问答工具重新询问。
 
   > [HARD_STOP] 无论变更大小，禁止用 Edit/Write 直接编辑已生成的制品文件。
   > 违反字面 = 违反精神：哪怕"只加一个字段""只改一行样式描述"，直接编辑都会让制品 hash 与 records 失配。修改只能通过"重新生成"（reset + /opsx:continue）或"回 brainstorming"实现。
@@ -600,8 +601,9 @@ alloy _guard user-gate require openspec/changes/<name> plan:phase-complete
 
 > ⛔ [HARD_STOP] 禁止输出"请运行 /alloy-xxx"让用户手动输入命令--用户已在 USER_GATE 授权,阶段转换已触发,再让用户输入命令 = 违反 Iron Law。
 > 违反字面 = 违反精神:哪怕"提示一下更友好"、"用户可能想暂停",也算违反--用户要暂停会在 USER_GATE 选"暂停",选"进入"就是授权直接加载。
-> 用户选 2 后,agent 停止,输出"已暂停。需要时运行 /alloy-apply <name> 继续。"
-> 用户选 3 后,agent 停止,等用户后续命令。
+> 用户选 2 后,agent **必须先调 `alloy _guard user-gate reset openspec/changes/<name> plan:phase-complete`**(把 gate 从 gate_history 移除 + 重新设为 pending_gate),再停止,输出"已暂停。需要时运行 /alloy-apply <name> 继续。"
+>   原因:hook-guard 检测到问答工具调用时无条件 clear pending_gate + 加入 gate_history,用户选"暂停"本意是拒绝通过 gate,语义被吞了。reset 恢复 gate 状态,用户"继续"时 agent 调 require(幂等)+ 问答工具重新询问。
+> 用户选 3 后,agent 同样调 reset,再停止,等用户后续命令。
 
 > **提示：apply 阶段早期的需求变更处理**
 > apply 阶段早期（worktree 未创建 + SDD/EP 未启动）仍可回退到 brainstorming 处理需求变更，走检查点回退流程。

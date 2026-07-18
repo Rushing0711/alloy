@@ -550,6 +550,105 @@ describe("alloy _guard", () => {
       }
     });
 
+    it("apply:sdd-ep-choice 前置 gate 检查:worktree-choice 不在 gate_history -> HARD_STOP exit 1", async () => {
+      // 模拟 agent 跳过 worktree-choice gate,直接设 sdd-ep-choice
+      await setupState("applying");
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+      const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      await guardCommand(["user-gate", "require", changeDir, "apply:sdd-ep-choice"]);
+
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(errSpy.mock.calls.some(c => String(c[0]).includes("前置 gate 未通过:apply:worktree-choice"))).toBe(true);
+      // 验证 pending_gate 未设置(拦截在 setPendingGate 之前)
+      const state = await readState(changeDir);
+      expect(state.pending_gate ?? null).toBeNull();
+
+      exitSpy.mockRestore();
+      errSpy.mockRestore();
+    });
+
+    it("apply:sdd-ep-choice 前置 gate 检查:worktree-choice 在 gate_history -> 放行设 pending_gate", async () => {
+      // 模拟 agent 走完 worktree-choice gate(在 gate_history),再设 sdd-ep-choice
+      await setupState("applying");
+      // 手动写入 gate_history 含 apply:worktree-choice
+      const yaml = [
+        "worktree: null",
+        "schema_version: 1",
+        "phase: applying",
+        'updated_at: "2020-01-01T00:00:00"',
+        "gate_history:",
+        "  - apply:worktree-choice",
+      ].join("\n");
+      await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
+
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await guardCommand(["user-gate", "require", changeDir, "apply:sdd-ep-choice"]);
+
+      // 验证 pending_gate 已设置(前置检查通过)
+      const state = await readState(changeDir);
+      expect(state.pending_gate).toBe("apply:sdd-ep-choice");
+
+      logSpy.mockRestore();
+    });
+
+    it("pass 把 gate 加入 gate_history", async () => {
+      // require + pass 后,gate 应在 gate_history
+      await setupState("started");
+      await guardCommand(["user-gate", "require", changeDir, "start:phase-complete"]);
+      await guardCommand(["user-gate", "pass", changeDir]);
+
+      const state = await readState(changeDir);
+      expect(state.pending_gate).toBeNull();
+      expect(state.gate_history ?? []).toContain("start:phase-complete");
+    });
+
+    it("reset 把 gate 从 gate_history 移除 + 重新设为 pending_gate", async () => {
+      // 模拟 hook-guard 误 clear:require + pass(gate 进 gate_history)+ reset 恢复
+      await setupState("started");
+      await guardCommand(["user-gate", "require", changeDir, "start:phase-complete"]);
+      await guardCommand(["user-gate", "pass", changeDir]);
+      // 此时 pending_gate=null, gate_history=[start:phase-complete]
+      await guardCommand(["user-gate", "reset", changeDir, "start:phase-complete"]);
+
+      const state = await readState(changeDir);
+      expect(state.pending_gate).toBe("start:phase-complete");
+      expect(state.gate_history ?? []).not.toContain("start:phase-complete");
+    });
+
+    it("reset 缺 change-dir -> exit 1", async () => {
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation((code?: number) => {
+        throw new Error(`exit:${code}`);
+      });
+      try {
+        await expect(guardCommand(["user-gate", "reset"])).rejects.toThrow();
+      } finally {
+        exitSpy.mockRestore();
+      }
+    });
+
+    it("reset 缺 gate-id -> exit 1", async () => {
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation((code?: number) => {
+        throw new Error(`exit:${code}`);
+      });
+      try {
+        await expect(guardCommand(["user-gate", "reset", changeDir])).rejects.toThrow();
+      } finally {
+        exitSpy.mockRestore();
+      }
+    });
+
+    it("reset 不在 gate_history 的 gate -> 只设 pending_gate(幂等,不报错)", async () => {
+      // gate 从未通过(gate_history 无此 gate),reset 仍设 pending_gate
+      await setupState("started");
+      await guardCommand(["user-gate", "reset", changeDir, "start:phase-complete"]);
+
+      const state = await readState(changeDir);
+      expect(state.pending_gate).toBe("start:phase-complete");
+      expect(state.gate_history ?? []).not.toContain("start:phase-complete");
+    });
+
     it("Pi 下其他 gate 正常设置(不自动通过)", async () => {
       const origPi = process.env.PI_CODING_AGENT;
       process.env.PI_CODING_AGENT = "true";

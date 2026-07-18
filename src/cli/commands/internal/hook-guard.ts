@@ -197,7 +197,7 @@ export function collectWorktreePaths(projectRoot: string): string[] {
  *   导致 worktree 内 pending_gate 永远不被 clear,agent 无法推进阶段
  */
 export async function clearAllPendingGates(projectRoot: string): Promise<void> {
-  const { setPendingGate } = await import("../../utils/state.js");
+  const { setPendingGate, addClearedGate } = await import("../../utils/state.js");
   const allDirs = scanAllChangeDirs(projectRoot);
   for (const changeDir of allDirs) {
     const stateFile = join(changeDir, ".alloy.yaml");
@@ -208,6 +208,8 @@ export async function clearAllPendingGates(projectRoot: string): Promise<void> {
         const gate = match[1].trim().replace(/^["']|["']$/g, "");
         if (gate && gate !== "null") {
           await setPendingGate(changeDir, null);
+          // 把 cleared gate 加入 gate_history,供 _guard user-gate require 前置检查 + _phase complete 检查
+          await addClearedGate(changeDir, gate);
         }
       }
     } catch {

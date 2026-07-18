@@ -632,7 +632,8 @@ alloy _guard user-gate require openspec/changes/<name> apply:lock-verify
 alloy _artifact commit openspec/changes/<name> verify
 ```
 
-选 2：重新生成 verify.md（不是直接编辑），重新展示审查窗口。
+选 2：agent **必须先调 `alloy _guard user-gate reset openspec/changes/<name> apply:lock-verify`**(把 gate 从 gate_history 移除 + 重新设为 pending_gate),再重新生成 verify.md(不是直接编辑),重新展示审查窗口。
+> 原因:hook-guard 检测到问答工具调用时无条件 clear pending_gate + 加入 gate_history,用户选"需要调整"本意是拒绝通过 gate,语义被吞了。reset 恢复 gate 状态,重新生成后 agent 调 require(幂等)+ 问答工具重新询问。
 
 > [N/M] 是阶段内局部编号（M=2），不输出全局制品进度。全局进度由 `alloy status` 管理。
 
@@ -725,7 +726,8 @@ alloy _verify phase-exit apply openspec/changes/<name> && alloy _phase complete 
 
 > 注意：步骤 1 和 2 是两个独立 commit。步骤 1 仅含 retrospective.md + records，步骤 2 仅含 .alloy.yaml 的 phase_timings + phase 字段。
 
-选 2：重新生成（不是直接编辑），重新展示审查窗口。
+选 2：agent **必须先调 `alloy _guard user-gate reset openspec/changes/<name> apply:lock-retrospective`**(把 gate 从 gate_history 移除 + 重新设为 pending_gate),再重新生成(不是直接编辑),重新展示审查窗口。
+> 原因:hook-guard 检测到问答工具调用时无条件 clear pending_gate + 加入 gate_history,用户选"需要调整"本意是拒绝通过 gate,语义被吞了。reset 恢复 gate 状态,重新生成后 agent 调 require(幂等)+ 问答工具重新询问。
 
 ---
 
@@ -788,5 +790,6 @@ alloy _guard user-gate require openspec/changes/<name> apply:phase-complete
 
 > ⛔ [HARD_STOP] 禁止输出"请运行 /alloy-xxx"让用户手动输入命令--用户已在 USER_GATE 授权,阶段转换已触发,再让用户输入命令 = 违反 Iron Law。
 > 违反字面 = 违反精神:哪怕"提示一下更友好"、"用户可能想暂停",也算违反--用户要暂停会在 USER_GATE 选"暂停",选"进入"就是授权直接加载。
-> 用户选 2 后,agent 停止,输出"已暂停。建议执行 QA 测试或浏览器测试,确认后运行 /alloy-archive <name> 继续。"
-> 用户选 3 后,agent 停止,等用户后续命令。
+> 用户选 2 后,agent **必须先调 `alloy _guard user-gate reset openspec/changes/<name> apply:phase-complete`**(把 gate 从 gate_history 移除 + 重新设为 pending_gate),再停止,输出"已暂停。建议执行 QA 测试或浏览器测试,确认后运行 /alloy-archive <name> 继续。"
+>   原因:hook-guard 检测到问答工具调用时无条件 clear pending_gate + 加入 gate_history,用户选"暂停"本意是拒绝通过 gate,语义被吞了。reset 恢复 gate 状态,用户"继续"时 agent 调 require(幂等)+ 问答工具重新询问。
+> 用户选 3 后,agent 同样调 reset,再停止,等用户后续命令。
