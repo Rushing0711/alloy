@@ -291,31 +291,28 @@ alloy _archive openspec/changes/<name>
 
 > ⛔ [HARD_STOP] USER_GATE 及后续命令必须用归档后路径 `$ARCHIVE_DIR`。
 > `alloy _archive` 执行后 `openspec/changes/<name>` 已移到 `openspec/changes/archive/<date>-<name>/`,原路径 `$CHANGE_DIR` 不存在,`_guard user-gate require` 内部 `readState` 会 ENOENT 失败。
-> 步骤:先解析 `$ARCHIVE_DIR`(下方 `ls -d` 命令),再设 USER_GATE。
+> 步骤:先解析 `$ARCHIVE_DIR`(用 `alloy _archive-dir <name>` 命令),再设 USER_GATE。
 >
-> ⛔ [HARD_STOP] **每个 bash 调用都必须先内联计算 `$ARCHIVE_DIR`**--Pi/OpenCode bash 工具无 shell state 持久化,前一个 bash 里 `ARCHIVE_DIR=$(ls ...)` 设的变量在新 bash 调用里为空,`alloy _guard user-gate require "$ARCHIVE_DIR" ...` 会因 `$ARCHIVE_DIR` 为空报"用法"错误 + readState ENOENT。
-> 标准模板(每个 bash 调用都用此模式,`<name>` 替换为实际 change 名):
+> ⛔ [HARD_STOP] **每个 bash 调用都必须先解析 `$ARCHIVE_DIR`**--Pi/OpenCode bash 工具无 shell state 持久化,前一个 bash 里设的变量在新 bash 调用里为空,`alloy _guard user-gate require "$ARCHIVE_DIR" ...` 会因 `$ARCHIVE_DIR` 为空报"用法"错误 + readState ENOENT。
+> **推荐用 `alloy _archive-dir <name>` 命令**(替代手抄 `ls -d ... | sort -r | head -1`--OpenCode 实测 1/11 次遗漏导致空参错误):
 > ```bash
-> ARCHIVE_DIR=$(ls -d openspec/changes/archive/*-<name> 2>/dev/null | sort -r | head -1)
-> [ -z "$ARCHIVE_DIR" ] && { echo "⛔ archive 目录不存在"; exit 1; }
+> ARCHIVE_DIR=$(alloy _archive-dir <name>)
 > alloy _guard user-gate require "$ARCHIVE_DIR" archive:delta-spec-review
 > ```
+> `_archive-dir` 命令找不到归档目录时 exit 1(无需手写 `[ -z "$ARCHIVE_DIR" ]` 检查)。
 > 违反字面 = 违反精神:哪怕"上一个 bash 已捕获 ARCHIVE_DIR"、"变量名一样应该能复用",也算违反--Pi/OpenCode 每个新 bash 调用是独立进程,变量不持久。
 > 常见违规模式:
-> - agent 在 bash A 里 `ARCHIVE_DIR=$(ls ...)`,在 bash B 里直接 `alloy _guard user-gate require "$ARCHIVE_DIR" ...` -> `$ARCHIVE_DIR` 为空 -> "用法"错误 + ENOENT
+> - agent 在 bash A 里 `ARCHIVE_DIR=$(alloy _archive-dir <name>)`,在 bash B 里直接 `alloy _guard user-gate require "$ARCHIVE_DIR" ...` -> `$ARCHIVE_DIR` 为空 -> "用法"错误 + ENOENT
 > - agent 以为"变量名一样跨 bash 复用",实际每个 bash 是独立 shell,变量不持久
+> - agent 手抄 `ls -d openspec/changes/archive/*-<name> | sort -r | head -1`(易漏)--应用 `alloy _archive-dir <name>` 替代
 
 **解析归档后路径（后续所有命令统一用 `$ARCHIVE_DIR`）：** change 目录在 archive 阶段已移到 `openspec/changes/archive/<YYYY-MM-DD>-<name>/`,后续 `_state write` / `_phase complete` / `_guard user-gate require` 都必须用归档后路径,用原路径 `openspec/changes/<name>` 会因目录已移走而失败。
 
 ```bash
-ARCHIVE_DIR=$(ls -d openspec/changes/archive/*-<name> 2>/dev/null | sort -r | head -1)
-if [ -z "$ARCHIVE_DIR" ]; then
-  echo "⛔ [PRECONDITION_FAIL] archive 目录不存在--alloy _archive 可能未完成目录移动"
-  echo "  期望路径: openspec/changes/archive/<YYYY-MM-DD>-<name>/"
-  echo "  禁止: 用原路径 openspec/changes/<name> 调后续命令--目录已移走,会失败"
-  exit 1
-fi
+ARCHIVE_DIR=$(alloy _archive-dir <name>)
 ```
+
+`_archive-dir` 命令找不到归档目录时 exit 1(无需手写 `[ -z "$ARCHIVE_DIR" ]` 检查)。
 
 ```bash
 SPEC_DIFF=$(git diff --stat openspec/specs/)

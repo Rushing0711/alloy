@@ -434,6 +434,26 @@ alloy _archive <change-dir>
 - 校验归档目录存在：`openspec/changes/archive/<YYYY-MM-DD>-<name>/`
 - 校验每个 capability 的主 spec 已 promote
 - **输出 `-> ARCHIVE_DIR=openspec/changes/archive/<date>-<name>` 引导行**,后续步骤(delta-spec-review USER_GATE、phase complete 等)用此路径,禁手写 `ls -d ... | sort -r | head -1`
+- **兜底:agent 跳过 archive SKILL.md Step 1 的 `_phase start` 时,自动在新路径写 `phase_timings.archive.started_at` + 推进 `phase=archiving`**(幂等,agent 按流程执行 Step 1 时不覆盖)
+
+### alloy _archive-dir
+
+输出归档后目录路径(`openspec/changes/archive/<YYYY-MM-DD>-<name>`)。agent 用 `ARCHIVE_DIR=$(alloy _archive-dir <name>)` 替代手抄内联计算--Pi/OpenCode bash 无 shell state 持久化,跨 bash 调用 `$ARCHIVE_DIR` 会丢;手抄 `ls -d ... | sort -r | head -1` 易漏(OpenCode 实测 1/11 次遗漏导致空参错误)。
+
+```
+alloy _archive-dir <change-name>
+```
+
+参数:
+- `<change-name>`:change 名(如 `add-hello-script`),不是路径
+
+行为:
+- 找 `openspec/changes/archive/*-<name>` 目录(按名称降序取最新,日期格式 `YYYY-MM-DD` 字符串排序 = 日期排序)
+- 找到 -> 输出相对路径(如 `openspec/changes/archive/2026-07-18-add-hello-script`),不带 `-> ARCHIVE_DIR=` 前缀,agent 直接 `ARCHIVE_DIR=$(alloy _archive-dir <name>)` 捕获
+- 找不到 -> exit 1 + 引导
+- `endsWith` 精确匹配:`test-change` 不误匹配 `test-change-v2`
+
+多 agent 适配:Claude Code / OpenCode / Pi 都用此命令,无平台差异。
 
 ### alloy _worktree-create
 

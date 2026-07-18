@@ -141,7 +141,8 @@ describe("alloy _worktree-cleanup 集成测试(真实 git 仓库)", () => {
     // merge 后 .alloy.yaml 应该是 worktree 分支的版本(worktree 内 commit 的)
     const mergedContent = git("git show HEAD:openspec/changes/test/.alloy.yaml", tmpDir);
     expect(mergedContent).toContain("phase: applied");
-    expect(mergedContent).toContain(`worktree: ${worktreePath}`);
+    // P1 修复:_worktree-cleanup 末尾清空 worktree 字段(避免后续 assertInWorktree 误判 worktree 模式)
+    expect(mergedContent).toContain("worktree: null");
 
     // 验证 4:worktree_merged_at 已记录(merge 后 writeState + commit)
     expect(mergedContent).toMatch(/worktree_merged_at:/);

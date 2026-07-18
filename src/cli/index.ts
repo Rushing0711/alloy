@@ -42,7 +42,7 @@ Commands:
 
 Internal commands (agent 调用,可直接使用):
   _state _skill _guard _phase _verify _artifact _record _config
-  _checkpoint _archive _worktree-cleanup _worktree-create _retro _env _progress
+  _checkpoint _archive _archive-dir _worktree-cleanup _worktree-create _retro _env _progress
   _precheck _infra-commit _pre-commit-check _hook-guard _stop-guard
   _branch _change _start
   详见 skills/alloy-shared/references/cli-reference.md
@@ -456,6 +456,11 @@ async function main() {
     case "_archive": {
       const { archiveCommand } = await import("./commands/internal/archive.js");
       await archiveCommand(restArgs);
+      break;
+    }
+    case "_archive-dir": {
+      const { archiveDirCommand } = await import("./commands/internal/archive-dir.js");
+      await archiveDirCommand(restArgs);
       break;
     }
     case "_worktree-cleanup": {

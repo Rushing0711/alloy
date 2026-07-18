@@ -99,7 +99,7 @@ describe("alloy _worktree-cleanup", () => {
     errSpy.mockRestore();
   });
 
-  it("worktree 目录不存在 + git worktree list 不含 -> silent fallback 仅记录 merged_at", async () => {
+  it("worktree 目录不存在 + git worktree list 不含 -> silent fallback 仅记录 merged_at + 清空 worktree 字段", async () => {
     mockBranchAndState((cmd) => {
       if (cmd.includes("git worktree list")) return "other-path\n";
       if (cmd === "git rev-parse --git-dir") return "/main/.git\n";
@@ -115,6 +115,10 @@ describe("alloy _worktree-cleanup", () => {
     expect(execSyncMock.mock.calls.some(c => String(c[0]).includes("git worktree remove"))).toBe(false);
     expect(execSyncMock.mock.calls.some(c => String(c[0]).includes("git branch -d"))).toBe(false);
     expect(writeStateMock).toHaveBeenCalled();
+    // 验证 worktree 字段被清空(避免后续 assertInWorktree 误判 worktree 模式)
+    const writtenState = writeStateMock.mock.calls[0][1] as { worktree: string | null; worktree_merged_at: string };
+    expect(writtenState.worktree).toBeNull();
+    expect(writtenState.worktree_merged_at).toBeTruthy();
   });
 
   it("当前在 worktree 内 -> PRECONDITION_FAIL", async () => {
@@ -232,6 +236,10 @@ describe("alloy _worktree-cleanup", () => {
 
     expect(writeStateMock).toHaveBeenCalled();
     expect(logSpy.mock.calls.some(c => String(c[0]).includes("✓ worktree 清理完成"))).toBe(true);
+    // 验证 worktree 字段被清空(避免后续 assertInWorktree 误判 worktree 模式)
+    const lastWriteCall = writeStateMock.mock.calls[writeStateMock.mock.calls.length - 1][1] as { worktree: string | null; worktree_merged_at: string };
+    expect(lastWriteCall.worktree).toBeNull();
+    expect(lastWriteCall.worktree_merged_at).toBeTruthy();
     logSpy.mockRestore();
   });
 

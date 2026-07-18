@@ -389,4 +389,75 @@ describe("alloy _archive", () => {
     errSpy.mockRestore();
     logSpy.mockRestore();
   });
+
+  it("兜底:agent 跳过 Step 1 _phase start 时,archive 后自动写 started_at + phase=archiving", async () => {
+    // setup:archive 目录存在 + 主 spec 已 promote + archiveDir 有 .alloy.yaml(phase=applied,无 started_at)
+    const archiveDir = join(tmpDir, `openspec/changes/archive/${new Date().toISOString().slice(0, 10)}-${changeName}`);
+    await mkdir(archiveDir, { recursive: true });
+    // 模拟 agent 跳过 Step 1:_phase start 未执行,phase=applied,无 archive.started_at
+    const state = createInitialState();
+    state.phase = "applied" as typeof state.phase;
+    await writeState(archiveDir, state);
+
+    execSyncMock.mockImplementation((cmd: string) => {
+      if (cmd.startsWith("openspec archive")) return "";
+      if (cmd.includes("git rev-parse --show-toplevel")) return tmpDir;
+      if (cmd === "git rev-parse --git-dir") return join(tmpDir, ".git");
+      if (cmd === "git rev-parse --git-common-dir") return join(tmpDir, ".git");
+      return "";
+    });
+
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await archiveCommand([changeDir]);
+
+    // 验证兜底写入
+    expect(logSpy.mock.calls.some(c => String(c[0]).includes("兜底:archive phase started_at + phase=archiving 已写入"))).toBe(true);
+    // 读回 .alloy.yaml 验证
+    const { readState } = await import("../../../src/cli/utils/state.js");
+    const writtenState = await readState(archiveDir);
+    expect(writtenState.phase).toBe("archiving");
+    expect(writtenState.phase_timings?.archive?.started_at).toBeTruthy();
+
+    exitSpy.mockRestore();
+    logSpy.mockRestore();
+  });
+
+  it("兜底幂等:agent 按流程执行 Step 1 后,archive 不重复写 started_at", async () => {
+    // setup:archiveDir 有 .alloy.yaml(phase=archiving,started_at 已存在)
+    const archiveDir = join(tmpDir, `openspec/changes/archive/${new Date().toISOString().slice(0, 10)}-${changeName}`);
+    await mkdir(archiveDir, { recursive: true });
+    const state = createInitialState();
+    state.phase = "archiving" as typeof state.phase;
+    const existingStartedAt = "2026-07-18 10:00:00";
+    state.phase_timings = {
+      ...state.phase_timings,
+      archive: { started_at: existingStartedAt, completed_at: null },
+    } as typeof state.phase_timings;
+    await writeState(archiveDir, state);
+
+    execSyncMock.mockImplementation((cmd: string) => {
+      if (cmd.startsWith("openspec archive")) return "";
+      if (cmd.includes("git rev-parse --show-toplevel")) return tmpDir;
+      if (cmd === "git rev-parse --git-dir") return join(tmpDir, ".git");
+      if (cmd === "git rev-parse --git-common-dir") return join(tmpDir, ".git");
+      return "";
+    });
+
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await archiveCommand([changeDir]);
+
+    // 验证未触发兜底写入(started_at 已存在 + phase 已是 archiving)
+    expect(logSpy.mock.calls.some(c => String(c[0]).includes("兜底:archive phase started_at"))).toBe(false);
+    // started_at 不被覆盖
+    const { readState } = await import("../../../src/cli/utils/state.js");
+    const writtenState = await readState(archiveDir);
+    expect(writtenState.phase_timings?.archive?.started_at).toBe(existingStartedAt);
+
+    exitSpy.mockRestore();
+    logSpy.mockRestore();
+  });
 });

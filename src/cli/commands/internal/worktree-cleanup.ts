@@ -98,14 +98,18 @@ export async function worktreeCleanupCommand(args: string[]): Promise<void> {
     const wtList = gitExec("git worktree list --porcelain").stdout;
     if (!wtList.includes(worktreePath)) {
       console.log(`ℹ️ worktree 目录不存在: ${worktreePath}（可能已清理）`);
-      console.log("  仅记录 worktree_merged_at");
+      console.log("  仅记录 worktree_merged_at + 清空 worktree 字段");
       const mergedAt = formatTimestamp();
       try {
         const state = await readState(changeDir);
         state.worktree_merged_at = mergedAt;
+        // 清空 worktree 字段:worktree 已清理,路径无效
+        // 不清空会导致 assertInWorktree 误判 worktree 模式,后续 _skill log / _guard user-gate require 在主仓执行触发 HARD_STOP
+        // retrospective 用 worktree_created_at + worktree_merged_at 算存活时长,不依赖 worktree 字段
+        state.worktree = null;
         await writeState(changeDir, state);
         gitExec(`git add "${changeDir}/.alloy.yaml" && git diff --cached --quiet || git commit -m "chore: 记录 worktree 合并时间"`);
-        console.log("✓ worktree_merged_at 已记录");
+        console.log("✓ worktree_merged_at 已记录,worktree 字段已清空");
       } catch {
         console.error(`⚠️ 无法读取 state: ${changeDir}/.alloy.yaml（merge 后再试）`);
       }
@@ -335,11 +339,15 @@ export async function worktreeCleanupCommand(args: string[]): Promise<void> {
     return;
   }
 
-  // 6. 记录 worktree_merged_at + commit（merge 后 change-dir 在 feature 分支存在）
+  // 6. 记录 worktree_merged_at + 清空 worktree 字段 + commit（merge 后 change-dir 在 feature 分支存在）
   const mergedAt = formatTimestamp();
   try {
     const state = await readState(changeDir);
     state.worktree_merged_at = mergedAt;
+    // 清空 worktree 字段:worktree 已清理(merge + remove + branch -d 都完成),路径无效
+    // 不清空会导致 assertInWorktree 误判 worktree 模式,后续 _skill log / _guard user-gate require 在主仓执行触发 HARD_STOP
+    // retrospective 用 worktree_created_at + worktree_merged_at 算存活时长,不依赖 worktree 字段
+    state.worktree = null;
     await writeState(changeDir, state);
     gitExec(`git add "${changeDir}/.alloy.yaml" && git diff --cached --quiet || git commit -m "chore: 记录 worktree 合并时间"`);
   } catch {
@@ -354,4 +362,5 @@ export async function worktreeCleanupCommand(args: string[]): Promise<void> {
   console.log(`  ✓ worktree remove: ${worktreePath}`);
   console.log(`  ✓ branch -d: ${worktreeBranch}`);
   console.log(`  ✓ worktree_merged_at: ${mergedAt}`);
+  console.log(`  ✓ worktree 字段已清空(避免后续命令误判 worktree 模式)`);
 }

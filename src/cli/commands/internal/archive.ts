@@ -4,7 +4,8 @@ import { realpathSync } from "node:fs";
 import { basename, relative, resolve } from "node:path";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { readState } from "../../utils/state.js";
+import { readState, writeState, formatTimestamp } from "../../utils/state.js";
+import type { PhaseTimings } from "../../../core/types.js";
 
 function findGitRoot(changeDir: string): { root: string; relPath: string } | null {
   try {
@@ -151,6 +152,37 @@ export async function archiveCommand(args: string[]): Promise<void> {
     }
   }
   // change 无 specs/ 目录时跳过 spec sync 校验（spec-less change）
+
+  // 兜底:确保 archive phase started_at 已写 + phase=archiving
+  // 原因:agent 跳过 archive SKILL.md Step 1 的 _phase start 时,新路径 .alloy.yaml 无 started_at + phase=applied,
+  // 后续 _verify phase-exit archive 会 FAIL("phase 不匹配: 期望 archiving,实际 applied; started_at 缺失")。
+  // 幂等:agent 按流程执行 Step 1 时,started_at 已存在,phase=archiving,此处不覆盖不写。
+  // 不 clear gate / 不 commit:clear gate 由 hook-guard 处理(问答工具调用时 clear);commit 由后续归档变更提交一起处理。
+  // 多 agent 影响:Claude Code/OpenCode/Pi 都可能跳过 Step 1,兜底对 3 个 agent 都正收益。
+  try {
+    const state = await readState(archiveDir);
+    let needsWrite = false;
+    const timings: PhaseTimings = state.phase_timings ?? {};
+    if (!timings.archive?.started_at) {
+      timings.archive = {
+        started_at: formatTimestamp(),
+        completed_at: timings.archive?.completed_at ?? null,
+      };
+      state.phase_timings = timings;
+      needsWrite = true;
+    }
+    if (state.phase !== "archiving") {
+      state.phase = "archiving";
+      needsWrite = true;
+    }
+    if (needsWrite) {
+      await writeState(archiveDir, state);
+      console.log(`✓ 兜底:archive phase started_at + phase=archiving 已写入(agent 可能跳过了 Step 1 的 _phase start)`);
+    }
+  } catch {
+    // .alloy.yaml 不存在或读写失败,不阻断 _archive--后续 _phase complete 会报错引导 agent 修复
+    console.warn(`⚠️ 兜底写 archive phase 状态失败(后续 _phase complete 可能 FAIL,agent 需手动调 alloy _phase start "${archiveDir}" archive)`);
+  }
 
   console.log(`✓ archive 完成: ${changeName}`);
   const archivePath = `openspec/changes/archive/${today}-${changeName}`;
