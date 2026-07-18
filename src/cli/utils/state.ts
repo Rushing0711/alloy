@@ -67,6 +67,39 @@ export async function writeState(
   await writeFile(yamlPath, content, "utf-8");
 }
 
+/**
+ * 精准替换 .alloy.yaml 的 pending_gate 字段,不触发 writeState 全量重写。
+ *
+ * 原因:writeState 用 yaml 库 stringifyYaml 全量重序列化,会破坏 agent 手动加的
+ * worktree_created_at 等字段引号格式(yaml 库序列化不加引号,agent edit 加引号),
+ * 产生 diff 噪音。pending_gate 是临时状态(USER_GATE 闸门),只改这一行即可,
+ * 保留其他字段格式。
+ *
+ * 不更新 updated_at:pending_gate 是临时状态,updated_at 应反映"状态最后更新时间"
+ * (phase/records/skill_usage 等),不应被临时 gate 写入刷新。
+ *
+ * gate 为 null 时写 `pending_gate: null`;为字符串时写 `pending_gate: <gate>`
+ * (yaml 库序列化也不加引号,保持一致)。
+ */
+export async function setPendingGate(
+  changePath: string,
+  gate: string | null
+): Promise<void> {
+  const yamlPath = join(changePath, ".alloy.yaml");
+  const content = await readFile(yamlPath, "utf-8");
+  const value = gate === null ? "null" : gate;
+  let newContent = content.replace(
+    /^pending_gate:.*$/m,
+    `pending_gate: ${value}`
+  );
+  if (newContent === content) {
+    // pending_gate 行不存在(理论上 .alloy.yaml 总有此字段,防御性追加)
+    const withNewline = content.endsWith("\n") ? content : content + "\n";
+    newContent = withNewline + `pending_gate: ${value}\n`;
+  }
+  await writeFile(yamlPath, newContent, "utf-8");
+}
+
 export async function findActiveChanges(
   changesDir: string
 ): Promise<Map<string, AlloyState>> {

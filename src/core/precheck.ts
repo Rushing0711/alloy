@@ -38,12 +38,21 @@ export interface PrecheckResult {
   openspecCliReady: boolean;
 }
 
+/** 把 cmd 声明名归一化为斜杠格式。
+ * 容错:接受冒号格式(opsx:verify)-> 斜杠格式(opsx/verify),与文件路径一致。
+ * 原因:skill md 里 cmd 名偶尔用冒号(opsx:verify),agent 按字面抄会失败;
+ * _precheck 容错自动转换,避免 agent 反复重试浪费 LLM 往返。 */
+function normalizeCmd(cmd: string): string {
+  return cmd.replace(/:/g, "/").replace(/^\//, "").replace(/\/$/, "");
+}
+
 /** 把 cmd 声明名(opsx/explore)转为可能的目标文件名候选:
  * - 横线格式:opsx-explore.md(所有 agent 通用)
  * - 斜杠格式:opsx/explore.md(Claude Code 子目录风格)
- * 两种都查,任一存在即视为就绪。 */
+ * 两种都查,任一存在即视为就绪。
+ * 容错:接受冒号格式(opsx:verify)-> 斜杠格式(opsx/verify)。 */
 function cmdFileCandidates(cmd: string): string[] {
-  const normalized = cmd.replace(/^\//, "").replace(/\/$/, "");
+  const normalized = normalizeCmd(cmd);
   const hyphenName = normalized.replace(/\//g, "-") + ".md";
   const slashName = normalized + ".md";
   return [hyphenName, slashName];
@@ -56,9 +65,10 @@ function cmdFileCandidates(cmd: string): string[] {
  * - opsx/continue -> openspec-continue-change
  * - opsx/verify -> openspec-verify-change
  * - opsx/archive -> openspec-archive-change
- * 这里返回可能的 skill 目录名,任一存在即视为就绪。 */
+ * 这里返回可能的 skill 目录名,任一存在即视为就绪。
+ * 容错:接受冒号格式(opsx:verify)-> 斜杠格式(opsx/verify)。 */
 function cmdSkillDirCandidates(cmd: string): string[] {
-  const normalized = cmd.replace(/^\//, "").replace(/\/$/, "");
+  const normalized = normalizeCmd(cmd);
   const workflow = normalized.replace(/\//g, "-"); // opsx/explore -> opsx-explore
   // 映射 opsx-<wf> -> openspec-<wf>[-change]
   // OpenSpec CLI 的命名不统一(explore 无 -change,其他有),两种都查

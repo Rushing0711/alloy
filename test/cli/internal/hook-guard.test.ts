@@ -8,8 +8,8 @@ vi.mock("node:child_process", () => ({
   execSync: (...args: unknown[]) => { throw new Error("不应被调用"); },
 }));
 
-import { evaluateHook, collectPhases, collectPendingGates, clearAllPendingGates } from "../../../src/cli/commands/internal/hook-guard.js";
-import { writeState, createInitialState } from "../../../src/cli/utils/state.js";
+import { evaluateHook, collectPhases, collectPendingGates, clearAllPendingGates, collectWorktreePaths } from "../../../src/cli/commands/internal/hook-guard.js";
+import { writeState, createInitialState, readState } from "../../../src/cli/utils/state.js";
 
 describe("alloy _hook-guard", () => {
   describe("evaluateHook(纯逻辑)", () => {
@@ -360,6 +360,146 @@ describe("alloy _hook-guard", () => {
       await clearAllPendingGates(tmpDir);
 
       expect(collectPendingGates(tmpDir)).toEqual([]);
+    });
+
+    it("扫描 worktree 路径:state.worktree 有值时,也 clear worktree 内的 pending_gate", async () => {
+      // 主仓 change 目录
+      const mainChangeDir = join(tmpDir, "openspec", "changes", "foo");
+      await mkdir(mainChangeDir, { recursive: true });
+      const mainState = createInitialState();
+      mainState.phase = "applying";
+      mainState.worktree = ".worktrees/foo";
+      mainState.pending_gate = "apply:lock-verify";
+      await writeState(mainChangeDir, mainState);
+
+      // worktree 内 change 目录(模拟 worktree 创建后的 worktree 内 .alloy.yaml)
+      const worktreePath = join(tmpDir, ".worktrees", "foo");
+      const worktreeChangeDir = join(worktreePath, "openspec", "changes", "foo");
+      await mkdir(worktreeChangeDir, { recursive: true });
+      const worktreeState = createInitialState();
+      worktreeState.phase = "applying";
+      worktreeState.worktree = ".worktrees/foo";
+      worktreeState.pending_gate = "apply:lock-verify";
+      await writeState(worktreeChangeDir, worktreeState);
+
+      await clearAllPendingGates(tmpDir);
+
+      // 验证主仓 pending_gate 被 clear
+      const mainAfter = await readState(mainChangeDir);
+      expect(mainAfter.pending_gate).toBeNull();
+      // 验证 worktree 内 pending_gate 也被 clear(关键:不漏 worktree)
+      const worktreeAfter = await readState(worktreeChangeDir);
+      expect(worktreeAfter.pending_gate).toBeNull();
+    });
+
+    it("worktree 路径不存在时,只 clear 主仓(不报错)", async () => {
+      const mainChangeDir = join(tmpDir, "openspec", "changes", "foo");
+      await mkdir(mainChangeDir, { recursive: true });
+      const mainState = createInitialState();
+      mainState.phase = "applying";
+      mainState.worktree = ".worktrees/foo"; // worktree 路径不存在
+      mainState.pending_gate = "apply:lock-verify";
+      await writeState(mainChangeDir, mainState);
+
+      await clearAllPendingGates(tmpDir);
+
+      const mainAfter = await readState(mainChangeDir);
+      expect(mainAfter.pending_gate).toBeNull();
+    });
+  });
+
+
+  describe("worktree 路径拦截", () => {
+    it("worktree 模式 + 相对路径写源码 -> 拦截 exit 2", () => {
+      const stdin = JSON.stringify({
+        tool_name: "Write",
+        tool_input: { file_path: "scripts/hello.sh" },
+      });
+      const result = evaluateHook(stdin, ["applying"], {}, "/project", [], true, ["/project/.worktrees/foo"]);
+      expect(result.exitCode).toBe(2);
+      expect(result.message).toContain("worktree 绝对路径");
+    });
+
+    it("worktree 模式 + 相对路径写制品 -> 拦截 exit 2", () => {
+      const stdin = JSON.stringify({
+        tool_name: "Write",
+        tool_input: { file_path: "openspec/changes/foo/verify.md" },
+      });
+      const result = evaluateHook(stdin, ["applying"], {}, "/project", [], true, ["/project/.worktrees/foo"]);
+      expect(result.exitCode).toBe(2);
+      expect(result.message).toContain("worktree 绝对路径");
+    });
+
+    it("worktree 模式 + worktree 绝对路径写源码 -> 放行", () => {
+      const stdin = JSON.stringify({
+        tool_name: "Write",
+        tool_input: { file_path: "/project/.worktrees/foo/scripts/hello.sh" },
+      });
+      const result = evaluateHook(stdin, ["applying"], {}, "/project", [], true, ["/project/.worktrees/foo"]);
+      expect(result.exitCode).toBe(0);
+    });
+
+    it("worktree 模式 + 主仓绝对路径写源码 -> 拦截", () => {
+      const stdin = JSON.stringify({
+        tool_name: "Write",
+        tool_input: { file_path: "/project/scripts/hello.sh" },
+      });
+      const result = evaluateHook(stdin, ["applying"], {}, "/project", [], true, ["/project/.worktrees/foo"]);
+      expect(result.exitCode).toBe(2);
+      expect(result.message).toContain("worktree 绝对路径");
+    });
+
+    it("worktree 模式 + 写 .alloy.yaml(非制品) -> 放行(白名单)", () => {
+      const stdin = JSON.stringify({
+        tool_name: "Write",
+        tool_input: { file_path: "openspec/changes/foo/.alloy.yaml" },
+      });
+      // .alloy.yaml 在白名单,不被 worktree 路径拦截(sourcePattern 排除 .alloy.yaml)
+      const result = evaluateHook(stdin, ["applying"], {}, "/project", [], true, ["/project/.worktrees/foo"]);
+      expect(result.exitCode).toBe(0);
+    });
+
+    it("无 worktree 模式 change + 相对路径写源码 -> 放行(apply 阶段)", () => {
+      const stdin = JSON.stringify({
+        tool_name: "Write",
+        tool_input: { file_path: "scripts/hello.sh" },
+      });
+      const result = evaluateHook(stdin, ["applying"], {}, "/project", [], true, []);
+      expect(result.exitCode).toBe(0);
+    });
+
+    it("worktree 模式 + ALLOY_FORCE_WRITE=1 -> 放行(逃生阀)", () => {
+      const stdin = JSON.stringify({
+        tool_name: "Write",
+        tool_input: { file_path: "scripts/hello.sh" },
+      });
+      const result = evaluateHook(stdin, ["applying"], { ALLOY_FORCE_WRITE: "1" }, "/project", [], true, ["/project/.worktrees/foo"]);
+      expect(result.exitCode).toBe(0);
+    });
+
+    it("collectWorktreePaths 收集 worktree 路径", async () => {
+      const tmpDir = join(tmpdir(), `alloy-wt-paths-${Date.now()}`);
+      const fooDir = join(tmpDir, "openspec", "changes", "foo");
+      const barDir = join(tmpDir, "openspec", "changes", "bar");
+      await mkdir(fooDir, { recursive: true });
+      await mkdir(barDir, { recursive: true });
+
+      const fooState = createInitialState();
+      fooState.phase = "applying";
+      fooState.worktree = "/tmp/.worktrees/foo" as any;
+      await writeState(fooDir, fooState);
+
+      const barState = createInitialState();
+      barState.phase = "planning";
+      barState.worktree = null;
+      await writeState(barDir, barState);
+
+      const paths = collectWorktreePaths(tmpDir);
+      expect(paths).toContain("/tmp/.worktrees/foo");
+      expect(paths).not.toContain(null as any);
+      expect(paths.length).toBe(1);
+
+      await rm(tmpDir, { recursive: true, force: true });
     });
   });
 });

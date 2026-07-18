@@ -1,5 +1,6 @@
 // src/cli/commands/internal/skill-usage.ts
 import { readState, writeState, createInitialState } from "../../utils/state.js";
+import { assertInWorktree } from "../../utils/worktree-guard.js";
 import type { SkillUsageEntry, AlloyState } from "../../../core/types.js";
 
 function formatTimestamp(): string {
@@ -38,6 +39,12 @@ export async function skillUsageCommand(args: string[]): Promise<void> {
     process.exit(1);
     return;
   }
+  // worktree cwd 守卫:apply 阶段 worktree 模式下,必须在 worktree 内执行
+  // OpenCode 无 EnterWorktree,session cwd 不解绑(agent 传 workdir),主仓执行会导致 skill_usage 写进 feature 分支
+  // Pi 不支持 worktree,不会进 worktree 模式,不触发本守卫
+  // 逃生阀 ALLOY_FORCE_WORKTREE=1 在 assertInWorktree 内部处理
+  await assertInWorktree(changeDir);
+
   if (!state.skill_usage) state.skill_usage = [];
 
   // 解析可选参数

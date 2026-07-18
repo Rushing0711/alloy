@@ -198,6 +198,35 @@ async function phaseStart(args: string[]): Promise<void> {
     return process.exit(1);
   }
 
+  // 进入新阶段时,自动 clear 上阶段的 phase-complete gate。
+  // 原因:_phase complete <prev> 推进到 -ed 时设了 <prev>:phase-complete gate,
+  // 但 hook-guard 的 clearAllPendingGates 只在问答工具调用时触发--
+  // 如果 agent 在阶段转换时没调问答工具(如直接 _phase start <next>),
+  // 上阶段的 phase-complete gate 会残留,pre-commit hook 拦截新阶段写文件。
+  // 逻辑上,进入新阶段 = 上阶段已确认完成,phase-complete gate 应自动 clear。
+  // 只 clear 上阶段的 phase-complete gate,其他 gate(如 lock-xxx)不动--
+  // 那些是当前阶段内部的 gate,不应被 phase start 清掉。
+  const prevPhaseMap: Record<string, string> = {
+    plan: "start",
+    apply: "plan",
+    archive: "apply",
+    finish: "archive",
+  };
+  const prevPhase = prevPhaseMap[phase];
+  if (prevPhase) {
+    try {
+      const state = await readState(changeDir);
+      const prevGate = `${prevPhase}:phase-complete`;
+      if (state.pending_gate === prevGate) {
+        state.pending_gate = null;
+        await writeState(changeDir, state);
+        console.log(`ℹ️ 自动 clear 上阶段 gate: ${prevGate}(进入 ${phase} 阶段 = 上阶段已确认完成)`);
+      }
+    } catch {
+      // state 读失败让后续 ensureStartedAt 报错,这里不重复报
+    }
+  }
+
   // 幂等写 started_at（已存在不覆盖）
   const startedAt = await ensureStartedAt(changeDir, phase, at);
 
@@ -211,6 +240,52 @@ async function phaseStart(args: string[]): Promise<void> {
   gitAddAndCommit(gitRoot, addPath, `chore(${changeName}): 记录 ${phase} 阶段开始时间，推进到 ${target}`, `${phase}: started_at=${startedAt} → ${target}`);
 }
 
+
+/**
+ * gate 下沉检查:_phase complete 前验证当前阶段无未 clear 的 pending_gate。
+ *
+ * pending_gate 格式 <phase>:<action>(如 start:phase-complete / plan:lock-proposal)。
+ * 如果 pending_gate 以当前 phase 开头,说明 agent 设了 gate 但没调问答工具就
+ * 试图推进阶段--拒绝推进,强制 agent 先调问答工具(AskUserQuestion/question/
+ * alloy-question)或手动 `alloy _guard user-gate pass` 降级。
+ *
+ * 这是"主动闸门下沉为被动检查"的核心:无论 agent 是否主动调 user-gate require,
+ * 只要推进阶段就必须 clear gate,接近 100% 强制。
+ */
+async function checkPendingGateBeforeComplete(changeDir: string, phase: string): Promise<boolean> {
+  let state;
+  try {
+    state = await readState(changeDir);
+  } catch {
+    return true; // state 读失败(目录不存在等),让后续逻辑报错
+  }
+
+  const pendingGate = state.pending_gate;
+  if (!pendingGate) return true; // 无 pending_gate,放行
+
+  // 检查 pending_gate 是否属于当前阶段(格式 <phase>:<action>)
+  const expectedPrefix = `${phase}:`;
+  if (pendingGate.startsWith(expectedPrefix)) {
+    console.error(`⛔ [HARD_STOP] ${phase} 阶段有未通过的 USER_GATE: ${pendingGate}`);
+    console.error("");
+    console.error("  阶段完成前必须先通过 USER_GATE--agent 可能跳过了问答工具。");
+    console.error("");
+    console.error("  合法路径(任一):");
+    console.error("    1. 调用平台原生问答工具(Claude Code AskUserQuestion / OpenCode question / Pi alloy-question)");
+    console.error("       -> hook-guard 检测到问答工具调用,自动 clear pending_gate");
+    console.error("    2. 手动降级(无问答工具的 agent / 调试场景):");
+    console.error(`       alloy _guard user-gate pass ${changeDir}`);
+    console.error("");
+    console.error("  违反字面 = 违反精神:哪怕'用户已口头同意'、'流程很顺不用确认',也算违反--");
+    console.error("  USER_GATE 必须用问答工具物理确认,口头同意不算授权。");
+    return false;
+  }
+  // pending_gate 属于其他阶段(残留),不阻塞当前阶段完成,但提示
+  console.error(`⚠️  [WARN] 检测到其他阶段的残留 pending_gate: ${pendingGate}(当前阶段 ${phase})`);
+  console.error("  建议排查:可能是上一阶段未正确 clear。继续推进,但请留意。");
+  return true;
+}
+
 async function phaseComplete(args: string[]): Promise<void> {
   const changeDir = args[0];
   const phase = args[1];
@@ -222,6 +297,12 @@ async function phaseComplete(args: string[]): Promise<void> {
 
   if (!(phase in PHASE_COMPLETE_TARGETS)) {
     console.error(`无效的 phase: ${phase} (支持: ${Object.keys(PHASE_COMPLETE_TARGETS).join(", ")})`);
+    return process.exit(1);
+  }
+
+  // gate 下沉检查:完成阶段前,检查当前阶段是否有未 clear 的 pending_gate
+  const gatePassed = await checkPendingGateBeforeComplete(changeDir, phase);
+  if (!gatePassed) {
     return process.exit(1);
   }
 

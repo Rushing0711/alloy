@@ -203,6 +203,26 @@ async function scanOpenCodeCommandWrappers(commandsDir: string): Promise<string[
   return found;
 }
 
+/** 扫描 Pi prompts 目录,识别 alloy 装的 command wrapper。
+ * 精确识别:文件名是 alloy-{8个id}.md 且内容含 `.pi/skills/alloy-${id}/SKILL.md` 字样
+ * (Pi wrapper 指示 agent read 该路径,避免误删用户自定义的 alloy-* prompt) */
+async function scanPiCommandWrappers(promptsDir: string): Promise<string[]> {
+  if (!existsSync(promptsDir)) return [];
+  const found: string[] = [];
+  for (const id of OPENCODE_COMMAND_IDS) {
+    const file = join(promptsDir, `alloy-${id}.md`);
+    try {
+      const content = await readFile(file, "utf-8");
+      if (content.includes(`.pi/skills/alloy-${id}/SKILL.md`)) {
+        found.push(file);
+      }
+    } catch {
+      // 文件不存在或读失败,跳过
+    }
+  }
+  return found;
+}
+
 /** 检测 settings.json 是否含 alloy hook 条目(command 含 _hook-guard 或 _stop-guard) */
 function settingsHasAlloyHook(settings: Record<string, unknown>): boolean {
   const hooks = (settings.hooks ?? {}) as Record<string, unknown>;
@@ -289,6 +309,18 @@ async function scanHookConfigs(
           const content = await readFile(extPath, "utf-8");
           if (content.includes("_hook-guard")) {
             result.push({ file: extPath, agentId: "pi" });
+          }
+        } catch {
+          // 读取失败
+        }
+      }
+      // alloy-question.ts(question 工具 extension,与 alloy-guard.ts 同目录但独立文件)
+      const questionPath = join(projectPath, ".pi", "extensions", "alloy-question.ts");
+      if (existsSync(questionPath)) {
+        try {
+          const content = await readFile(questionPath, "utf-8");
+          if (content.includes("alloy-question") && content.includes("registerTool")) {
+            result.push({ file: questionPath, agentId: "pi" });
           }
         } catch {
           // 读取失败
@@ -395,11 +427,19 @@ export async function scanForClean(
     if (agent.id === "opencode") {
       opencodeCommandWrappers.push(...(await scanOpenCodeCommandWrappers(commandsDir)));
     }
-    // Pi 特殊:global scope 时实际读 ~/.pi/agent/prompts/,但 OpenSpec CLI 装到 ~/.pi/prompts/
-    // clean 两个路径都扫(参考 init-matrix.ts 注释)
-    if (agent.id === "pi" && scope === "global") {
-      const piAgentPrompts = join(home, ".pi", "agent", "prompts");
-      opsxPaths.push(...(await scanOpsxInDir(piAgentPrompts)));
+    // Pi:扫 command wrapper + global scope 补扫 ~/.pi/agent/prompts/
+    // Pi wrapper 装在 .pi/prompts/(project) 或 ~/.pi/agent/prompts/(global)
+    // global scope 时 commandsDir 是 ~/.pi/prompts/(OpenSpec CLI 装 opsx),Pi 实际读 ~/.pi/agent/prompts/
+    if (agent.id === "pi") {
+      const piWrapperDirs = [commandsDir];
+      if (scope === "global") {
+        const piAgentPrompts = join(home, ".pi", "agent", "prompts");
+        piWrapperDirs.push(piAgentPrompts);
+        opsxPaths.push(...(await scanOpsxInDir(piAgentPrompts)));
+      }
+      for (const dir of piWrapperDirs) {
+        opencodeCommandWrappers.push(...(await scanPiCommandWrappers(dir)));
+      }
     }
   }
 
@@ -851,6 +891,7 @@ export async function executeClean(
       // pi 扩展文件 / opencode 工具文件:直接删
       if (
         file.endsWith("alloy-guard.ts") ||
+        file.endsWith("alloy-question.ts") ||
         file.endsWith(".opencode/tools/write.ts") ||
         file.endsWith(".opencode/tools/edit.ts")
       ) {

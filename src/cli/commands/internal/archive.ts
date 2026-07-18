@@ -72,9 +72,13 @@ export async function archiveCommand(args: string[]): Promise<void> {
 
   // 防御检查 2:worktree 未清理拒绝执行
   // 原因:worktree 分支的变更未合入 feature 分支,此时归档会导致 worktree 分支与 feature 分支内容不一致
+  // 例外:worktree=skipped(Pi 不支持 worktree / 用户选跳过)或 null(未创建)时不检查 worktree_merged_at
   try {
     const state = await readState(changeDir);
-    if (state.worktree && !state.worktree_merged_at) {
+    const hasWorktree = state.worktree
+      && state.worktree !== "skipped"
+      && state.worktree !== "null";
+    if (hasWorktree && !state.worktree_merged_at) {
       console.error("⛔ [PRECONDITION_FAIL] worktree 未清理,禁止执行 alloy _archive");
       console.error(`  .alloy.yaml 记录 worktree=${state.worktree},但 worktree_merged_at 为 null`);
       console.error("  原因:worktree 分支的变更未合入 feature 分支,此时归档会导致变更丢失");
@@ -149,7 +153,11 @@ export async function archiveCommand(args: string[]): Promise<void> {
   // change 无 specs/ 目录时跳过 spec sync 校验（spec-less change）
 
   console.log(`✓ archive 完成: ${changeName}`);
-  console.log(`  归档目录: openspec/changes/archive/${today}-${changeName}/`);
+  const archivePath = `openspec/changes/archive/${today}-${changeName}`;
+  console.log(`  归档目录: ${archivePath}/`);
+  // 输出 ARCHIVE_DIR 引导行,供 agent 可靠解析后续 finish 阶段所需路径
+  // 避免 agent 手写 ls -d openspec/changes/archive/*-<name> | sort -r | head -1(重名/多 archive 不可靠)
+  console.log(`-> ARCHIVE_DIR=${archivePath}`);
   if (hasSpecs) {
     console.log(`  ✓ Delta Spec 已 promote 到主 spec`);
   } else {

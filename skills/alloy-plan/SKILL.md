@@ -28,7 +28,7 @@ behaviors:
 
 **核心原则：按 schema DAG 依赖顺序逐一产出制品，每步有审查闸门，不跳过上游直接产下游。** 5 制品（proposal/design/specs/tasks/plans）以 hash-lock + 单独 commit 入 records，禁直接编辑，禁互相替代。
 
-**交互规则：** `🔴 STOP` 等价 `USER_GATE`，首次呈现即必须调用平台原生交互工具——禁"先文本展示 1./2. 再等待用户打字"。Claude Code 用 `AskUserQuestion`,OpenCode 用 `question` 工具(字段名 `multiple` 非 `multiSelect`,可选 `custom`),Pi 用 extension `ctx.ui`(通过 alloy ask-question 扩展);Copilot CLI / Gemini CLI 无原生交互工具,降级为结构化文本选项。三平台调用示例见 `alloy-shared/references/interaction-style.md` §审查窗口标准模式。含"沉默 ≠ 授权"通用禁令——禁批量打包、禁基于内容跳过、禁 agent 回填精确字符串。跳过任何 USER_GATE = 违反 Iron Law。
+**交互规则：** `🔴 STOP` 等价 `USER_GATE`，首次呈现即必须调用平台原生交互工具——禁"先文本展示 1./2. 再等待用户打字"。Claude Code 用 `AskUserQuestion`,OpenCode 用 `question` 工具(字段名 `multiple` 非 `multiSelect`,可选 `custom`),Pi 用 `alloy-question` 工具(alloy-question extension 注册);Copilot CLI / Gemini CLI 无原生交互工具,降级为结构化文本选项。三平台调用示例见 `alloy-shared/references/interaction-style.md` §审查窗口标准模式。含"沉默 ≠ 授权"通用禁令——禁批量打包、禁基于内容跳过、禁 agent 回填精确字符串。跳过任何 USER_GATE = 违反 Iron Law。
 
 **状态符号：** `⛔` = HARD_STOP / PRECONDITION_FAIL，`🔴` = USER_GATE，`⚠️` = WARN（视觉规范 §七）。
 
@@ -156,7 +156,9 @@ draft.md 来源已在 Step 0 完成 hash 验证（task #16）。本步聚焦 pha
 
 **每个制品必须通过 `/opsx:continue` 生成。禁止手动编写制品文件。**
 
-调 `skill({ name: "openspec-continue-change" })` 加载 opsx skill(详见 `alloy-shared/references/opsx-commands.md` 命名映射表),传入 change name。`opsx:continue` 自动获取 schema 指令并生成制品--不要自行编写,不要一次生成多个。
+加载 `openspec-continue-change` skill(多 agent 适配见 `alloy-shared/references/skill-loading.md`),传入 change name。`opsx:continue` 自动获取 schema 指令并生成制品--不要自行编写,不要一次生成多个。
+- Claude Code / OpenCode: 调 `skill({ name: "openspec-continue-change" })`
+- Pi: `read .pi/skills/openspec-continue-change/SKILL.md`
 
 **⛔ HARD_STOP：每次调用 `/opsx:continue` 生成制品前必须 `_skill log`。** 跳过 = skill_usage 缺失 = count 不反映实际调用次数。
 > count 语义是"技能实际调用次数"——plan 阶段每生成一个制品调用一次 opsx:continue，count 应累加。
@@ -184,7 +186,7 @@ alloy _progress artifacts openspec/changes/<name>
 > ⛔ [HARD_STOP] 禁用 `openspec status` 检测制品状态——openspec CLI 不识别 alloy 的 hash 锁定,会误报制品未 commit（如 specs 状态显示 "ready" 但 alloy 已 hash-lock）,导致重复 `_skill log` + 重复 `opsx:continue`。
 > 违反字面 = 违反精神：哪怕"openspec status 看起来也能用",也会因不识别 hash 锁定而误判。必须用 `alloy _progress artifacts`。
 
-> ⛔ [HARD_STOP] `opsx:continue` 是 skill(`openspec-continue-change`),**不是 openspec CLI 子命令**。禁止跑 `openspec continue`--该命令不存在,会报 `error: unknown command 'continue'`。必须调 `skill({ name: "openspec-continue-change" })` 加载 skill,skill 内部会调正确的 openspec CLI 子命令。
+> ⛔ [HARD_STOP] `opsx:continue` 是 skill(`openspec-continue-change`),**不是 openspec CLI 子命令**。禁止跑 `openspec continue`--该命令不存在,会报 `error: unknown command 'continue'`。必须加载 `openspec-continue-change` skill(Claude Code/OpenCode 调 `skill({ name: "openspec-continue-change" })`,Pi `read .pi/skills/openspec-continue-change/SKILL.md`),skill 内部会调正确的 openspec CLI 子命令。
 > 违反字面 = 违反精神:哪怕"openspec continue 看起来是对应 CLI",也是 agent 脑补的错误映射。详见 `alloy-shared/references/opsx-commands.md`。
 
 > [N/M] 是阶段内局部编号（M=5），不输出全局制品进度。全局进度由 `alloy status` 管理。
@@ -195,11 +197,28 @@ alloy _progress artifacts openspec/changes/<name>
 
 **[HARD_STOP] 禁连续生成——每个制品必须走完"生成 → 展示 → USER_GATE 响应 → commit"完整流程，才生成下一个。** 违反字面 = 违反精神：哪怕"一次性生成 3 个再一起审查"，也算跳过审查窗口。两个制品 commit 时间差过小（如同一秒）= 未等待用户响应 = Iron Law 违规。
 
-每个制品生成后，展示完整内容 + 🔴 USER_GATE 审查窗口：
+每个制品生成后,设 USER_GATE pending + 展示完整内容 + 🔴 USER_GATE 审查窗口:
+
+> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question/alloy-question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级。
+
+⛔ [HARD_STOP] 必须执行以下命令设置 pending_gate(不是说明,是必跑命令):
+
+```bash
+alloy _guard user-gate require openspec/changes/<name> plan:lock-<artifact>
+```
 
 > 制品 [N/5] \<artifact\> ✓ 完成
 > [展示制品完整内容]
-> 🔴 USER_GATE: 确认锁定 <artifact>（确认并继续 / 需要调整）
+
+🔴 USER_GATE（必须平台原生交互工具调用,首次呈现即调--禁先文本列选项）: 确认锁定 <artifact>
+
+> ⛔ [HARD_STOP] 必须用平台原生交互工具调用--禁先文本输出"确认并继续 / 需要调整"再调工具。
+> 违反字面 = 违反精神:哪怕"先展示选项让用户思考"、"文本+工具双保险",也算违反--首次呈现必须是平台原生交互工具调用,不是文本。
+> 常见违规模式:agent 先输出"🔴 USER_GATE: 确认锁定 <artifact>(确认并继续 / 需要调整)"文本,再等用户回复--这是纯文本呈现,违反首次呈现原则。
+
+选项:
+- 1. 确认并继续 -- hash 锁定 + commit,生成下一个制品
+- 2. 需要调整 -- 回到 brainstorming 重新设计
 
 - **选 1：** hash 锁定 + commit——原子命令 `alloy _artifact commit` 内部完成 hash 计算 + records 写入（自动刷新 updated_at）+ git add 限路径 + commit：
   ```bash
@@ -425,7 +444,9 @@ DIFF_NEW=$(cat "openspec/changes/<name>/<artifact>.md" 2>/dev/null)
 
 ### tasks 审批后 → writing-plans
 
-tasks 审批通过并 commit 后，加载 `superpowers:writing-plans` 生成 plans.md：
+加载 `writing-plans` skill(多 agent 适配见 `alloy-shared/references/skill-loading.md`)生成 plans.md:
+- Claude Code / OpenCode: 调 `skill({ name: "writing-plans" })`
+- Pi: `read .pi/skills/writing-plans/SKILL.md`
 
 - 传入 tasks + specs + design 作为上下文
 - **遵循 writing-plans 完整原始流程**——从任务拆解到执行交接
@@ -550,6 +571,14 @@ alloy _state set openspec/changes/<name> phase started
 
 **plans 完成后不要自动进入 apply** — 给用户空间审视完整规划。
 
+> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question/alloy-question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级。
+
+⛔ [HARD_STOP] 必须执行以下命令设置 pending_gate(不是说明,是必跑命令):
+
+```bash
+alloy _guard user-gate require openspec/changes/<name> plan:phase-complete
+```
+
 🔴 USER_GATE（必须平台原生交互工具调用）: plan 阶段完成,下一步?
 
 > ⛔ [HARD_STOP] 必须用平台原生交互工具调用——禁纯文本列选项 / 禁直接 `Skill` 加载下一阶段 / 禁纯文本"运行 /alloy-apply"提示 / 禁提示用户手动输入命令。
@@ -565,7 +594,12 @@ alloy _state set openspec/changes/<name> phase started
 > - 2. 暂停——审视规划制品,或查看状态(`alloy status`)
 > - 3. 其他——用户自定义下一步
 
-> 用户选 1 后,agent **必须直接用 `Skill` 工具加载 `alloy-apply`**(传入 change name),进入 apply 阶段——用户已在 USER_GATE 授权,再让用户输入命令 = 多此一举。
+> 用户选 1 后,agent **必须直接加载 `alloy-apply` skill(多 agent 适配,见 `alloy-shared/references/skill-loading.md`):
+- Claude Code / OpenCode: 调 `skill({ name: "alloy-apply", args: "<change-name>" })`
+- Pi: `read .pi/skills/alloy-apply/SKILL.md`(read 后按 SKILL.md 指引执行,change name 通过上下文传入)**
+
+> ⛔ [HARD_STOP] 禁止输出"请运行 /alloy-xxx"让用户手动输入命令--用户已在 USER_GATE 授权,阶段转换已触发,再让用户输入命令 = 违反 Iron Law。
+> 违反字面 = 违反精神:哪怕"提示一下更友好"、"用户可能想暂停",也算违反--用户要暂停会在 USER_GATE 选"暂停",选"进入"就是授权直接加载。
 > 用户选 2 后,agent 停止,输出"已暂停。需要时运行 /alloy-apply <name> 继续。"
 > 用户选 3 后,agent 停止,等用户后续命令。
 

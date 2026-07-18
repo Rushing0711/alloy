@@ -40,6 +40,13 @@ Commands:
   completion  [bash|zsh|pwsh|powershell] [--install]
               生成 shell 补全脚本，--install 自动注册
 
+Internal commands (agent 调用,可直接使用):
+  _state _skill _guard _phase _verify _artifact _record _config
+  _checkpoint _archive _worktree-cleanup _worktree-create _retro _env _progress
+  _precheck _infra-commit _pre-commit-check _hook-guard _stop-guard
+  _branch _change _start
+  详见 skills/alloy-shared/references/cli-reference.md
+
 Options:
   --version, -v  版本号
   --help, -h     帮助（alloy -h 或 alloy <command> -h）
@@ -456,6 +463,11 @@ async function main() {
       await worktreeCleanupCommand(restArgs);
       break;
     }
+    case "_worktree-create": {
+      const { worktreeCreateCommand } = await import("./commands/internal/worktree-create.js");
+      await worktreeCreateCommand(restArgs);
+      break;
+    }
     case "_verify": {
       const { verifyCommand } = await import("./commands/internal/verify.js");
       await verifyCommand(restArgs);
@@ -484,6 +496,21 @@ async function main() {
     case "_infra-commit": {
       const { infraCommitCommand } = await import("./commands/internal/infra-commit.js");
       await infraCommitCommand(restArgs);
+      break;
+    }
+    case "_branch": {
+      const { branchCommand } = await import("./commands/internal/branch.js");
+      await branchCommand(restArgs);
+      break;
+    }
+    case "_change": {
+      const { changeCommand } = await import("./commands/internal/change.js");
+      await changeCommand(restArgs);
+      break;
+    }
+    case "_start": {
+      const { startCommand } = await import("./commands/internal/start.js");
+      await startCommand(restArgs);
       break;
     }
     default:

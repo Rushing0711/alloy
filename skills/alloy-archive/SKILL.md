@@ -3,8 +3,8 @@ name: alloy-archive
 description: 归档阶段--将 change 归档。手动调用 /alloy-archive。
 spec: 01-product-spec/04-archive-spec.md
 behaviors:
-  preconditions: 7
-  hard_stops:    12
+  preconditions: 5
+  hard_stops:    19
   user_gates:    3
   warns:         1
   artifacts: [delta-spec, archive]
@@ -142,10 +142,11 @@ fi
 > 2. **USER_GATE**：确认清理 worktree
 > 3. **退出 worktree 回主仓**(多 agent 适配,见下方):
 >    - **Claude Code**: 调 `ExitWorktree` 工具(`action: "keep"`)
->    - **OpenCode/Pi**: 无 `ExitWorktree` 工具,用 `cd <主仓路径>` 切回主仓(这些 agent 用 `git worktree add` 创建 worktree,`cd` 切换是合法路径)
+>    - **OpenCode**: 无 `ExitWorktree` 工具,后续 bash 命令传 `workdir=<主仓路径>` 切回主仓(OpenCode bash 工具有 `workdir` 参数,cd 不持久)
+>    - **Pi**: 不支持 worktree,不会进 worktree 模式,无此步骤
 > 4. **`alloy _worktree-cleanup <change-dir>`**：原子完成 merge + remove + branch -d + worktree_mergedat 记录（CLI 自己从 worktree 分支读 state,不传参;用原路径 openspec/changes/<name>,此时 archive 尚未执行）
 >
-> 违反字面 = 违反精神：哪怕"在 worktree 里 merge 效率高"、"cd 主仓替代退出 worktree"(Claude Code)",也算违反--worktree 里 merge 自己到自己没意义,Claude Code 的 cd 不解绑 session。
+> 违反字面 = 违反精神：哪怕"在 worktree 里 merge 效率高"、"Claude Code 用 cd 主仓替代 ExitWorktree",也算违反--worktree 里 merge 自己到自己没意义,Claude Code 的 cd 不解绑 session。
 > 常见违规模式:
 > - 在 worktree 里执行 `git merge worktree-<name>`（HEAD 是 worktree 分支,merge 自己）
 > - 在 worktree 里执行 `git worktree remove`（删除自己 cwd,后续命令失败）
@@ -200,11 +201,14 @@ alloy _guard user-gate require "$CHANGE_DIR" archive:worktree-cleanup
 
 **Claude Code:** 调用 `ExitWorktree` 工具,**必须用 `action: "keep"`**--禁用 `action: "remove"`。
 
-**OpenCode/Pi:** 无 `ExitWorktree` 工具,用 `cd <主仓路径>` 切回主仓。主仓路径 = git 仓库根目录(`git rev-parse --show-toplevel` 在 worktree 内返回主仓路径)。
+**OpenCode:** 无 `ExitWorktree` 工具,后续 bash 命令传 `workdir=<主仓路径>` 切回主仓(OpenCode bash 工具有 `workdir` 参数,cd 不持久)。主仓路径 = git 仓库根目录(`git rev-parse --git-common-dir` 在 worktree 内返回主仓 .git 路径,其父目录即主仓根)。
+
+**Pi:** 不支持 worktree,不会进 worktree 模式,无此步骤。
 
 ```bash
-# OpenCode/Pi:cd 回主仓
-cd "$(git rev-parse --git-common-dir)/.."  # git-common-dir 指向主仓 .git
+# OpenCode:后续 bash 命令传 workdir=<主仓根>
+# 主仓根 = git rev-parse --git-common-dir 的父目录
+# (agent 在 bash 调用时传 workdir 参数,不是 cd)
 ```
 
 > ⛔ [HARD_STOP] Claude Code 必须用 `ExitWorktree` 工具,action 必须是 `keep`,不能是 `remove`。
@@ -221,7 +225,8 @@ cd "$(git rev-parse --git-common-dir)/.."  # git-common-dir 指向主仓 .git
 
 > ⛔ [HARD_STOP] 退出 worktree 的方式按 agent:
 > - **Claude Code**: 必须调 `ExitWorktree` 工具--禁用 `cd /主仓` / `git -C /主仓` 绕过。`ExitWorktree` 解绑 session cwd,后续 CLI 命令在主仓执行。Claude Code 的 `cd` 不解绑 session,后续命令仍可能在 worktree 执行。
-> - **OpenCode/Pi**: 用 `cd <主仓路径>` 切回主仓(这些 agent 无 `ExitWorktree` 工具,`cd` 是唯一合法路径)。
+> - **OpenCode**: 后续 bash 命令传 `workdir=<主仓路径>` 切回主仓(OpenCode bash 工具有 `workdir` 参数,cd 不持久)。禁用 `cd /主仓`(不持久,下一个 bash 仍回 worktree 或 instanceCtx.directory)。
+> - **Pi**: 不支持 worktree,不会进 worktree 模式,无此步骤。
 >
 > 两种方式都必须确保后续命令在主仓 feature 分支执行(步骤 ④ 的 `alloy _worktree-cleanup` 会校验)。
 
@@ -261,7 +266,7 @@ CLI 失败 -> ⛔ `[HARD_STOP]` 按 CLI 输出的指引处理（冲突 / 未跟�
 
 **[PRECONDITION_FAIL] `alloy _archive` 内置 worktree 防御检查--跳过步骤 ② worktree 清理直接归档会被拒绝:**
 - 检查 1:当前在 worktree 内(`git rev-parse --git-dir` ≠ `--git-common-dir`)-> 拒绝
-- 检查 2:.alloy.yaml 的 `worktree` 非 null 且 `worktree_merged_at` 为 null -> 拒绝
+- 检查 2:.alloy.yaml 的 `worktree` 非 null/skipped 且 `worktree_merged_at` 为 null -> 拒绝(worktree=skipped 时跳过此检查,Pi 下正常)
 - 拦截后提示"先调 `alloy _worktree-cleanup` 合并 worktree 分支到 feature"--回到步骤 ② 重新执行,不可在 worktree 内或未清理时强跑。
 
 调用 `alloy _archive`，传入 change dir。该命令原子完成：调用 `openspec archive` CLI + 校验 Delta Spec promote + 校验目录移动。agent 禁自行 mkdir/cp/mv 模拟。
@@ -270,6 +275,8 @@ CLI 失败 -> ⛔ `[HARD_STOP]` 按 CLI 输出的指引处理（冲突 / 未跟�
 alloy _skill log openspec/changes/<name> archive alloy:_archive
 alloy _archive openspec/changes/<name>
 ```
+
+> **`alloy _archive` 输出 `-> ARCHIVE_DIR=openspec/changes/archive/<date>-<name>` 引导行**,后续步骤(delta-spec-review USER_GATE、phase complete 等)用此路径,禁手写 `ls -d openspec/changes/archive/*-<name> | sort -r | head -1`(重名/多 archive 不可靠)。agent 从输出捕获 ARCHIVE_DIR 后,在后续 bash 命令里用此变量(注意 Pi/OpenCode bash 不持久,每个 bash 需重新捕获或硬编码路径)。
 
 **错误处理（HARD_STOP）：** `alloy _archive` 返回 PRECONDITION_FAIL -> ⛔ `[HARD_STOP] 归档中止`。**禁止：忽略错误继续后续步骤--Delta Spec 未合并时主 spec 与代码已分叉，强行推进 phase 会永久封存分叉。** 禁止 agent 自行 mkdir/cp/mv 补救--必须重调 `alloy _archive`。
 
@@ -285,6 +292,18 @@ alloy _archive openspec/changes/<name>
 > ⛔ [HARD_STOP] USER_GATE 及后续命令必须用归档后路径 `$ARCHIVE_DIR`。
 > `alloy _archive` 执行后 `openspec/changes/<name>` 已移到 `openspec/changes/archive/<date>-<name>/`,原路径 `$CHANGE_DIR` 不存在,`_guard user-gate require` 内部 `readState` 会 ENOENT 失败。
 > 步骤:先解析 `$ARCHIVE_DIR`(下方 `ls -d` 命令),再设 USER_GATE。
+>
+> ⛔ [HARD_STOP] **每个 bash 调用都必须先内联计算 `$ARCHIVE_DIR`**--Pi/OpenCode bash 工具无 shell state 持久化,前一个 bash 里 `ARCHIVE_DIR=$(ls ...)` 设的变量在新 bash 调用里为空,`alloy _guard user-gate require "$ARCHIVE_DIR" ...` 会因 `$ARCHIVE_DIR` 为空报"用法"错误 + readState ENOENT。
+> 标准模板(每个 bash 调用都用此模式,`<name>` 替换为实际 change 名):
+> ```bash
+> ARCHIVE_DIR=$(ls -d openspec/changes/archive/*-<name> 2>/dev/null | sort -r | head -1)
+> [ -z "$ARCHIVE_DIR" ] && { echo "⛔ archive 目录不存在"; exit 1; }
+> alloy _guard user-gate require "$ARCHIVE_DIR" archive:delta-spec-review
+> ```
+> 违反字面 = 违反精神:哪怕"上一个 bash 已捕获 ARCHIVE_DIR"、"变量名一样应该能复用",也算违反--Pi/OpenCode 每个新 bash 调用是独立进程,变量不持久。
+> 常见违规模式:
+> - agent 在 bash A 里 `ARCHIVE_DIR=$(ls ...)`,在 bash B 里直接 `alloy _guard user-gate require "$ARCHIVE_DIR" ...` -> `$ARCHIVE_DIR` 为空 -> "用法"错误 + ENOENT
+> - agent 以为"变量名一样跨 bash 复用",实际每个 bash 是独立 shell,变量不持久
 
 **解析归档后路径（后续所有命令统一用 `$ARCHIVE_DIR`）：** change 目录在 archive 阶段已移到 `openspec/changes/archive/<YYYY-MM-DD>-<name>/`,后续 `_state write` / `_phase complete` / `_guard user-gate require` 都必须用归档后路径,用原路径 `openspec/changes/<name>` 会因目录已移走而失败。
 
@@ -400,7 +419,11 @@ alloy _guard user-gate require "$ARCHIVE_DIR" archive:phase-complete
 
 archive 不做代码合并--代码合入由 `/alloy-finish` 处理。
 
-> 用户选 1 后,agent **必须直接用 `Skill` 工具加载 `alloy-finish`**(传入 change name),进入 finish 阶段--禁提示"请运行 /alloy-finish"让用户手动输入。
+> 用户选 1 后,agent **必须直接加载 `alloy-finish` skill(多 agent 适配,见 `alloy-shared/references/skill-loading.md`):
+- Claude Code / OpenCode: 调 `skill({ name: "alloy-finish", args: "<change-name>" })`
+- Pi: `read .pi/skills/alloy-finish/SKILL.md`(read 后按 SKILL.md 指引执行,change name 通过上下文传入)**
+
+> ⛔ [HARD_STOP] 禁止输出"请运行 /alloy-finish"让用户手动输入命令--用户已在 USER_GATE 授权,阶段转换已触发,再让用户输入命令 = 违反 Iron Law。
 > 用户选 2 后,agent 停止,输出"已暂停。需要时运行 /alloy-finish <name> 继续。"
 > 用户选 3 后,agent 停止,等用户后续命令。
 > ⛔ 禁止：纯文本输出"运行 /alloy-finish 进入收尾阶段"让用户手动输入--用户已在 USER_GATE 授权,应直接加载 finish skill。

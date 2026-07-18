@@ -33,6 +33,7 @@ alloy init [path] [--scope <project|global>] [--agents <id,id,...>] [--force]
 - agent 相关:alloy skills/opsx/hook/permissions/Superpowers(矩阵,按 scope 装)
 - 项目资源:openspec/.gitignore/.gitattributes/pre-commit/settings.json/shell 补全/git init/commit(总是装到当前目录)
 - OpenCode 专属:目标 agent 含 opencode 时,额外装 8 个 command wrapper 到 `.opencode/commands/alloy-*.md`(project)或 `~/.config/opencode/commands/`(global)。OpenCode 的 `/` 只列 commands,skills 不在 `/` 列表;wrapper 指示 agent 调 `skill({ name })` 加载对应 alloy skill,让 `/alloy-start` 等 slash command 能间接触发 skill
+- Pi 专属:目标 agent 含 pi 时,额外装 8 个 command wrapper 到 `.pi/prompts/alloy-*.md`(project)或 `~/.pi/agent/prompts/`(global)。Pi 的 `/` 只从 `.pi/prompts/` 加载 prompt template,skills 不自动触发(Pi 无 `skill({ name })` 工具);wrapper 指示 agent `read` 对应 `.pi/skills/alloy-*/SKILL.md`,让 `/alloy-start` 等 slash command 能间接触发 skill
 
 示例:
 ```bash
@@ -99,7 +100,7 @@ alloy update [path] [--force]
 
 ### alloy clean
 
-清理 `alloy init` 装的产物。交互问 scope(project/global),按 scope 清理所有 init 装的产物:alloy skills(+ .alloy-version)/ OpenSpec Commands / OpenCode command wrapper / Superpowers / hook / permissions / .gitignore / .gitattributes / .pre-commit / openspec schema。只清 alloy 注入的部分,保留用户配置(specs/changes/用户 settings key/用户 gitignore 规则)。
+清理 `alloy init` 装的产物。交互问 scope(project/global),按 scope 清理所有 init 装的产物:alloy skills(+ .alloy-version)/ OpenSpec Commands / OpenCode + Pi command wrapper / Superpowers / hook / permissions / .gitignore / .gitattributes / .pre-commit / openspec schema。只清 alloy 注入的部分,保留用户配置(specs/changes/用户 settings key/用户 gitignore 规则)。
 
 ```
 alloy clean [path] [options]
@@ -200,8 +201,10 @@ alloy _guard user-gate <require|pass> <change-dir> [<gate-id>]
 - `verify-passed <change-dir>`：读 verify.md 判定，输出 `PASS` / `FAIL` / `WARNING`。退出码 0=PASS/WARNING，1=FAIL
 - `precheck <change-dir> <expected-phase>`：单点 phase 路由校验。`expected-phase` 支持逗号分隔多值（如 `planned,applied`）。输出 `PASS:<phase>` / `FAIL:<reason>`。退出码 0=通过，1=不通过
 - `worktree-status <change-dir>`：输出 `done:<path>:<branch>` / `stale:<path>` / `skipped` / `pending`。退出码始终 0（查询命令）
-- `user-gate require <change-dir> <gate-id>`：设 pending_gate,后续 Write/Edit 非白名单被 hook-guard 拦截(即使 apply 阶段),直到问答工具(AskUserQuestion/question)调用自动 clear,或手动 `user-gate pass` 降级
-- `user-gate pass <change-dir>`：清除 pending_gate(手动降级 / 无问答工具的 agent)。pending_gate 是临时状态,不 commit
+- `user-gate require <change-dir> <gate-id>`：设 pending_gate,后续 Write/Edit 非白名单被 hook-guard 拦截(即使 apply 阶段),直到问答工具(AskUserQuestion/question/alloy-question)调用自动 clear,或手动 `user-gate pass` 降级。**实现**:用 `setPendingGate` 精准替换 `pending_gate` 行(正则替换),不触发 writeState 全量重写--保留 worktree_created_at 等字段引号格式;**不自动 commit**(pending_gate 作为临时状态,由下一个 `_artifact commit` / `_phase complete` 等命令的 `git add .alloy.yaml` 一起 commit,合并到有意义的 commit,避免 USER_GATE 独占 commit 噪音)。**worktree cwd 守卫**:worktree 模式下必须在 worktree 内执行,主仓执行 exit 1。守卫双重检测:① state.worktree 字段有值;② git worktree list 有 `worktree-<change-name>` 分支(补救主仓 state 没同步 worktree 分支的盲区)。**Pi 自动通过**:`PI_CODING_AGENT=true` 时 `apply:worktree-choice` / `apply:sdd-ep-choice` 不设 pending_gate,直接返回自动通过 + 输出路径引导(`-> 走 skipped 路径` / `-> 走 EP 路径`)--Pi 不支持 worktree / SDD,SKILL.md 不再做 Pi 软约束(避免 Claude Code/OpenCode 多读 Pi 分支)。**覆盖节点**:start(lock-draft/phase-complete)+ plan(lock-`<artifact>`/phase-complete,5 个制品)+ apply(requirement-change/worktree-choice/sdd-ep-choice/lock-verify/lock-retrospective/phase-complete)+ archive(worktree-cleanup/delta-spec-review/phase-complete)+ discard(confirm-delete)+ finish(choose-method/confirm-merge)。制品锁定 + 阶段完成类 USER_GATE 必须设 pending_gate,防止 agent 用纯文本呈现代替问答工具
+- `user-gate pass <change-dir>`：清除 pending_gate(手动降级 / 无问答工具的 agent)。用 `setPendingGate` 精准替换,不自动 commit(与 require 对称)
+- **gate 下沉检查**:`_phase complete <change-dir> <phase>` 在推进阶段前,会检查当前阶段是否有未 clear 的 pending_gate(格式 `<phase>:<action>`)。如果有,拒绝推进(exit 1),强制 agent 先调问答工具或 `user-gate pass`。这是"主动闸门下沉为被动检查"--无论 agent 是否主动调 `user-gate require`,只要推进阶段就必须 clear gate,接近 100% 强制
+- **hook-guard clearAllPendingGates 扫描 worktree 路径**:问答工具调用触发 hook-guard 清 pending_gate 时,扫描主仓 change 目录 + worktree 内 change 目录(从 state.worktree 字段读路径)。解决 agent 在 worktree 内 require 写 worktree .alloy.yaml,hook-guard 在主仓执行只扫主仓漏 worktree 的问题。用 `setPendingGate` 精准替换,不触发 writeState 全量重写
 
 允许的 phase 转换：`started→planned`、`planned→applied`、`applied→archived`、`archived→finished`。`-ing` 进行中态由 `_phase start/complete` 推进，**不通过 `_guard --apply`**。
 
@@ -214,8 +217,8 @@ alloy _phase <start|complete|reset> <change-dir> <phase>
 ```
 
 子命令：
-- `start <change-dir> <phase> [--at <ts>]`：幂等写 `started_at` + 推进到 `-ing` 态 + commit。`--at` 补录实际开始时间
-- `complete <change-dir> <phase>`：写 `completed_at` + 推进到 `-ed` 态 + commit。**前置：必须先 `_phase start`**（`started_at` 缺失则 PRECONDITION_FAIL）。`finish` 阶段额外写顶层 `completed_at`
+- `start <change-dir> <phase> [--at <ts>]`：幂等写 `started_at` + 推进到 `-ing` 态 + commit。`--at` 补录实际开始时间。**自动 clear 上阶段 phase-complete gate**:进入新阶段(plan/apply/archive/finish)时,若 pending_gate 是 `<prev-phase>:phase-complete`,自动 clear(进入新阶段 = 上阶段已确认完成)
+- `complete <change-dir> <phase>`：写 `completed_at` + 推进到 `-ed` 态 + commit。**前置：必须先 `_phase start`**（`started_at` 缺失则 PRECONDITION_FAIL）。**gate 下沉检查**:推进前检查当前阶段是否有未 clear 的 pending_gate(格式 `<phase>:<action>`),未 clear 时 exit 1 拒绝推进。`finish` 阶段额外写顶层 `completed_at`
 - `reset <change-dir> <phase>`：删除 `phase_timings.<phase>` 整个 key + commit（回溯清理专用，不存在则幂等跳过）
 
 phase 取值：`start` / `plan` / `apply` / `archive` / `finish`。
@@ -238,7 +241,7 @@ alloy _artifact <reset|commit> <change-dir> <artifact>
 ```
 
 子命令：
-- `commit <change-dir> <artifact>`：计算 hash + 写 records + `git add` 限路径 + commit。重复锁定（hash 未变）跳过；hash 变了（回溯后重新生成）允许重锁。commit message：首锁 `docs(<change>): 锁定 <artifact>`，重锁 `docs(<change>): 重锁 <artifact> [<old>-><new>]`
+- `commit <change-dir> <artifact>`：计算 hash + 写 records + `git add` 限路径 + commit。重复锁定（hash 未变）跳过；hash 变了（回溯后重新生成）允许重锁。commit message：首锁 `docs(<change>): 锁定 <artifact>`，重锁 `docs(<change>): 重锁 <artifact> [<old>-><new>]`。**worktree cwd 守卫**:worktree 模式下必须在 worktree 内执行(OpenCode 需传 workdir 或显式 cd),主仓执行 exit 1,逃生阀 `ALLOY_FORCE_WORKTREE=1`。Pi 不支持 worktree,不触发
 - `reset <change-dir> <artifact>`：清除 hash 记录 + 删除制品文件（回溯重做制品时用）
 
 制品 id 白名单（8 个）：
@@ -367,6 +370,8 @@ alloy _skill <log|skip> <change-dir> <stage> <skill> [--via <source>] [--reason 
 
 stage 取值：`start` / `plan` / `apply` / `archive` / `finish`。
 
+
+**worktree cwd 守卫**:worktree 模式下(apply 阶段 state.worktree 有值),必须在 worktree 内执行(OpenCode 需传 workdir 或显式 cd)。主仓执行 exit 1,逃生阀 `ALLOY_FORCE_WORKTREE=1`。Pi 不支持 worktree,不触发。
 **前置**（非 `--at` 补录时）：`phase_timings.<stage>.started_at` 必须已存在——agent 跳过 `_phase start` 时早期拦截。
 
 示例：
@@ -428,6 +433,31 @@ alloy _archive <change-dir>
 - 调用 `openspec archive <name> -y`（`-y` 必传，agent 非交互）
 - 校验归档目录存在：`openspec/changes/archive/<YYYY-MM-DD>-<name>/`
 - 校验每个 capability 的主 spec 已 promote
+- **输出 `-> ARCHIVE_DIR=openspec/changes/archive/<date>-<name>` 引导行**,后续步骤(delta-spec-review USER_GATE、phase complete 等)用此路径,禁手写 `ls -d ... | sort -r | head -1`
+
+### alloy _worktree-create
+
+worktree 创建（原子操作：git worktree add + _state write 三字段 + commit）。**OpenCode 用;Claude Code 用 EnterWorktree 工具;Pi 不支持 worktree,不调本命令。**
+
+```
+alloy _worktree-create <change-dir>
+```
+
+参数：
+- `<change-dir>`：change 目录路径（如 `openspec/changes/<name>`）
+
+原子完成:
+1. 校验当前在主仓(不在 worktree 内) + 当前分支 = feature_branch + 主仓工作目录清洁
+2. 校验 .worktrees/ 已在 .gitignore + worktree-<change-name> 分支不存在
+3. `git worktree add .worktrees/<change-name> -b worktree-<change-name>`(worktree 分支名约定,不是 feature 分支)
+4. worktree 内 `_state write worktree / worktree_branch / worktree_created_at` 三字段
+5. worktree 内 `git add .alloy.yaml + commit`
+
+**易错**:
+- 禁用 feature 分支名建 worktree(`git worktree add .worktrees/feature/x -b feature/x` -- feature 分支已存在且已被主仓 checkout,fatal)。worktree 分支名约定 `worktree-<change-name>`
+- agent 不手动 git worktree add / _state write worktree 字段 / mkdir .worktrees -- 本命令是唯一合法路径(OpenCode)
+- Claude Code agent 必须用 `EnterWorktree(name)` 工具,路径 `.claude/worktrees/<name>`,不调本命令
+- Pi 不支持 worktree(bash 工具无 cwd 参数,session cwd 不解绑),禁调本命令;Pi 下 `alloy _guard worktree-status` 强制返回 `skipped`
 
 ### alloy _worktree-cleanup
 
@@ -444,6 +474,8 @@ CLI 自己从 worktree 分支（`worktree-<change-name>`）读 state（用 `git 
 
 **易错**：必须在主仓执行（ExitWorktree 后）+ 当前分支 = feature 分支。CLI 从 **worktree 分支**读 state（不是 feature 分支），解决 agent 在 feature 分支读 state 为 null 的问题（state 写在 worktree 分支，feature 读不到）。
 
+**merge 进行中识别**:若 `.git/MERGE_HEAD` 存在(上次 merge 成功但 commit 被拦截),跳过 dirty 检查和重新 merge,直接用 `ALLOY_FORCE_WRITE=1 git commit --no-edit` 完成 merge commit。解决 archive 阶段 pre-commit hook 拦截 worktree 分支带过来的 apply 产物(scripts/ 等)导致 merge commit 失败的重试问题。
+
 ### alloy _hook-guard
 
 PreToolUse hook 适配器(Claude Code 用,Pi/OpenCode 通过扩展/工具调用)。从 stdin 读 JSON,判定 Write/Edit 是否允许,exit 0(放行)/ 2(拦截)。由 `alloy init` 自动装到:
@@ -457,9 +489,11 @@ alloy _hook-guard
 
 行为：
 - 从 stdin 读 JSON（`{tool_name, tool_input:{file_path}}`）
+- 检测问答工具(`AskUserQuestion`/`question`/`ask`/`alloy-question`) -> 自动 clear 所有 pending_gate + 放行
 - 只拦截 `Write` / `Edit` 工具
-- 扫描 `openspec/changes/*/.alloy.yaml`(含 `archive/*/`)收集所有 change 的 phase(活跃 + 归档)
+- 扫描 `openspec/changes/*/.alloy.yaml`(含 `archive/*/`)收集所有 change 的 phase(活跃 + 归档)+ worktree 路径
 - 非 alloy 项目（无 `openspec/changes/` 目录） -> 放行
+- **worktree 路径拦截**:有 worktree 模式 change 时,write/edit 源码/制品路径(`scripts/`/`src/`/`openspec/changes/<name>/` 非 .alloy.yaml)必须用 worktree 绝对路径前缀。相对路径或主仓绝对路径 -> 拦截 exit 2(防止文件落主仓污染 feature 分支)
 - alloy 项目但无活跃 change（phases 空） -> 拦截（强制先 /alloy-start 创建 change,防绕过整个流程）
 - 有任一 change 在 apply/finishing/finished 阶段（`applying`/`applied`/`finishing`/`finished`） -> 放行（允许写源码 / finish 合入 main 的 commit）
 - 非 apply 阶段 + 白名单路径（`openspec/`/`.alloy.yaml`/`.claude/`/`.agents/`/`.opencode/`/`.pi/`/`docs/`/`*.md`/`.gitignore`/`.gitattributes`/`opencode.json`） -> 放行
@@ -479,6 +513,7 @@ alloy _pre-commit-check
 
 行为:
 - 读 git 暂存文件列表
+- **merge 进行中(.git/MERGE_HEAD 存在) -> 放行**:merge commit 的文件已在 worktree 分支审查过,不应拦截
 - 复用 `guardCheck`(与 PreToolUse hook 行为一致):非 alloy 放行 / alloy 无活跃 change 拦截 / apply/finishing/finished 放行 / 白名单放行 / 非白名单拦截 / pending_gate 拦截
 - 有暂存文件被拦 -> exit 1(拦截 commit)
 - 全通过 -> exit 0(放行 commit)
@@ -559,6 +594,102 @@ alloy _infra-commit [--message <msg>]
 
 **不直接调用**:本命令由 `.git/hooks/pre-commit` 自动触发,agent 不主动调用。
 
+### alloy _branch
+
+分支上下文读取 + 分支创建验证。合并 alloy-start Step 1 ①②④⑤ 的多步 bash(2+2 次 LLM 往返 -> 1+1 次),缓解轻量级模型 RPM 限流。
+
+```
+alloy _branch context
+alloy _branch create --feature <branch> --main <main-branch>
+```
+
+子命令:
+
+- `context`:读 `openspec/config.yaml` 的 main_branch + git 当前分支,输出 JSON `{"main_branch":"<main>","current_branch":"<current>"}`。agent 读取后在后续命令里用对应的值。main_branch 未配置 -> ⛔ PRECONDITION_FAIL exit 1(引导 `alloy init`)。
+- `create --feature <branch> --main <main-branch>`:`git checkout -b <feature> <main>` + 验证当前分支 = feature。
+  - 失败(仍在 main / checkout 失败 / 分支已存在) -> ⛔ [FAIL] exit 1,SKILL.md 指示回退 USER_GATE
+  - feature = main -> ⛔ PRECONDITION_FAIL exit 1
+  - 不自动 reset/checkout(§3.5.1 git 自救禁令)
+
+**被调用方**:alloy-start Step 1 ①②(分支上下文读取)+ ④⑤(分支创建验证)。
+
+### alloy _change
+
+OpenSpec change 目录创建 + 验证。合并 alloy-start Step 2+3 的多步 bash(3 次 LLM 往返 -> 1 次)。
+
+```
+alloy _change create <name>
+```
+
+子命令:
+
+- `create <name>`:目录冲突预检 + `openspec new change <name>` + `.openspec.yaml` 验证。
+  - 目录已存在 -> ⛔ PRECONDITION_FAIL exit 1(走 USER_GATE 让用户决策:改名 / 接续 / 中止)
+  - openspec CLI 失败 -> ⛔ [FAIL] exit 1
+  - .openspec.yaml 缺失 -> ⛔ PRECONDITION_FAIL exit 1(禁 alloy 补写,退出让用户排查 openspec CLI)
+
+**被调用方**:alloy-start Step 2+3(目录冲突预检 + opsx:new + .openspec.yaml 验证)。
+
+### alloy _start
+
+start 阶段多步 bash 序列下沉。合并 alloy-start 状态检测(precheck,5 次 -> 1 次)、Step 4-7(bootstrap,6 次 -> 1 次)和 Step 10(finalize,3 次 -> 1 次)。缓解轻量级模型 RPM 限流的核心命令。
+
+```
+alloy _start precheck --cmd "opsx/explore opsx/new" --skill "brainstorming"
+alloy _start bootstrap <change-dir> --start-at <ts> --opsx-new-at <ts> --feature-branch <branch>
+alloy _start finalize <change-dir>
+```
+
+子命令:
+
+- `precheck --cmd <cmds> --skill <skills>`:状态检测原子命令,合并 5 步(5 次 LLM 往返 -> 1 次,任一失败 exit 1):
+  1. env check(git 仓库 + openspec/config.yaml 含 schema: alloy + schema.yaml + Alloy skills)
+  2. status 检测活跃 change(含归档目录扫描)
+  3. 捕获 START_TIME(仅统一流程,即无活跃 change 时)
+  4. precheck(cmd + skill 就绪检测,仅统一流程)
+  5. git 仓库就绪(已由 env check 覆盖,不单独校验)
+
+  参数:
+  - `--cmd <cmds>`:空格分隔的 cmd 列表(声明格式,如 `opsx/explore opsx/new`)
+  - `--skill <skills>`:空格分隔的 skill 列表(如 `brainstorming`)
+
+  输出(人类可读 + `->` 标注关键信息):
+  - env 失败:⛔ PRECONDITION_FAIL + 缺失项 + exit 1
+  - 有活跃 change:`-> active_changes: <n>` + 列表 + `-> route: resume` + exit 0
+  - 无活跃 change + precheck 通过:`-> start_time: <ts>` + precheck 结果 + `-> route: unified` + exit 0
+  - 无活跃 change + precheck 失败:`-> start_time: <ts>` + precheck 缺失项 + `-> route: abort` + exit 1
+
+  agent 根据 `-> route` 决策:abort -> 引导 alloy init;resume -> USER_GATE 路由;unified -> 用 start_time 继续。
+
+  ⛔ 禁止在 precheck 后重复跑 `test -f openspec/config.yaml` / `git rev-parse --git-dir` / `alloy _env check` / `alloy status` / `alloy _precheck`--已由 precheck 覆盖,重复 = 浪费 LLM 往返 = 限流风险。
+
+- `bootstrap <change-dir> --start-at <ts> --opsx-new-at <ts> --feature-branch <branch>`:原子完成 6 步(任一步失败 exit 1,不继续):
+  1. state init(写 started_at + feature_branch,先于 phase start / skill log)
+  2. infra-commit(基础设施 commit,幂等)
+  3. skill log opsx:explore(补录 --at=start-at)
+  4. skill log opsx:new(补录 --at=opsx-new-at)
+  5. state write worktree null(标记非 worktree 模式)
+  6. phase start(写 phase_timings.start.started_at + 推进到 starting + commit)
+
+  参数:
+  - `--start-at <ts>`:start 阶段开始时间(= START_TIME,explore 执行时间)
+  - `--opsx-new-at <ts>`:opsx:new 执行时间(= OPSX_NEW_START)
+  - `--feature-branch <branch>`:feature 分支名(= $FEATURE_BRANCH)
+
+  约束(内化到 CLI):`--start-at` 与 `--opsx-new-at` 必须不同值(同值 -> ⛔ HARD_STOP exit 1)。
+
+- `finalize <change-dir>`:原子完成 4 步(任一步失败 exit 1,不继续):
+  1. artifact commit draft(hash-lock + records + commit)
+  2. checkpoint create --kind brainstorming(draft 锚点 tag,必须在 artifact commit 之后、phase complete 之前)
+  3. verify phase-exit start(校验 draft + state 字段;失败 exit 1,阻止 phase complete)
+  4. phase complete(写 completed_at + 推进到 started + commit)
+
+  约束(内化到 CLI):checkpoint 时序(artifact commit 后、phase complete 前);verify && phase complete 短路保护(verify 失败时 phase complete 不执行,无需 agent 手写 `&&`)。
+
+**被调用方**:alloy-start 状态检测(precheck)+ Step 4-7(bootstrap)+ Step 10(finalize)。
+
+**设计目的**:减少 LLM 往返次数,缓解轻量级模型(如 step-3.7-flash 限 10 RPM)的限流压力。precheck 把状态检测 5 次 LLM 往返合并为 1 次,bootstrap 把 6 次合并为 1 次,finalize 把 3 次合并为 1 次。
+
 ## 易错点汇总
 
 1. **`alloy status` 查特定 change 用 `alloy status <name>`**，禁用 `--change`（不支持）
@@ -576,8 +707,17 @@ alloy _infra-commit [--message <msg>]
 13. **`alloy _artifact commit` 重复锁定检测**：hash 未变跳过（避免回溯再提交污染历史），hash 变了允许重锁
 14. **`alloy _skill log` 前置校验**：非 `--at` 补录时，`phase_timings.<stage>.started_at` 必须已存在
 15. **内部命令不支持 `--help`**（除 `_spec-audit`）：无参数运行看 usage，或查本文件
+16. **`alloy _start bootstrap` 两 `--at` 必须不同值**：`--start-at` 与 `--opsx-new-at` 同值 -> HARD_STOP exit 1（called_at 语义=实际调用时间，两技能不同步骤调用）
+17. **`alloy _change create` 目录冲突时走 USER_GATE**：exit 1 后 agent 不得自动复用/覆盖，必须 USER_GATE 让用户决策（改名 / 接续 / 中止）
+18. **`alloy _branch create` 失败时回退 USER_GATE**：exit 1 后 agent 不自动 reset/checkout（§3.5.1 git 自救禁令），回退到 change name + 分支决策 USER_GATE
+19. **`alloy _start bootstrap/finalize` 任一步失败不继续**：内部按序执行，失败立即 exit 1，不回滚（回滚需用户介入，符合 §3.5.1）
 16. **`alloy _state write worktree/branch/created_at` 实际值只能在 worktree 内写**：主仓写实际值会被拒（PRECONDITION_FAIL），写 `null`（清理）或 `skipped`（跳过 worktree）允许。防止 feature 分支写 worktree state 导致 merge 冲突。
 17. **`alloy _state write phase` 被拦截**：phase 推进必须走 `_phase start/complete` 或 `_guard --apply`，确保阶段时间链 + 制品完整性。逃生阀 `ALLOY_FORCE_PHASE=1`（仅限修复畸形状态）
 18. **`alloy _hook-guard` hook 逃生阀**:`ALLOY_FORCE_WRITE=1` 绕过 hook 拦截(仅限修复畸形状态)。hook 由 `alloy init` 自动装到 `.claude/settings.json`(PreToolUse) / `.pi/extensions/alloy-guard.ts`(tool_call 扩展) / `.opencode/tools/write.ts+edit.ts`(custom tool),拦截非 apply 阶段写源码
 19. **`alloy _guard user-gate require` 后写源码被拦**:pending_gate 期间,hook-guard 拦截非白名单写入(即使 apply 阶段)。需先用问答工具(AskUserQuestion/question,自动 clear pending_gate)或 `alloy _guard user-gate pass <change-dir>` 降级。解决弱模型忘记用问答工具与用户确认的问题
 20. **pre-commit hook 兜底 PreToolUse 盲区**:agent 用 Bash 写文件(`echo > / cat << / tee`)绕过 Write/Edit hook,但 `git commit` 时 pre-commit 检查暂存文件,拦住。逃生阀 `ALLOY_FORCE_WRITE=1`。由 `alloy init` 自动装到 `.git/hooks/pre-commit`
+21. **`alloy _start precheck` 后禁重复检查**:precheck 已原子完成 env check + status + precheck + git 校验,禁再跑 `test -f openspec/config.yaml` / `git rev-parse --git-dir` / `alloy _env check` / `alloy status` / `alloy _precheck`--重复 = 浪费 LLM 往返 = 限流风险(step-3.7-flash 限 10 RPM,实测 16 秒内 11 次调用即触顶 429)。agent 根据 `-> route: <unified|resume|abort>` 决策即可
+22. **`_phase complete` 强制检查 pending_gate**:`_phase complete <dir> <phase>` 推进阶段前,检查当前阶段是否有未 clear 的 pending_gate(格式 `<phase>:<action>`)。未 clear 时 exit 1,拒绝推进。agent 必须先调问答工具(AskUserQuestion/question/alloy-question,自动 clear)或 `alloy _guard user-gate pass <dir>` 手动降级,才能 complete。这是 gate 下沉机制--接近 100% 强制 USER_GATE 物理确认
+23. **`_artifact commit` / `_skill log` worktree cwd 守卫**:apply 阶段 worktree 模式下(state.worktree 有值),这两个命令必须在 worktree 内执行(git-dir != git-common-dir)。OpenCode 无 EnterWorktree,session cwd 不解绑,主仓执行会导致 records/skill_usage 写进 feature 分支,破坏 worktree 隔离。在主仓执行时 exit 1,引导 `cd <worktree-path>`。逃生阀 `ALLOY_FORCE_WORKTREE=1`(仅限修复畸形状态,如 worktree 已删除但 state 未更新)。Pi 不支持 worktree,不会进 worktree 模式,不触发本守卫
+24. **`_guard user-gate require/pass` worktree cwd 守卫**:worktree 模式下必须在 worktree 内执行。主仓执行会写 pending_gate 到主仓 .alloy.yaml(应写 worktree)+ commit 进 feature 分支,破坏 worktree 隔离。用 `setPendingGate` 精准替换 pending_gate 行(不触发 writeState 全量重写,保留 worktree_created_at 引号)+ 自动 commit。同理 `_artifact commit`/`_skill log`/`_guard user-gate require/pass` 都有守卫,`_phase start/complete` 等写 .alloy.yaml 的命令也应遵守(后续逐步覆盖)。Pi 不支持 worktree,不会进 worktree 模式,不触发本守卫
+25. **worktree 路径拦截(hook-guard)**:worktree 模式下,write/edit 工具用相对路径或主仓绝对路径写源码/制品(`scripts/`/`src/`/`openspec/changes/<name>/` 非 .alloy.yaml)会被 hook-guard 拦截 exit 2。OpenCode 的 write/edit 工具与 bash 独立进程,不共享 cwd,bash 里传 workdir 不影响 write/edit。必须用 worktree 绝对路径前缀(`<worktree-path>/scripts/...`)。逃生阀 `ALLOY_FORCE_WRITE=1`。Pi 不支持 worktree,不会进 worktree 模式,不触发本守卫

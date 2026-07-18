@@ -83,4 +83,21 @@ describe("alloy _pre-commit-check evaluatePreCommit", () => {
     const result = evaluatePreCommit(["src/foo.ts"], ["archived"], [], {}, true);
     expect(result.exitCode).toBe(1);
   });
+
+  it("merge 进行中(mergeInProgress=true)+ 暂存 src/ -> exit 0(放行 merge commit)", () => {
+    // archive 阶段 worktree-cleanup 的 git merge 带过来的 apply 产物,
+    // 已在 worktree 分支审查过,pre-commit 不应拦截
+    const result = evaluatePreCommit(["src/foo.ts", "scripts/hello.sh"], ["archiving"], [], {}, true, true);
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("merge 进行中 + ALLOY_FORCE_WRITE=1 -> exit 0(逃生阀优先)", () => {
+    const result = evaluatePreCommit(["src/foo.ts"], ["archiving"], [], { ALLOY_FORCE_WRITE: "1" }, true, true);
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("非 merge 场景(mergeInProgress=false)+ 暂存 src/ -> exit 1(正常拦截)", () => {
+    const result = evaluatePreCommit(["src/foo.ts"], ["archiving"], [], {}, true, false);
+    expect(result.exitCode).toBe(1);
+  });
 });

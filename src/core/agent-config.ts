@@ -499,15 +499,35 @@ function generatePiExtensionContent(alloyCliPath: string): string {
   return [
     "// Alloy hook-guard 扩展:订阅 tool_call(PreToolUse) + agent_settled(Stop) 事件",
     "// 由 alloy init 自动生成。",
+    "// Pi tool_call 事件参数:event.toolName(工具名) + event.input(工具输入,可变)",
+    "// 证据:https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md",
     'import { execSync } from "node:child_process";',
     "",
     "export default function alloyGuard(pi: any) {",
-    "  // PreToolUse:拦截非白名单写入(Write/Edit)",
+    "  // PreToolUse:拦截非白名单写入(Write/Edit) + 检测 alloy-question 工具调用",
     '  pi.on("tool_call", async (event: any) => {',
-    "    const toolName = event?.tool ?? event?.name;",
+    "    const toolName = event?.toolName;",
+    "",
+    "    // 检测 alloy-question 工具调用 -> 触发 _hook-guard clearAllPendingGates",
+    "    // _hook-guard 内部检测到问答工具(ASK_TOOLS)会自动 clear pending_gate",
+    '    if (toolName === "alloy-question") {',
+    "      try {",
+    '        const stdin = JSON.stringify({ tool_name: "alloy-question" });',
+    `        execSync("node ${alloyCliPath} _hook-guard", {`,
+    "          input: stdin,",
+    '          stdio: ["pipe", "ignore", "pipe"],',
+    "        });",
+    "      } catch {",
+    "        // clear 失败不阻断问答",
+    "      }",
+    "      return;",
+    "    }",
+    "",
     '    if (toolName !== "write" && toolName !== "edit") return;',
     "",
-    "    const filePath = event?.args?.path ?? event?.args?.file_path;",
+    "    // Pi write 工具参数名:input.path(主)/input.file_path(兼容);edit:input.filePath/input.file_path",
+    "    const input = event?.input ?? {};",
+    '    const filePath = input.path ?? input.filePath ?? input.file_path;',
     "    if (!filePath) return;",
     "",
     "    const stdin = JSON.stringify({",
@@ -560,6 +580,271 @@ export async function writePiHookExtension(projectPath: string): Promise<boolean
   await mkdir(join(extPath, ".."), { recursive: true });
   await writeFile(extPath, content, "utf-8");
   return true;
+}
+
+// --- Pi question 扩展(.pi/extensions/alloy-question.ts) ---
+// 注册 alloy-question 工具,LLM 调用时弹出 SelectList TUI 让用户选选项(USER_GATE)
+// 解决 Pi 无原生交互工具导致 SKILL.md 里 USER_GATE 无法触发的问题
+
+const PI_QUESTION_EXTENSION_FILE = ".pi/extensions/alloy-question.ts";
+
+function generatePiQuestionExtensionContent(): string {
+  return [
+    "// Alloy question 扩展:注册 alloy-question 工具,LLM 调用时弹出 TUI 让用户选选项",
+    "// 由 alloy init 自动生成。解决 Pi 无原生交互工具(USER_GATE)的问题。",
+    "// 按键:用 ctx.ui.custom 注入的 keybindings 参数(官方推荐),不调 getKeybindings()",
+    "// 颜色:ANSI truecolor 绕过 theme(标题亮白/内容普通白/选中深蓝)",
+    'import { Type } from "typebox";',
+    'import { DynamicBorder } from "@earendil-works/pi-coding-agent";',
+    'import { Container, Text, matchesKey, Key, truncateToWidth } from "@earendil-works/pi-tui";',
+    "",
+    "// ANSI truecolor(绕过 Pi theme 的 accent 浅蓝限制)",
+    "// 亮白 \\x1b[97m / 普通白 \\x1b[37m / 深蓝 #4A9EFF / reset前景 \\x1b[39m / bold \\x1b[1m / reset bold \\x1b[22m",
+    "const BRIGHT_WHITE = \"\\x1b[97m\";",
+    "const NORMAL_WHITE = \"\\x1b[37m\";",
+    "const DEEP_BLUE = \"\\x1b[38;2;74;158;255m\";",
+    "const DIM_GRAY = \"\\x1b[90m\";",
+    "const RESET_FG = \"\\x1b[39m\";",
+    "const BOLD = \"\\x1b[1m\";",
+    "const RESET_BOLD = \"\\x1b[22m\";",
+    "function brightWhite(text: string): string { return `${BRIGHT_WHITE}${text}${RESET_FG}`; }",
+    "function normalWhite(text: string): string { return `${NORMAL_WHITE}${text}${RESET_FG}`; }",
+    "function deepBlue(text: string): string { return `${DEEP_BLUE}${text}${RESET_FG}`; }",
+    "function bold(text: string): string { return `${BOLD}${text}${RESET_BOLD}`; }",
+    "",
+    "",
+    "export default function alloyQuestion(pi: any) {",
+    "  pi.registerTool({",
+    '    name: "alloy-question",',
+    '    label: "Alloy Question",',
+    '    description: "Ask user a question with options (USER_GATE). Use for decisions requiring user input. Returns selected option label(s).",',
+    '    promptSnippet: "Ask user a question with options (USER_GATE)",',
+    "    promptGuidelines: [",
+    '      "Use alloy-question for USER_GATE decisions instead of text output. Pass question + options[{label, description}] + multiple?",',
+    "    ],",
+    "    parameters: Type.Object({",
+    '      question: Type.String({ description: "Question text to display" }),',
+    "      options: Type.Array(Type.Object({",
+    '        label: Type.String({ description: "Short option label" }),',
+    '        description: Type.String({ description: "Longer explanation of the option" }),',
+    "      })),",
+    '      multiple: Type.Optional(Type.Boolean({ description: "Allow multiple selections (default: false)" })),',
+    "    }),",
+    "    async execute(_toolCallId: string, params: any, _signal: any, _onUpdate: any, ctx: any) {",
+    "      let options = params.options.map((o: any) => ({ label: o.label, description: o.description }));",
+    "",
+    "      // 单选项自动转 confirm:追加\"取消\"选项变成 2 选项",
+    "      // 原因:单选项 = 确认场景(非选择),select TUI 展示单选项用户只能 enter 或 esc,失去\"选择\"意义",
+    "      // 自动补\"取消\"= 确认/取消 2 选项,正好是 confirm 语义,用 select TUI 呈现保持一致性",
+    "      // 用户选\"取消\"(追加项)返回 null,agent 收到退出流程",
+    "      let isConfirmMode = false;",
+    "      if (!params.multiple && options.length === 1) {",
+    "        isConfirmMode = true;",
+    "        options = [...options, { label: \"取消\", description: \"退出当前操作\" }];",
+    "      }",
+    "",
+    "      if (params.multiple) {",
+    "        const selected = await showMultiSelect(ctx, params.question, options);",
+    "        const labels = selected.map(i => options[i].label);",
+    "        return {",
+    "          content: [{ type: \"text\", text: labels.length ? labels.join(\", \") : \"用户取消\" }],",
+    "          details: { selected, cancelled: labels.length === 0 },",
+    "        };",
+    "      } else {",
+    "        const choice = await showSingleSelect(ctx, params.question, options);",
+    "        // confirm 模式:选\"取消\"追加项(index = options.length - 1)视为用户取消",
+    "        if (choice === null || (isConfirmMode && choice === options.length - 1)) {",
+    "          return { content: [{ type: \"text\", text: \"用户取消\" }], details: { cancelled: true } };",
+    "        }",
+    "        return { content: [{ type: \"text\", text: options[choice].label }], details: { selected: choice } };",
+    "      }",
+    "    },",
+    "  });",
+    "}",
+    "",
+    "// 自定义选项列表组件",
+    "// 按键:keybindings.matches(data, 'tui.select.up/down/confirm/cancel')(注入的 keybindings)",
+    "// 颜色:非选中普通白,选中深蓝+bold;序号 1./2./3.;多选 checkbox [ ]/[x]",
+    "class OptionList {",
+    "  private options: { label: string; description: string }[];",
+    "  private selected: number = 0;",
+    "  private checked: Set<number> = new Set();",
+    "  private multiple: boolean;",
+    "  private maxVisible: number;",
+    "  private scrollTop: number = 0;",
+    "  private keybindings: any;",
+    "  public onConfirm?: (selected: number[]) => void;",
+    "  public onCancel?: () => void;",
+    "",
+    "  constructor(options: { label: string; description: string }[], multiple: boolean, keybindings: any) {",
+    "    this.options = options;",
+    "    this.multiple = multiple;",
+    "    this.keybindings = keybindings;",
+    "    this.maxVisible = Math.min(options.length, 8);",
+    "  }",
+    "",
+    "  invalidate(): void {}",
+    "",
+    "  private ensureVisible(): void {",
+    "    if (this.selected < this.scrollTop) this.scrollTop = this.selected;",
+    "    if (this.selected >= this.scrollTop + this.maxVisible) this.scrollTop = this.selected - this.maxVisible + 1;",
+    "  }",
+    "",
+    "  render(width: number): string[] {",
+    "    this.ensureVisible();",
+    "    const lines: string[] = [];",
+    "    const end = Math.min(this.scrollTop + this.maxVisible, this.options.length);",
+    "    for (let i = this.scrollTop; i < end; i++) {",
+    "      const opt = this.options[i];",
+    "      const isSelected = i === this.selected;",
+    "      const isChecked = this.checked.has(i);",
+    "      // 序号:1./2./3. 统一 3 字符宽",
+    "      const num = `${i + 1}.`.padEnd(3);",
+    "      // checkbox(多选)或空(单选),统一 4 字符宽",
+    "      const marker = this.multiple ? (isChecked ? \"[x] \" : \"[ ] \") : \"\";",
+    "      const label = truncateToWidth(opt.label, width - 8);",
+    "      let labelLine = `${num}${marker}${label}`;",
+    "      if (isSelected) {",
+    "        // 选中:深蓝 + 加粗",
+    "        labelLine = deepBlue(bold(labelLine));",
+    "      } else {",
+    "        // 非选中:普通白",
+    "        labelLine = normalWhite(labelLine);",
+    "      }",
+    "      lines.push(labelLine);",
+    "      // description:缩进对齐 label 起始(序号 3 + checkbox 4 = 7;单选无 checkbox = 3)",
+    "      // 选中/非选中都用暗灰(description 是辅助信息,不随选中变色)",
+    "      if (opt.description) {",
+    "        const descIndent = this.multiple ? \"       \" : \"   \";",
+    "        const desc = truncateToWidth(opt.description, width - 8);",
+    "        lines.push(`${DIM_GRAY}${descIndent}${desc}${RESET_FG}`);",
+    "      }",
+    "    }",
+    "    if (this.options.length > this.maxVisible) {",
+    "      lines.push(`  (${this.selected + 1}/${this.options.length})`);",
+    "    }",
+    "    return lines;",
+    "  }",
+    "",
+    "  handleInput(data: string): void {",
+    "    const kb = this.keybindings;",
+    "    // 用注入的 keybindings(和 SelectList 一致,官方推荐方式)",
+    "    if (kb.matches(data, \"tui.select.up\")) {",
+    "      this.selected = this.selected === 0 ? this.options.length - 1 : this.selected - 1;",
+    "    } else if (kb.matches(data, \"tui.select.down\")) {",
+    "      this.selected = this.selected === this.options.length - 1 ? 0 : this.selected + 1;",
+    "    } else if (kb.matches(data, \"tui.select.confirm\")) {",
+    "      if (this.multiple) {",
+    "        // 多选:enter 确认所有选中(空选中则确认当前高亮)",
+    "        const result = this.checked.size > 0 ? Array.from(this.checked).sort((a,b) => a-b) : [this.selected];",
+    "        this.onConfirm?.(result);",
+    "      } else {",
+    "        this.onConfirm?.([this.selected]);",
+    "      }",
+    "    } else if (kb.matches(data, \"tui.select.cancel\")) {",
+    "      this.onCancel?.();",
+    "    } else if (matchesKey(data, Key.space)) {",
+    "      // space:多选切换",
+    "      if (this.multiple) {",
+    "        if (this.checked.has(this.selected)) this.checked.delete(this.selected);",
+    "        else this.checked.add(this.selected);",
+    "      }",
+    "    }",
+    "  }",
+    "}",
+    "",
+    "// 单选 TUI",
+    "async function showSingleSelect(ctx: any, question: string, options: { label: string; description: string }[]): Promise<number | null> {",
+    "  return ctx.ui.custom<number | null>((tui: any, _theme: any, keybindings: any, done: (v: number | null) => void) => {",
+    "    const container = new Container();",
+    "    container.addChild(new DynamicBorder((s: string) => deepBlue(s)));",
+    "    // 标题:亮白 + 加粗",
+    "    container.addChild(new Text(brightWhite(bold(`❓ ${question}`)), 1, 0));",
+    "    container.addChild(new Text(\"\", 0, 0));",
+    "    const list = new OptionList(options, false, keybindings);",
+    "    list.onConfirm = (sel) => done(sel[0]);",
+    "    list.onCancel = () => done(null);",
+    "    container.addChild(list);",
+    "    container.addChild(new Text(\"\", 0, 0));",
+    "    container.addChild(new Text(normalWhite(\"  ↑↓ navigate   enter select   esc cancel\"), 0, 0));",
+    "    container.addChild(new DynamicBorder((s: string) => deepBlue(s)));",
+    "    return {",
+    "      render: (w: number) => container.render(w),",
+    "      invalidate: () => container.invalidate(),",
+    "      handleInput: (data: string) => { list.handleInput(data); tui.requestRender(); },",
+    "    };",
+    "  });",
+    "}",
+    "",
+    "// 多选 TUI",
+    "async function showMultiSelect(ctx: any, question: string, options: { label: string; description: string }[]): Promise<number[]> {",
+    "  return ctx.ui.custom<number[]>((tui: any, _theme: any, keybindings: any, done: (v: number[]) => void) => {",
+    "    const container = new Container();",
+    "    container.addChild(new DynamicBorder((s: string) => deepBlue(s)));",
+    "    container.addChild(new Text(brightWhite(bold(`❓ ${question}`)), 1, 0));",
+    "    container.addChild(new Text(normalWhite(\"  (space 切换选择,enter 确认所有选中)\"), 0, 0));",
+    "    container.addChild(new Text(\"\", 0, 0));",
+    "    const list = new OptionList(options, true, keybindings);",
+    "    list.onConfirm = (sel) => done(sel);",
+    "    list.onCancel = () => done([]);",
+    "    container.addChild(list);",
+    "    container.addChild(new Text(\"\", 0, 0));",
+    "    container.addChild(new Text(normalWhite(\"  ↑↓ navigate   space toggle   enter confirm   esc cancel\"), 0, 0));",
+    "    container.addChild(new DynamicBorder((s: string) => deepBlue(s)));",
+    "    return {",
+    "      render: (w: number) => container.render(w),",
+    "      invalidate: () => container.invalidate(),",
+    "      handleInput: (data: string) => { list.handleInput(data); tui.requestRender(); },",
+    "    };",
+    "  });",
+    "}",
+    "",
+  ].join("\n");
+}
+
+/** 检测 Pi 是否已装 alloy-question 扩展 */
+export async function hasPiQuestionExtension(projectPath: string): Promise<boolean> {
+  const extPath = join(projectPath, PI_QUESTION_EXTENSION_FILE);
+  try {
+    const content = await readFile(extPath, "utf-8");
+    return content.includes("alloy-question") && content.includes("registerTool");
+  } catch {
+    return false;
+  }
+}
+
+/** 写入 Pi question 扩展(.pi/extensions/alloy-question.ts) */
+export async function writePiQuestionExtension(projectPath: string): Promise<boolean> {
+  const extPath = join(projectPath, PI_QUESTION_EXTENSION_FILE);
+  const content = generatePiQuestionExtensionContent();
+  await mkdir(join(extPath, ".."), { recursive: true });
+  await writeFile(extPath, content, "utf-8");
+  return true;
+}
+
+/** 返回需要装 question 扩展的 agent id 列表(仅 Pi,因 Claude Code/OpenCode 有原生交互工具) */
+export function getQuestionSupportedAgents(): string[] {
+  return ["pi"];
+}
+
+/** 返回 agent 的 question 配置路径描述(用于 init 执行清单显示) */
+export function getQuestionConfigPath(agentId: string): string {
+  switch (agentId) {
+    case "pi": return ".pi/extensions/alloy-question.ts (alloy-question 工具)";
+    default: return "";
+  }
+}
+
+/** 检测指定 agent 是否已装 question 配置 */
+export async function hasQuestionConfig(projectPath: string, agentId: string): Promise<boolean> {
+  if (agentId === "pi") return hasPiQuestionExtension(projectPath);
+  return false;
+}
+
+/** 写入 question 配置到指定 agent(幂等)。仅 pi 需要。 */
+export async function writeQuestionConfig(projectPath: string, agentId: string): Promise<boolean> {
+  if (agentId === "pi") return writePiQuestionExtension(projectPath);
+  return false;
 }
 
 // --- OpenCode hook 插件(.opencode/plugins/alloy-guard.ts) ---

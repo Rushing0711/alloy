@@ -27,7 +27,7 @@ export const KNOWN_AGENTS: AgentInfo[] = [
     supportsColonCommands: false,
     commandsDir: ".pi/prompts/",
     globalBase: ".pi/agent",
-    interactiveTool: "none",
+    interactiveTool: "alloy-question",
   },
 ];
 

@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { writeFile, readFile, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { injectAgentConfigs, hasPermissionsConfig, writePermissionsConfig, ALLOY_PERMISSIONS, getPermissionSupportedAgents, hasHookConfig, writeHookConfig, getHookSupportedAgents, writePiHookExtension, hasPiHookExtension, writeOpenCodeHookTools, hasOpenCodeHookTools } from "../../src/core/agent-config.js";
+import { injectAgentConfigs, hasPermissionsConfig, writePermissionsConfig, ALLOY_PERMISSIONS, getPermissionSupportedAgents, hasHookConfig, writeHookConfig, getHookSupportedAgents, writePiHookExtension, hasPiHookExtension, writeOpenCodeHookTools, hasOpenCodeHookTools, writePiQuestionExtension, hasPiQuestionExtension, writeQuestionConfig, getQuestionSupportedAgents, hasQuestionConfig } from "../../src/core/agent-config.js";
 import { getPackageRoot } from "../../src/utils/fs.js";
 
 const expectedHookCommand = `node ${getPackageRoot()}/dist/cli/index.js _hook-guard`;
@@ -405,6 +405,77 @@ describe("writePiHookExtension / hasPiHookExtension", () => {
     await writePiHookExtension(tmpDir);
     await writePiHookExtension(tmpDir);
     expect(await hasPiHookExtension(tmpDir)).toBe(true);
+  });
+});
+
+describe("writePiQuestionExtension / hasPiQuestionExtension", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = join(tmpdir(), `alloy-pi-question-${Date.now()}`);
+    await mkdir(tmpDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("未装时 hasPiQuestionExtension -> false", async () => {
+    expect(await hasPiQuestionExtension(tmpDir)).toBe(false);
+  });
+
+  it("writePiQuestionExtension -> 写 .pi/extensions/alloy-question.ts + hasPiQuestionExtension -> true", async () => {
+    await writePiQuestionExtension(tmpDir);
+    expect(await hasPiQuestionExtension(tmpDir)).toBe(true);
+    const content = await readFile(join(tmpDir, ".pi", "extensions", "alloy-question.ts"), "utf-8");
+    expect(content).toContain("alloy-question");
+    expect(content).toContain("registerTool");
+    expect(content).toContain("ctx.ui.custom");
+    expect(content).toContain("OptionList");
+    // 选中项用深蓝字(deepBlue)+ bold 高亮,不用背景色
+    expect(content).toContain("deepBlue");
+    expect(content).toContain("matchesKey");
+  });
+
+  it("writePiQuestionExtension 幂等(重复写不报错)", async () => {
+    await writePiQuestionExtension(tmpDir);
+    await writePiQuestionExtension(tmpDir);
+    expect(await hasPiQuestionExtension(tmpDir)).toBe(true);
+  });
+});
+
+describe("writeQuestionConfig / getQuestionSupportedAgents / hasQuestionConfig", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = join(tmpdir(), `alloy-question-config-${Date.now()}`);
+    await mkdir(tmpDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("getQuestionSupportedAgents 只返回 pi(Claude Code/OpenCode 有原生工具)", () => {
+    const agents = getQuestionSupportedAgents();
+    expect(agents).toEqual(["pi"]);
+    expect(agents).not.toContain("claude-code");
+    expect(agents).not.toContain("opencode");
+  });
+
+  it("writeQuestionConfig(pi) -> 装 alloy-question extension", async () => {
+    const written = await writeQuestionConfig(tmpDir, "pi");
+    expect(written).toBe(true);
+    expect(await hasQuestionConfig(tmpDir, "pi")).toBe(true);
+  });
+
+  it("writeQuestionConfig(claude-code) -> false(Claude Code 有原生 AskUserQuestion)", async () => {
+    const written = await writeQuestionConfig(tmpDir, "claude-code");
+    expect(written).toBe(false);
+  });
+
+  it("hasQuestionConfig 未装时 -> false", async () => {
+    expect(await hasQuestionConfig(tmpDir, "pi")).toBe(false);
   });
 });
 

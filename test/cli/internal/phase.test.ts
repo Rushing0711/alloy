@@ -464,3 +464,271 @@ describe("alloy _phase reset", () => {
   });
 });
 
+
+describe("alloy _phase complete gate 下沉检查", () => {
+  let tmpDir: string;
+  let changeDir: string;
+
+  beforeEach(async () => {
+    tmpDir = join(tmpdir(), `alloy-phase-gate-test-${Date.now()}`);
+    changeDir = join(tmpDir, "openspec", "changes", "test-change");
+    await mkdir(changeDir, { recursive: true });
+
+    execSync("git init", { cwd: tmpDir, stdio: "pipe" });
+    execSync('git config user.name "test-user"', { cwd: tmpDir, stdio: "pipe" });
+    execSync('git config user.email "test@test.com"', { cwd: tmpDir, stdio: "pipe" });
+
+    const yaml = [
+      "phase: starting",
+      "schema_version: 1",
+      "worktree: null",
+      'created_at: "2020-01-01 00:00:00"',
+      'updated_at: "2020-01-01 00:00:00"',
+      "phase_timings:",
+      "  start:",
+      '    started_at: "2020-01-01 10:00:00"',
+      "    completed_at: null",
+      "records: []",
+      "skill_usage: []",
+      "pending_gate: null",
+    ].join("\n");
+    await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+    vi.clearAllMocks();
+  });
+
+  it("无 pending_gate:放行 complete", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    // pending_gate: null,正常推进
+    await phaseCommand(["complete", changeDir, "start"]);
+
+    const state = await readState(changeDir);
+    expect(state.phase).toBe("started");
+    expect(state.phase_timings?.start?.completed_at).toBeTruthy();
+  });
+
+  it("当前阶段 pending_gate 未 clear:HARD_STOP exit 1", async () => {
+    // 设置 start:phase-complete 的 pending_gate
+    const state = await readState(changeDir);
+    state.pending_gate = "start:phase-complete";
+    const { writeState } = await import("../../../src/cli/utils/state.js");
+    await writeState(changeDir, state);
+
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await phaseCommand(["complete", changeDir, "start"]);
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errSpy.mock.calls.some(c => String(c[0]).includes("HARD_STOP"))).toBe(true);
+    expect(errSpy.mock.calls.some(c => String(c[0]).includes("start:phase-complete"))).toBe(true);
+    expect(errSpy.mock.calls.some(c => String(c[0]).includes("user-gate pass"))).toBe(true);
+
+    // phase 未推进
+    const after = await readState(changeDir);
+    expect(after.phase).toBe("starting");
+    exitSpy.mockRestore();
+    errSpy.mockRestore();
+  });
+
+  it("当前阶段制品锁定 pending_gate 未 clear:HARD_STOP exit 1", async () => {
+    // 模拟 plan 阶段 lock-proposal gate 未 clear
+    const state = await readState(changeDir);
+    state.phase = "planning";
+    state.pending_gate = "plan:lock-proposal";
+    state.phase_timings = {
+      start: { started_at: "2020-01-01 10:00:00", completed_at: "2020-01-01 11:00:00" },
+      plan: { started_at: "2020-01-01 12:00:00", completed_at: null },
+    };
+    const { writeState } = await import("../../../src/cli/utils/state.js");
+    await writeState(changeDir, state);
+
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await phaseCommand(["complete", changeDir, "plan"]);
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errSpy.mock.calls.some(c => String(c[0]).includes("plan:lock-proposal"))).toBe(true);
+    exitSpy.mockRestore();
+    errSpy.mockRestore();
+  });
+
+  it("其他阶段残留 pending_gate:WARN 但放行", async () => {
+    // start 阶段 complete,但有 apply 阶段残留 gate
+    const state = await readState(changeDir);
+    state.pending_gate = "apply:lock-verify";
+    const { writeState } = await import("../../../src/cli/utils/state.js");
+    await writeState(changeDir, state);
+
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await phaseCommand(["complete", changeDir, "start"]);
+
+    // 放行(phase 推进)
+    const after = await readState(changeDir);
+    expect(after.phase).toBe("started");
+    // 有 WARN 提示
+    expect(errSpy.mock.calls.some(c => String(c[0]).includes("WARN"))).toBe(true);
+    expect(errSpy.mock.calls.some(c => String(c[0]).includes("apply:lock-verify"))).toBe(true);
+    errSpy.mockRestore();
+  });
+
+  it("pending_gate 已 clear(pass 后):放行 complete", async () => {
+    // 先设 gate,再 pass,再 complete
+    const state = await readState(changeDir);
+    state.pending_gate = "start:phase-complete";
+    const { writeState } = await import("../../../src/cli/utils/state.js");
+    await writeState(changeDir, state);
+
+    // 模拟 user-gate pass
+    state.pending_gate = null;
+    await writeState(changeDir, state);
+
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await phaseCommand(["complete", changeDir, "start"]);
+
+    const after = await readState(changeDir);
+    expect(after.phase).toBe("started");
+    expect(after.phase_timings?.start?.completed_at).toBeTruthy();
+  });
+});
+
+describe("alloy _phase start 自动 clear 上阶段 phase-complete gate", () => {
+  let tmpDir: string;
+  let changeDir: string;
+
+  beforeEach(async () => {
+    tmpDir = join(tmpdir(), `alloy-phase-start-clear-${Date.now()}`);
+    changeDir = join(tmpDir, "openspec", "changes", "test-change");
+    await mkdir(changeDir, { recursive: true });
+
+    execSync("git init", { cwd: tmpDir, stdio: "pipe" });
+    execSync('git config user.name "test-user"', { cwd: tmpDir, stdio: "pipe" });
+    execSync('git config user.email "test@test.com"', { cwd: tmpDir, stdio: "pipe" });
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+    vi.clearAllMocks();
+  });
+
+  it("进入 plan 阶段:自动 clear start:phase-complete gate", async () => {
+    // 模拟 start 阶段完成后,pending_gate 残留 start:phase-complete
+    const yaml = [
+      "phase: started",
+      "schema_version: 1",
+      "worktree: null",
+      'created_at: "2020-01-01 00:00:00"',
+      'updated_at: "2020-01-01 00:00:00"',
+      "phase_timings:",
+      "  start:",
+      '    started_at: "2020-01-01 10:00:00"',
+      '    completed_at: "2020-01-01 11:00:00"',
+      "records: []",
+      "skill_usage: []",
+      "pending_gate: start:phase-complete",
+    ].join("\n");
+    await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
+
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await phaseCommand(["start", changeDir, "plan"]);
+
+    const after = await readState(changeDir);
+    expect(after.phase).toBe("planning");
+    expect(after.pending_gate).toBeNull();
+  });
+
+  it("进入 apply 阶段:自动 clear plan:phase-complete gate", async () => {
+    const yaml = [
+      "phase: planned",
+      "schema_version: 1",
+      "worktree: null",
+      'created_at: "2020-01-01 00:00:00"',
+      'updated_at: "2020-01-01 00:00:00"',
+      "phase_timings:",
+      "  plan:",
+      '    started_at: "2020-01-01 10:00:00"',
+      '    completed_at: "2020-01-01 11:00:00"',
+      "records: []",
+      "skill_usage: []",
+      "pending_gate: plan:phase-complete",
+    ].join("\n");
+    await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
+
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await phaseCommand(["start", changeDir, "apply"]);
+
+    const after = await readState(changeDir);
+    expect(after.phase).toBe("applying");
+    expect(after.pending_gate).toBeNull();
+  });
+
+  it("上阶段 gate 是 lock-xxx(非 phase-complete):不 clear", async () => {
+    // lock-xxx 是当前阶段内部 gate,不应被 phase start 清掉
+    const yaml = [
+      "phase: planned",
+      "schema_version: 1",
+      "worktree: null",
+      'created_at: "2020-01-01 00:00:00"',
+      'updated_at: "2020-01-01 00:00:00"',
+      "phase_timings:",
+      "  plan:",
+      '    started_at: "2020-01-01 10:00:00"',
+      "    completed_at: null",
+      "records: []",
+      "skill_usage: []",
+      "pending_gate: plan:lock-proposal",
+    ].join("\n");
+    await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
+
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await phaseCommand(["start", changeDir, "apply"]);
+
+    const after = await readState(changeDir);
+    expect(after.phase).toBe("applying");
+    // lock-proposal 不应被清掉(它是 plan 阶段内部 gate,不是 phase-complete)
+    expect(after.pending_gate).toBe("plan:lock-proposal");
+  });
+
+  it("无 pending_gate:正常推进,不报错", async () => {
+    const yaml = [
+      "phase: started",
+      "schema_version: 1",
+      "worktree: null",
+      'created_at: "2020-01-01 00:00:00"',
+      'updated_at: "2020-01-01 00:00:00"',
+      "phase_timings:",
+      "  start:",
+      '    started_at: "2020-01-01 10:00:00"',
+      '    completed_at: "2020-01-01 11:00:00"',
+      "records: []",
+      "skill_usage: []",
+      "pending_gate: null",
+    ].join("\n");
+    await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
+
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await phaseCommand(["start", changeDir, "plan"]);
+
+    const after = await readState(changeDir);
+    expect(after.phase).toBe("planning");
+    expect(after.pending_gate).toBeNull();
+  });
+});

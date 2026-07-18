@@ -1,12 +1,12 @@
 ---
 behaviors:
-  preconditions: 6
-  hard_stops: 12
+  preconditions: 5
+  hard_stops: 19
   user_gates: 3
   warns: 1
   artifacts: [delta-spec, archive]
   transitions_to: archived
-  external_calls: [opsx:archive]
+  external_calls: [alloy _archive]
 ---
 
 # alloy archive 行为规格

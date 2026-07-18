@@ -4,7 +4,7 @@ description: 执行应用阶段--将 plan 落地为代码。手动调用 /alloy-
 spec: 01-product-spec/03-apply-spec.md
 behaviors:
   preconditions: 12
-  hard_stops:    18
+  hard_stops:    31
   user_gates:    7
   warns:         3
   artifacts: [verify, retrospective]
@@ -28,7 +28,7 @@ behaviors:
 
 **核心原则：先 TDD 再代码，先验证再复盘。** 所有阶段制品（verify / retrospective）以 hash-lock + 单独 commit 入 records，禁直接编辑。
 
-**交互规则：** `🔴 STOP` 等价 `USER_GATE`，首次呈现即必须调用平台原生交互工具——禁"先文本展示 1./2. 再等待用户打字"。Claude Code 用 `AskUserQuestion`,OpenCode 用 `question` 工具(字段名 `multiple` 非 `multiSelect`,可选 `custom`),Pi 用 extension `ctx.ui`(通过 alloy ask-question 扩展);Copilot CLI / Gemini CLI 无原生交互工具,降级为结构化文本选项。三平台调用示例见 `alloy-shared/references/interaction-style.md` §审查窗口标准模式。含"沉默 ≠ 授权"通用禁令——禁批量打包、禁基于 diff 短/无 conflict 跳过、禁 agent 回填精确字符串。跳过任何 USER_GATE = 违反 Iron Law。
+**交互规则：** `🔴 STOP` 等价 `USER_GATE`，首次呈现即必须调用平台原生交互工具——禁"先文本展示 1./2. 再等待用户打字"。Claude Code 用 `AskUserQuestion`,OpenCode 用 `question` 工具(字段名 `multiple` 非 `multiSelect`,可选 `custom`),Pi 用 `alloy-question` 工具(alloy-question extension 注册);Copilot CLI / Gemini CLI 无原生交互工具,降级为结构化文本选项。三平台调用示例见 `alloy-shared/references/interaction-style.md` §审查窗口标准模式。含"沉默 ≠ 授权"通用禁令——禁批量打包、禁基于 diff 短/无 conflict 跳过、禁 agent 回填精确字符串。跳过任何 USER_GATE = 违反 Iron Law。
 
 **状态符号：** `⛔` = HARD_STOP / PRECONDITION_FAIL，`🔴` = USER_GATE，`⚠️` = WARN（视觉规范 §七）。
 
@@ -172,7 +172,7 @@ alloy _guard user-gate require openspec/changes/<name> apply:requirement-change
 
 ### [Step 1/5] 隔离环境设置
 
-> [HARD_STOP §3.5.1] worktree / branch 操作链路上严禁 agent 自动 `git worktree remove --force` / `git worktree prune --force` / `git branch -D` / `rm -rf .claude/worktrees/<name>` / `rm -rf .worktrees/<name>` / `git reset --hard` 任意一个清场(两种 worktree 路径都覆盖:Claude Code 用 `.claude/worktrees/`,其他 agent(OpenCode/Pi)用 `.worktrees/`)。
+> [HARD_STOP §3.5.1] worktree / branch 操作链路上严禁 agent 自动 `git worktree remove --force` / `git worktree prune --force` / `git branch -D` / `rm -rf .claude/worktrees/<name>` / `rm -rf .worktrees/<name>` / `git reset --hard` 任意一个清场(两种 worktree 路径都覆盖:Claude Code 用 `.claude/worktrees/`,OpenCode 用 `.worktrees/`;Pi 不支持 worktree,不会产生这些路径)。
 > 违反字面 = 违反精神：哪怕"残留 worktree 看起来空，删了让流程继续"，也算违反禁令——必须 USER_GATE。
 
 **幂等检查：**
@@ -201,20 +201,21 @@ alloy _guard branch-position openspec/changes/<name>
 
 **主分支确认：** 读取 `alloy-shared/references/main-branch-detection.md`。若 `openspec/config.yaml` 已有 `alloy.main_branch`，直接用，跳过确认。
 
-分支验证通过后，加载 `superpowers:using-git-worktrees` 技能：
+分支验证通过后,加载 `using-git-worktrees` skill(多 agent 适配见 `alloy-shared/references/skill-loading.md`):
+- Claude Code / OpenCode: 调 `skill({ name: "using-git-worktrees" })`
 - **完整执行技能 Step 0-4**（检测 + consent + 创建 + 项目设置 + 基线测试），不再限制仅 Step 0
 - **前置条件（alloy init 已配置）：** Claude Code 的 `.claude/settings.json` 含 `worktree.baseRef: head`，EnterWorktree 从当前 feature 分支分出（非 origin/main），base ref 正确。
 - **传入 name=`<name>`**（change 名）：所有 agent 统一用此 name 作为分支名(`worktree-<name>`)和 worktree 目录名
 
 > ⛔ [HARD_STOP] worktree 创建按 agent 平台分两种路径,各自必须用对应方式,禁混用:
 > - **Claude Code agent:** 必须用 `EnterWorktree(name)` 工具创建,路径 `.claude/worktrees/<name>`(EnterWorktree 硬编码,不可改)。禁手动 `git worktree add`。
-> - **其他 agent(OpenCode/Pi):** alloy 实现选择走 git worktree fallback(非 agent 缺陷,OpenCode 有原生 worktree 服务但 alloy 未集成,Pi 无 worktree 支持),路径 `.worktrees/<name>`(skill 默认)。
+> - **OpenCode agent:** 调 `alloy _worktree-create <change-dir>` 原子命令创建,路径 `.worktrees/<name>`,分支 `worktree-<name>`。命令内部完成 git worktree add + _state write 三字段 + commit。OpenCode 的 bash 工具有 `workdir` 参数,agent 后续每个 bash 命令传 `workdir=<worktree>` 进入 worktree 执行。
 > 违反字面 = 违反精神:
 > - Claude Code agent:哪怕"手动 git worktree 更可控"、"路径换一下无影响"、"superpowers 技能引导手动创建",也算违反--
 >   - `EnterWorktree` 解绑 session cwd,后续 CLI 命令自动在 worktree 执行;手动 `git worktree add` 不解绑,agent 需 `cd` 切换(易错,且 cd 不解绑 session)
 >   - `.claude/worktrees/` 是 alloy 约定(与 `.claude/settings.json` / `.claude/commands/` 一致)
 >   - 手动创建的 worktree 路径记录到 state,archive 阶段 `_worktree-cleanup` 用 state 路径清理,路径不一致虽不致命但偏离约定
-> - 其他 agent:必须走 git worktree fallback 建到 `.worktrees/<name>`,禁手动建到其他路径(如 `.git/worktrees/` 或项目根下自定义目录)
+> - OpenCode agent:必须走 `alloy _worktree-create` 建到 `.worktrees/<name>`,禁手动建到其他路径(如 `.git/worktrees/` 或项目根下自定义目录)
 > - **`.worktrees/` 已由 `alloy init` 写入 .gitignore**(运行时规则块),无需重复检测或添加。禁用 `git check-ignore .worktrees` 检测--`.worktrees` 目录不存在时,`git check-ignore .worktrees`(不带斜杠)对 `.worktrees/`(带斜杠的目录规则)返回 exit 1,误判为"未忽略"。如需校验,用 `grep -q '^.worktrees/' .gitignore`。
 > 常见违规模式:
 > - Claude Code agent 手动 `mkdir -p .worktrees && git worktree add .worktrees/<name>`--应该用 `EnterWorktree(name)` 工具
@@ -228,6 +229,8 @@ alloy _guard branch-position openspec/changes/<name>
 ```bash
 alloy _guard user-gate require openspec/changes/<name> apply:worktree-choice
 ```
+
+> **Pi 下此 gate 自动通过**:guard 检测 `PI_CODING_AGENT=true` 直接返回 `✓ 自动通过(Pi 不支持 worktree)` + 输出 `-> 走 skipped 路径`。agent 按输出走下方"用户选择不创建"段,Claude Code/OpenCode 正常调问答工具问用户。
 
 🔴 USER_GATE（必须平台原生交互工具）: 确认 worktree 选择。**选项描述必须如实映射任务规模,禁说反：**
 
@@ -272,15 +275,53 @@ git diff --cached --quiet || git commit -m "chore(<name>): 记录 worktree 决�
 > commit message 用"记录 worktree 决策 skipped",不用"记录 using-git-worktrees 技能使用（skipped）"——前者明确这是 worktree 决策记录,与上方 _skill log commit 语义区分;后者含"using-git-worktrees"会与上方 commit 看起来重复。
 跳到 Step 1 完成框。
 
-**用户选择创建：** 由 using-git-worktrees 技能驱动创建（EnterWorktree 优先，git worktree fallback），agent 不手动 `git worktree add`。
+**用户选择创建：** 按 agent 平台分两种路径创建 worktree:
 
-**创建后状态记录 + worktree 内分支锁定**：读取 `references/worktree.md`：
+- **Claude Code agent:** 用 `EnterWorktree(name)` 工具创建,路径 `.claude/worktrees/<name>`(EnterWorktree 硬编码)。session cwd 自动解绑到 worktree。创建后在 worktree 内手动写三字段(下方"创建后状态记录")。
+- **OpenCode agent:** 调 `alloy _worktree-create <change-dir>` 原子命令创建,路径 `.worktrees/<name>`,分支 `worktree-<name>`。命令内部完成 git worktree add + _state write 三字段 + commit,agent 不手动 git worktree add / _state write / mkdir .worktrees。OpenCode 的 bash 工具有 `workdir` 参数,agent 后续每个 bash 命令传 `workdir=<worktree>` 进入 worktree 执行。
 
-- 技能执行完毕后，**必须验证已在 worktree 内**（`GIT_DIR != GIT_COMMON`），否则 ⛔ PRECONDITION_FAIL——禁 fallback 到主仓写入（元信息写到 feature 分支会导致 worktree 内状态分裂）
+```bash
+# OpenCode:原子创建 worktree(含 state 三字段 + commit)
+alloy _worktree-create openspec/changes/<name>
+```
+
+> ⛔ [HARD_STOP] 禁用 feature 分支名建 worktree:
+> - 错误:`git worktree add .worktrees/feature/<name> -b feature/<name>` -- feature 分支已存在且已被主仓 checkout,fatal
+> - 正确:worktree 分支名约定 `worktree-<name>`(alloy _worktree-create 自动用此约定)
+> - Claude Code 用 EnterWorktree(路径 `.claude/worktrees/<name>`),OpenCode 用 `alloy _worktree-create`(路径 `.worktrees/<name>`)
+
+**创建后状态记录 + worktree 内分支锁定**：
+
+- Claude Code:EnterWorktree 创建后,在 worktree 内手动写三字段(`alloy _state write` x3 + commit);OpenCode:`_worktree-create` 已自动完成,跳过此步
+- 技能执行完毕后，**必须验证已在 worktree 内**（`GIT_DIR != GIT_COMMON`），否则 ⛔ PRECONDITION_FAIL--禁 fallback 到主仓写入（元信息写到 feature 分支会导致 worktree 内状态分裂）
 - ⛔ [HARD_STOP] 在 worktree 内**必须**写入 worktree / worktree_branch / worktree_created_at **三字段**并 commit（断点恢复）。三字段缺一不可——worktree_created_at 漏写会导致 archive 阶段时间链断裂。
   违反字面 = 违反精神：哪怕"worktree 路径已记录、created_at 可推断"、"先写两个字段后面补",也算违反——worktree_created_at 是 worktree 创建时间的唯一来源,archive 阶段清理 worktree 时需要这个字段计算 worktree 存活时长。
   常见违规模式:agent 只写 worktree + worktree_branch 两字段,漏 worktree_created_at。
 - 进入后校验 HEAD == `worktree-<name>`（task #18）；不一致 ⛔ PRECONDITION_FAIL，**禁 agent 自动 git checkout 切换。**
+
+> ⛔ [HARD_STOP] **OpenCode worktree cwd 隔离**(无 EnterWorktree 工具,session cwd 不自动解绑):
+> - Claude Code 用 `EnterWorktree` 创建 worktree 后,session cwd 自动解绑到 worktree,后续所有 Bash/Write 默认在 worktree 内执行
+> - **OpenCode 走 `alloy _worktree-create`,session cwd 不解绑**,仍在主仓。OpenCode bash 工具有 `workdir` 参数,agent 每次调用传 `workdir=<worktree>` 进入;write/edit 工具必须用 worktree 绝对路径前缀,否则文件落主仓污染 feature 分支
+> - worktree 路径从 state 读取:`WORKTREE_PATH=$(alloy _state read openspec/changes/<name> worktree)`
+>
+> **必跑命令**(worktree 创建后,Step 2 及之后所有操作前):
+> ```bash
+> WORKTREE_PATH=$(alloy _state read openspec/changes/<name> worktree)
+> # OpenCode:bash 命令传 workdir 参数;Claude Code 已由 EnterWorktree 解绑可跳过
+> ```
+>
+> **⛔ write/edit 工具路径规则(关键,与 bash 独立)**:
+> - OpenCode 的 write/edit 工具与 bash 是**独立进程,不共享 cwd**。bash 里传 `workdir` **不影响** write/edit 工具的路径解析
+> - write/edit 工具用相对路径时,按 session cwd(主仓)解析,文件落主仓
+> - **write/edit 工具必须用 worktree 绝对路径前缀**:`<WORKTREE_PATH>/openspec/changes/<name>/verify.md` / `<WORKTREE_PATH>/scripts/hello.sh`
+> - 禁用相对路径 `openspec/changes/<name>/verify.md`(落主仓)/ 主仓绝对路径 `/主仓/openspec/...`(绕过 worktree)
+>
+> 违反字面 = 违反精神:哪怕"相对路径也能写文件"、"传 workdir 一次就够了"(每个新 Bash 调用需重新传)、"write 工具传 workdir 会传染"(不会,独立进程)、"用绝对路径替代 workdir",也算违反--OpenCode 的 Bash 工具每次调用需显式传 workdir,write/edit 工具独立进程也不共享 bash cwd,不传 workdir 或不用 worktree 绝对路径就落主仓。
+> 常见违规模式:
+> - agent 创建 worktree 后,bash 命令不传 `workdir`(OpenCode),但 write 工具用相对路径 `write openspec/changes/<name>/verify.md` -> verify.md 落主仓,_artifact commit 在 worktree 内找不到 verify.md 失败
+> - agent 在一个 Bash 里传 `workdir` 后以为 write 工具也在 worktree,实际 write 工具独立进程不共享 cwd,文件落主仓
+> - agent 用主仓绝对路径 `/主仓/scripts/hello.sh` 创建文件,绕过 worktree 隔离
+> - agent 以为"bash 传 workdir 后 write 也在 worktree",实际 write 工具 cwd 还是主仓
 
 **Step 1/5 完成：**
 ```
@@ -302,7 +343,7 @@ git diff --cached --quiet || git commit -m "chore(<name>): 记录 worktree 决�
 
 **幂等检查：** 读取 `tasks.md` checkbox 状态。已勾选任务 TDD 测试仍通过，自然跳过；从第一个未勾选开始。
 
-> **worktree 内读制品用相对路径**：worktree 创建后(Claude Code 用 EnterWorktree,其他 agent(OpenCode/Pi)走 git worktree fallback)，session cwd 已是 worktree 根目录，读 `openspec/changes/<name>/` 下制品用相对路径即可。用 worktree 绝对路径前缀会路径重复，导致 `No such file or directory`。
+> **worktree 内读制品用相对路径**：worktree 创建后(Claude Code 用 EnterWorktree 解绑 session cwd / OpenCode agent 传 workdir 参数)，session cwd 已是 worktree 根目录，读 `openspec/changes/<name>/` 下制品用相对路径即可。用 worktree 绝对路径前缀会路径重复，导致 `No such file or directory`。
 >
 > 正例：`cat openspec/changes/<name>/tasks.md`
 > 反例:`cat .claude/worktrees/<name>/openspec/changes/<name>/tasks.md`(Claude Code 路径重复) / `cat .worktrees/<name>/openspec/...`(其他 agent 同理)
@@ -311,7 +352,7 @@ git diff --cached --quiet || git commit -m "chore(<name>): 记录 worktree 决�
 
 1. 读取 `plans.md` frontmatter 的 `strategy` + `reason`
 2. 读取 `tasks.md`，分析任务特征（数量、独立性、耦合度）
-3. 展示推荐方案，用户可覆写：
+3. 展示推荐方案，用户可覆写:
    - **subagent-driven-development** — 任务多（≥3）、相互独立、涉及不同文件/模块
    - **executing-plans** — 任务少（1-2）、紧密耦合、共享状态
 
@@ -320,19 +361,20 @@ git diff --cached --quiet || git commit -m "chore(<name>): 记录 worktree 决�
 
 4. 🔴 USER_GATE（必须平台原生交互工具）: 选择执行策略（`subagent-driven-development` / `executing-plans`）。必须等用户选择后才加载技能。
 
+   ⛔ [HARD_STOP] 必须执行以下命令设置 pending_gate(不是说明,是必跑命令):
+
+   ```bash
+   alloy _guard user-gate require openspec/changes/<name> apply:sdd-ep-choice
+   ```
+
+   > **Pi 下此 gate 自动通过**:guard 检测 `PI_CODING_AGENT=true` 直接返回 `✓ 自动通过(Pi 不支持 SDD)` + 输出 `-> 走 EP 路径`。agent 按输出走下方"EP 路径"段,Claude Code/OpenCode 正常调问答工具问用户。
+
    > ⛔ [HARD_STOP] options label 必须用技能全称 `subagent-driven-development` / `executing-plans`，禁缩写（SDD/EP）——SDD 缩写会被误解为 "Single Developer Direct"（单开发者直接执行），与实际 "Subagent-Driven Development"（子 agent 驱动）语义相反。
    > 违反字面 = 违反精神：哪怕"缩写更简洁用户易选"，也算违反——缩写歧义导致 agent 误述描述（把 SDD 说成"任务少、简单直接"），误导用户选错策略。
    > options description 必须对齐 L269 设计语义：`subagent-driven-development` = 任务多（≥3）、相互独立、涉及不同文件/模块；`executing-plans` = 任务少（1-2）、紧密耦合、共享状态。禁反转描述（把 SDD 说成"任务少/简单"、EP 说成"任务多/复杂"均算违反）。
    > 常见违规模式：label 用"SDD 直接执行"/"Subagent 并行"等自造缩写，description 把 SDD 描述成"单开发者直接执行，适合任务少"——这反转了 SDD 实际语义（子 agent 驱动，适合任务多）。
 
    > **决策不回写 plans.md**——plans 仅保留 plan 阶段的推荐快照，apply 可覆写。
-   > 实际执行方式由随后的 `_skill log` 留痕（加载 `superpowers:subagent-driven-development`
-   > 或 `superpowers:executing-plans` 即记录决策）。retrospective §4 审计读 skill_usage
-   > 得知实际策略。
-   >
-   > **异常态兜底**：若 frontmatter 无 strategy（plan 阶段未正常完成），USER_GATE 仍让
-   > 用户选 `subagent-driven-development` / `executing-plans`，决策落 skill_usage（不回写 plans）。提示用户 plans 异常，retro §3
-   > 计划偏离记录此情况。
 
 **SDD 路径：**
 
@@ -344,7 +386,9 @@ alloy _skill log openspec/changes/<name> apply spec-compliance-review --via suba
 alloy _skill log openspec/changes/<name> apply code-quality-review --via subagent-driven-development
 ```
 
-加载 `superpowers:subagent-driven-development`，由其驱动分派子 agent → 每个独立 TDD + code review（transitive 激活）。
+加载 `subagent-driven-development` skill(多 agent 适配见 `alloy-shared/references/skill-loading.md`),由其驱动分派子 agent -> 每个独立 TDD + code review(transitive 激活):
+- Claude Code / OpenCode: 调 `skill({ name: "subagent-driven-development" })`
+- Pi: `read .pi/skills/subagent-driven-development/SKILL.md`
 
 **构造子 agent prompt 前,必须先读取 worktree 路径:**
 
@@ -376,16 +420,22 @@ WORKTREE_PATH=$(alloy _state read openspec/changes/<name> worktree 2>/dev/null)
 > ⛔ [HARD_STOP] `_skill log` 必须在对应技能**实际加载后立即**执行，禁预录。预录 = skill_usage 不反映真实使用轨迹 = retrospective §4 审计失真。
 > 违反字面 = 违反精神：哪怕"先打完 log 再干活效率高"，也算违反——skill_usage 必须反映真实加载顺序。
 
-1. 加载 `test-driven-development`（设定 TDD 预期，RED→GREEN→REFACTOR 成为硬约束），加载后立即 log：
+加载 `test-driven-development` skill(多 agent 适配见 `alloy-shared/references/skill-loading.md`)(设定 TDD 预期,RED->GREEN->REFACTOR 成为硬约束),加载后立即 log:
+- Claude Code / OpenCode: 调 `skill({ name: "test-driven-development" })`
+- Pi: `read .pi/skills/test-driven-development/SKILL.md`
    ```bash
    alloy _skill log openspec/changes/<name> apply superpowers:test-driven-development
    ```
-2. 加载 `executing-plans`（逐步执行 plans.md，每步遵循 TDD），加载后立即 log：
+2. 加载 `executing-plans` skill(多 agent 适配见 `alloy-shared/references/skill-loading.md`,逐步执行 plans.md,每步遵循 TDD),加载后立即 log:
+   - Claude Code / OpenCode: 调 `skill({ name: "executing-plans" })`
+   - Pi: `read .pi/skills/executing-plans/SKILL.md`
    ```bash
    alloy _skill log openspec/changes/<name> apply superpowers:executing-plans
    ```
 3. Spec 合规审查（Agent 自检：每个 checkbox ↔ 代码实现，无 over-building，排除范围未碰，不通过→修复→重审）
-4. 加载 `requesting-code-review`（代码审查闸门——所有代码变更必须经审查才进 Step 3），加载后立即 log：
+加载 `requesting-code-review` skill(多 agent 适配见 `alloy-shared/references/skill-loading.md`)(代码审查闸门--所有代码变更必须经审查才进 Step 3),加载后立即 log:
+- Claude Code / OpenCode: 调 `skill({ name: "requesting-code-review" })`
+- Pi: `read .pi/skills/requesting-code-review/SKILL.md`
    ```bash
    alloy _skill log openspec/changes/<name> apply superpowers:requesting-code-review
    ```
@@ -400,6 +450,22 @@ WORKTREE_PATH=$(alloy _state read openspec/changes/<name> worktree 2>/dev/null)
 2. **git add 限路径**（⛔ HARD_STOP §5.2.1）—— 精确路径，禁 `-A`/`-a`/`.`。违反字面 = 违反精神：哪怕"反正只有这一个文件"也禁 `-A`，副作用文件会被一并 commit。判断不准 🔴 USER_GATE。
 3. **stash 残留检查**（⚠️ WARN，task #19）—— commit 前 `git stash list`，非空播报让用户决策，禁 agent 自动 `git stash drop`（§3.5.1）。
 4. **commit 失败禁自救**（⛔ HARD_STOP §3.5.1）—— `git commit` 失败时禁自动 `git reset --hard` / `git checkout .` / `git restore .` / `git stash` / `git clean -fd` 清场。违反字面 = 违反精神：哪怕"清一下重试效率高",也算违反——破坏性命令会丢失用户已 stage 的工作,必须报告问题让用户决策。
+
+#### Step 2/5 完成前：tasks.md hash 重锁（⛔ HARD_STOP）
+
+子 agent 全部完成后，主 agent 必须立即调 `alloy _artifact commit tasks` 重锁 hash。子 agent 的 `git commit` 只提交了 tasks.md 文件变更，**没有重算 records 里的 hash** -- 不重锁会导致 Step 3/4 出口 `_record check` 发现 hash 不匹配触发 HARD_STOP。
+
+```bash
+alloy _artifact commit openspec/changes/<name> tasks
+```
+
+> ⛔ [HARD_STOP] 子 agent 完成后必须立即重锁 tasks hash -- 禁只 `git commit` 不重锁。
+> 违反字面 = 违反精神：哪怕"子 agent 已 commit 文件变更"、"Step 4 会重锁兜底",也算违反--records 里 hash 还是旧的,Step 3/4 任何 `_record check` 都会触发 HARD_STOP,浪费 LLM 往返恢复。
+> 常见违规模式:
+> - agent 在子 agent commit 后只跑 `git commit` 不调 `alloy _artifact commit tasks`,Step 4 出口 `_record check` 触发 HARD_STOP
+> - agent 以为"Step 4 会兜底重锁"跳过 Step 2 完成时的重锁,导致 Step 3 中途任何 hash 校验失败
+
+> Step 4 开头的重锁段是兜底 -- 若 Step 2 完成时已重锁,Step 4 此处 `_artifact commit` 检测到 hash 未变会跳过(幂等)。
 
 #### Step 2/5 完成前：skill_usage 校验（⛔ HARD_STOP）
 
@@ -457,7 +523,10 @@ worktree 模式下，所有子 agent 变更应落在 worktree 分支。主仓工
 WORKTREE=$(alloy _state read openspec/changes/<name> worktree)
 if [ "$WORKTREE" != "skipped" ] && [ -n "$WORKTREE" ] && [ "$WORKTREE" != "null" ]; then
   MAIN_ROOT=$(git rev-parse --git-common-dir | xargs dirname)
-  (cd "$MAIN_ROOT" && git status --porcelain) | if [ -n "$(cat)" ]; then
+  # 禁用管道结构--管道右边 exit 1 只退 subshell,不退整个脚本,导致校验失效后仍输出"通过"
+  # 用变量捕获 git status 输出,非管道结构保证 exit 1 传播
+  MAIN_DIRTY=$(cd "$MAIN_ROOT" && git status --porcelain)
+  if [ -n "$MAIN_DIRTY" ]; then
     echo "⛔ [PRECONDITION_FAIL] 主仓工作目录有未提交变更（worktree 模式下应全部落在 worktree 分支）"
     (cd "$MAIN_ROOT" && git status --short)
     echo ""
@@ -477,7 +546,9 @@ fi
 
 **REQUIRED SUB-SKILL:** Use superpowers:verification-before-completion
 
-加载 `superpowers:verification-before-completion` 技能——代码行为验证。
+加载 `verification-before-completion` skill(多 agent 适配见 `alloy-shared/references/skill-loading.md`)--代码行为验证:
+- Claude Code / OpenCode: 调 `skill({ name: "verification-before-completion" })`
+- Pi: `read .pi/skills/verification-before-completion/SKILL.md`
 
 ```bash
 alloy _skill log openspec/changes/<name> apply superpowers:verification-before-completion
@@ -506,7 +577,10 @@ alloy _record check openspec/changes/<name> plans
 
 check 失败 → ⛔ `[PRECONDITION_FAIL] plans 上游 hash 失效——plans.md 可能被未审批修改`。修复路径：用户审查 plans.md 变更后，决定是否回到 plan 阶段重新锁定，或回滚 plans.md 到锁定版本。**禁止 agent 自动 `alloy _record write` 重新锁定——绕过审查 = 绕过 hash chain（§5.2.3）。**
 
-1. 调 `skill({ name: "openspec-verify-change" })` 加载 opsx skill(详见 `alloy-shared/references/opsx-commands.md` 命名映射表)执行 7 项检查(结构校验 -> 任务完成 -> Delta Spec 同步 -> Design/Specs 一致性 -> 实现信号 -> 路由泄漏检测 -> 延期任务对照)。禁跑 `openspec verify`(不是 opsx:verify 的 CLI 等价物,必须调 `skill({ name: "openspec-verify-change" })`)。
+1. 加载 `openspec-verify-change` skill(多 agent 适配见 `alloy-shared/references/skill-loading.md`)执行 7 项检查(结构校验 -> 任务完成 -> Delta Spec 同步 -> Design/Specs 一致性 -> 实现信号 -> 路由泄漏检测 -> 延期任务对照):
+   - Claude Code / OpenCode: 调 `skill({ name: "openspec-verify-change" })`
+   - Pi: `read .pi/skills/openspec-verify-change/SKILL.md`
+   禁跑 `openspec verify`(不是 opsx:verify 的 CLI 等价物,必须加载 `openspec-verify-change` skill)。
    ```bash
    alloy _skill log openspec/changes/<name> apply opsx:verify
    ```
@@ -538,6 +612,14 @@ alloy _artifact commit openspec/changes/<name> tasks
 
 > 制品 [1/2] verify ✓ 完成
 > [展示 verify.md 完整内容]
+> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question/alloy-question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级。
+
+⛔ [HARD_STOP] 必须执行以下命令设置 pending_gate(不是说明,是必跑命令):
+
+```bash
+alloy _guard user-gate require openspec/changes/<name> apply:lock-verify
+```
+
 > 🔴 USER_GATE（必须平台原生交互工具）: 确认锁定 verify
 > 1. 确认并继续——hash-lock + commit
 > 2. 需要调整——重新生成 verify.md（禁直接编辑），重展示审查窗口
@@ -613,6 +695,14 @@ echo "本 change 累计 commit 数: $COMMIT_COUNT"
 
 > 制品 [2/2] retrospective ✓ 完成
 > [展示 retrospective.md 完整内容]
+> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question/alloy-question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级。
+
+⛔ [HARD_STOP] 必须执行以下命令设置 pending_gate(不是说明,是必跑命令):
+
+```bash
+alloy _guard user-gate require openspec/changes/<name> apply:lock-retrospective
+```
+
 > 🔴 USER_GATE（必须平台原生交互工具）: 确认锁定 retrospective
 > 1. 确认并继续提交
 > 2. 需要调整——重新生成（禁直接编辑），重展示审查窗口
@@ -670,6 +760,14 @@ git reset HEAD~1                                              # 退回 phase com
 
 > 禁止 agent 自动 `git reset --hard` / `git checkout .` 清场（§3.5.1）。违反字面 = 违反精神：哪怕"清理一下让流程重启"也算违反——退出 skill 让用户决策是唯一合法路径。详见 `alloy-shared/references/phase-downgrade-path.md`。
 
+> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question/alloy-question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级。
+
+⛔ [HARD_STOP] 必须执行以下命令设置 pending_gate(不是说明,是必跑命令):
+
+```bash
+alloy _guard user-gate require openspec/changes/<name> apply:phase-complete
+```
+
 🔴 USER_GATE（必须平台原生交互工具调用）: apply 阶段完成,下一步?
 
 > ⛔ [HARD_STOP] 必须用平台原生交互工具调用——禁纯文本列选项 / 禁直接 `Skill` 加载下一阶段 / 禁纯文本"运行 /alloy-archive"提示 / 禁提示用户手动输入命令。
@@ -684,6 +782,11 @@ git reset HEAD~1                                              # 退回 phase com
 > - 2. 暂停——执行 QA 测试 / 浏览器测试 / 查看状态(`alloy status`)
 > - 3. 其他——用户自定义下一步
 
-> 用户选 1 后,agent **必须直接用 `Skill` 工具加载 `alloy-archive`**(传入 change name),进入 archive 阶段——用户已在 USER_GATE 授权,再让用户输入命令 = 多此一举。
+> 用户选 1 后,agent **必须直接加载 `alloy-archive` skill(多 agent 适配,见 `alloy-shared/references/skill-loading.md`):
+- Claude Code / OpenCode: 调 `skill({ name: "alloy-archive", args: "<change-name>" })`
+- Pi: `read .pi/skills/alloy-archive/SKILL.md`(read 后按 SKILL.md 指引执行,change name 通过上下文传入)**
+
+> ⛔ [HARD_STOP] 禁止输出"请运行 /alloy-xxx"让用户手动输入命令--用户已在 USER_GATE 授权,阶段转换已触发,再让用户输入命令 = 违反 Iron Law。
+> 违反字面 = 违反精神:哪怕"提示一下更友好"、"用户可能想暂停",也算违反--用户要暂停会在 USER_GATE 选"暂停",选"进入"就是授权直接加载。
 > 用户选 2 后,agent 停止,输出"已暂停。建议执行 QA 测试或浏览器测试,确认后运行 /alloy-archive <name> 继续。"
 > 用户选 3 后,agent 停止,等用户后续命令。

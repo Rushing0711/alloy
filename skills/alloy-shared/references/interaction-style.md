@@ -7,7 +7,7 @@ Alloy 各阶段需要用户输入时，**优先使用平台原生的交互式选
 所有 🔴 USER_GATE / 🔴 STOP 首次呈现即必须调用平台原生交互工具,禁"先文本展示 1./2. 再等待用户打字"。
 - Claude Code：必须用 `AskUserQuestion`
 - OpenCode：必须用 `question` 工具
-- Pi：必须用 extension `ctx.ui`(通过 alloy ask-question 扩展)
+- Pi：必须用 `alloy-question` 工具(alloy init 自动装 alloy-question extension,注册 alloy-question 工具供 LLM 调用)
 - Copilot CLI / Gemini CLI 等无原生交互工具的平台：降级为结构化文本选项
 违反字面 = 违反精神：哪怕"就一个问题用文本快"、"先文本展示再问"、"长流程偶尔一次用文本"、"平台有工具但我习惯输出 1.2."--也算违反 Iron Law。
 ```
@@ -22,11 +22,11 @@ Alloy 各阶段需要用户输入时，**优先使用平台原生的交互式选
 |------|-------------|------|
 | **Claude Code** | `AskUserQuestion` | radio（单选）、checkbox（多选）、preview（代码对比） |
 | **OpenCode** | `question` | options(label+description)、`multiple: true`(多选)、`custom: true`(自定义文本,默认开) |
-| **Pi** | extension `ctx.ui`(select/confirm/input/notify/custom) | 需装 alloy ask-question 扩展(通过 `ctx.ui` 实现) |
+| **Pi** | `alloy-question` 工具(alloy-question extension 注册) | alloy init 自动装 `.pi/extensions/alloy-question.ts` |
 | **Copilot CLI** | 无等价工具 | 降级为结构化文本选项 |
 | **Gemini CLI** | 查平台工具映射 | 查 GEMINI.md 中的工具映射 |
 
-**降级策略：** 当平台无原生交互工具时，使用清晰的文本选项格式——但必须结构化（每选项一行，带编号和简短说明），不要让用户猜要输入什么。Claude Code(`AskUserQuestion`) / OpenCode(`question`) / Pi(`ctx.ui`) 有等价工具,**必须用工具,不可降级文本**;Copilot CLI/Gemini CLI 无等价工具降级文本。
+**降级策略：** 当平台无原生交互工具时，使用清晰的文本选项格式——但必须结构化（每选项一行，带编号和简短说明），不要让用户猜要输入什么。Claude Code(`AskUserQuestion`) / OpenCode(`question`) / Pi(`alloy-question`) 有等价工具,**必须用工具,不可降级文本**;Copilot CLI/Gemini CLI 无等价工具降级文本。
 
 ## 选择类型与工具映射
 
@@ -75,16 +75,17 @@ question: {
 }
 ```
 
-**Pi（`ctx.ui` select，通过 alloy ask-question 扩展）：**
+**Pi（`alloy-question` 工具,由 alloy-question extension 注册）：**
 ```
-ctx.ui.select({
-  title: "确认并锁定 <制品名>？",
+alloy-question({
+  question: "确认并锁定 <制品名>？",
   options: [
-    { label: "1. 确认，锁定并继续", value: "1" },
-    { label: "2. 需要调整", value: "2" }
+    { label: "1. 确认，锁定并继续", description: "锁定制品 hash,推进到下一阶段" },
+    { label: "2. 需要调整", description: "回退到上一步骤修改" }
   ]
 })
 ```
+> LLM 调用 `alloy-question` 工具,extension 内部用 `ctx.ui.custom()` + SelectList 弹出 TUI,用户选择后返回选中 label。
 
 **Copilot CLI / Gemini CLI（无原生工具,降级文本）：**
 ```
@@ -110,7 +111,7 @@ ctx.ui.select({
 
 ## 沉默 ≠ 授权（USER_GATE 通用禁令，跨 skill 适用）
 
-**[HARD_STOP]** 所有 🔴 USER_GATE / 🔴 STOP **必须**单独调用平台原生交互工具(Claude Code `AskUserQuestion` / OpenCode `question` / Pi `ctx.ui` / 无工具平台降级文本) 等用户物理选择，下列行为全部禁止：
+**[HARD_STOP]** 所有 🔴 USER_GATE / 🔴 STOP **必须**单独调用平台原生交互工具(Claude Code `AskUserQuestion` / OpenCode `question` / Pi `alloy-question` / 无工具平台降级文本) 等用户物理选择，下列行为全部禁止：
 
 | 反模式 | 现实 |
 |--------|------|
@@ -124,17 +125,19 @@ ctx.ui.select({
 
 ### 精确字符串确认特例
 
-部分破坏性操作要求用户输入精确字符串（discard、热修 merge），见上方"不能使用 AskUserQuestion 的场景"章节。此时禁令仍适用：
+部分破坏性操作要求用户输入精确字符串（discard），见上方"不能使用 AskUserQuestion 的场景"章节。此时禁令仍适用：
 
-- **agent 不得回填精确字符串**：用户必须自己输入 `discard <name>` / `merge <branch> into <branch>`，禁 agent 在工具调用中预填、模拟、或基于"用户回复了'好'"自行判定
+- **agent 不得回填精确字符串**：用户必须自己输入 `discard <name>`，禁 agent 在工具调用中预填、模拟、或基于"用户回复了'好'"自行判定
 - **模糊回复不算确认**："好"、"可以"、"y"、"go ahead" 全部不算精确确认，必须等到字面匹配的字符串
-- **跨 skill 适用**：fix 场景 3 热修合并、discard 命令均按此规则
+- **跨 skill 适用**：discard 命令按此规则
+
+> **注意:** merge 确认（finish 阶段）**不适用**精确字符串特例--必须用问答工具(AskUserQuestion/question/alloy-question)让用户选"确认合并"选项。原因:实测发现 LLM agent 容易把"用户说'好'"当成精确字符串确认,违反 Iron Law;问答工具的选项选择是物理确认,无歧义。
 
 ## 不能使用 AskUserQuestion 的场景
 
 以下场景**保持精确文本确认**，因为它们是安全机制而非便利功能：
 
-- **破坏性操作确认**（discard、merge 确认）：用户必须输入精确字符串 `discard <name>` 或 `merge <branch> into <branch>`
+- **破坏性操作确认**（discard）：用户必须输入精确字符串 `discard <name>`
 - **已由外部技能处理的交互**：如 `finishing-a-development-branch` 技能的合并策略选择
 
 ## 提问密度

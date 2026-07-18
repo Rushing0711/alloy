@@ -106,12 +106,74 @@ export function collectPendingGates(projectRoot: string): string[] {
 }
 
 /**
+ * 收集所有 worktree 模式 change 的 worktree 路径(实际值,非 null/skipped)。
+ * 用于 write/edit 路径拦截:worktree 模式下,write/edit 必须用 worktree 绝对路径,
+ * 不能用相对路径或主仓绝对路径(会落主仓污染 feature 分支)。
+ */
+export function collectWorktreePaths(projectRoot: string): string[] {
+  const paths: string[] = [];
+  for (const changeDir of scanChangeDirs(projectRoot)) {
+    const stateFile = join(changeDir, ".alloy.yaml");
+    try {
+      const content = readFileSync(stateFile, "utf-8");
+      const match = content.match(/^worktree:\s*(.+)$/m);
+      if (match) {
+        const wt = match[1].trim().replace(/^["']|["']$/g, "");
+        if (wt && wt !== "null" && wt !== "skipped") {
+          paths.push(wt);
+        }
+      }
+    } catch {
+      // 文件不存在,跳过
+    }
+  }
+  return paths;
+}
+
+/**
  * 清除所有 change(活跃 + 归档)的 pending_gate(问答工具调用后自动触发)。
- * 用 readState/writeState 保证 yaml 格式正确。
+ *
+ * 实现细节(2026-07-17 修复):
+ * - 用 setPendingGate 精准替换 pending_gate 行,不触发 writeState 全量重写
+ *   原因:writeState 全量重序列化会破坏 worktree_created_at 等字段引号格式
+ * - 扫描主仓 change 目录 + worktree 内 change 目录(从 state.worktree 字段读路径)
+ *   原因:agent 在 worktree 内 user-gate require 写 worktree 内 .alloy.yaml,
+ *   hook-guard 在主仓执行(cwd=主仓),只扫主仓会漏 worktree 内的 pending_gate,
+ *   导致 worktree 内 pending_gate 永远不被 clear,agent 无法推进阶段
  */
 export async function clearAllPendingGates(projectRoot: string): Promise<void> {
-  const { readState, writeState } = await import("../../utils/state.js");
-  for (const changeDir of scanChangeDirs(projectRoot)) {
+  const { setPendingGate } = await import("../../utils/state.js");
+  const mainChangeDirs = scanChangeDirs(projectRoot);
+  // 收集所有需要扫描的目录(主仓 + worktree 路径)
+  const allDirs = new Set(mainChangeDirs);
+  for (const changeDir of mainChangeDirs) {
+    const stateFile = join(changeDir, ".alloy.yaml");
+    try {
+      const content = readFileSync(stateFile, "utf-8");
+      // 读 worktree 字段,如果存在且目录存在,扫描 worktree 内的 change 目录
+      const worktreeMatch = content.match(/^worktree:\s*(.+)$/m);
+      if (worktreeMatch) {
+        const worktreePath = worktreeMatch[1].trim().replace(/^["']|["']$/g, "");
+        if (worktreePath && worktreePath !== "null" && worktreePath !== "skipped") {
+          const absWorktreePath = isAbsolute(worktreePath)
+            ? worktreePath
+            : join(projectRoot, worktreePath);
+          if (existsSync(absWorktreePath)) {
+            // worktree 内的 change 目录路径与主仓相同(changeDir 相对 projectRoot)
+            const relChangeDir = relative(projectRoot, changeDir);
+            const worktreeChangeDir = join(absWorktreePath, relChangeDir);
+            if (existsSync(join(worktreeChangeDir, ".alloy.yaml"))) {
+              allDirs.add(worktreeChangeDir);
+            }
+          }
+        }
+      }
+    } catch {
+      // 文件不存在,跳过
+    }
+  }
+  // 扫描所有目录,精准替换 pending_gate 为 null
+  for (const changeDir of allDirs) {
     const stateFile = join(changeDir, ".alloy.yaml");
     try {
       const content = readFileSync(stateFile, "utf-8");
@@ -119,9 +181,7 @@ export async function clearAllPendingGates(projectRoot: string): Promise<void> {
       if (match) {
         const gate = match[1].trim().replace(/^["']|["']$/g, "");
         if (gate && gate !== "null") {
-          const state = await readState(changeDir);
-          state.pending_gate = null;
-          await writeState(changeDir, state);
+          await setPendingGate(changeDir, null);
         }
       }
     } catch {
@@ -139,8 +199,8 @@ function readStdin(): string {
   }
 }
 
-/** 问答工具名(Claude Code 的 AskUserQuestion / OpenCode 的 question) */
-const ASK_TOOLS = new Set(["AskUserQuestion", "question", "ask"]);
+/** 问答工具名(Claude Code 的 AskUserQuestion / OpenCode 的 question / Pi 的 alloy-question) */
+const ASK_TOOLS = new Set(["AskUserQuestion", "question", "ask", "alloy-question"]);
 
 /** 根据 agent 返回 USER_GATE 应用的交互工具提示 */
 function getAgentToolHint(agent: AgentId | null): string {
@@ -162,9 +222,11 @@ export function evaluateHook(
   env: Record<string, string>,
   projectRoot?: string,
   pendingGates?: string[],
-  isAlloyProject?: boolean
+  isAlloyProject?: boolean,
+  worktreePaths?: string[]
 ): { exitCode: number; message?: string; clearPendingGates?: boolean } {
   const gates = pendingGates ?? [];
+  const wtPaths = worktreePaths ?? [];
 
   // 逃生阀
   if (env.ALLOY_FORCE_WRITE === "1") {
@@ -206,6 +268,36 @@ export function evaluateHook(
     relPath = relative(root, filePath);
   } else {
     relPath = filePath;
+  }
+
+  // worktree 路径校验:worktree 模式下,write/edit 必须用 worktree 绝对路径
+  // 原因:OpenCode 的 write/edit 工具与 bash 独立进程,不共享 cwd。
+  // bash 里传 workdir 不影响 write/edit,相对路径按 session cwd(主仓)解析,文件落主仓。
+  // Pi 不支持 worktree,不会进 worktree 模式,不触发本校验。
+  // 解决:有 worktree 模式 change 时,write/edit 源码/制品路径必须是 worktree 绝对路径。
+  if (wtPaths.length > 0 && isAlloyProject !== false) {
+    const absFilePath = isAbsolute(filePath) ? filePath : join(projectRoot ?? process.cwd(), filePath);
+    const isInWorktree = wtPaths.some(wt => absFilePath.startsWith(wt + "/") || absFilePath === wt);
+    if (!isInWorktree) {
+      // 路径不在任何 worktree 内,检查是否是源码/制品路径(需要隔离的)
+      const sourcePattern = /^(scripts\/|src\/|openspec\/changes\/[^/]+\/(?!.*\.alloy\.yaml))/;
+      if (sourcePattern.test(relPath)) {
+        const message = [
+          `⛔ [alloy hook] worktree 模式下,write/edit 必须用 worktree 绝对路径`,
+          `  当前路径: ${filePath}`,
+          `  worktree 路径: ${wtPaths.join(", ")}`,
+          "",
+          "  原因:OpenCode 的 write/edit 工具与 bash 独立进程,不共享 cwd。",
+          "  bash 里传 workdir 不影响 write/edit,相对路径按 session cwd(主仓)解析,文件落主仓。",
+          "",
+          "  修复:用 worktree 绝对路径前缀:",
+          ...wtPaths.map(wt => `    ${wt}/${relPath}`),
+          "",
+          "  逃生阀:ALLOY_FORCE_WRITE=1 绕过(仅限修复畸形状态)。",
+        ].join("\n");
+        return { exitCode: 2, message };
+      }
+    }
   }
 
   // 调 guardCheck(传 pendingGates + isAlloyProject;undefined 时 guardCheck 内部默认 true)
@@ -257,7 +349,8 @@ export async function hookGuardCommand(args: string[]): Promise<void> {
   const phases = collectPhases(projectRoot);
   const pendingGates = collectPendingGates(projectRoot);
   const isAlloy = isAlloyProject(projectRoot);
-  const result = evaluateHook(raw, phases, process.env as Record<string, string>, projectRoot, pendingGates, isAlloy);
+  const worktreePaths = collectWorktreePaths(projectRoot);
+  const result = evaluateHook(raw, phases, process.env as Record<string, string>, projectRoot, pendingGates, isAlloy, worktreePaths);
 
   if (result.clearPendingGates) {
     await clearAllPendingGates(projectRoot);

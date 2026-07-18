@@ -29,7 +29,7 @@ NO FIX WITHOUT DIAGNOSIS - EVERY CALL
 违反字面 = 违反精神：哪怕"用户重复调用同一命令"/"用户说直接改"/"上一次已诊断过"，也禁跳过诊断直接 Edit 代码
 ```
 
-**交互规则：** `🔴 STOP` = 硬交互确认点，首次呈现即必须调用平台原生交互工具--禁"先文本展示 1./2. 再等待用户打字"。Claude Code 用 `AskUserQuestion`,OpenCode 用 `question` 工具(字段名 `multiple` 非 `multiSelect`,可选 `custom`),Pi 用 extension `ctx.ui`(通过 alloy ask-question 扩展);Copilot CLI / Gemini CLI 无原生交互工具,降级为结构化文本选项。三平台调用示例见 `alloy-shared/references/interaction-style.md` §审查窗口标准模式。含"沉默 ≠ 授权"通用禁令--禁批量打包、禁基于内容跳过、禁 agent 回填精确字符串。跳过任何 🔴 STOP = 违反 Iron Law。
+**交互规则：** `🔴 STOP` = 硬交互确认点，首次呈现即必须调用平台原生交互工具--禁"先文本展示 1./2. 再等待用户打字"。Claude Code 用 `AskUserQuestion`,OpenCode 用 `question` 工具(字段名 `multiple` 非 `multiSelect`,可选 `custom`),Pi 用 `alloy-question` 工具(alloy-question extension 注册);Copilot CLI / Gemini CLI 无原生交互工具,降级为结构化文本选项。三平台调用示例见 `alloy-shared/references/interaction-style.md` §审查窗口标准模式。含"沉默 ≠ 授权"通用禁令--禁批量打包、禁基于内容跳过、禁 agent 回填精确字符串。跳过任何 🔴 STOP = 违反 Iron Law。
 
 **调用外部命令或技能前，先输出标题和状态描述，再执行操作。**
 
@@ -99,7 +99,9 @@ alloy _config read . main_branch 2>/dev/null
 
 **REQUIRED SUB-SKILL:** Use superpowers:systematic-debugging
 
-加载 `superpowers:systematic-debugging` 技能。禁止跳过--普通对话无法替代系统化调试（复现 -> 假设 -> 验证 -> 定位）。
+加载 `systematic-debugging` skill(多 agent 适配见 `alloy-shared/references/skill-loading.md`)。禁止跳过--普通对话无法替代系统化调试(复现 -> 假设 -> 验证 -> 定位):
+- Claude Code / OpenCode: 调 `skill({ name: "systematic-debugging" })`
+- Pi: `read .pi/skills/systematic-debugging/SKILL.md`
 
 ```bash
 [ -n "<name>" ] && alloy _skill log openspec/changes/<name> fix superpowers:systematic-debugging
@@ -169,8 +171,8 @@ Alloy · Bug 修复 - HANDOFF -> /alloy-start
 归属 change: <name>（phase: applying）Worktree: <path>
 ```
 
-1. 加载 `test-driven-development` -> 写失败测试 -> 修代码
-2. 加载 `verification-before-completion` -> 验证修复
+1. 加载 `test-driven-development` skill(见 `alloy-shared/references/skill-loading.md`) -> 写失败测试 -> 修代码
+2. 加载 `verification-before-completion` skill(见 `alloy-shared/references/skill-loading.md`) -> 验证修复
 3. **⛔ HARD_STOP pre-commit 校验**（读取 `references/precommit-check.md`）：commit 前必须确认 skill_usage[] 包含 `fix/test-driven-development` + `fix/verification-before-completion` 两条 `action=log` 记录。缺失 -> 返回步骤 1-2 重做，**禁 agent 自动补 `_skill log` 后继续**。
 4. 🔴 STOP: 确认修复内容（展示 `git diff --stat` 和关键变更摘要。确认提交 / 需要调整）
 5. 精确提交：`git add <路径> && git commit -m "fix: <描述>"`
@@ -189,8 +191,8 @@ alloy _skill log openspec/changes/<name> fix superpowers:verification-before-com
 归属 change: <name>（phase: <phase>）Feature 分支: <branch>
 ```
 
-1. 加载 `test-driven-development`
-2. 加载 `verification-before-completion`
+1. 加载 `test-driven-development` skill(见 `alloy-shared/references/skill-loading.md`)
+2. 加载 `verification-before-completion` skill(见 `alloy-shared/references/skill-loading.md`)
 3. **⛔ HARD_STOP pre-commit 校验**（读取 `references/precommit-check.md`）：与场景 1 相同--skill_usage[] 校验通过才能进入步骤 4。
 4. 🔴 STOP: 确认修复内容（展示 `git diff --stat` 和关键变更摘要。确认提交 / 需要调整）
 5. 精确提交到 feature 分支
@@ -215,8 +217,8 @@ alloy _skill log openspec/changes/<name> fix superpowers:verification-before-com
 
 创建热修分支：`git checkout -b fix/<desc> <MAIN_BRANCH>`
 
-1. 加载 `test-driven-development`
-2. 加载 `verification-before-completion`
+1. 加载 `test-driven-development` skill(见 `alloy-shared/references/skill-loading.md`)
+2. 加载 `verification-before-completion` skill(见 `alloy-shared/references/skill-loading.md`)
 3. 精确提交（可追溯原 change 时注明 `fix-from: <change名>`）
 
    > **git add 限路径（§5.2.1 HARD_STOP）：** 禁 `git add -A`/`-a`/`.`，必须明确路径。

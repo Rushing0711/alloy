@@ -66,6 +66,12 @@ openspec/schemas/ # 制品 schema 定义
    - **修改时同步检查**：修改某 agent 相关内容时，同步检查其他 3 个 agent 是否也需更新。典型反例：只给 Claude Code 写了 `AskUserQuestion` 调用示例，OpenCode agent 看到"AskUserQuestion"字眼却无 `question` 工具示例，误降级为文本输出。
    - **中性表述优先**：用"平台原生交互工具"代替"AskUserQuestion"（除非上下文明确指 Claude Code）；用"3 个 agent"代替"其他平台"（避免暗示 Claude Code 是默认）。
 
+9. **修改评估必须做多 agent 影响分析**--alloy 是多 agent 适配的 Skill 编排工具,任何修改(缺陷修复 / 功能新增 / SKILL.md 调整 / CLI 改动)在**确定方案前**,必须评估对 3 个 agent(Claude Code / OpenCode / Pi)的影响。具体要求:
+   - **逐 agent 分析**:每个改动点逐一列出对 3 个 agent 的影响(正收益 / 负收益 / 无影响),不能只分析受影响的 agent。
+   - **负收益优先排查**:重点排查"为某 agent 修复问题,是否给其他 agent 带来负收益"(多读分支 / 多调命令 / 流程变复杂)。典型反例:为 Pi 加检测段,Claude Code/OpenCode 多读 Pi 分支 + 多调检测命令。
+   - **Pi 迁就警惕**:Pi 平台能力最弱(无 worktree / 无 subagent / bash 无 cwd 参数),容易写成"迁就 Pi"的修复。优先保证 Claude Code/OpenCode 效果,Pi 靠 CLI 层硬约束 + 降级路径适配,不在 SKILL.md 写 Pi 检测段(避免其他 agent 多读)。
+   - **报告结论**:修改前向用户报告多 agent 影响分析,确认后再改。
+
 ## PR 规范
 
 当用户选择创建 PR 时：

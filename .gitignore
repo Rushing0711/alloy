@@ -40,6 +40,27 @@ docs/superpowers/
 .worktrees/
 worktrees/
 
+### Alloy 运行时产物 ###
+# Superpowers 技能(alloy init 从 obra/superpowers 安装到 .agents/skills/,此处是符号链接)
+skills/brainstorming
+skills/dispatching-parallel-agents
+skills/executing-plans
+skills/finishing-a-development-branch
+skills/receiving-code-review
+skills/requesting-code-review
+skills/subagent-driven-development
+skills/systematic-debugging
+skills/test-driven-development
+skills/using-git-worktrees
+skills/using-superpowers
+skills/verification-before-completion
+skills/writing-plans
+skills/writing-skills
+# 多 agent 共享目录(alloy init 生成)
+.agents/
+# 技能版本锁定(alloy init 生成)
+skills-lock.json
+
 ### Playwright ###
 .playwright-mcp/
 

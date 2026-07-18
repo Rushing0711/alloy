@@ -8,7 +8,7 @@ export interface AgentInfo {
   /** 全局级 base 目录(相对 HOME)。不设则用 commandsDir 的第一段。如 opencode 全局是 .config/opencode,非 .opencode */
   globalBase?: string;
   globalOnly?: boolean;
-  interactiveTool?: "askuserquestion" | "question" | "partial" | "none";
+  interactiveTool?: "askuserquestion" | "question" | "alloy-question" | "partial" | "none";
   settingsFile?: string;
   settingsContent?: Record<string, unknown>;
 }

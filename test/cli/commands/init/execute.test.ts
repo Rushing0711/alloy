@@ -27,6 +27,8 @@ vi.mock("../../../../src/core/agent-config.js", () => ({
   getHookSupportedAgents: vi.fn(() => ["claude-code"]),
   getStopHookSupportedAgents: vi.fn(() => ["claude-code"]),
   getPermissionSupportedAgents: vi.fn(() => ["claude-code"]),
+  writeQuestionConfig: vi.fn(),
+  getQuestionSupportedAgents: vi.fn(() => []),
 }));
 vi.mock("../../../../src/core/health.js", () => ({ runHealthCheck: vi.fn() }));
 vi.mock("../../../../src/utils/fs.js", () => ({ getPackageRoot: vi.fn() }));

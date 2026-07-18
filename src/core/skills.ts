@@ -164,3 +164,65 @@ export async function deployOpenCodeCommands(opts: DeployOptions): Promise<strin
 
   return deployed;
 }
+
+/** Pi command wrapper 覆盖的流程 id(与 OpenCode 一致) */
+const PI_COMMAND_IDS = OPENCODE_COMMAND_IDS;
+
+/** 生成 Pi command wrapper 内容:薄包装,指示 agent read SKILL.md 加载 skill。
+ * Pi 无 skill({ name }) 工具(内置仅 read/bash/edit/write/grep/find/ls),
+ * wrapper 指示 agent 用 read 工具读 SKILL.md 文件。 */
+function buildPiCommandWrapper(skillName: string, description: string): string {
+  return `---
+description: ${description}
+---
+
+加载并执行 \`${skillName}\` skill。
+
+读取 skill 文件并严格按其流程指引执行(项目级优先,全局级 fallback):
+- \`.pi/skills/${skillName}/SKILL.md\`
+- \`~/.pi/agent/skills/${skillName}/SKILL.md\`(项目级不存在时)
+
+用户输入: $@
+`;
+}
+
+/**
+ * 为 Pi 部署 command wrapper,让 /alloy-start 等 slash command 能触发 skill。
+ *
+ * 背景:Pi 的 / slash command 只从 .pi/prompts/ 加载 prompt template,skills 虽在
+ * .pi/skills/ 但 /alloy-start 不会自动触发 skill 加载(Pi 无 skill 工具)。
+ * 补装 wrapper 到 .pi/prompts/alloy-*.md,wrapper 指示 agent read 对应 SKILL.md,
+ * 从而 /alloy-start 能间接触发 skill。
+ *
+ * 范围:只对 Pi(agent.id === "pi")。
+ * 路径:project -> <projectPath>/.pi/prompts/;global -> ~/.pi/agent/prompts/
+ */
+export async function deployPiCommands(opts: DeployOptions): Promise<string[]> {
+  const deployed: string[] = [];
+  const piAgents = opts.targetAgents.filter((a) => a.id === "pi");
+  if (piAgents.length === 0) return deployed;
+
+  const packageRoot = getPackageRoot();
+  const skillsSourceDir = join(packageRoot, "skills");
+  const pi = piAgents[0];
+  const commandsDir = getCommandsTargetDir(pi, opts.scope, opts.projectPath);
+  await mkdir(commandsDir, { recursive: true });
+
+  for (const id of PI_COMMAND_IDS) {
+    const skillName = `alloy-${id}`;
+    let description = `Alloy ${id} 流程`;
+    try {
+      const skillMd = await readFile(join(skillsSourceDir, skillName, "SKILL.md"), "utf-8");
+      const m = skillMd.match(/^description:\s*(.+)$/m);
+      if (m) description = m[1].trim();
+    } catch {
+      // skill 源文件缺失,用默认 description
+    }
+
+    const wrapperPath = join(commandsDir, `${skillName}.md`);
+    await writeFile(wrapperPath, buildPiCommandWrapper(skillName, description), "utf-8");
+    deployed.push(wrapperPath);
+  }
+
+  return deployed;
+}

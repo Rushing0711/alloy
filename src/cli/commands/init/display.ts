@@ -105,6 +105,16 @@ export async function displayAndConfirm(actionPlan: ActionPlan, force: boolean):
   }
   info("");
 
+  // 1.5 Pi worktree + SDD 不支持警告(Pi bash 无 cwd 参数 + 无原生 subagent)
+  // 详见 docs/reference/agent-instruction-files.md 第 11 章 Worktree + 第 12 章 Subagent
+  if (actionPlan.targetAgents.some(a => a.id === "pi")) {
+    warn("⚠️ Pi 不支持 git worktree:apply 阶段将在 feature 分支执行,无 worktree 隔离");
+    warn("   原因:Pi bash 工具无 per-call cwd 参数,session cwd 不解绑到 worktree");
+    warn("⚠️ Pi 不支持 SDD:apply 阶段只能用 executing-plans(EP),不能用 subagent-driven-development");
+    warn("   原因:Pi 无原生 subagent(需装 pi-subagents 可选包,alloy 不依赖)");
+    info("");
+  }
+
   // 2. 项目资源列表
   for (const line of formatProjectResources(actionPlan)) {
     info(line);

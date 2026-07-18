@@ -3,6 +3,7 @@ import { existsSync, rmSync, realpathSync } from "node:fs";
 import { join, basename, relative } from "node:path";
 import { execSync } from "node:child_process";
 import { readState, writeState } from "../../utils/state.js";
+import { assertInWorktree } from "../../utils/worktree-guard.js";
 import { ARTIFACT_FILES, computeArtifactHash } from "../../../core/artifacts.js";
 import type { ArtifactRecord } from "../../../core/types.js";
 
@@ -99,6 +100,12 @@ async function artifactCommit(args: string[]): Promise<void> {
     console.log(`✓ ${artifactId}: hash=${hash} (已锁定且未变更，跳过重复 commit)`);
     return;
   }
+
+  // worktree cwd 守卫:apply 阶段 worktree 模式下,必须在 worktree 内执行
+  // OpenCode 无 EnterWorktree,session cwd 不解绑(agent 传 workdir),主仓执行会导致 records 写进 feature 分支
+  // Pi 不支持 worktree,不会进 worktree 模式,不触发本守卫
+  // 逃生阀 ALLOY_FORCE_WORKTREE=1 在 assertInWorktree 内部处理
+  await assertInWorktree(changeDir);
 
   // git add 限路径 + commit（用 git 仓库根目录作为 cwd）
   const changeName = basename(changeDir);

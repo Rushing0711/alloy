@@ -9,7 +9,7 @@ vi.mock("../../src/utils/fs.js", () => ({
 }));
 
 import { getPackageRoot } from "../../src/utils/fs.js";
-import { deploySkills, deploySchema, detectAlloySkillsVersion, deployOpenCodeCommands } from "../../src/core/skills.js";
+import { deploySkills, deploySchema, detectAlloySkillsVersion, deployOpenCodeCommands, deployPiCommands } from "../../src/core/skills.js";
 import { KNOWN_AGENTS } from "../../src/core/agents.js";
 import type { DeployOptions } from "../../src/core/types.js";
 
@@ -530,5 +530,111 @@ describe("deployOpenCodeCommands", () => {
     const startWrapper = await readFile(join(projectPath, ".opencode", "commands", "alloy-start.md"), "utf-8");
     // 使用默认 description
     expect(startWrapper).toContain("description: Alloy start 流程");
+  });
+});
+
+describe("deployPiCommands", () => {
+  let tmpDir: string;
+  let sourceDir: string;
+  let projectPath: string;
+
+  const commandIds = ["start", "plan", "apply", "archive", "finish", "fix", "status", "discard"];
+  const piAgent = KNOWN_AGENTS.find((a) => a.id === "pi")!;
+
+  beforeEach(async () => {
+    tmpDir = join(tmpdir(), `alloy-pi-cmd-test-${Date.now()}`);
+    sourceDir = join(tmpDir, "package", "skills");
+    projectPath = join(tmpDir, "project");
+    await mkdir(sourceDir, { recursive: true });
+    await mkdir(projectPath, { recursive: true });
+
+    for (const id of commandIds) {
+      const skillDir = join(sourceDir, `alloy-${id}`);
+      await mkdir(skillDir, { recursive: true });
+      await writeFile(
+        join(skillDir, "SKILL.md"),
+        `---\nname: alloy-${id}\ndescription: Alloy ${id} 流程--测试描述\n---\n# alloy-${id}`,
+        "utf-8"
+      );
+    }
+
+    vi.mocked(getPackageRoot).mockReturnValue(join(tmpDir, "package"));
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+    vi.clearAllMocks();
+  });
+
+  it("project scope:生成 8 个 wrapper 到 .pi/prompts/", async () => {
+    const opts: DeployOptions = {
+      scope: "project",
+      projectPath,
+      targetAgents: [piAgent],
+    };
+    const paths = await deployPiCommands(opts);
+    expect(paths.length).toBe(8);
+    for (const id of commandIds) {
+      const expected = join(projectPath, ".pi", "prompts", `alloy-${id}.md`);
+      expect(paths).toContain(expected);
+    }
+  });
+
+  it("global scope:生成到 ~/.pi/agent/prompts/", async () => {
+    const fakeHome = join(tmpDir, "home");
+    await mkdir(fakeHome, { recursive: true });
+    const originalHome = process.env.HOME;
+    process.env.HOME = fakeHome;
+    try {
+      const opts: DeployOptions = {
+        scope: "global",
+        projectPath,
+        targetAgents: [piAgent],
+      };
+      const paths = await deployPiCommands(opts);
+      expect(paths.length).toBe(8);
+      for (const id of commandIds) {
+        const expected = join(fakeHome, ".pi", "agent", "prompts", `alloy-${id}.md`);
+        expect(paths).toContain(expected);
+      }
+    } finally {
+      process.env.HOME = originalHome;
+    }
+  });
+
+  it("wrapper 内容含 read SKILL.md 指示 + description", async () => {
+    const opts: DeployOptions = {
+      scope: "project",
+      projectPath,
+      targetAgents: [piAgent],
+    };
+    await deployPiCommands(opts);
+    const startWrapper = await readFile(join(projectPath, ".pi", "prompts", "alloy-start.md"), "utf-8");
+    expect(startWrapper).toContain("description: Alloy start 流程--测试描述");
+    expect(startWrapper).toContain(".pi/skills/alloy-start/SKILL.md");
+    expect(startWrapper).toContain("~/.pi/agent/skills/alloy-start/SKILL.md");
+  });
+
+  it("非 pi agent 不生成 wrapper(返回空)", async () => {
+    const claudeAgent = KNOWN_AGENTS.find((a) => a.id === "claude-code")!;
+    const opts: DeployOptions = {
+      scope: "project",
+      projectPath,
+      targetAgents: [claudeAgent],
+    };
+    const paths = await deployPiCommands(opts);
+    expect(paths.length).toBe(0);
+  });
+
+  it("多 agent 时只对 pi 生成 wrapper", async () => {
+    const claudeAgent = KNOWN_AGENTS.find((a) => a.id === "claude-code")!;
+    const opts: DeployOptions = {
+      scope: "project",
+      projectPath,
+      targetAgents: [claudeAgent, piAgent],
+    };
+    const paths = await deployPiCommands(opts);
+    expect(paths.length).toBe(8);
+    expect(paths.every(p => p.includes(join(".pi", "prompts")))).toBe(true);
   });
 });

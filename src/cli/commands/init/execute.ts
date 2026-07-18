@@ -10,10 +10,11 @@ import { ensureGitRepo } from "../../../core/git.js";
 import { installOpenSpecCli, initOpenSpecProject } from "../../../core/openspec.js";
 import { installSuperpowers } from "../../../core/superpowers.js";
 import { detectSkill } from "../../../core/detect-installations.js";
-import { deploySkills, deploySchema, deployOpenCodeCommands } from "../../../core/skills.js";
+import { deploySkills, deploySchema, deployOpenCodeCommands, deployPiCommands } from "../../../core/skills.js";
 import {
   injectAgentConfigs, writePermissionsConfig, writeHookConfig, writeStopHookConfig,
   getHookSupportedAgents, getStopHookSupportedAgents, getPermissionSupportedAgents,
+  writeQuestionConfig, getQuestionSupportedAgents,
 } from "../../../core/agent-config.js";
 import { runHealthCheck } from "../../../core/health.js";
 import { getPackageRoot } from "../../../utils/fs.js";
@@ -290,6 +291,12 @@ export async function execute(
     for (const p of wrapperPaths) success(p);
   }
 
+  // 5.2 Pi command wrapper(Pi 的 / 只从 .pi/prompts/ 加载,skills 不自动触发;补装 wrapper 指示 agent read SKILL.md)
+  if (skillsAgents.some(a => a.id === "pi")) {
+    const wrapperPaths = await deployPiCommands({ ...opts, targetAgents: skillsAgents });
+    for (const p of wrapperPaths) success(p);
+  }
+
   // 6-8. opsx commands / hook / permissions(通过 injectAgentConfigs + writeHookConfig + writePermissionsConfig)
   section("注入 agent 专有配置...");
   await injectAgentConfigs(opts);
@@ -313,6 +320,13 @@ export async function execute(
   for (const agentId of permAgentIds) {
     const written = await writePermissionsConfig(projectPath, agentId);
     if (written) success(`${agentId} -> permissions`);
+  }
+
+  // question extension(Pi 专用:注册 alloy-question 工具供 LLM 调用 USER_GATE)
+  const questionAgentIds = targetAgents.map(a => a.id).filter(id => getQuestionSupportedAgents().includes(id));
+  for (const agentId of questionAgentIds) {
+    const written = await writeQuestionConfig(projectPath, agentId);
+    if (written) success(`${agentId} -> alloy-question extension`);
   }
 
   // 9-10. .gitignore + .gitattributes + pre-commit
@@ -382,5 +396,15 @@ export async function execute(
       ? targetAgents.map(a => a.label).join(" / ")
       : "目标 Agent";
     info(`在 ${labels} 中输入 /alloy-start <topic> 开始工作\n`);
+
+    // Pi 不支持 worktree + SDD 提醒(Pi bash 工具无 cwd 参数 + 无原生 subagent)
+    // 详见 docs/reference/agent-instruction-files.md 第 11 章 Worktree + 第 12 章 Subagent
+    if (targetAgents.some(a => a.id === "pi")) {
+      warn("⚠️ Pi 不支持 git worktree 隔离:apply 阶段将在 feature 分支执行,不创建 worktree。");
+      warn("   原因:Pi bash 工具无 cwd 参数,session cwd 不解绑到 worktree,创建后 commit 会落错分支。");
+      warn("⚠️ Pi 不支持 SDD(subagent-driven-development):apply 阶段只能用 executing-plans。");
+      warn("   原因:Pi 无原生 subagent(需装 pi-subagents 可选包,alloy 不依赖),SDD 的'分派子 agent'不可用。");
+      info("");
+    }
   }
 }

@@ -96,6 +96,40 @@ describe("evaluatePrecheck - cmd 检测", () => {
     expect(result.found[0].cmds).toContain("opsx/explore");
   });
 
+  it("冒号格式 opsx:explore 容错转斜杠(避免 agent 抄错格式失败重试)", async () => {
+    const claude = KNOWN_AGENTS.find(a => a.id === "claude-code")!;
+    // 创建 opsx-explore.md(横线格式)
+    const dir = join(projectDir, ".claude", "commands");
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "opsx-explore.md"), "# explore", "utf-8");
+    // agent 传冒号格式 opsx:explore,应自动转斜杠识别
+    const result = evaluatePrecheck({
+      cmds: ["opsx:explore"],
+      skills: [],
+      projectPath: projectDir,
+      targetAgents: [claude],
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.found[0].cmds).toContain("opsx:explore");
+  });
+
+  it("冒号格式 opsx:verify 容错(Pi skill openspec-verify-change 识别)", async () => {
+    const pi = KNOWN_AGENTS.find(a => a.id === "pi")!;
+    // 创建 .pi/skills/openspec-verify-change/SKILL.md(delivery=both 时 skill 形态)
+    const dir = join(projectDir, ".pi", "skills", "openspec-verify-change");
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "SKILL.md"), "# verify", "utf-8");
+    // agent 传冒号格式 opsx:verify,应自动转斜杠识别 skill
+    const result = evaluatePrecheck({
+      cmds: ["opsx:verify"],
+      skills: [],
+      projectPath: projectDir,
+      targetAgents: [pi],
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.found[0].cmds).toContain("opsx:verify");
+  });
+
   it("global scope 的 cmd 也检测(用户级 commands)", async () => {
     const opencode = KNOWN_AGENTS.find(a => a.id === "opencode")!;
     // 在 HOME 的 .config/opencode/commands/ 创建 cmd

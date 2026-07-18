@@ -4,17 +4,18 @@ import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { detectDeployedAgents } from "../../../core/agents.js";
 
+export interface EnvCheckResult {
+  ok: boolean;
+  missing: string[];
+}
+
 /**
- * alloy _env check — 只读环境完整性检测
+ * 环境完整性检测纯函数:4 项基础设施任一缺失即返回 ok=false。
+ * 供 envCheckCommand 和 _start precheck 复用,避免逻辑漂移。
  *
- * 4 项基础设施任一缺失即 exit(1)，输出缺失项列表。
- * 供 start.md 等 skill 调用，避免 agent 自由实现检测导致误判
- *（如检测 .claude/skills/ 顶层文件数而非 alloy/ 子目录）。
- *
- * agent 命名规则真相源在 agents.ts 的 KNOWN_AGENTS，此处复用，消除漂移。
+ * agent 命名规则真相源在 agents.ts 的 KNOWN_AGENTS,此处复用,消除漂移。
  */
-export async function envCheckCommand(): Promise<void> {
-  const projectPath = process.cwd();
+export function checkEnvIntegrity(projectPath: string): EnvCheckResult {
   const missing: string[] = [];
 
   // 1. git 仓库
@@ -52,11 +53,24 @@ export async function envCheckCommand(): Promise<void> {
     missing.push("Alloy skills（未找到 alloy-start/SKILL.md，init 未为当前 agent 部署）");
   }
 
-  if (missing.length > 0) {
+  return { ok: missing.length === 0, missing };
+}
+
+/**
+ * alloy _env check - 只读环境完整性检测
+ *
+ * 4 项基础设施任一缺失即 exit(1)，输出缺失项列表。
+ * 供 start.md 等 skill 调用，避免 agent 自由实现检测导致误判
+ *（如检测 .claude/skills/ 顶层文件数而非 alloy/ 子目录）。
+ */
+export async function envCheckCommand(): Promise<void> {
+  const result = checkEnvIntegrity(process.cwd());
+
+  if (!result.ok) {
     console.log("⛔ PRECONDITION_FAIL: Alloy 环境不完整");
     console.log("");
     console.log("缺失检查项：");
-    for (const m of missing) {
+    for (const m of result.missing) {
       console.log(`  ✗ ${m}`);
     }
     console.log("");

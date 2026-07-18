@@ -9,6 +9,7 @@ vi.mock("../../../../src/core/agent-config.js", () => ({
   getHookSupportedAgents: vi.fn(() => ["claude-code", "pi", "opencode"]),
   getPermissionSupportedAgents: vi.fn(() => ["claude-code", "pi"]),
   getStopHookSupportedAgents: vi.fn(() => ["claude-code", "pi", "opencode"]),
+  getQuestionSupportedAgents: vi.fn(() => ["pi"]),
 }));
 vi.mock("../../../../src/utils/fs.js", () => ({ getPackageRoot: vi.fn() }));
 

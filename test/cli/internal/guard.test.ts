@@ -414,5 +414,214 @@ describe("alloy _guard", () => {
       exitSpy.mockRestore();
       errSpy.mockRestore();
     });
+
+    it("require 保留 worktree_created_at 引号(精准字段替换,不触发 writeState 全量重写)", async () => {
+      // 模拟 agent 手动加引号的 worktree_created_at(agent edit 加引号,yaml 库序列化不加)
+      // user-gate require 用 setPendingGate 精准替换 pending_gate 行,不动其他字段
+      const yaml = [
+        'phase: applying',
+        'worktree: .worktrees/test-change',
+        'feature_branch: feature/test-change',
+        'worktree_branch: worktree-test-change',
+        'worktree_created_at: "2026-07-17 11:08:41"',
+        'worktree_merged_at: null',
+        'schema_version: 1',
+        'started_at: 2026-07-17 10:32:24',
+        'created_at: 2026-07-17 10:34:27',
+        'updated_at: "2026-07-17 11:30:07"',
+        'pending_gate: null',
+      ].join("\n");
+      const { writeFile: writeFileSync } = await import("node:fs/promises");
+      await writeFileSync(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
+
+      // 设 ALLOY_FORCE_WORKTREE=1 绕过 assertInWorktree 守卫(测试不在真实 worktree 内)
+      process.env.ALLOY_FORCE_WORKTREE = "1";
+      try {
+        await guardCommand(["user-gate", "require", changeDir, "apply:lock-verify"]);
+      } finally {
+        delete process.env.ALLOY_FORCE_WORKTREE;
+      }
+
+      const { readFile: readFileSync } = await import("node:fs/promises");
+      const after = await readFileSync(join(changeDir, ".alloy.yaml"), "utf-8");
+      // worktree_created_at 引号保留(精准替换不动此字段)
+      expect(after).toContain('worktree_created_at: "2026-07-17 11:08:41"');
+      // updated_at 引号保留(精准替换不动此字段)
+      expect(after).toContain('updated_at: "2026-07-17 11:30:07"');
+      // pending_gate 已设为 gate
+      expect(after).toMatch(/^pending_gate: apply:lock-verify$/m);
+      // 验证 readState 能正确解析
+      const state = await readState(changeDir);
+      expect(state.pending_gate).toBe("apply:lock-verify");
+      expect(state.worktree_created_at).toBe("2026-07-17 11:08:41");
+    });
+
+    it("pass 保留 worktree_created_at 引号(精准字段替换)", async () => {
+      const yaml = [
+        'phase: applying',
+        'worktree: .worktrees/test-change',
+        'feature_branch: feature/test-change',
+        'worktree_branch: worktree-test-change',
+        'worktree_created_at: "2026-07-17 11:08:41"',
+        'worktree_merged_at: null',
+        'schema_version: 1',
+        'started_at: 2026-07-17 10:32:24',
+        'created_at: 2026-07-17 10:34:27',
+        'updated_at: "2026-07-17 11:30:07"',
+        'pending_gate: apply:lock-verify',
+      ].join("\n");
+      const { writeFile: writeFileSync } = await import("node:fs/promises");
+      await writeFileSync(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
+
+      process.env.ALLOY_FORCE_WORKTREE = "1";
+      try {
+        await guardCommand(["user-gate", "pass", changeDir]);
+      } finally {
+        delete process.env.ALLOY_FORCE_WORKTREE;
+      }
+
+      const { readFile: readFileSync } = await import("node:fs/promises");
+      const after = await readFileSync(join(changeDir, ".alloy.yaml"), "utf-8");
+      expect(after).toContain('worktree_created_at: "2026-07-17 11:08:41"');
+      expect(after).toContain('updated_at: "2026-07-17 11:30:07"');
+      expect(after).toMatch(/^pending_gate: null$/m);
+    });
+
+    it("require 不自动 git commit(pending_gate 作为临时状态,由下一个 _artifact commit 一起 commit)", async () => {
+      const calls: string[] = [];
+      mockExecSync.mockImplementation((cmd: string) => {
+        calls.push(cmd);
+        return "";
+      });
+
+      process.env.ALLOY_FORCE_WORKTREE = "1";
+      try {
+        await guardCommand(["user-gate", "require", changeDir, "apply:lock-verify"]);
+      } finally {
+        delete process.env.ALLOY_FORCE_WORKTREE;
+      }
+
+      // 验证不自动 git commit(避免 USER_GATE 独占 commit 噪音)
+      expect(calls.some(c => c.startsWith("git commit -m"))).toBe(false);
+      expect(calls.some(c => c === "git add .alloy.yaml")).toBe(false);
+      // pending_gate 已写入文件(setPendingGate 精准替换)
+      const { readFile: readFileSync } = await import("node:fs/promises");
+      const after = await readFileSync(join(changeDir, ".alloy.yaml"), "utf-8");
+      expect(after).toMatch(/^pending_gate: apply:lock-verify$/m);
+    });
+
+    it("Pi 下 apply:worktree-choice 自动通过(不设 pending_gate)", async () => {
+      const origPi = process.env.PI_CODING_AGENT;
+      process.env.PI_CODING_AGENT = "true";
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        await guardCommand(["user-gate", "require", changeDir, "apply:worktree-choice"]);
+        // 验证输出"自动通过"提示
+        expect(logSpy.mock.calls.some(c => String(c[0]).includes("自动通过"))).toBe(true);
+        // 验证输出"走 skipped 路径"引导
+        expect(logSpy.mock.calls.some(c => String(c[0]).includes("走 skipped 路径"))).toBe(true);
+        // 验证 pending_gate 未设置(undefined 或 null,默认 state 无此字段)
+        const state = await readState(changeDir);
+        expect(state.pending_gate ?? null).toBeNull();
+      } finally {
+        if (origPi === undefined) delete process.env.PI_CODING_AGENT;
+        else process.env.PI_CODING_AGENT = origPi;
+        logSpy.mockRestore();
+      }
+    });
+
+    it("Pi 下 apply:sdd-ep-choice 自动通过(不设 pending_gate)", async () => {
+      const origPi = process.env.PI_CODING_AGENT;
+      process.env.PI_CODING_AGENT = "true";
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        await guardCommand(["user-gate", "require", changeDir, "apply:sdd-ep-choice"]);
+        // 验证输出"自动通过"提示
+        expect(logSpy.mock.calls.some(c => String(c[0]).includes("自动通过"))).toBe(true);
+        // 验证输出"走 EP 路径"引导
+        expect(logSpy.mock.calls.some(c => String(c[0]).includes("走 EP 路径"))).toBe(true);
+        // 验证 pending_gate 未设置
+        const state = await readState(changeDir);
+        expect(state.pending_gate ?? null).toBeNull();
+      } finally {
+        if (origPi === undefined) delete process.env.PI_CODING_AGENT;
+        else process.env.PI_CODING_AGENT = origPi;
+        logSpy.mockRestore();
+      }
+    });
+
+    it("Pi 下其他 gate 正常设置(不自动通过)", async () => {
+      const origPi = process.env.PI_CODING_AGENT;
+      process.env.PI_CODING_AGENT = "true";
+      try {
+        await guardCommand(["user-gate", "require", changeDir, "apply:lock-verify"]);
+        const state = await readState(changeDir);
+        expect(state.pending_gate).toBe("apply:lock-verify");
+      } finally {
+        if (origPi === undefined) delete process.env.PI_CODING_AGENT;
+        else process.env.PI_CODING_AGENT = origPi;
+      }
+    });
+  });
+
+  describe("worktree-status", () => {
+    it("PI_CODING_AGENT=true 时强制返回 skipped(即使 state.worktree=null)", async () => {
+      // state.worktree: null(默认 setupState)
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const origPi = process.env.PI_CODING_AGENT;
+      process.env.PI_CODING_AGENT = "true";
+      try {
+        await guardCommand(["worktree-status", changeDir]);
+        expect(logSpy).toHaveBeenCalledWith("skipped");
+      } finally {
+        if (origPi === undefined) delete process.env.PI_CODING_AGENT;
+        else process.env.PI_CODING_AGENT = origPi;
+        logSpy.mockRestore();
+      }
+    });
+
+    it("非 Pi env + state.worktree=null 返回 pending", async () => {
+      // state.worktree: null(默认 setupState)
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const origPi = process.env.PI_CODING_AGENT;
+      delete process.env.PI_CODING_AGENT;
+      try {
+        await guardCommand(["worktree-status", changeDir]);
+        expect(logSpy).toHaveBeenCalledWith("pending");
+      } finally {
+        if (origPi !== undefined) process.env.PI_CODING_AGENT = origPi;
+        logSpy.mockRestore();
+      }
+    });
+
+    it("非 Pi env + state.worktree=skipped 返回 skipped", async () => {
+      const yaml = [
+        "worktree: skipped",
+        "schema_version: 1",
+        "phase: applying",
+        'updated_at: "2020-01-01T00:00:00"',
+      ].join("\n");
+      await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
+
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const origPi = process.env.PI_CODING_AGENT;
+      delete process.env.PI_CODING_AGENT;
+      try {
+        await guardCommand(["worktree-status", changeDir]);
+        expect(logSpy).toHaveBeenCalledWith("skipped");
+      } finally {
+        if (origPi !== undefined) process.env.PI_CODING_AGENT = origPi;
+        logSpy.mockRestore();
+      }
+    });
+
+    it("缺 change-dir -> exit 1", async () => {
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+      const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      await guardCommand(["worktree-status"]);
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      exitSpy.mockRestore();
+      errSpy.mockRestore();
+    });
   });
 });

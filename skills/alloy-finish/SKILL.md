@@ -5,7 +5,7 @@ spec: 01-product-spec/05-finish-spec.md
 behaviors:
   preconditions: 6
   hard_stops:    8
-  user_gates:    4
+  user_gates:    5
   warns:         2
   artifacts: []
   transitions_to: finished
@@ -21,14 +21,14 @@ behaviors:
 你是 Alloy 的收尾命令。spec 已归档（phase=archived）前提下，完成代码合入与现场清理，推进 phase 到 `finished`。
 
 ```
-[HARD_STOP] NO MERGE WITHOUT EXACT CONFIRMATION
-phase != archived / 分支不存在 / merge 精确确认未通过 / spec 已归档需修改 / merge 冲突自动 abort 任一存在 = 拒绝执行
-违反字面 = 违反精神：哪怕"用户口头同意了"、"用户说'可以，合吧'"、"merge 冲突很简单 abort 一下"，也算违反 Iron Law。精确字符串确认不可被任何形式的口头同意替代--用户说"合"不算确认，必须亲手输入 merge 指令。
+[HARD_STOP] NO MERGE WITHOUT USER GATE CONFIRMATION
+phase != archived / 分支不存在 / merge 问答工具确认未通过 / spec 已归档需修改 / merge 冲突自动 abort 任一存在 = 拒绝执行
+违反字面 = 违反精神：哪怕"用户口头同意了"、"用户说'可以，合吧'"、"merge 冲突很简单 abort 一下"，也算违反 Iron Law。merge 确认必须用问答工具(AskUserQuestion/question/alloy-question)让用户选"确认合并"选项,口头同意不算授权。
 ```
 
 **核心原则：只做代码合入，不碰 spec。** spec 已归档封存，任何 spec 级变更应走新 change（[HARD_STOP]）。
 
-**交互规则：** `🔴 STOP` 等价 `USER_GATE`，首次呈现即必须调用平台原生交互工具--禁"先文本展示 1./2. 再等待用户打字"。Claude Code 用 `AskUserQuestion`,OpenCode 用 `question` 工具(字段名 `multiple` 非 `multiSelect`,可选 `custom`),Pi 用 extension `ctx.ui`(通过 alloy ask-question 扩展);Copilot CLI / Gemini CLI 无原生交互工具,降级为结构化文本选项。三平台调用示例见 `alloy-shared/references/interaction-style.md` §审查窗口标准模式。含"沉默 ≠ 授权"通用禁令--禁批量打包、禁基于内容跳过、禁 agent 回填精确字符串。跳过任何 USER_GATE = 违反 Iron Law。
+**交互规则：** `🔴 STOP` 等价 `USER_GATE`，首次呈现即必须调用平台原生交互工具--禁"先文本展示 1./2. 再等待用户打字"。Claude Code 用 `AskUserQuestion`,OpenCode 用 `question` 工具(字段名 `multiple` 非 `multiSelect`,可选 `custom`),Pi 用 `alloy-question` 工具(alloy-question extension 注册);Copilot CLI / Gemini CLI 无原生交互工具,降级为结构化文本选项。三平台调用示例见 `alloy-shared/references/interaction-style.md` §审查窗口标准模式。含"沉默 ≠ 授权"通用禁令--禁批量打包、禁基于内容跳过、禁 agent 回填精确字符串。跳过任何 USER_GATE = 违反 Iron Law。
 
 **状态符号：** `⛔` = HARD_STOP / PRECONDITION_FAIL，`🔴` = USER_GATE，`⚠️` = WARN（视觉规范 §七）。
 
@@ -46,7 +46,7 @@ phase != archived / 分支不存在 / merge 精确确认未通过 / spec 已归�
 | "分支已经删了，finish 白跑了" | 分支不存在 = 无需再次 finish，直接告知用户。 |
 | "PR 审查说要改 spec，顺手改了吧" | spec 已归档封存。任何 spec 变更 = 新 change。 |
 | "选'保持分支'等于没做完，直接 merge 吧" | 保持分支是合法选项--用户可能有后续计划。替用户选 merge 是越权。 |
-| "用户说了 'y'，应该等于 merge 确认吧" | 精确字符串确认不可被口头同意替代。"y"/"好"/"可以"/"合吧"全部不算（§Iron Law）。即使用户说"我同意了，直接合"，也不算确认--必须亲手输入 merge 指令。 |
+| "用户说了 'y'，应该等于 merge 确认吧" | 问答工具确认不可被口头同意替代。"y"/"好"/"可以"/"合吧"全部不算（§Iron Law）。即使用户说"我同意了，直接合"，也不算确认--必须在问答工具中选"确认合并"选项。 |
 | "git pull 失败一次，重试一下静默继续" | pull 失败 = 远端状态未知，silent 继续 = 基于过期 main 做 squash，污染主分支历史。必须 USER_GATE。 |
 | "merge --squash 冲突了，git merge --abort 让流程重启" | abort = 撕毁现场，用户的 in-progress 工作消失。退出 skill 让用户处理是唯一合法路径（§3.5.1）。 |
 | "feature_branch 看起来像 main，应该没事" | branch -D 变量未替换或与主分支同名 = 强删主分支引用，灾难性。必须 PRECONDITION_FAIL（task #25）。 |
@@ -145,6 +145,14 @@ echo "✓ checkpoint tag 已全部清理"
 
 **REQUIRED SUB-SKILL:** Use superpowers:finishing-a-development-branch
 
+> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question/alloy-question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级。
+
+⛔ [HARD_STOP] 必须执行以下命令设置 pending_gate(不是说明,是必跑命令):
+
+```bash
+alloy _guard user-gate require "$CHANGE_DIR" finish:choose-method
+```
+
 🔴 USER_GATE（必须平台原生交互工具调用,首次呈现即调--禁先文本列选项）: 选择处理方式
 
 > ⛔ [HARD_STOP] 必须用平台原生交互工具调用--禁先文本输出"1. 本地 merge / 2. 创建 PR / 3. 保持分支"再调工具。
@@ -159,7 +167,9 @@ echo "✓ checkpoint tag 已全部清理"
 > ⛔ [HARD_STOP] 禁增设第 4 选项"放弃工作"--放弃走 `/alloy-discard <name>` 独立命令,不在 finish 阶段。
 > 违反字面 = 违反精神：哪怕"用户想放弃,顺便在 finish 里给选项方便",也算违反--finish 是封存阶段（merge/PR/保持）,放弃是独立流程（删分支+删 change 目录）,混在一起 = 职责不清。引导用户运行 `/alloy-discard` 而非在 finish 增设选项。
 
-加载 `superpowers:finishing-a-development-branch` 技能，传入：
+加载 `finishing-a-development-branch` skill(多 agent 适配见 `alloy-shared/references/skill-loading.md`),传入:
+- Claude Code / OpenCode: 调 `skill({ name: "finishing-a-development-branch" })`
+- Pi: `read .pi/skills/finishing-a-development-branch/SKILL.md`
 ```
 Change: <name>
 状态：phase=finishing（spec 已归档，代码待合入）
@@ -179,26 +189,35 @@ alloy _skill log "$CHANGE_DIR" finish superpowers:finishing-a-development-branch
 > 任一步失败时严禁 agent 自动 reset --hard / checkout . / stash drop 清场。
 > 违反字面 = 违反精神：哪怕"先回到干净状态再重试"，也算违反 §3.5.1 禁令--必须 USER_GATE 让用户决策。
 
-**合并确认（USER_GATE 特例--精确字符串，不用 AskUserQuestion）：**
+**合并确认（USER_GATE --问答工具,选项确认）:**
 
-> 本确认是 `alloy-shared/references/interaction-style.md` §"不能使用 AskUserQuestion 的场景"列出的特例--破坏性操作确认必须用户输入精确字符串,不能用选择题替代。**agent 禁用 AskUserQuestion 实现**（options 是选择题,无法承接精确字符串输入,强行用会导致 options < 2 报错或用户选"确认"不等于输入精确字符串）,改用终端直接让用户输入。
->
-> ⛔ [HARD_STOP] 禁用 `read -p` 等 bash 交互命令--Claude Code 平台 bash 非交互,`read -p` 报 `no coprocess` 失败。"终端直接输入"在 CC 平台指**对话提示用户输入**（输出提示文本后等待用户下一条消息）,不是 `read -p`。其他平台按 `interaction-style.md` §平台工具对照 处理。
+> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question/alloy-question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级。
 
-**[HARD_STOP] 即使用户说"我同意了"、"可以，合吧"、"口头确认过"，也不算确认。** 精确字符串不可被任何形式的口头同意替代--用户必须亲手输入 `merge <branch> into <branch>`。
+⛔ [HARD_STOP] 必须执行以下命令设置 pending_gate(不是说明,是必跑命令):
 
-> 🔴 USER_GATE: 确认合并：源 `<feature_branch>` -> 目标 `<main_branch>`
-> 即将合入的提交（按类型摘要）：
+```bash
+alloy _guard user-gate require "$CHANGE_DIR" finish:confirm-merge
+```
+
+🔴 USER_GATE（必须平台原生交互工具调用,首次呈现即调--禁先文本列选项）: 确认合并
+
+> ⛔ [HARD_STOP] 必须用平台原生交互工具调用--禁先文本输出"1. 确认合并 / 2. 取消"再调工具。
+> 违反字面 = 违反精神:哪怕"先展示选项让用户思考"、"文本+工具双保险",也算违反--首次呈现必须是平台原生交互工具调用,不是文本。
+
+选项:
+- 1. 确认合并 -- 执行 squash merge:源 `<feature_branch>` -> 目标 `<main_branch>`
+- 2. 取消 -- 退出 skill,保持当前分支
+
+> 即将合入的提交（按类型摘要）:
 > ```
 > <运行 git log main_branch..feature_branch --oneline 获取全部 commit。若超过 10 条，按 Conventional Commits 类型（feat/fix/chore/docs/refactor 等）归纳：每类注明数量 + 列 1-2 条代表性 commit 主题；若 ≤10 条则直接列原始 --oneline 输出。>
 > ```
 > 注：摘要仅用于展示合并内容范围，方便快速感知即将合入的变更。合并后仍是 **1 条 squash commit**（非上述多条），摘要不构成合并后的 commit 历史。
-> 合并后 worktree 清理，分支删除。
-> 输入 `merge <feature_branch> into <main_branch>` 确认，其他输入取消。
->
+
+> ⛔ [HARD_STOP] 即使用户说"我同意了"、"可以，合吧"、"口头确认过"，也不算确认--必须用户在问答工具中选"确认合并"选项。
 > 违反字面 = 违反精神："y" / "好" / "可以" / "ok" 全部不算确认（§Iron Law）。
 
-确认后执行：
+用户选"确认合并"后执行：
 ```bash
 ARCHIVE_DIR=$(ls -d openspec/changes/archive/*-<name> 2>/dev/null | sort -r | head -1)
 CHANGE_DIR="${ARCHIVE_DIR:-openspec/changes/<name>}"

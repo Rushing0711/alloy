@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, basename } from "node:path";
 import { execSync } from "node:child_process";
-import { readState, writeState, readProjectConfig } from "../../utils/state.js";
+import { readState, writeState, readProjectConfig, setPendingGate } from "../../utils/state.js";
+import { assertInWorktree } from "../../utils/worktree-guard.js";
 import { computeArtifactHash, ARTIFACT_FILES } from "../../../core/artifacts.js";
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
@@ -306,6 +307,15 @@ async function worktreeStatusGuard(args: string[]): Promise<void> {
     return process.exit(1);
   }
 
+  // Pi 不支持 worktree:强制返回 skipped(双重保险,配合 apply SKILL.md 的 Pi 检测)
+  // 原因:Pi bash 工具无 cwd 参数,session cwd 不解绑到 worktree,
+  // 创建 worktree 后 agent 仍在主仓操作,commit 落 feature 分支破坏隔离。
+  // 详见 docs/reference/agent-instruction-files.md 第 11 章 Worktree。
+  if (process.env.PI_CODING_AGENT === "true") {
+    console.log("skipped");
+    return;
+  }
+
   const state = await readState(changeDir);
   const worktree = state.worktree;
 
@@ -337,8 +347,16 @@ async function worktreeStatusGuard(args: string[]): Promise<void> {
  * - require:设置 pending_gate,后续 Write/Edit 非白名单被 hook 拦截,直到问答工具调用或手动 pass
  * - pass:清除 pending_gate(手动降级 / 无问答工具的 agent)
  *
- * hook-guard 检测到 AskUserQuestion/question 工具调用时,自动 clear 所有 pending_gate。
- * pending_gate 是临时状态,不 commit(由 _state write 模式管理)。
+ * hook-guard 检测到 AskUserQuestion/question/alloy-question 工具调用时,自动 clear 所有 pending_gate。
+ *
+ * 实现细节(2026-07-17 修复):
+ * - 用 setPendingGate 精准替换 pending_gate 行,不触发 writeState 全量重写
+ *   原因:writeState 全量重序列化会破坏 agent 手动加的 worktree_created_at 引号格式,
+ *   产生 diff 噪音;且 readState + writeState 会读错文件(worktree 内执行但读主仓)
+ * - require/pass 不自动 commit,pending_gate 作为临时状态留在工作区 dirty
+ *   原因:USER_GATE 独占 commit 噪音大(chore: 设 USER_GATE xxx);pending_gate 由下一个
+ *   _artifact commit / _phase complete 等命令的 git add .alloy.yaml 一起 commit,
+ *   合并到有意义的 commit(如 artifact 锁定 / 阶段推进)
  */
 async function userGateGuard(args: string[]): Promise<void> {
   const action = args[0];
@@ -351,9 +369,28 @@ async function userGateGuard(args: string[]): Promise<void> {
       process.exit(1);
       return;
     }
-    const state = await readState(changeDir);
-    state.pending_gate = gateId;
-    await writeState(changeDir, state);
+    // Pi 下两个 apply gate 无意义,CLI 层硬约束自动通过 + 输出路径引导
+    // SKILL.md 不再为 Pi 做软约束(避免 Claude Code/OpenCode 多读 Pi 分支 + 多调 _detect agent)
+    // - apply:worktree-choice:Pi 不支持 worktree(bash 无 cwd 参数,session cwd 不解绑),强制 skipped
+    // - apply:sdd-ep-choice:Pi 无原生 subagent(README "skips sub agents"),强制 EP
+    if (process.env.PI_CODING_AGENT === "true" && (gateId === "apply:worktree-choice" || gateId === "apply:sdd-ep-choice")) {
+      if (gateId === "apply:worktree-choice") {
+        console.log(`✓ user-gate 自动通过(Pi 不支持 worktree): ${gateId} (${changeDir})`);
+        console.log("  -> 走 skipped 路径:alloy _state write <change-dir> worktree skipped + commit");
+        console.log("  详见 docs/reference/agent-instruction-files.md 第 11 章 Worktree");
+      } else {
+        console.log(`✓ user-gate 自动通过(Pi 不支持 SDD): ${gateId} (${changeDir})`);
+        console.log("  -> 走 EP 路径:加载 executing-plans skill,在当前 session 顺序执行");
+        console.log("  详见 docs/reference/agent-instruction-files.md 第 12 章 Subagent");
+      }
+      return;
+    }
+    // worktree cwd 守卫:worktree 模式下必须在 worktree 内执行
+    // 否则 pending_gate 写到主仓 .alloy.yaml,且 .alloy.yaml/制品 commit 进 feature 分支,破坏 worktree 隔离
+    await assertInWorktree(changeDir);
+    // 精准替换 pending_gate 行,不触发 writeState 全量重写(保留 worktree_created_at 等字段格式)
+    // 不自动 commit:pending_gate 作为临时状态,由下一个 _artifact commit / _phase complete 一起 commit
+    await setPendingGate(changeDir, gateId);
     console.log(`✓ user-gate 已设: ${gateId} (${changeDir})`);
     console.log("  hook-guard 将拦截非白名单写入,直到问答工具调用或 alloy _guard user-gate pass");
     return;
@@ -365,14 +402,30 @@ async function userGateGuard(args: string[]): Promise<void> {
       process.exit(1);
       return;
     }
+    // worktree cwd 守卫:worktree 模式下必须在 worktree 内执行(与 require 对称)
+    await assertInWorktree(changeDir);
     const state = await readState(changeDir);
     const cleared = state.pending_gate ?? null;
-    state.pending_gate = null;
-    await writeState(changeDir, state);
+    // 精准替换 pending_gate 行为 null,不触发 writeState 全量重写
+    // 不自动 commit:pending_gate 作为临时状态,由下一个 _artifact commit / _phase complete 一起 commit
+    await setPendingGate(changeDir, null);
     console.log(`✓ user-gate 已通过: ${cleared ?? "(无)"} (${changeDir})`);
     return;
   }
 
   console.error(`未知操作: ${action} (支持: require, pass)`);
   process.exit(1);
+}
+
+/**
+ * git add .alloy.yaml + commit(无变更跳过)。
+ * 用于 user-gate require/pass 后自动提交 pending_gate 修改,避免 worktree 内 .alloy.yaml dirty。
+ * 在 changeDir 下执行(cwd=changeDir),git 自动找仓库根,git add .alloy.yaml 限路径。
+ *
+ * 2026-07-17:已停用。pending_gate 作为临时状态不独占 commit,由下一个 _artifact commit /
+ * _phase complete 等命令的 git add .alloy.yaml 一起 commit,合并到有意义的 commit。
+ * 保留函数定义以防未来需要,但 userGateGuard 不再调用。
+ */
+function commitPendingGateChange(_changeDir: string, _commitMsg: string): void {
+  void _changeDir; void _commitMsg;
 }

@@ -1,7 +1,7 @@
 import { loadCompat } from "../../../core/compat.js";
 import { detectInitMatrix, readPackageVersion } from "../../../core/init-matrix.js";
 import { getPackageRoot } from "../../../utils/fs.js";
-import { getHookSupportedAgents, getPermissionSupportedAgents, getStopHookSupportedAgents } from "../../../core/agent-config.js";
+import { getHookSupportedAgents, getPermissionSupportedAgents, getStopHookSupportedAgents, getQuestionSupportedAgents } from "../../../core/agent-config.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -170,6 +170,9 @@ export async function plan(
   // hook / permissions 汇总(项目级资源,与 agent 无关,从矩阵移出)
   // 各 agent 的 hook/permissions 状态汇总为"将装/已配置",展示在项目资源列表
   const hookAgents = choices.targetAgents.filter(a => hookSupported.includes(a.id));
+
+  const questionSupported = getQuestionSupportedAgents();
+  const questionAgents = choices.targetAgents.filter(a => questionSupported.includes(a.id));
   const permAgents = choices.targetAgents.filter(a => permSupported.includes(a.id));
   const hookAllConfigured = hookAgents.length > 0 && hookAgents.every(a => matrix.agents.find(s => s.agentId === a.id)!.hook.installed);
   const permAllConfigured = permAgents.length > 0 && permAgents.every(a => {
@@ -215,6 +218,13 @@ export async function plan(
       description: permAgents.length === 0
         ? "无支持 permissions 的 agent"
         : `${permAgents.map(a => a.label).join("+")} allow ${permAllConfigured ? "已配置" : "将装"}`,
+    },
+    {
+      resource: "question-extension",
+      action: questionAgents.length === 0 ? "skip" : "install",
+      description: questionAgents.length === 0
+        ? "无支持 question 的 agent"
+        : `${questionAgents.map(a => a.label).join("+")} alloy-question 工具将装`,
     },
     {
       resource: "settings-json",
