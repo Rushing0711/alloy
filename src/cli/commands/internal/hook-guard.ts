@@ -1,4 +1,5 @@
 // src/cli/commands/internal/hook-guard.ts
+import { execSync } from "node:child_process";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import type { Dirent } from "node:fs";
 import { join, relative, isAbsolute } from "node:path";
@@ -60,13 +61,67 @@ function collectChangeDirsFromDir(dir: string, dirs: string[], skipArchive: bool
 }
 
 /**
- * 扫描所有 change(活跃 + 归档)的 .alloy.yaml,收集所有 phase。
+ * 列出所有 git worktree 路径(含主仓)。
+ * 非 git 仓库或 git 命令失败时返回 [projectRoot]。
+ *
+ * 用于 hook-guard 兜底扫描 worktree 内的 .alloy.yaml:
+ * OpenCode hook-guard 在主仓执行(cwd=主仓),但 worktree 内 .alloy.yaml 可能与主仓不同步
+ * (worktree state 只在 worktree 分支写,主仓 .alloy.yaml 的 worktree 字段为 null)。
+ * 只扫主仓会漏 worktree 内的 pending_gate / phase / worktree 路径。
+ */
+function listGitWorktrees(projectRoot: string): string[] {
+  try {
+    const output = execSync("git worktree list --porcelain", {
+      cwd: projectRoot,
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const paths: string[] = [];
+    for (const line of output.split("\n")) {
+      if (line.startsWith("worktree ")) {
+        const wt = line.slice("worktree ".length).trim();
+        if (wt) paths.push(wt);
+      }
+    }
+    return paths.length > 0 ? paths : [projectRoot];
+  } catch {
+    return [projectRoot];
+  }
+}
+
+/**
+ * 扫描所有 change 目录(主仓 + 所有 git worktree)。
+ *
+ * 原因:OpenCode hook-guard 在主仓执行,但 worktree 内 .alloy.yaml 可能与主仓不同步
+ * (worktree state 只在 worktree 分支写,主仓 .alloy.yaml 的 worktree 字段为 null)。
+ * 只扫主仓会漏 worktree 内的 pending_gate / phase / worktree 路径,
+ * 导致 hook-guard 判定错误(漏 clear pending_gate / 漏拦截 write/edit / phase 判定错)。
+ *
+ * 多 agent 影响:
+ * - Claude Code:hook-guard 在 worktree 内执行,git worktree list 仍列出所有 worktree(含主仓),
+ *   扫描范围从"只扫当前 worktree"扩展为"扫所有 worktree",能 clear 其他 worktree 残留 gate
+ * - OpenCode:hook-guard 在主仓执行,git worktree list 列出所有 worktree,补全 worktree 内 .alloy.yaml
+ * - Pi:不支持 worktree,git worktree list 只返回主仓,等同于原 scanChangeDirs
+ */
+function scanAllChangeDirs(projectRoot: string): string[] {
+  const allDirs = new Set<string>();
+  for (const wtPath of listGitWorktrees(projectRoot)) {
+    if (!existsSync(wtPath)) continue;
+    for (const changeDir of scanChangeDirs(wtPath)) {
+      allDirs.add(changeDir);
+    }
+  }
+  return Array.from(allDirs);
+}
+
+/**
+ * 扫描所有 change(活跃 + 归档,主仓 + 所有 worktree)的 .alloy.yaml,收集所有 phase。
  * 非 alloy 项目(无 openspec/changes/)返回空数组。
  * 含 archive/ 下的 archived/finishing/finished phase(用于 guardCheck 放行 finish 阶段合入)。
  */
 export function collectPhases(projectRoot: string): string[] {
   const phases: string[] = [];
-  for (const changeDir of scanChangeDirs(projectRoot)) {
+  for (const changeDir of scanAllChangeDirs(projectRoot)) {
     const stateFile = join(changeDir, ".alloy.yaml");
     try {
       const content = readFileSync(stateFile, "utf-8");
@@ -82,12 +137,12 @@ export function collectPhases(projectRoot: string): string[] {
 }
 
 /**
- * 扫描所有 change(活跃 + 归档)的 .alloy.yaml,收集所有未通过的 user-gate。
+ * 扫描所有 change(活跃 + 归档,主仓 + 所有 worktree)的 .alloy.yaml,收集所有未通过的 user-gate。
  * pending_gate 为 null/空/不存在 -> 跳过。
  */
 export function collectPendingGates(projectRoot: string): string[] {
   const gates: string[] = [];
-  for (const changeDir of scanChangeDirs(projectRoot)) {
+  for (const changeDir of scanAllChangeDirs(projectRoot)) {
     const stateFile = join(changeDir, ".alloy.yaml");
     try {
       const content = readFileSync(stateFile, "utf-8");
@@ -112,7 +167,7 @@ export function collectPendingGates(projectRoot: string): string[] {
  */
 export function collectWorktreePaths(projectRoot: string): string[] {
   const paths: string[] = [];
-  for (const changeDir of scanChangeDirs(projectRoot)) {
+  for (const changeDir of scanAllChangeDirs(projectRoot)) {
     const stateFile = join(changeDir, ".alloy.yaml");
     try {
       const content = readFileSync(stateFile, "utf-8");
@@ -131,48 +186,19 @@ export function collectWorktreePaths(projectRoot: string): string[] {
 }
 
 /**
- * 清除所有 change(活跃 + 归档)的 pending_gate(问答工具调用后自动触发)。
+ * 清除所有 change(活跃 + 归档,主仓 + 所有 worktree)的 pending_gate(问答工具调用后自动触发)。
  *
- * 实现细节(2026-07-17 修复):
+ * 实现细节:
  * - 用 setPendingGate 精准替换 pending_gate 行,不触发 writeState 全量重写
  *   原因:writeState 全量重序列化会破坏 worktree_created_at 等字段引号格式
- * - 扫描主仓 change 目录 + worktree 内 change 目录(从 state.worktree 字段读路径)
- *   原因:agent 在 worktree 内 user-gate require 写 worktree 内 .alloy.yaml,
- *   hook-guard 在主仓执行(cwd=主仓),只扫主仓会漏 worktree 内的 pending_gate,
+ * - 扫描主仓 + 所有 git worktree(用 `git worktree list` 兜底,不依赖主仓 .alloy.yaml 的 worktree 字段)
+ *   原因:OpenCode hook-guard 在主仓执行,主仓 .alloy.yaml 的 worktree 字段可能为 null
+ *   (worktree state 只在 worktree 分支写),依赖主仓 worktree 字段定位会漏扫 worktree 内 .alloy.yaml,
  *   导致 worktree 内 pending_gate 永远不被 clear,agent 无法推进阶段
  */
 export async function clearAllPendingGates(projectRoot: string): Promise<void> {
   const { setPendingGate } = await import("../../utils/state.js");
-  const mainChangeDirs = scanChangeDirs(projectRoot);
-  // 收集所有需要扫描的目录(主仓 + worktree 路径)
-  const allDirs = new Set(mainChangeDirs);
-  for (const changeDir of mainChangeDirs) {
-    const stateFile = join(changeDir, ".alloy.yaml");
-    try {
-      const content = readFileSync(stateFile, "utf-8");
-      // 读 worktree 字段,如果存在且目录存在,扫描 worktree 内的 change 目录
-      const worktreeMatch = content.match(/^worktree:\s*(.+)$/m);
-      if (worktreeMatch) {
-        const worktreePath = worktreeMatch[1].trim().replace(/^["']|["']$/g, "");
-        if (worktreePath && worktreePath !== "null" && worktreePath !== "skipped") {
-          const absWorktreePath = isAbsolute(worktreePath)
-            ? worktreePath
-            : join(projectRoot, worktreePath);
-          if (existsSync(absWorktreePath)) {
-            // worktree 内的 change 目录路径与主仓相同(changeDir 相对 projectRoot)
-            const relChangeDir = relative(projectRoot, changeDir);
-            const worktreeChangeDir = join(absWorktreePath, relChangeDir);
-            if (existsSync(join(worktreeChangeDir, ".alloy.yaml"))) {
-              allDirs.add(worktreeChangeDir);
-            }
-          }
-        }
-      }
-    } catch {
-      // 文件不存在,跳过
-    }
-  }
-  // 扫描所有目录,精准替换 pending_gate 为 null
+  const allDirs = scanAllChangeDirs(projectRoot);
   for (const changeDir of allDirs) {
     const stateFile = join(changeDir, ".alloy.yaml");
     try {

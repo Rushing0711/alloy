@@ -362,36 +362,6 @@ describe("alloy _hook-guard", () => {
       expect(collectPendingGates(tmpDir)).toEqual([]);
     });
 
-    it("扫描 worktree 路径:state.worktree 有值时,也 clear worktree 内的 pending_gate", async () => {
-      // 主仓 change 目录
-      const mainChangeDir = join(tmpDir, "openspec", "changes", "foo");
-      await mkdir(mainChangeDir, { recursive: true });
-      const mainState = createInitialState();
-      mainState.phase = "applying";
-      mainState.worktree = ".worktrees/foo";
-      mainState.pending_gate = "apply:lock-verify";
-      await writeState(mainChangeDir, mainState);
-
-      // worktree 内 change 目录(模拟 worktree 创建后的 worktree 内 .alloy.yaml)
-      const worktreePath = join(tmpDir, ".worktrees", "foo");
-      const worktreeChangeDir = join(worktreePath, "openspec", "changes", "foo");
-      await mkdir(worktreeChangeDir, { recursive: true });
-      const worktreeState = createInitialState();
-      worktreeState.phase = "applying";
-      worktreeState.worktree = ".worktrees/foo";
-      worktreeState.pending_gate = "apply:lock-verify";
-      await writeState(worktreeChangeDir, worktreeState);
-
-      await clearAllPendingGates(tmpDir);
-
-      // 验证主仓 pending_gate 被 clear
-      const mainAfter = await readState(mainChangeDir);
-      expect(mainAfter.pending_gate).toBeNull();
-      // 验证 worktree 内 pending_gate 也被 clear(关键:不漏 worktree)
-      const worktreeAfter = await readState(worktreeChangeDir);
-      expect(worktreeAfter.pending_gate).toBeNull();
-    });
-
     it("worktree 路径不存在时,只 clear 主仓(不报错)", async () => {
       const mainChangeDir = join(tmpDir, "openspec", "changes", "foo");
       await mkdir(mainChangeDir, { recursive: true });
@@ -406,6 +376,9 @@ describe("alloy _hook-guard", () => {
       const mainAfter = await readState(mainChangeDir);
       expect(mainAfter.pending_gate).toBeNull();
     });
+
+    // 注意:worktree 内 .alloy.yaml 兜底扫描的测试在 hook-guard.integration.test.ts
+    // (用真实 git worktree 验证 listGitWorktrees 的 git worktree list 调用)
   });
 
 

@@ -23,7 +23,13 @@
 
 > **注意：** `docs/superpowers/` 是 Superpowers 技能生成的设计和计划产物，仍在正常使用。真相源是 `docs/specification/`，文档对齐时不检查此目录。该目录已在 `.gitignore` 中，**禁止 `git add` 该目录下的任何文件**。
 
-**分支规范：** 先问"是否建分支"，用户确认后执行。分支命名：`feature/`、`fix/`、`docs/`、`refactor/`、`test/`、`chore/`
+**分支规范：**
+1. 先问"是否建分支",用户确认后执行。分支命名:`feature/`、`fix/`、`docs/`、`refactor/`、`test/`、`chore/`
+2. **开新分支前,必须先处理当前分支的未合并修复**(关键):如果当前分支有未合并到 main 的 commit 或工作区改动(需要保留),必须先 squash merge 到 main + `npm run build`,再基于 main 开新分支。否则基于 main 开新分支会丢失当前分支的修复,下次测试用不到上次的修复(实测踩坑:`fix/worktree-archive-defects` 的 P3 修复未合并就开新分支,导致 opencode 下次测试仍手写 `ls -d` 没用 `alloy _archive-dir`)。
+   - 检查命令:`git branch --merged main`(看当前分支是否在列表里)+ `git status`(看工作区有无改动)+ `git log main..HEAD`(看当前分支有无 main 没有的 commit)
+   - 当前分支已合并 + 工作区干净 -> 直接基于 main 开新分支
+   - 当前分支有未合并修复 -> 先 squash merge 到 main + build,再开新分支
+   - 当前分支是废弃实验分支(不要了)-> 告知用户后可切走,不合并
 
 ## 仓库用途
 
