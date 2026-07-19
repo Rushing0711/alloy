@@ -401,7 +401,59 @@ describe("alloy _guard", () => {
     });
 
     it("pass 时 pending_gate 已 null -> 幂等", async () => {
+      // 显式写入 pending_gate: null 行(真实 alloy 流程 .alloy.yaml 始终有此字段)
+      const yaml = [
+        'phase: started',
+        'worktree: null',
+        'schema_version: 1',
+        'updated_at: "2020-01-01T00:00:00"',
+        'pending_gate: null',
+      ].join("\n");
+      await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
       await guardCommand(["user-gate", "pass", changeDir]);
+      const state = await readState(changeDir);
+      expect(state.pending_gate).toBeNull();
+    });
+
+    it("pass 时 pending_gate 已是 null(行存在) 不追加重复行(复现 bug)", async () => {
+      // 真实 alloy 流程中 .alloy.yaml 始终有 pending_gate 行(createInitialState 包含)。
+      // 旧版 setPendingGate(null) 在 pending_gate 已是 null 时,
+      // 误判"行不存在"在文件末尾追加 pending_gate: null,产生 YAML 重复键,
+      // 后续 readState 抛 YAMLParseError 阻断流程。
+      const yaml = [
+        'phase: applying',
+        'worktree: .worktrees/test-change',
+        'worktree_branch: worktree-test-change',
+        'worktree_created_at: "2026-07-19 07:22:07"',
+        'schema_version: 1',
+        'started_at: 2026-07-19 07:10:03',
+        'updated_at: "2026-07-19 07:22:08"',
+        'records: []',
+        'skill_usage: []',
+        'pending_gate: null',
+        'gate_history:',
+        '  - plan:phase-complete',
+        'phase_timings:',
+        '  apply:',
+        '    started_at: 2026-07-19 07:21:40',
+        '    completed_at: null',
+      ].join("\n");
+      await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
+
+      process.env.ALLOY_FORCE_WORKTREE = "1";
+      try {
+        await guardCommand(["user-gate", "pass", changeDir]);
+      } finally {
+        delete process.env.ALLOY_FORCE_WORKTREE;
+      }
+
+      const { readFile: readFileSync } = await import("node:fs/promises");
+      const after = await readFileSync(join(changeDir, ".alloy.yaml"), "utf-8");
+      // 只能有 1 处 pending_gate(无重复键)
+      const matches = after.match(/^pending_gate:.*$/gm);
+      expect(matches).not.toBeNull();
+      expect(matches!.length).toBe(1);
+      // readState 能正常解析(无 YAMLParseError)
       const state = await readState(changeDir);
       expect(state.pending_gate).toBeNull();
     });

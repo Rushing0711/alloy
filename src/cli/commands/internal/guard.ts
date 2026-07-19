@@ -4,6 +4,7 @@ import { execSync } from "node:child_process";
 import { readState, writeState, readProjectConfig, setPendingGate, addClearedGate, removeClearedGate } from "../../utils/state.js";
 import { assertInWorktree } from "../../utils/worktree-guard.js";
 import { computeArtifactHash, ARTIFACT_FILES } from "../../../core/artifacts.js";
+import { parseVerifyDecision } from "../../utils/verify.js";
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
   started: ["planned"],
@@ -240,19 +241,11 @@ async function verifyPassedGuard(args: string[]): Promise<void> {
 
   try {
     const content = readFileSync(verifyPath, "utf-8");
-    const failMatch = content.match(/^- \[x\].*(?:❌\s*)?FAIL/mi);
-    if (failMatch) {
-      console.log("FAIL");
+    const decision = parseVerifyDecision(content);
+    console.log(decision);
+    if (decision === "FAIL") {
       return process.exit(1);
     }
-
-    const warnMatch = content.match(/^- \[x\].*(?:⚠️\s*)?WARNING/mi);
-    if (warnMatch) {
-      console.log("WARNING");
-      return; // exit(0)
-    }
-
-    console.log("PASS");
     return; // exit(0)
   } catch {
     console.log("FAIL");
@@ -436,15 +429,19 @@ async function userGateGuard(args: string[]): Promise<void> {
     await assertInWorktree(changeDir);
     const state = await readState(changeDir);
     const cleared = state.pending_gate ?? null;
-    // 精准替换 pending_gate 行为 null,不触发 writeState 全量重写
-    // 不自动 commit:pending_gate 作为临时状态,由下一个 _artifact commit / _phase complete 一起 commit
-    await setPendingGate(changeDir, null);
-    // 把 cleared gate 加入 gate_history,供后续 gate 前置检查 + _phase complete 检查
+    // cleared=null 时无 gate 需清:跳过 setPendingGate 调用。
+    // setPendingGate(null) 在 pending_gate 已是 null 时虽已是 no-op,
+    // 但仍触发文件 IO,且早期版本的 setPendingGate 在此场景会产生重复键 bug。
+    // 此处跳过既避免无意义 IO,也消除 bug 边界场景。
     if (cleared) {
+      await setPendingGate(changeDir, null);
+      // 把 cleared gate 加入 gate_history,供后续 gate 前置检查 + _phase complete 检查
       try {
         await addClearedGate(changeDir, cleared);
-      } catch {
-        // gate_history 写失败不阻断 pass(pending_gate 已 clear)
+      } catch (e) {
+        // gate_history 写失败不阻断 pass(pending_gate 已 clear),
+        // 但输出 stderr 提示:可能是 .alloy.yaml 已损坏(YAMLParseError),需排查
+        console.error(`⚠️ addClearedGate 失败 (${changeDir}): ${e}`);
       }
     }
     console.log(`✓ user-gate 已通过: ${cleared ?? "(无)"} (${changeDir})`);

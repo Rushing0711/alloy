@@ -198,7 +198,7 @@ alloy _guard user-gate <require|pass|reset> <change-dir> [<gate-id>]
 子命令说明：
 - **phase 转换**（无子命令关键字，直接传 change-dir + target-phase）：校验 `started→planned`、`planned→applied`、`applied→archived`、`archived→finished` 的合法性 + 制品完整性 + hash 一致性。`--apply` 通过则推进 phase
 - `branch-position <change-dir>`：输出 `on-feature` / `on-main` / `feature-missing` / `feature-lost:<branch>` / `on-other:<current>`。退出码 0=位置正确，1=不正确
-- `verify-passed <change-dir>`：读 verify.md 判定，输出 `PASS` / `FAIL` / `WARNING`。退出码 0=PASS/WARNING，1=FAIL
+- `verify-passed <change-dir>`：读 verify.md 判定，输出 `PASS` / `FAIL` / `WARNING`。退出码 0=PASS/WARNING，1=FAIL。判定规则(`parseVerifyDecision`,retro scaffold 复用同一函数):行首 `- [x]` checkbox + ❌ FAIL -> FAIL;`- [x]` + ⚠️ WARNING -> WARNING;其他(含无标记或纯文本"WARNING: 无"字眼) -> PASS。**禁 grep 整个 verify.md**:OpenCode verify.md 含 "**WARNING:** 无" 描述会被旧 `/WARNING/i` 误判 WARNING
 - `precheck <change-dir> <expected-phase>`：单点 phase 路由校验。`expected-phase` 支持逗号分隔多值（如 `planned,applied`）。输出 `PASS:<phase>` / `FAIL:<reason>`。退出码 0=通过，1=不通过
 - `worktree-status <change-dir>`：输出 `done:<path>:<branch>` / `stale:<path>` / `skipped` / `pending`。退出码始终 0（查询命令）
 - `user-gate require <change-dir> <gate-id>`：设 pending_gate,后续 Write/Edit 非白名单被 hook-guard 拦截(即使 apply 阶段),直到问答工具(AskUserQuestion/question/alloy-question)调用自动 clear,或手动 `user-gate pass` 降级。**实现**:用 `setPendingGate` 精准替换 `pending_gate` 行(正则替换),不触发 writeState 全量重写--保留 worktree_created_at 等字段引号格式;**不自动 commit**(pending_gate 作为临时状态,由下一个 `_artifact commit` / `_phase complete` 等命令的 `git add .alloy.yaml` 一起 commit,合并到有意义的 commit,避免 USER_GATE 独占 commit 噪音)。**worktree cwd 守卫**:worktree 模式下必须在 worktree 内执行,主仓执行 exit 1。守卫双重检测:① state.worktree 字段有值;② git worktree list 有 `worktree-<change-name>` 分支(补救主仓 state 没同步 worktree 分支的盲区)。**前置 gate 检查(防跳过闸门)**:`require apply:sdd-ep-choice` 时检查 `apply:worktree-choice` 是否在 `gate_history`(已通过),未在则 exit 1--SKILL.md HARD_STOP 对 agent 不够强,实测 agent 跳过 worktree-choice 直接设 sdd-ep-choice,CLI 层硬约束兜底。**gate_history 写入时机**:`user-gate pass` / hook-guard clearAllPendingGates / Pi 自动通过 时把 gate 加入 `gate_history`(用 `addClearedGate` 精准追加)。**Pi 自动通过**:`PI_CODING_AGENT=true` 时 `apply:worktree-choice` / `apply:sdd-ep-choice` 不设 pending_gate,直接返回自动通过 + 输出路径引导(`-> 走 skipped 路径` / `-> 走 EP 路径`)+ 写入 gate_history--Pi 不支持 worktree / SDD,SKILL.md 不再做 Pi 软约束(避免 Claude Code/OpenCode 多读 Pi 分支)。**覆盖节点**:start(lock-draft/phase-complete)+ plan(lock-`<artifact>`/phase-complete,5 个制品)+ apply(requirement-change/worktree-choice/sdd-ep-choice/lock-verify/lock-retrospective/phase-complete)+ archive(worktree-cleanup/delta-spec-review/phase-complete)+ discard(confirm-delete)+ finish(choose-method/confirm-merge)。制品锁定 + 阶段完成类 USER_GATE 必须设 pending_gate,防止 agent 用纯文本呈现代替问答工具
@@ -406,7 +406,7 @@ alloy _env check
 alloy _retro scaffold <change-dir>
 ```
 
-自动填充 §0 量化全景（时间线/制品审批链/commit 汇总/阶段耗时/检查点/任务完成比/变更规模/worktree 状态/验证状态/计划策略/提交链）+ §4 全周期技能审计。agent 需补 §1/§2/§3/§5/§6/§7 定性分析。
+自动填充 §0 量化全景（时间线/制品审批链/commit 汇总/阶段耗时/检查点/任务完成比/变更规模/worktree 状态/验证状态/计划策略/提交链）+ §4 全周期技能审计。agent 需补 §1/§2/§3/§5/§6/§7 定性分析。**验证状态判定**:与 `_guard verify-passed` 同一函数 `parseVerifyDecision`,精确匹配 `- [x]` + 标记,避免 grep "WARNING" 字眼误判(如 OpenCode verify.md 含 "**WARNING:** 无" 描述性文本不应标 WARNING)。**§7 自检提示**:覆盖 PRECONDITION_FAIL / HARD_STOP / cat heredoc / Bash 变量拆调用 / 重锁 hash 等典型偏差,明确"已修复的偏差也算偏差",防止 agent 把已修复偏差误判为非偏差。
 
 ### alloy _spec-audit
 

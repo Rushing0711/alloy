@@ -269,6 +269,20 @@ describe("alloy _guard verify-passed", () => {
     logSpy.mockRestore();
   });
 
+  it("verify.md 含 WARNING 字眼但无 - [x] 标记 -> PASS(防止误判)", async () => {
+    // 复现 OpenCode 实际 verify.md 格式:"**WARNING:** 无" 是描述无警告,不是 WARNING 状态
+    await writeFile(join(changeDir, "verify.md"),
+      "## Verification Report\n\n**CRITICAL:** 无\n**WARNING:** 无\n**SUGGESTION:** 无\n\nAll checks passed. Ready for archive.\n",
+      "utf-8");
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await guardCommand(["verify-passed", changeDir]);
+
+    expect(logSpy).toHaveBeenCalledWith("PASS");
+    logSpy.mockRestore();
+  });
+
   it("缺少参数时 exit(1)", async () => {
     const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
     await guardCommand(["verify-passed"]);

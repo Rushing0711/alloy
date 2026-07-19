@@ -2,7 +2,7 @@
 import { execSync } from "node:child_process";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import type { Dirent } from "node:fs";
-import { join, relative, isAbsolute } from "node:path";
+import { join, relative, isAbsolute, resolve, dirname } from "node:path";
 import { guardCheck } from "../../../core/hook-guard.js";
 import { detectAgent } from "../../../core/agents.js";
 import type { AgentId } from "../../../core/types.js";
@@ -164,9 +164,21 @@ export function collectPendingGates(projectRoot: string): string[] {
  * 收集所有 worktree 模式 change 的 worktree 路径(实际值,非 null/skipped)。
  * 用于 write/edit 路径拦截:worktree 模式下,write/edit 必须用 worktree 绝对路径,
  * 不能用相对路径或主仓绝对路径(会落主仓污染 feature 分支)。
+ *
+ * 返回的路径已归一化为绝对路径:
+ * - .alloy.yaml 中 worktree 字段可能是绝对路径(agent 按 worktree.md 标准写入)或相对路径
+ *   (agent 误用 SKILL.md 文档示例字面字符串 / OpenCode `_worktree-create` 写入 `.worktrees/<name>`)
+ * - 相对路径以主仓 root 为基准解析(EnterWorktree 与 _worktree-create 都基于主仓创建 worktree,
+ *   `.worktrees/<name>` 和 `.claude/worktrees/<name>` 都是相对于主仓 root)
+ * - 主仓 root 通过 `git rev-parse --git-common-dir` 获取(在任何 worktree 内都返回主仓 .git 路径)
+ *   非 git 项目或 git 命令失败时回退到 projectRoot
+ *
+ * 不归一化会导致 line 311 `absFilePath.startsWith(wt + "/")` 用绝对路径比对相对路径字符串,永远 false,
+ * 误拦 worktree 模式下所有 Write/Edit(agent 被迫用 bash heredoc 绕过)。
  */
 export function collectWorktreePaths(projectRoot: string): string[] {
   const paths: string[] = [];
+  const mainRoot = getMainRepoRoot(projectRoot);
   for (const changeDir of scanAllChangeDirs(projectRoot)) {
     const stateFile = join(changeDir, ".alloy.yaml");
     try {
@@ -175,7 +187,9 @@ export function collectWorktreePaths(projectRoot: string): string[] {
       if (match) {
         const wt = match[1].trim().replace(/^["']|["']$/g, "");
         if (wt && wt !== "null" && wt !== "skipped") {
-          paths.push(wt);
+          // 归一化为绝对路径:绝对路径直接用,相对路径以主仓 root 为基准解析
+          const absWt = isAbsolute(wt) ? wt : resolve(mainRoot, wt);
+          paths.push(absWt);
         }
       }
     } catch {
@@ -183,6 +197,28 @@ export function collectWorktreePaths(projectRoot: string): string[] {
     }
   }
   return paths;
+}
+
+/**
+ * 获取 git 仓库主仓 root(用于相对路径归一化)。
+ *
+ * 实现:`git rev-parse --git-common-dir` 在任何 worktree 内都返回主仓 .git 路径,
+ * 主仓 root = dirname(.git path)。git 命令失败或非 git 项目时回退到 cwd。
+ *
+ * 与 listGitWorktrees 一致:try/catch + 回退,确保测试环境(mock execSync)不抛错。
+ */
+function getMainRepoRoot(cwd: string): string {
+  try {
+    const gitCommonDir = execSync("git rev-parse --git-common-dir", {
+      cwd,
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+    }).trim();
+    const absGitDir = isAbsolute(gitCommonDir) ? gitCommonDir : resolve(cwd, gitCommonDir);
+    return dirname(absGitDir);
+  } catch {
+    return cwd;
+  }
 }
 
 /**
@@ -212,8 +248,11 @@ export async function clearAllPendingGates(projectRoot: string): Promise<void> {
           await addClearedGate(changeDir, gate);
         }
       }
-    } catch {
-      // 文件不存在或读错误,跳过
+    } catch (e) {
+      // 不阻断 hook exit code(hook 不能因 .alloy.yaml 损坏阻塞工具调用),
+      // 但输出 stderr 提示:可能是 .alloy.yaml 有 YAML 语法错误(重复键等),需 agent 排查
+      // 旧实现静默吞 YAMLParseError,让 bug 沿时间线传播,最后在 readState 时才暴露,定位困难
+      process.stderr.write(`⚠️ hook-guard clearAllPendingGates 失败 (${changeDir}): ${e}\n`);
     }
   }
 }

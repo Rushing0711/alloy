@@ -89,12 +89,18 @@ export async function setPendingGate(
   const yamlPath = join(changePath, ".alloy.yaml");
   const content = await readFile(yamlPath, "utf-8");
   const value = gate === null ? "null" : gate;
-  let newContent = content.replace(
-    /^pending_gate:.*$/m,
-    `pending_gate: ${value}`
-  );
-  if (newContent === content) {
-    // pending_gate 行不存在(理论上 .alloy.yaml 总有此字段,防御性追加)
+  // 用 regex.test 判断 pending_gate 行是否存在。
+  // 不能用 content.replace 后比较 newContent === content:JS 字符串值相等,
+  // 当 value 与当前 pending_gate 值相同(null->null)时,replace 后内容相同,
+  // 误判为"行不存在"触发防御性追加,在文件末尾多写一行,产生 YAML 重复键。
+  const hasLine = /^pending_gate:.*$/m.test(content);
+  let newContent: string;
+  if (hasLine) {
+    newContent = content.replace(
+      /^pending_gate:.*$/m,
+      `pending_gate: ${value}`
+    );
+  } else {
     const withNewline = content.endsWith("\n") ? content : content + "\n";
     newContent = withNewline + `pending_gate: ${value}\n`;
   }

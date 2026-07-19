@@ -377,6 +377,39 @@ describe("alloy _hook-guard", () => {
       expect(mainAfter.pending_gate).toBeNull();
     });
 
+    it(".alloy.yaml 有 YAML 重复键时输出 stderr(不静默吞错)", async () => {
+      // 模拟 setPendingGate 旧 bug 产生的损坏:.alloy.yaml 有两处 pending_gate 行
+      // 旧 hook-guard catch 块静默吞 YAMLParseError,bug 沿时间线传播
+      // 修复后应输出 stderr 提示,不阻断 hook exit code
+      const fooDir = join(tmpDir, "openspec", "changes", "foo");
+      await mkdir(fooDir, { recursive: true });
+      const brokenYaml = [
+        "phase: applying",
+        "schema_version: 1",
+        "pending_gate: apply:sdd-ep-choice",
+        "gate_history: []",
+        "phase_timings:",
+        "  apply:",
+        "    completed_at: null",
+        "pending_gate: null",  // 重复键(YAML 不允许)
+      ].join("\n");
+      await writeFile(join(fooDir, ".alloy.yaml"), brokenYaml, "utf-8");
+
+      // 捕获 stderr
+      const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+      // 不抛错(hook 不能因 .alloy.yaml 损坏阻塞工具调用)
+      await expect(clearAllPendingGates(tmpDir)).resolves.not.toThrow();
+
+      // stderr 有输出提示
+      expect(stderrSpy).toHaveBeenCalled();
+      const stderrOutput = stderrSpy.mock.calls.map(c => String(c[0])).join("");
+      expect(stderrOutput).toContain("hook-guard clearAllPendingGates 失败");
+      expect(stderrOutput).toContain("foo");
+
+      stderrSpy.mockRestore();
+    });
+
     // 注意:worktree 内 .alloy.yaml 兜底扫描的测试在 hook-guard.integration.test.ts
     // (用真实 git worktree 验证 listGitWorktrees 的 git worktree list 调用)
   });
@@ -473,6 +506,74 @@ describe("alloy _hook-guard", () => {
       expect(paths.length).toBe(1);
 
       await rm(tmpDir, { recursive: true, force: true });
+    });
+
+    it("collectWorktreePaths 相对路径归一化为绝对路径(复现 bug:agent 误用 .worktrees/<name>)", async () => {
+      // bug 现场:agent 用相对路径 .claude/worktrees/<name> 写入 worktree 字段
+      // (套用 SKILL.md 文档示例字面字符串,而非 worktree.md 期望的 pwd -P 绝对路径)
+      // hook-guard 用绝对路径 startsWith 匹配相对路径字符串,永远 false,误拦所有 Write/Edit
+      // 修复:collectWorktreePaths 把相对路径归一化为绝对路径(以主仓 root 为基准)
+      const tmpDir = join(tmpdir(), `alloy-wt-rel-${Date.now()}`);
+      const fooDir = join(tmpDir, "openspec", "changes", "foo");
+      await mkdir(fooDir, { recursive: true });
+
+      const fooState = createInitialState();
+      fooState.phase = "applying";
+      fooState.worktree = ".claude/worktrees/foo" as any;  // 相对路径(agent 误用)
+      await writeState(fooDir, fooState);
+
+      const paths = collectWorktreePaths(tmpDir);
+      // 归一化后是绝对路径:tmpDir/.claude/worktrees/foo
+      // (测试环境 mock execSync,getMainRepoRoot 回退到 projectRoot=tmpDir)
+      expect(paths).toEqual([join(tmpDir, ".claude/worktrees/foo")]);
+      // 不再返回相对路径(否则 startsWith 匹配失败)
+      expect(paths).not.toContain(".claude/worktrees/foo");
+
+      await rm(tmpDir, { recursive: true, force: true });
+    });
+
+    it("collectWorktreePaths OpenCode .worktrees/<name> 相对路径也归一化", async () => {
+      // OpenCode 的 _worktree-create 命令也写相对路径 .worktrees/<name>
+      // (src/cli/commands/internal/worktree-create.ts:61)
+      const tmpDir = join(tmpdir(), `alloy-wt-opencode-${Date.now()}`);
+      const fooDir = join(tmpDir, "openspec", "changes", "foo");
+      await mkdir(fooDir, { recursive: true });
+
+      const fooState = createInitialState();
+      fooState.phase = "applying";
+      fooState.worktree = ".worktrees/foo" as any;  // OpenCode 相对路径
+      await writeState(fooDir, fooState);
+
+      const paths = collectWorktreePaths(tmpDir);
+      expect(paths).toEqual([join(tmpDir, ".worktrees/foo")]);
+
+      await rm(tmpDir, { recursive: true, force: true });
+    });
+
+    it("evaluateHook: 相对路径 worktree 字段 + 写文件在 worktree 内 -> 放行(修复后)", () => {
+      // 修复前:wtPaths=["/project/.worktrees/foo"] 时,agent 写绝对路径在 worktree 内 -> 放行
+      //         但 wtPaths=[".worktrees/foo"](相对)时,startsWith 匹配失败 -> 拦截
+      // 修复后:collectWorktreePaths 归一化为绝对路径,evaluateHook 接收的 wtPaths 都是绝对路径,
+      //         原有 startsWith 逻辑正确工作
+      // 此测试用绝对路径 wtPaths 模拟修复后的 collectWorktreePaths 输出
+      const stdin = JSON.stringify({
+        tool_name: "Write",
+        tool_input: { file_path: "/project/.worktrees/foo/scripts/hello.sh" },
+      });
+      const result = evaluateHook(stdin, ["applying"], {}, "/project", [], true, ["/project/.worktrees/foo"]);
+      expect(result.exitCode).toBe(0);
+    });
+
+    it("evaluateHook: 相对路径 worktree 字段 + 写文件在主仓 -> 拦截(防止落主仓)", () => {
+      // worktree 模式下,相对路径写源码应拦截(避免文件落主仓)
+      // 此场景在 OpenCode 下:agent bash 传 workdir 但 write/edit 独立进程不共享 cwd
+      const stdin = JSON.stringify({
+        tool_name: "Write",
+        tool_input: { file_path: "scripts/hello.sh" },  // 相对路径 -> 按主仓 cwd 解析
+      });
+      const result = evaluateHook(stdin, ["applying"], {}, "/project", [], true, ["/project/.worktrees/foo"]);
+      expect(result.exitCode).toBe(2);
+      expect(result.message).toContain("worktree 绝对路径");
     });
   });
 });

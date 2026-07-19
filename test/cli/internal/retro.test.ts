@@ -316,4 +316,64 @@ describe("alloy _retro scaffold", () => {
     exitSpy.mockRestore();
     logSpy.mockRestore();
   });
+
+  it("verify.md 含 WARNING 字眼但无 - [x] 标记 -> verifyDecision=PASS(复现 OpenCode 误判 bug)", async () => {
+    // 反例:OpenCode verify.md 含 "**WARNING:** 无" 字眼被旧 grep 误判 WARNING,实际全 PASS
+    // 修复:用 parseVerifyDecision 精确匹配 `- [x]` + 标记,无标记 -> PASS
+    await writeFile(join(changeDir, "verify.md"),
+      "## Verification Report\n\n**CRITICAL:** 无\n**WARNING:** 无\n**SUGGESTION:** 无\n\nAll checks passed. Ready for archive.\n",
+      "utf-8");
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    await retroCommand(["scaffold", changeDir]);
+    const content = await readFile(join(changeDir, "retrospective.md"), "utf-8");
+    const verifySection = content.split("### 验证状态")[1]?.split("###")[0] ?? "";
+    expect(verifySection).toContain("PASS");
+    expect(verifySection).not.toContain("WARNING");
+    exitSpy.mockRestore();
+    logSpy.mockRestore();
+  });
+
+  it("verify.md 含 - [x] ⚠️ WARNING checkbox -> verifyDecision=WARNING", async () => {
+    await writeFile(join(changeDir, "verify.md"),
+      "## Overall Decision\n- [x] ⚠️ WARNING\n",
+      "utf-8");
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    await retroCommand(["scaffold", changeDir]);
+    const content = await readFile(join(changeDir, "retrospective.md"), "utf-8");
+    const verifySection = content.split("### 验证状态")[1]?.split("###")[0] ?? "";
+    expect(verifySection).toContain("WARNING");
+    exitSpy.mockRestore();
+    logSpy.mockRestore();
+  });
+
+  it("verify.md 含 - [x] ❌ FAIL checkbox -> verifyDecision=FAIL", async () => {
+    await writeFile(join(changeDir, "verify.md"),
+      "## Overall Decision\n- [x] ❌ FAIL\n",
+      "utf-8");
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    await retroCommand(["scaffold", changeDir]);
+    const content = await readFile(join(changeDir, "retrospective.md"), "utf-8");
+    const verifySection = content.split("### 验证状态")[1]?.split("###")[0] ?? "";
+    expect(verifySection).toContain("FAIL");
+    exitSpy.mockRestore();
+    logSpy.mockRestore();
+  });
+
+  it("§7 自检提示覆盖 PRECONDITION_FAIL / HARD_STOP / cat heredoc / 重锁 / 平台原生交互工具", async () => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    await retroCommand(["scaffold", changeDir]);
+    const content = await readFile(join(changeDir, "retrospective.md"), "utf-8");
+    expect(content).toContain("PRECONDITION_FAIL");
+    expect(content).toContain("HARD_STOP");
+    expect(content).toContain("cat heredoc");
+    expect(content).toContain("平台原生交互工具");
+    expect(content).toContain("重锁");
+    expect(content).toContain("已修复的偏差也算偏差");
+    exitSpy.mockRestore();
+    logSpy.mockRestore();
+  });
 });

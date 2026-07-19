@@ -125,9 +125,11 @@ describe("alloy _hook-guard worktree 兜底扫描(真实 git worktree)", () => {
 
   it("collectWorktreePaths:主仓 worktree=null 时,git worktree list 兜底收集 worktree 内 worktree 路径", () => {
     // 修复前:只扫主仓,返回 [](主仓 worktree=null)
-    // 修复后:git worktree list 兜底扫描,返回 [".worktrees/test"](worktree 内 worktree 字段)
+    // 修复后:git worktree list 兜底扫描,返回 worktree 内 worktree 字段
+    //         collectWorktreePaths 把相对路径 ".worktrees/test" 归一化为绝对路径
+    //         (tmpDir/.worktrees/test),否则 line 311 startsWith 匹配失败,误拦所有 Write/Edit
     const paths = collectWorktreePaths(tmpDir);
-    expect(paths).toContain(".worktrees/test");
+    expect(paths).toContain(worktreePath);
   });
 
   it("非 git 仓库:git worktree list 失败时,退化为只扫主仓(不报错)", async () => {

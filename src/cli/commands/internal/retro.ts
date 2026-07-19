@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { join, basename } from "node:path";
 import { execSync } from "node:child_process";
 import { readState, readProjectConfig, formatTimestamp } from "../../utils/state.js";
+import { parseVerifyDecision } from "../../utils/verify.js";
 import type { AlloyState, ArtifactRecord, SkillUsageEntry, PhaseTimings } from "../../../core/types.js";
 
 function git(cmd: string, cwd: string): string {
@@ -238,10 +239,7 @@ export async function retroCommand(args: string[]): Promise<void> {
   const verifyPath = join(changeDir, "verify.md");
   if (existsSync(verifyPath)) {
     const v = await readFile(verifyPath, "utf-8");
-    if (/FAIL/.test(v)) verifyDecision = "FAIL";
-    else if (/WARNING/i.test(v)) verifyDecision = "WARNING";
-    else if (/PASS/.test(v)) verifyDecision = "PASS";
-    else verifyDecision = "（verify.md 无明确决策标记）";
+    verifyDecision = parseVerifyDecision(v);
   }
 
   // plans.md frontmatter strategy / reason
@@ -344,7 +342,14 @@ export async function retroCommand(args: string[]): Promise<void> {
     "> **无偏差时全部保持 [ ] 未勾选,在下方填\"无偏差\"。**",
     "> **常见误解:[x] 不是\"已检查\"是\"有此问题\"。**",
     ">",
-    "> **自检(必做):回顾本次 session 每个 USER_GATE——你是否都用 AskUserQuestion 工具调用?有没有输出过\"(a) X (b) Y\"让用户打字回复?有没有在 main 分支直接改代码?只要命中 1 处,对应项必勾 [x]。**",
+    "> **自检(必做):以下问题逐条回顾,只要命中 1 处,对应项必勾 [x]:**",
+    "> - 每个 USER_GATE--你是否都用平台原生交互工具(AskUserQuestion/question/alloy-question)调用?有没有输出过\"(a) X (b) Y\"让用户打字回复?",
+    "> - 有没有在 main 分支直接改代码?",
+    "> - 是否触发过 PRECONDITION_FAIL / HARD_STOP(如主仓不 clean / phase 不对 / 参数缺失 / worktree 未 commit)?哪怕已修复也算偏差,必勾对应项或\"其他\"并描述。",
+    "> - 是否用 cat heredoc 写过文件(应改用 Write/Edit 工具)?哪怕文件创建了也算偏差。",
+    "> - 是否拆两次 Bash 调用导致变量丢失(应 `VAR=... && cmd` 同一 shell 串联)?",
+    "> - 是否锁定制品后又改动需要重锁(hash-lock 失效,出现\"重锁\"commit)?",
+    "> **已修复的偏差也算偏差--必须勾选对应项或\"其他\",不能因为已修复就视为\"非偏差\"。**",
     "",
     "- [ ] AskUserQuestion 漏触发(应触发但没调工具——如只输出\"是否继续?\"等用户回复,或输出选项后没调工具)",
     "- [ ] 纯文本列选项代替 AskUserQuestion(输出 \"(a) X (b) Y\" 让用户打 a/b——哪怕只 1 处也算,哪怕后续调了工具也算双重呈现)",
