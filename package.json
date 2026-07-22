@@ -14,7 +14,7 @@
   "files": [
     "dist/",
     "compat.yaml",
-    "commands/",
+    "skills/",
     "openspec/schemas/alloy/",
     "vendor/"
   ],
