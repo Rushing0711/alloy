@@ -2,6 +2,50 @@
 
 本文件记录 @flyin-ai/alloy 的所有版本变更。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.5.0] - 2026-07-22
+
+本版本将 agent 缩减为 3 个(Claude Code/OpenCode/Pi)并完成 3 轮完全测试(含需求变更全流程),新增 hook 主动闸门机制(PreToolUse + USER_GATE + 制品检查),重设计 init 交互,下沉模块化 CLI 原子命令。
+
+**BREAKING:** agent 从 8 个缩减为 3 个(剔除 Codex 等 5 个 experimental agent)。升级后运行 `alloy init` 重新选择 agent。
+
+### Added
+
+- **hook-guard PreToolUse 主动闸门**:`alloy _hook-guard` 拦截 Write/Edit,非 apply/finishing/finished 阶段禁写源码(`src/`/`scripts/`),白名单放行 `openspec/`/`.alloy.yaml`/`docs/`/`*.md`。逃生阀 `ALLOY_FORCE_WRITE=1`
+- **USER_GATE 闸门机制**:`pending_gate` + `gate_history` 字段,agent 在关键决策点(锁定制品/创建 worktree/阶段完成)必须设 pending_gate + 调问答工具,hook-guard 检测问答工具调用自动 clear + addClearedGate。`_guard user-gate require/pass/reset` 管理 gate
+- **git pre-commit hook 兜底**:`alloy _pre-commit-check` 拦截 Bash 写文件绕过 Write/Edit 的盲区
+- **`_phase start` 制品完整性检查**:进入 plan/apply/archive/finish 时,检查上阶段 phase-complete gate 已通过 + 上阶段制品已产出(复用 ARTIFACT_CHECKS),堵"设 gate 跳过制品"漏洞
+- **`_worktree-create syncGateHistoryFromMainRepo`**:Claude Code EnterWorktree / OpenCode _worktree-create 从 HEAD 创建 worktree 后,同步主仓工作区 gate_history 到 worktree .alloy.yaml(两种模式:--record-only + 非 --record-only)
+- **`init` 重设计**:agent 矩阵显示 + Superpowers 多版本选择 + `--force` 覆盖 + 权限白名单交互
+- **Pi/OpenCode 闸门适配**:多 agent 交互工具(AskUserQuestion / question / alloy-question)适配 + Pi 自动通过 worktree-choice/sdd-ep-choice(`PI_CODING_AGENT=true`)
+- **command -> skill 迁移**:alloy 命令从 commands/ 迁移到 skills/,统一 skill 加载机制
+- **`doctor` agent 能力检测 + 保护层级标注**:检测 3 个 agent 的 worktree / subagent / bash cwd 等能力
+
+### Changed
+
+- **agent 缩减为 3 个**:Claude Code/OpenCode/Pi,剔除 Codex 等 5 个 experimental agent。3 个 agent 经 3 轮完全测试(含需求变更全流程),0 `chore: clear USER_GATE` commit + gate_history 完整 + 流程跑完
+- **模块化下沉**:重复 bash 序列(状态写入 + commit / hash-lock + commit / worktree 创建等)下沉为 CLI 原子命令,提升 agent 执行稳定性
+- **`clearAllPendingGates` 不单独 commit**:gate_history 改动随下一个 `_artifact commit` / `_state write --commit` 一起落地,消除 `chore: clear USER_GATE` 污染历史(违反 d4b5db4 "state 写入不单独提交"规范的修复)
+- **hook-guard worktree 兜底扫描**:`git worktree list` 扫描主仓 + 所有 worktree,不依赖主仓 state.worktree 字段(OpenCode hook-guard 在主仓执行,主仓 worktree 字段可能为 null)
+- **gate 顺序硬约束**:`require apply:sdd-ep-choice` 检查 `apply:worktree-choice` 是否在 gate_history,防 agent 跳过前置 gate
+- **拦截消息抗合理化**:gate 拦截消息加"合法路径:先走完 prev SKILL.md 产出制品"+ "gate 是阶段完成标志,不是跳过制品的通行证" + Red Flags
+- **文档同步**:`cli-reference.md` + `08-cli-spec.md` + `gate-ceremony.md` 按代码对齐(幽灵命令修复 + 子命令补全 + 部署路径更新)
+
+### Fixed
+
+- **archive 死循环**:`specs/<name>.md` 直接文件格式(非 `<name>/spec.md` 目录格式)不再误判为缺失制品
+- **worktree-cleanup 参数 + untracked 处理**:改为 `<change-dir>` 参数 + untracked 文件 `--force` 删除 + tracked modified 仍 HARD_STOP
+- **`_state write` worktree 字段环境校验**:worktree/worktree_branch/worktree_created_at 实际值只能在 worktree 内写(主仓写 null/skipped 允许),防 feature 分支写 worktree state 导致 merge 冲突
+- **skill-migration**:`disable-model-invocation` 恢复 finish/fix/discard + 流程内 skill 去掉 + spec/behaviors frontmatter 恢复(迁移误删)
+- **Pi 适配优化**:SKILL.md 流程修复 + 多 agent 影响分析规则(CLAUDE.md 规则 9)
+- **worktree/archive 阶段 3 处缺陷**(P1+P2a+P3)
+- **gate-guard 稳定性 + retro verify 判定对齐**
+- **finish 二次确认**:`finish:confirm-merge` USER_GATE + finish 阶段 checkpoint tag 清理校验
+
+### Removed
+
+- **Codex agent**:剔除 Codex 支持
+- **5 个 experimental agent**:agent 从 8 个缩减到 3 个(仅保留 stable: Claude Code/OpenCode/Pi)
+
 ## [0.4.0] - 2026-07-08
 
 本版本扩展 Superpowers 兼容范围至 v5+v6 双版本(非 BREAKING),升级 vendor 快照为 v6.1.1,并改进检测逻辑与 init 交互。
