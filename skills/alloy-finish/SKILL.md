@@ -228,10 +228,9 @@ CHANGE_DIR="${ARCHIVE_DIR:-openspec/changes/<name>}"
 
 # 记录完成时间 + 推进 phase（在 squash merge 之前--§5.2.3 路径 B）
 # [HARD_STOP] phase 推进早于不可逆操作（squash merge / branch -D），失败时必须有降级路径：
-#   - 若 squash merge 后续步骤失败 -> 用户须手动回滚 phase：
-#       alloy _state set "$CHANGE_DIR" phase archived
-#       git checkout HEAD~1 -- "$CHANGE_DIR/.alloy.yaml"  # 撤销 phase commit 中的状态变更
-#       git reset HEAD~1                                  # 退回 phase commit
+#   - 若 squash merge 后续步骤失败 -> 用户须手动降级 phase：
+#       alloy _phase downgrade "$CHANGE_DIR" archived
+#       （_phase downgrade 内部完成 state 写入 + commit，不撤销原 phase commit，hash 链保留）
 #   - 禁止 agent 自动运行 git reset --hard / git checkout . 清场（详见 §3.5.1）。
 # 详见 docs/reference/alloy-skill-writing-guide.md §5.2.3 路径 B
 alloy _phase complete "$CHANGE_DIR" finish
@@ -258,8 +257,8 @@ else
     echo "  🔴 USER_GATE: 选择处理方式"
     echo "    1. 重试--用户手动修复后再次运行 /alloy-finish"
     echo "    2. 跳过 pull 直接 squash（仅当用户确认 main 已是最新--风险自负）"
-    echo "    3. 中止 finish--保持当前分支，回退 phase："
-    echo "        alloy _state set \"$CHANGE_DIR\" phase archived"
+    echo "    3. 中止 finish--保持当前分支，降级 phase："
+    echo "        alloy _phase downgrade \"$CHANGE_DIR\" archived"
     echo ""
     echo "  禁止：agent 自动运行 git reset --hard origin/<main_branch> 强制对齐。"
     exit 1
@@ -307,10 +306,9 @@ alloy _finish-cleanup "$CHANGE_DIR" "<feature_branch>"
 ARCHIVE_DIR=$(alloy _archive-dir <name>)
 CHANGE_DIR="${ARCHIVE_DIR:-openspec/changes/<name>}"
 # [§5.2.3 路径 B] phase 推进发生在 PR 创建之前。PR 后续被 close / 不合入时，
-# 用户须手动按以下 3 步回退（与选项 1 同款手动回退路径）：
-#   alloy _state set "$CHANGE_DIR" phase archived
-#   git checkout HEAD~1 -- "$CHANGE_DIR/.alloy.yaml"  # 撤销 phase commit 中的状态变更
-#   git reset HEAD~1                                  # 退回 phase commit
+# 用户须手动降级 phase（与选项 1 同款降级路径）：
+#   alloy _phase downgrade "$CHANGE_DIR" archived
+#   （_phase downgrade 内部完成 state 写入 + commit，不撤销原 phase commit，hash 链保留）
 # 禁止 agent 自动 git reset --hard / git checkout . 清场（§3.5.1）。
 alloy _phase complete "$CHANGE_DIR" finish
 ```

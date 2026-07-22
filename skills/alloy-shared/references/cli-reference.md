@@ -6,7 +6,7 @@
 
 ## 用户命令
 
-面向终端用户，5 个。
+面向终端用户，6 个。
 
 ### alloy init
 
@@ -146,7 +146,7 @@ source <(alloy completion bash)         # 临时启用 bash 补全
 
 ## 内部命令（`_` 开头）
 
-面向 skill md 编排，17 个。Agent 通过这些命令操作 state、推进 phase、锁定制品 hash、归档等。**Agent 不直接写 YAML**——必须通过 `_state` / `_artifact` / `_phase` 等原子命令操作 `.alloy.yaml`。
+面向 skill md 编排，28 个。Agent 通过这些命令操作 state、推进 phase、锁定制品 hash、归档等。**Agent 不直接写 YAML**——必须通过 `_state` / `_artifact` / `_phase` 等原子命令操作 `.alloy.yaml`。
 
 ### alloy _state
 
@@ -344,7 +344,7 @@ alloy _record <write|check|scan|compute|approver> <change-dir> [artifact] [hash]
 
 子命令：
 - `write <change-dir> <artifact> <hash> <committed_at> <approver>`：写入/覆盖 record（不 git commit，底层操作）
-- `check <change-dir> [artifact]`：校验 record hash 与当前文件 hash 是否一致。输出 `[PASS]` / `[FAIL]`
+- `check <change-dir> [artifact]`：校验 record hash 与当前文件 hash 是否一致。输出 `[PASS]` / `[FAIL]` / `[WARN]`(无 records 或 artifact 未找到时 `[WARN]` + exit 1)
 - `scan <change-dir> [artifact...]`：批量校验（默认 `draft/proposal/design/specs/tasks/plans`）。任一失败 exit 1（HARD_STOP）
 - `compute <change-dir> <artifact>`：计算并输出当前制品 hash（不写 record）
 - `approver`：输出当前 git user.name（审批人）
@@ -378,7 +378,7 @@ alloy _skill <log|skip> <change-dir> <stage> <skill> [--via <source>] [--reason 
 ```
 
 - `log`：记录使用。`--via` 标记调用来源；`--at` 补录实际使用时间（补录场景豁免 `started_at` 前置校验）。同一 skill+stage 组合幂等更新，`count` +1
-- `skip`：记录跳过。`--reason` 必填原因
+- `skip`：记录跳过。`--reason` 推荐填写(代码不强制,但 retrospective §4 技能审计会引用)
 
 stage 取值：`start` / `plan` / `apply` / `archive` / `finish`。
 
@@ -521,26 +521,30 @@ alloy _fix detect-keywords <description>
 
 ### alloy _worktree-create
 
-worktree 创建（原子操作：git worktree add + _state write 三字段 + commit）。**OpenCode 用;Claude Code 用 EnterWorktree 工具;Pi 不支持 worktree,不调本命令。**
+worktree 创建（原子操作：git worktree add + _state write 三字段 + commit）。**OpenCode 用;Claude Code 用 EnterWorktree 工具(后调 `--record-only` 模式记录 state);Pi 不支持 worktree,不调本命令。**
 
 ```
 alloy _worktree-create <change-dir>
+alloy _worktree-create --record-only <change-dir> --path <worktree-path> --branch <worktree-branch>
 ```
 
 参数：
 - `<change-dir>`：change 目录路径（如 `openspec/changes/<name>`）
+- `--record-only`（可选）：Claude Code EnterWorktree 后用,仅记录 state 三字段 + commit,不创建 worktree(EnterWorktree 已创建)。需配合 `--path` + `--branch`
 
-原子完成:
+原子完成(默认模式):
 1. 校验当前在主仓(不在 worktree 内) + 当前分支 = feature_branch + 主仓工作目录清洁
 2. 校验 .worktrees/ 已在 .gitignore + worktree-<change-name> 分支不存在
 3. `git worktree add .worktrees/<change-name> -b worktree-<change-name>`(worktree 分支名约定,不是 feature 分支)
 4. worktree 内 `_state write worktree / worktree_branch / worktree_created_at` 三字段
 5. worktree 内 `git add .alloy.yaml + commit`
 
+`--record-only` 模式:跳过步骤 1-3(EnterWorktree 已创建 worktree),直接在 worktree 内执行步骤 4-5(state write 三字段 + commit)。`--path` 传 worktree 绝对路径,`--branch` 传 worktree 分支名(如 `worktree-<change-name>`)。
+
 **易错**:
 - 禁用 feature 分支名建 worktree(`git worktree add .worktrees/feature/x -b feature/x` -- feature 分支已存在且已被主仓 checkout,fatal)。worktree 分支名约定 `worktree-<change-name>`
 - agent 不手动 git worktree add / _state write worktree 字段 / mkdir .worktrees -- 本命令是唯一合法路径(OpenCode)
-- Claude Code agent 必须用 `EnterWorktree(name)` 工具,路径 `.claude/worktrees/<name>`,不调本命令
+- Claude Code agent 必须用 `EnterWorktree(name)` 工具创建 worktree(路径 `.claude/worktrees/<name>`),创建后调 `--record-only` 模式记录 state(不能省略,否则 state 无 worktree 字段,后续 worktree-cleanup 失败)
 - Pi 不支持 worktree(bash 工具无 cwd 参数,session cwd 不解绑),禁调本命令;Pi 下 `alloy _guard worktree-status` 强制返回 `skipped`
 
 ### alloy _worktree-cleanup
@@ -588,10 +592,10 @@ alloy _finish-cleanup <change-dir> <feature-branch>
 
 ### alloy _hook-guard
 
-PreToolUse hook 适配器(Claude Code 用,Pi/OpenCode 通过扩展/工具调用)。从 stdin 读 JSON,判定 Write/Edit 是否允许,exit 0(放行)/ 2(拦截)。由 `alloy init` 自动装到:
+PreToolUse hook 适配器(Claude Code 用,Pi/OpenCode 通过扩展/plugin 调用)。从 stdin 读 JSON,判定 Write/Edit 是否允许,exit 0(放行)/ 2(拦截)。由 `alloy init` 自动装到:
 - Claude Code:`.claude/settings.json` 的 `hooks.PreToolUse`
 - Pi:`.pi/extensions/alloy-guard.ts`(订阅 tool_call 事件,回调调本命令)
-- OpenCode:`.opencode/tools/write.ts` + `edit.ts`(覆盖内置工具,execute 调本命令)
+- OpenCode:`.opencode/plugins/alloy-guard.ts`(plugin `tool.execute.before`,可拦截所有工具含 question)
 
 ```
 alloy _hook-guard
@@ -632,7 +636,7 @@ alloy _pre-commit-check
 
 ### alloy _stop-guard
 
-Stop hook 适配器(仅 Claude Code)。检测 agent 在 USER_GATE 用纯文本输出 1./2. 选项代替 AskUserQuestion 的违规行为,返回 additionalContext 提醒 agent 改用工具。
+Stop hook 适配器(Claude Code / OpenCode / Pi)。检测 agent 在 USER_GATE 用纯文本输出 1./2. 选项代替 AskUserQuestion 的违规行为,返回 additionalContext 提醒 agent 改用工具。
 
 ```
 alloy _stop-guard
@@ -653,7 +657,7 @@ alloy _stop-guard
 
 **逃生阀**:`ALLOY_FORCE_STOP=1` 绕过(仅限修复畸形状态)。
 
-**仅 Claude Code**:依赖 Stop hook + `last_assistant_message` 字段。OpenCode 用 plugin session.idle,Pi 用 extension agent_settled。由 `alloy init` 自动装到 `.claude/settings.json` 的 `hooks.Stop`。
+**部署路径**:Claude Code `.claude/settings.json` hooks.Stop;Pi `.pi/extensions/alloy-guard.ts` agent_settled;OpenCode `.opencode/plugins/alloy-guard.ts` session.idle。由 `alloy init` 自动装到对应路径。
 
 ### alloy _precheck
 
@@ -824,8 +828,8 @@ alloy _start finalize <change-dir>
 18. **`alloy _branch create` 失败时回退 USER_GATE**：exit 1 后 agent 不自动 reset/checkout（§3.5.1 git 自救禁令），回退到 change name + 分支决策 USER_GATE
 19. **`alloy _start bootstrap/finalize` 任一步失败不继续**：内部按序执行，失败立即 exit 1，不回滚（回滚需用户介入，符合 §3.5.1）
 16. **`alloy _state write worktree/branch/created_at` 实际值只能在 worktree 内写**：主仓写实际值会被拒（PRECONDITION_FAIL），写 `null`（清理）或 `skipped`（跳过 worktree）允许。防止 feature 分支写 worktree state 导致 merge 冲突。
-17. **`alloy _state write phase` 被拦截**：phase 推进必须走 `_phase start/complete` 或 `_guard --apply`，确保阶段时间链 + 制品完整性。逃生阀 `ALLOY_FORCE_PHASE=1`（仅限修复畸形状态）
-18. **`alloy _hook-guard` hook 逃生阀**:`ALLOY_FORCE_WRITE=1` 绕过 hook 拦截(仅限修复畸形状态)。hook 由 `alloy init` 自动装到 `.claude/settings.json`(PreToolUse) / `.pi/extensions/alloy-guard.ts`(tool_call 扩展) / `.opencode/tools/write.ts+edit.ts`(custom tool),拦截非 apply 阶段写源码
+17. **`alloy _state write phase` 被拦截**：phase 推进必须走 `_phase start/complete` 或 `_guard --apply`，确保阶段时间链 + 制品完整性。降级用 `_phase downgrade <change-dir> <to-phase>`（替代 `ALLOY_FORCE_PHASE=1 alloy _state write phase` 逃生阀，内部完成 state 写入 + commit）
+18. **`alloy _hook-guard` hook 逃生阀**:`ALLOY_FORCE_WRITE=1` 绕过 hook 拦截(仅限修复畸形状态)。hook 由 `alloy init` 自动装到 `.claude/settings.json`(PreToolUse) / `.pi/extensions/alloy-guard.ts`(tool_call 扩展) / `.opencode/plugins/alloy-guard.ts`(plugin tool.execute.before),拦截非 apply 阶段写源码
 19. **`alloy _guard user-gate require` 后写源码被拦**:pending_gate 期间,hook-guard 拦截非白名单写入(即使 apply 阶段)。需先用问答工具(AskUserQuestion/question,自动 clear pending_gate)或 `alloy _guard user-gate pass <change-dir>` 降级。解决弱模型忘记用问答工具与用户确认的问题
 20. **pre-commit hook 兜底 PreToolUse 盲区**:agent 用 Bash 写文件(`echo > / cat << / tee`)绕过 Write/Edit hook,但 `git commit` 时 pre-commit 检查暂存文件,拦住。逃生阀 `ALLOY_FORCE_WRITE=1`。由 `alloy init` 自动装到 `.git/hooks/pre-commit`
 21. **`alloy _start precheck` 后禁重复检查**:precheck 已原子完成 env check + status + precheck + git 校验,禁再跑 `test -f openspec/config.yaml` / `git rev-parse --git-dir` / `alloy _env check` / `alloy status` / `alloy _precheck`--重复 = 浪费 LLM 往返 = 限流风险(step-3.7-flash 限 10 RPM,实测 16 秒内 11 次调用即触顶 429)。agent 根据 `-> route: <unified|resume|abort>` 决策即可

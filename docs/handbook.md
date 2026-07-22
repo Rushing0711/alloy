@@ -202,14 +202,17 @@ worktree 是 apply 的**本地实现细节**。apply 完成后代码已经合并
 |------|------|------|
 | `alloy init` | `[path]` | 项目初始化：HOME 拦截 → 确保 git 仓库 → 安装依赖 → 部署 schema + skill → 配置权限白名单 + `.gitattributes` |
 | | `--scope <global\|project>` | 安装范围，默认 project |
-| | `--inject-claude-md` | 注入 CLAUDE.md（默认关闭） |
 | | `--agents <id,id,...>` | 非交互式模式，指定 AI 工具 |
+| | `--force` | 跳过确认 + breaking 变更双重确认 |
 | | | init 交互步骤：主分支确认 → 权限白名单(allow alloy/git/openspec 等,deny force/reset/rm,支持 Claude Code/CodeBuddy/Pi) → `.gitattributes`(`* text=auto eol=lf`,避免 Windows CRLF) |
 | `alloy status` | `[path\|name] [--json]` | 查看活跃 change 总览或指定 change 详情 |
 | | `--json` | JSON 格式输出 |
-| `alloy doctor` | `[path]` | 诊断：版本兼容性、文件一致性 |
-| | `--json` | JSON 格式输出 |
+| `alloy doctor` | `[path] [--json]` | 诊断：版本兼容性、文件一致性 |
 | `alloy update` | `[path]` | 重新部署 skill + schema。开发模式（有 .git）直接部署本地；用户模式查 npm registry 新版 |
+| | `--force, -f` | 强制重新部署（跳过版本检查） |
+| `alloy clean` | `[path]` | 清理 alloy 部署的文件（skills/schema/hook/permissions 等） |
+| | `--scope <global\|project>` | 清理范围，默认 project |
+| | `--force, -f` | 跳过确认 |
 | `alloy completion` | `[shell] [--install]` | 生成 shell 补全脚本 |
 | `alloy --version`, `-v` | | 版本号 |
 | `alloy --help`, `-h` | | 帮助 |
@@ -220,18 +223,31 @@ worktree 是 apply 的**本地实现细节**。apply 完成后代码已经合并
 |------|------|
 | `alloy _state` | 读写 `.alloy.yaml` 状态文件（`read\|write\|init\|merge\|check\|timestamp`） |
 | `alloy _skill` | 技能使用记录管理（`log\|skip`），持久化到 `skill_usage[]` |
-| `alloy _guard` | 阶段转换校验 + phase 推进（`precheck\|verify-passed\|branch-position\|worktree-status`） |
-| `alloy _phase` | 阶段时间记录 + phase 推进（`start` 推进到 -ing，`complete` 推进到 -ed + 写 completed_at，`reset` 清理 timing） |
+| `alloy _guard` | 阶段转换校验 + phase 推进 + USER_GATE 闸门（`precheck\|verify-passed\|branch-position\|worktree-status\|user-gate\|main-clean\|parallel-phase\|dirty-check`） |
+| `alloy _phase` | 阶段时间记录 + phase 推进（`start` 推进到 -ing，`complete` 推进到 -ed + 写 completed_at，`reset` 清理 timing，`downgrade <change-dir> <to-phase>` 降级 phase 用于 §5.2.3 路径 B） |
 | `alloy _verify` | 阶段转换状态校验（`phase-enter\|phase-exit <phase> <change-dir>`），校验制品 + state 字段 + 目录位置 |
 | `alloy _artifact` | 制品 hash-lock + commit（`commit\|reset`），原子命令 |
-| `alloy _record` | 制品 hash 记录管理（`compute\|write\|check\|approver`） |
+| `alloy _record` | 制品 hash 记录管理（`compute\|write\|check\|scan\|approver`） |
 | `alloy _config` | 读写 `openspec/config.yaml` 项目级配置 |
 | `alloy _checkpoint` | 检查点管理（`create\|list\|switch\|clean`） |
 | `alloy _archive` | 归档原子命令:调用 openspec archive CLI + 校验 Delta Spec promote + 校验目录移动 |
-| `alloy _worktree-cleanup` | worktree 清理原子命令:merge + remove + branch -d + worktree_merged_at 记录(接受 state 字段参数) |
+| `alloy _worktree-cleanup` | worktree 清理原子命令:merge + remove + branch -d + worktree_merged_at 记录(CLI 自己从 worktree 分支读 state,不依赖 agent 传参) |
 | `alloy _retro` | retrospective 机械数据预生成（`scaffold`） |
 | `alloy _env` | 环境完整性检测（`check`） |
 | `alloy _progress` | 制品进度扫描（`artifacts`） |
+| `alloy _archive-dir` | 输出归档后目录路径(`openspec/changes/archive/<YYYY-MM-DD>-<name>`) |
+| `alloy _worktree-create` | worktree 创建原子命令(git worktree add + state write 三字段 + commit) |
+| `alloy _finish-cleanup` | finish 阶段 squash merge 后原子删除 feature 分支(下沉 git branch -D) |
+| `alloy _precheck` | Skill/Command 预检(多 agent 适配),检测指定 cmd 和 skill 是否就绪 |
+| `alloy _infra-commit` | 基础设施 commit 原子命令(限路径 + 跳过 CI) |
+| `alloy _chore-commit` | 杂项 chore commit 原子命令(限路径,禁 feat/fix) |
+| `alloy _fix` | fix 阶段辅助命令(如 detect-keywords) |
+| `alloy _hook-guard` | PreToolUse hook 适配器(判定 Write/Edit 是否允许) |
+| `alloy _pre-commit-check` | git pre-commit hook 适配器(兜底 PreToolUse 盲区) |
+| `alloy _stop-guard` | Stop hook 适配器(检测文本输出代替问答工具的违规) |
+| `alloy _branch` | 分支管理辅助命令 |
+| `alloy _change` | change 目录管理原子命令(目录冲突预检 + openspec new change) |
+| `alloy _start` | start 阶段多步 bash 序列下沉(`precheck\|bootstrap\|finalize`) |
 | `alloy _spec-audit` | skill frontmatter 与 spec 对账,检测漂移 |
 
 ### 4.3 Slash Command（AI Agent 内使用）
@@ -473,7 +489,7 @@ openspec/
 | `openspec status` 报 `Invalid schema` | version 是 string、artifact 缺 description、apply 缺 requires | `openspec schemas` 验证 |
 | `Template not found` | template 值含 `templates/` 前缀，OpenSpec 又加一遍 | 去掉前缀，只写文件名 |
 | vitest mock 不生效 | ESM 模块不能用 `vi.spyOn(require(...))` | 用 `vi.mock` + `vi.mocked` |
-| worktree 断线重连无法识别 | apply 创建 worktree 后没写 `.alloy.yaml` | apply Step 1 后立即 `alloy _state write worktree` |
+| worktree 断线重连无法识别 | apply 创建 worktree 后没写 `.alloy.yaml` | 用 `alloy _worktree-create` 原子命令(OpenCode)或 EnterWorktree 工具(Claude Code),禁手写 `_state write worktree` |
 | `.alloy.yaml` phase 不更新 | guard 无制品检查 | 补充制品缺失检查 |
 | "Alloy 未初始化" | 未运行 `alloy init` | 运行 `alloy init` |
 | "OpenSpec 项目结构未找到" | `openspec/config.yaml` 不存在 | 运行 `alloy init` |

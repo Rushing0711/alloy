@@ -746,10 +746,8 @@ alloy _verify phase-exit apply openspec/changes/<name> && alloy _phase complete 
 **§5.2.3 路径 B 降级（HARD_STOP）：** 若 `_phase complete` 失败（commit 失败等不可恢复状态），降级路径（apply 阶段降级 → `planned`）：
 
 ```bash
-# 用户须手动回滚 phase：
-alloy _state set openspec/changes/<name> phase planned
-git checkout HEAD~1 -- "openspec/changes/<name>/.alloy.yaml"  # 撤销 phase commit 中的状态变更
-git reset HEAD~1                                              # 退回 phase commit
+# 用户须手动降级 phase（_phase downgrade 内部完成 state 写入 + commit）：
+alloy _phase downgrade openspec/changes/<name> planned
 ```
 
 > 禁止 agent 自动 `git reset --hard` / `git checkout .` 清场（§3.5.1）。违反字面 = 违反精神：哪怕"清理一下让流程重启"也算违反——退出 skill 让用户决策是唯一合法路径。详见 `alloy-shared/references/phase-downgrade-path.md`。

@@ -51,7 +51,7 @@ behaviors:
 | "需求变更和轻量修正差不多，先 reset 试试看" | ⛔ HARD_STOP：分类不清前禁执行 `_artifact reset`。需求变更 = 删除全部 plan 制品，轻量修正 = 只重置一个制品。后果完全不同。 |
 | "draft 的 commit message 看着像是确认了，跳过 hash 校验吧" | ⛔ PRECONDITION_FAIL：draft 来源必须 `alloy _record check` 验证 hash 链（task #16），commit msg 字符串解析不可靠。 |
 | "rollback 失败了，git reset --hard 清场重来" | ⛔ HARD_STOP：rollback 失败时禁 reset --hard / checkout . / stash drop（§3.5.1 git 自救禁令）。退出 skill 让用户处理。 |
-| "phase 推进失败但 plans 已生成，git reset 回退一下" | ⛔ HARD_STOP：phase 推进路径 B 降级——手动 `alloy _state set` 回退 phase，禁 git reset 清场（§5.2.3）。 |
+| "phase 推进失败但 plans 已生成，git reset 回退一下" | ⛔ HARD_STOP：phase 推进路径 B 降级——调 `alloy _phase downgrade` 回退 phase，禁 git reset 清场（§5.2.3）。 |
 | "用户在等，分类先按轻量修正走，错了再说" | 分类不清 = 默认需求变更（references/rollback.md 已写）。USER_GATE 必须用户明确选择。 |
 | "先文本列 1./2. 选项让用户思考，再调 AskUserQuestion 双保险" | ⛔ HARD_STOP：双重呈现违规——首次呈现必须是平台原生交互工具调用,不是文本。哪怕"先展示选项让用户思考"、"文本+工具双保险",也算违反。常见模式:thinking 决策"用 AskUserQuestion"但执行时先输出纯文本选项(决策→执行断裂)。 |
 | "这个项目很小，不需要那么正式" | 小项目和大项目的闸门完全一样。不存在"规模分级的保护等级"。 |
@@ -571,9 +571,9 @@ alloy _verify phase-exit plan openspec/changes/<name> && alloy _phase complete o
 **§5.2.3 路径 B 降级（HARD_STOP）：** 如果 guard --apply 推进 phase 成功，但后续命令意外失败（不可恢复状态），**禁 agent 运行 `git reset --hard` / `git checkout .` 清场**。降级路径：
 
 ```bash
-# 手动回退 phase（仅限用户确认后执行）
-alloy _state set openspec/changes/<name> phase started
-# 不要 reset 已 commit 的制品——hash 链保留，用户可重入 plan 阶段决定下一步
+# 降级 phase（仅限用户确认后执行,_phase downgrade 内部完成 state 写入 + commit）
+alloy _phase downgrade openspec/changes/<name> started
+# 不撤销原 phase commit——hash 链保留，用户可重入 plan 阶段决定下一步
 ```
 
 违反字面 = 违反精神：哪怕"只是为了让流程干净"，也禁 reset 清场——制品 hash 链是用户的工作记录。

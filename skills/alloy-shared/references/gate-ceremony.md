@@ -9,7 +9,7 @@ Alloy 用 `alloy _guard user-gate require/pass/reset` + hook-guard 实现硬交�
 agent 在 SKILL.md 里调:
 
 ```bash
-alloy _guard user-gate require <change-dir> <gate-name> "<prompt>"
+alloy _guard user-gate require <change-dir> <gate-name>
 ```
 
 效果:
@@ -38,7 +38,7 @@ alloy _guard user-gate reset <change-dir> <gate-name>
 ### 4. pass pending gate(降级路径,慎用)
 
 ```bash
-alloy _guard user-gate pass <change-dir> <gate-name>
+alloy _guard user-gate pass <change-dir>
 ```
 
 效果:gate 标记为 passed,不再拦写入。**仅在用户已经明确决策(不是问答工具调用)的场景使用**,例如用户在文本里说"继续合并"。
@@ -64,6 +64,6 @@ SKILL.md 里设 USER_GATE 时,引用本文件代替内联说明(避免 16 处复
 hook-guard 在 PreToolUse 事件里:
 1. 读 `.alloy.yaml` 的 `pending_gate` 字段
 2. 如果有 pending_gate 且当前工具是 Write/Edit(非白名单),exit 2 拦截
-3. 如果当前工具是问答工具(AskUserQuestion/question/alloy-question),调 `_guard user-gate pass` 自动 clear
+3. 如果当前工具是问答工具(AskUserQuestion/question/alloy-question),调 `clearAllPendingGates` 内部函数自动 clear(扫描主仓 + 所有 git worktree,`setPendingGate(null)` + `addClearedGate(gate)`,不调 `_guard user-gate pass` CLI 命令--那是 agent 手动降级用的)
 
 详见 `alloy-shared/references/cli-reference.md` `_guard user-gate` 章节。
