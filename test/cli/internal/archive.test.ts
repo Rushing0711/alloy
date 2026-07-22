@@ -460,4 +460,49 @@ describe("alloy _archive", () => {
     exitSpy.mockRestore();
     logSpy.mockRestore();
   });
+
+  it("内部完成归档 commit(git add + git commit)", async () => {
+    // setup: change 含 specs/
+    await mkdir(join(changeDir, "specs/cli-greeting"), { recursive: true });
+    await writeFile(join(changeDir, "specs/cli-greeting/spec.md"), "# spec", "utf-8");
+
+    const archiveDir = join(tmpDir, `openspec/changes/archive/${new Date().toISOString().slice(0, 10)}-${changeName}`);
+    await mkdir(archiveDir, { recursive: true });
+    await mkdir(join(archiveDir, "specs/cli-greeting"), { recursive: true });
+    await writeFile(join(archiveDir, "specs/cli-greeting/spec.md"), "# spec", "utf-8");
+    await mkdir(join(tmpDir, "openspec/specs/cli-greeting"), { recursive: true });
+    await writeFile(join(tmpDir, "openspec/specs/cli-greeting/spec.md"), "# spec", "utf-8");
+
+    execSyncMock.mockImplementation((cmd: string) => {
+      if (cmd.startsWith("openspec archive")) return "";
+      if (cmd.includes("git rev-parse --show-toplevel")) return tmpDir;
+      if (cmd.includes("git rev-parse --git-dir")) return ".git";
+      if (cmd.includes("git rev-parse --git-common-dir")) return ".git";
+      if (cmd.includes("git add openspec/specs/")) return "";
+      if (cmd.includes("git diff --cached --quiet")) throw new Error("has staged");
+      if (cmd.includes("git commit")) return "";
+      return "";
+    });
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    await archiveCommand([changeDir]);
+
+    // 验证调用了 git add openspec/specs/ openspec/changes/
+    expect(execSyncMock).toHaveBeenCalledWith(
+      expect.stringContaining("git add openspec/specs/ openspec/changes/"),
+      expect.anything()
+    );
+    // 验证调用了 git commit
+    expect(execSyncMock).toHaveBeenCalledWith(
+      expect.stringMatching(/git commit -m "chore\(test-change\): 归档目录移动"/),
+      expect.anything()
+    );
+    // 验证输出了归档 commit 提示
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("归档变更已 commit"));
+
+    exitSpy.mockRestore();
+    logSpy.mockRestore();
+  });
 });

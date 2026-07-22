@@ -171,4 +171,26 @@ describe("alloy _worktree-create", () => {
     exitSpy.mockRestore();
     logSpy.mockRestore();
   });
+
+  it("--record-only 缺 --path -> exit 1", async () => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await worktreeCreateCommand(["openspec/changes/test", "--record-only", "--branch", "worktree-test"]);
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    exitSpy.mockRestore();
+    errSpy.mockRestore();
+  });
+
+  it("--record-only 缺 --branch -> exit 1", async () => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await worktreeCreateCommand(["openspec/changes/test", "--record-only", "--path", ".claude/worktrees/test"]);
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    exitSpy.mockRestore();
+    errSpy.mockRestore();
+  });
 });

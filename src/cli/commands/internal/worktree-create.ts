@@ -46,6 +46,7 @@ function gitExec(cmd: string, opts: { cwd?: string } = {}): { ok: boolean; stdou
  */
 export async function worktreeCreateCommand(args: string[]): Promise<void> {
   const changeDir = args.find((a) => !a.startsWith("--"));
+  const recordOnly = args.includes("--record-only");
   if (!changeDir) {
     console.error("用法: alloy _worktree-create <change-dir>");
     console.error("");
@@ -54,6 +55,10 @@ export async function worktreeCreateCommand(args: string[]): Promise<void> {
     console.error("  前置:已在 feature 分支,主仓工作目录清洁。");
     process.exit(1);
     return;
+  }
+
+  if (recordOnly) {
+    return worktreeRecordOnly(args, changeDir);
   }
 
   const changeName = basename(changeDir);
@@ -185,4 +190,63 @@ export async function worktreeCreateCommand(args: string[]): Promise<void> {
   console.log("  下一步(OpenCode:后续 bash 命令传 workdir=<worktree> 进入 worktree):");
   console.log(`    worktree 路径: ${worktreePath}`);
   console.log("    <继续 apply 阶段后续步骤,OpenCode bash 传 workdir 参数>");
+}
+
+/**
+ * alloy _worktree-create --record-only <change-dir> --path <worktree-path> --branch <worktree-branch>
+ *
+ * Claude Code EnterWorktree 后,仅记录 state 三字段 + commit,不创建 worktree。
+ * Claude Code 用 EnterWorktree 工具创建 worktree(不是本命令),但需要记录 state。
+ * --record-only 模式跳过 git worktree add + 校验,直接写 state + commit。
+ */
+async function worktreeRecordOnly(args: string[], changeDir: string): Promise<void> {
+  const changeName = basename(changeDir);
+  const pathIdx = args.indexOf("--path");
+  const branchIdx = args.indexOf("--branch");
+  const worktreePath = pathIdx >= 0 ? args[pathIdx + 1] : "";
+  const worktreeBranch = branchIdx >= 0 ? args[branchIdx + 1] : "";
+
+  if (!worktreePath || !worktreeBranch) {
+    console.error("用法: alloy _worktree-create --record-only <change-dir> --path <worktree-path> --branch <worktree-branch>");
+    console.error("  --record-only: Claude Code EnterWorktree 后,仅记录 state 三字段 + commit,不创建 worktree");
+    console.error("  --path: worktree 路径(EnterWorktree 创建的,如 .claude/worktrees/<name>)");
+    console.error("  --branch: worktree 分支(EnterWorktree 创建的,如 worktree-<name>)");
+    process.exit(1);
+    return;
+  }
+
+  const createdAt = formatTimestamp();
+
+  // 写 state 三字段(在 worktree 内执行,cwd 是 worktree)
+  const stateWrites = [
+    `alloy _state write "${changeDir}" worktree "${worktreePath}"`,
+    `alloy _state write "${changeDir}" worktree_branch "${worktreeBranch}"`,
+    `alloy _state write "${changeDir}" worktree_created_at "${createdAt}"`,
+  ];
+  for (const cmd of stateWrites) {
+    const r = gitExec(cmd);
+    if (!r.ok) {
+      console.error(`⛔ [HARD_FAIL] _state write 失败: ${cmd}`);
+      console.error(`  ${r.stderr}`);
+      process.exit(1);
+      return;
+    }
+  }
+
+  // git add .alloy.yaml + commit(在 worktree 内)
+  const commitResult = gitExec(
+    `git add openspec/changes/${changeName}/.alloy.yaml && git diff --cached --quiet || git commit -m "chore(${changeName}): 记录 worktree 状态(--record-only)"`
+  );
+  if (!commitResult.ok) {
+    console.error(`⚠️ worktree state 已写入但 commit 失败: ${commitResult.stderr}`);
+  } else {
+    console.log(`✓ worktree state 已 commit (worktree 分支 ${worktreeBranch})`);
+  }
+
+  console.log("");
+  console.log("✓ worktree 记录完成(--record-only 模式):");
+  console.log(`  ✓ worktree 路径: ${worktreePath}`);
+  console.log(`  ✓ worktree 分支: ${worktreeBranch}`);
+  console.log("  ✓ state 三字段已写入: worktree / worktree_branch / worktree_created_at");
+  console.log(`  ✓ worktree_created_at: ${createdAt}`);
 }

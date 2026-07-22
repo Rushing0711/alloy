@@ -150,7 +150,7 @@ export async function phaseCommand(args: string[]): Promise<void> {
   const action = args[0];
 
   if (!action) {
-    console.error("用法: alloy _phase <start|complete|reset> <change-dir> <phase>");
+    console.error("用法: alloy _phase <start|complete|reset|downgrade> <change-dir> <phase>");
     return process.exit(1);
   }
 
@@ -165,8 +165,11 @@ export async function phaseCommand(args: string[]): Promise<void> {
   if (action === "reset") {
     return phaseReset(args.slice(1));
   }
+  if (action === "downgrade") {
+    return phaseDowngrade(args.slice(1));
+  }
 
-  console.error(`未知操作: ${action} (支持: start, complete, reset)`);
+  console.error(`未知操作: ${action} (支持: start, complete, reset, downgrade)`);
   return process.exit(1);
 }
 
@@ -282,6 +285,11 @@ async function checkPendingGateBeforeComplete(changeDir: string, phase: string):
   // 检查 pending_gate 是否属于当前阶段(格式 <phase>:<action>)
   const expectedPrefix = `${phase}:`;
   if (pendingGate.startsWith(expectedPrefix)) {
+    // phase-complete gate 放行:由 _phase complete 自动设置(#3 下沉),重试 complete 时不应被拦
+    // 其他 gate(lock-xxx 等)是 agent 手动设的制品 gate,complete 前必须 clear
+    if (pendingGate === `${phase}:phase-complete`) {
+      return true;
+    }
     console.error(`⛔ [HARD_STOP] ${phase} 阶段有未通过的 USER_GATE: ${pendingGate}`);
     console.error("");
     console.error("  阶段完成前必须先通过 USER_GATE--agent 可能跳过了问答工具。");
@@ -328,6 +336,36 @@ async function phaseComplete(args: string[]): Promise<void> {
     return process.exit(1);
   }
 
+  // finish 阶段额外校验:checkpoint tag 必须已清理
+  // 原因:SKILL.md finish 第 5 步要求 _checkpoint clean,但 agent 会跳过(实测 OpenCode 会话
+  // 跳过 clean 直接 _phase complete finish,导致 tag 残留污染后续 change 的 _checkpoint list
+  // 与 retrospective 统计)。CLI 层硬约束:finish phase complete 前校验 tag 已清理。
+  if (phase === "finish") {
+    const rawName = basename(changeDir);
+    const changeName = rawName.replace(/^\d{4}-\d{2}-\d{2}-/, "");
+    const tagPrefix = `alloy-checkpoint-${changeName}-`;
+    let remainingTags: string[] = [];
+    try {
+      const out = execSync(`git tag -l "${tagPrefix}*"`, {
+        cwd: gitRoot.root,
+        encoding: "utf-8",
+      }).trim();
+      remainingTags = out ? out.split("\n") : [];
+    } catch {
+      // git tag 失败继续--后续 commit 会暴露真实问题
+    }
+    if (remainingTags.length > 0) {
+      console.error(`⛔ [PRECONDITION_FAIL] finish 阶段未清理 checkpoint tag,拒绝推进 phase`);
+      console.error(`  残留 tag (${remainingTags.length} 个):`);
+      for (const tag of remainingTags) {
+        console.error(`    ${tag}`);
+      }
+      console.error(`  SKILL.md finish 第 5 步要求 _checkpoint clean,change 封存后 tag 无恢复价值。`);
+      console.error(`  修复:调 alloy _checkpoint clean ${changeDir} --verify 清理后重试 _phase complete finish。`);
+      return process.exit(1);
+    }
+  }
+
   const completedAt = formatTimestamp();
   const target = PHASE_COMPLETE_TARGETS[phase];
 
@@ -346,6 +384,26 @@ async function phaseComplete(args: string[]): Promise<void> {
   const changeName = basename(changeDir);
   const addPath = gitRoot.relPath === "." ? "." : `${gitRoot.relPath}/.alloy.yaml`;
   gitAddAndCommit(gitRoot, addPath, `chore(${changeName}): 记录 ${phase} 阶段完成时间，推进到 ${target}`, `${phase}: completed_at=${completedAt} → ${target}`);
+
+  // 4. 自动设 <phase>:phase-complete gate(阶段完成 gate)
+  // 原因:SKILL.md 要求阶段完成后设 phase-complete gate + 问答工具确认进下一阶段,
+  // 但实测 agent 会漏设 gate(OpenCode 会话 apply->archive 跳过 gate 直接 _phase start archive 被 HARD_STOP 拦)。
+  // CLI 层下沉:_phase complete 后自动设 pending_gate,agent 只需调问答工具确认(hook-guard 自动 clear + add gate_history)。
+  // 幂等:agent 若手动调 _guard user-gate require <phase>:phase-complete,setPendingGate 覆盖相同值,无冲突。
+  // finish 阶段无下一阶段,不设 gate(finish:phase-complete 无消费者)。
+  if (phase !== "finish") {
+    const gateId = `${phase}:phase-complete`;
+    try {
+      const { setPendingGate } = await import("../../utils/state.js");
+      await setPendingGate(changeDir, gateId);
+      console.log(`✓ 已自动设 ${gateId} gate(阶段完成 gate)`);
+      console.log("  agent 调问答工具确认进下一阶段时,hook-guard 自动 clear + add gate_history");
+    } catch (e) {
+      // 设 gate 失败不阻断 phase complete(已完成 + commit),只提示
+      console.error(`⚠️ 自动设 ${gateId} gate 失败: ${e}`);
+      console.error("  agent 需手动调 alloy _guard user-gate require <change-dir> " + gateId);
+    }
+  }
 }
 
 /** 删除 phase_timings.<phase> 整个 key（回溯清理专用，writeState 自动刷新 updated_at）。返回是否实际删除。 */
@@ -392,4 +450,67 @@ async function phaseReset(args: string[]): Promise<void> {
   const changeName = basename(changeDir);
   const addPath = gitRoot.relPath === "." ? "." : `${gitRoot.relPath}/.alloy.yaml`;
   gitAddAndCommit(gitRoot, addPath, `chore(${changeName}): 回溯——清除 ${phase} 阶段时间记录`, `${phase}: timing 已清除`);
+}
+
+/**
+ * alloy _phase downgrade <change-dir> <to-phase>
+ *
+ * 降级 phase(绕过 _state write 拦截,记录降级 commit)。
+ * 替代 ALLOY_FORCE_PHASE=1 alloy _state write phase(逃生阀)。
+ *
+ * 校验降级合法性:只能降级到前一个 phase(如 applied -> planned)。
+ * 用于 _phase complete 失败后的降级路径(§5.2.3 路径 B)。
+ */
+async function phaseDowngrade(args: string[]): Promise<void> {
+  const changeDir = args[0];
+  const toPhase = args[1];
+
+  if (!changeDir || !toPhase) {
+    console.error("用法: alloy _phase downgrade <change-dir> <to-phase>");
+    console.error("  降级 phase(绕过 _state write 拦截,记录降级 commit)");
+    console.error("  替代 ALLOY_FORCE_PHASE=1 alloy _state write phase(逃生阀)");
+    return process.exit(1);
+  }
+
+  let state: AlloyState;
+  try {
+    state = await readState(changeDir);
+  } catch {
+    console.error(`⛔ [PRECONDITION_FAIL] 无法读 state: ${changeDir}/.alloy.yaml`);
+    return process.exit(1);
+  }
+
+  // 校验降级合法性(只能降级到前一个 phase)
+  const validDowngrades: Record<string, string> = {
+    planned: "started",
+    applied: "planned",
+    archived: "applied",
+    finished: "archived",
+    archiving: "applied",
+    planning: "started",
+  };
+  const expectedPrev = validDowngrades[state.phase];
+  if (!expectedPrev) {
+    console.error(`⛔ [PRECONDITION_FAIL] 当前 phase ${state.phase} 不支持降级`);
+    return process.exit(1);
+  }
+  if (expectedPrev !== toPhase) {
+    console.error(`⛔ [PRECONDITION_FAIL] 降级不合法: ${state.phase} -> ${toPhase}`);
+    console.error(`  期望降级: ${state.phase} -> ${expectedPrev}`);
+    return process.exit(1);
+  }
+
+  const fromPhase = state.phase;
+  state.phase = toPhase as AlloyState["phase"];
+  await writeState(changeDir, state);
+
+  // git add .alloy.yaml + commit(复用 gitAddAndCommit)
+  const gitRoot = findGitRoot(changeDir);
+  if (!gitRoot) {
+    console.error(`[FAIL] 不在 git 仓库中: ${changeDir}`);
+    return process.exit(1);
+  }
+  const changeName = basename(changeDir);
+  const addPath = gitRoot.relPath === "." ? "." : `${gitRoot.relPath}/.alloy.yaml`;
+  gitAddAndCommit(gitRoot, addPath, `chore(${changeName}): phase 降级 ${fromPhase} -> ${toPhase}`, `phase: ${fromPhase} -> ${toPhase}`);
 }

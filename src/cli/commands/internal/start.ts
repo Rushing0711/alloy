@@ -13,7 +13,7 @@
 import { parseArgs } from "node:util";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { readProjectConfig, findActiveChanges, formatTimestamp } from "../../utils/state.js";
+import { readProjectConfig, findActiveChanges, formatTimestamp, readState } from "../../utils/state.js";
 import { executeInfraCommit } from "../../../core/infra-commit.js";
 import { KNOWN_AGENTS } from "../../../core/agents.js";
 import { evaluatePrecheck, formatPrecheckResult } from "../../../core/precheck.js";
@@ -257,6 +257,35 @@ async function startFinalize(args: string[]): Promise<void> {
     console.error("用法: alloy _start finalize <change-dir>");
     process.exit(1);
     return;
+  }
+
+  // 越界回退检测:phase=starting + records 已有 draft = 越界回退到 brainstorming-N 场景
+  // 原因:brainstorming-N tag 在 _phase complete 之前打,switch 回去 phase=starting。
+  // 此场景 _start finalize 不适用(_artifact commit draft 因 hash 未变跳过 commit,
+  // .alloy.yaml 的 _skill log 修改没被 commit,_checkpoint create brainstorming 因 dirty 失败)。
+  // 越界回退必须走 alloy-plan SKILL.md 步骤 9-11(reset + 沟通 + commit + checkpoint + phase complete)。
+  // 实测踩坑:Pi 会话 agent 跳步调 _start finalize,被 dirty 拦住,流程卡死。
+  let state;
+  try {
+    state = await readState(changeDir);
+  } catch {
+    state = null;
+  }
+  if (state) {
+    const hasDraft = (state.records ?? []).some(r => r.artifact === "draft");
+    if (state.phase === "starting" && hasDraft) {
+      console.error(`⛔ [PRECONDITION_FAIL] 越界回退场景禁调 _start finalize`);
+      console.error(`  当前状态: phase=starting + records 已有 draft(越界回退到 brainstorming-N)`);
+      console.error(`  _start finalize 是"全新开始"路径的 finalize(假设 records 无 draft),此场景不适用:`);
+      console.error(`    _artifact commit draft 因 hash 未变跳过 commit,.alloy.yaml 的 _skill log 修改没被 commit,`);
+      console.error(`    _checkpoint create brainstorming 因 dirty 失败。`);
+      console.error(`  修复:走 alloy-plan SKILL.md 步骤 9-11:`);
+      console.error(`    9. _skill log start superpowers:brainstorming`);
+      console.error(`    10. _artifact reset <change-dir> draft -> 沟通产出新 draft -> _artifact commit <change-dir> draft`);
+      console.error(`    11. _checkpoint create <change-dir> --kind brainstorming -> _phase complete <change-dir> start`);
+      process.exit(1);
+      return;
+    }
   }
 
   // Step 1: artifact commit draft

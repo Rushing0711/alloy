@@ -35,6 +35,152 @@ describe("alloy _hook-guard", () => {
       expect(result.exitCode).toBe(0);
     });
 
+    it("Bash cat heredoc 写文件 -> exit 2", () => {
+      const stdin = JSON.stringify({ tool_name: "Bash", tool_input: { command: "cat << EOF > file.txt" } });
+      const result = evaluateHook(stdin, ["started"], {});
+      expect(result.exitCode).toBe(2);
+      expect(result.message).toContain("cat heredoc");
+    });
+
+    it("Bash > file 重定向 -> exit 0(不拦重定向,只拦 heredoc)", () => {
+      const stdin = JSON.stringify({ tool_name: "Bash", tool_input: { command: "echo hello > file.txt" } });
+      const result = evaluateHook(stdin, ["started"], {});
+      expect(result.exitCode).toBe(0);
+    });
+
+    it("Bash > /dev/null 丢弃输出 -> exit 0", () => {
+      const stdin = JSON.stringify({ tool_name: "Bash", tool_input: { command: "alloy _record check && echo done > /dev/null" } });
+      const result = evaluateHook(stdin, ["started"], {});
+      expect(result.exitCode).toBe(0);
+    });
+
+    it("Bash git reset --hard -> exit 2", () => {
+      const stdin = JSON.stringify({ tool_name: "Bash", tool_input: { command: "git reset --hard HEAD~1" } });
+      const result = evaluateHook(stdin, ["started"], {});
+      expect(result.exitCode).toBe(2);
+      expect(result.message).toContain("git 自救");
+    });
+
+    it("Bash git checkout . -> exit 2", () => {
+      const stdin = JSON.stringify({ tool_name: "Bash", tool_input: { command: "git checkout ." } });
+      const result = evaluateHook(stdin, ["started"], {});
+      expect(result.exitCode).toBe(2);
+      expect(result.message).toContain("git 自救");
+    });
+
+    it("Bash git stash drop -> exit 2", () => {
+      const stdin = JSON.stringify({ tool_name: "Bash", tool_input: { command: "git stash drop stash@{0}" } });
+      const result = evaluateHook(stdin, ["started"], {});
+      expect(result.exitCode).toBe(2);
+      expect(result.message).toContain("git 自救");
+    });
+
+    it("Bash git merge --abort -> exit 2", () => {
+      const stdin = JSON.stringify({ tool_name: "Bash", tool_input: { command: "git merge --abort" } });
+      const result = evaluateHook(stdin, ["started"], {});
+      expect(result.exitCode).toBe(2);
+      expect(result.message).toContain("git 自救");
+    });
+
+    it("Bash git clean -fd -> exit 2", () => {
+      const stdin = JSON.stringify({ tool_name: "Bash", tool_input: { command: "git clean -fd" } });
+      const result = evaluateHook(stdin, ["started"], {});
+      expect(result.exitCode).toBe(2);
+      expect(result.message).toContain("git 自救");
+    });
+
+    it("Bash echo 字符串含 'git reset --hard' 文本 -> exit 0(不误拦 echo 内容)", () => {
+      const cmd = `echo "  禁止:agent 自动运行 git reset --hard origin/<main_branch> 强制对齐。"`;
+      const stdin = JSON.stringify({ tool_name: "Bash", tool_input: { command: cmd } });
+      const result = evaluateHook(stdin, ["started"], {});
+      expect(result.exitCode).toBe(0);
+    });
+
+    it("Bash finish SKILL.md 的 git pull 完整块(含 echo 'git reset --hard' 文本)-> exit 0", () => {
+      const cmd = `REMOTE=$(git remote -v | head -1)
+if [ -z "$REMOTE" ]; then
+  echo "ℹ️ 无 remote 配置--跳过 git pull"
+else
+  if ! git pull --ff-only; then
+    echo "  禁止:agent 自动运行 git reset --hard origin/<main_branch> 强制对齐。"
+    exit 1
+  fi
+fi`;
+      const stdin = JSON.stringify({ tool_name: "Bash", tool_input: { command: cmd } });
+      const result = evaluateHook(stdin, ["started"], {});
+      expect(result.exitCode).toBe(0);
+    });
+
+    it("Bash && git reset --hard -> exit 2(命令分隔符后是实际命令,拦)", () => {
+      const stdin = JSON.stringify({ tool_name: "Bash", tool_input: { command: "echo foo && git reset --hard HEAD~1" } });
+      const result = evaluateHook(stdin, ["started"], {});
+      expect(result.exitCode).toBe(2);
+      expect(result.message).toContain("git 自救");
+    });
+
+    it("Bash $(git reset --hard) 命令替换内 -> exit 2(子shell 内也拦)", () => {
+      const stdin = JSON.stringify({ tool_name: "Bash", tool_input: { command: "RESULT=$(git reset --hard HEAD~1)" } });
+      const result = evaluateHook(stdin, ["started"], {});
+      expect(result.exitCode).toBe(2);
+      expect(result.message).toContain("git 自救");
+    });
+
+    it("Bash git branch -D <feature> -> exit 2(下沉到 _finish-cleanup,agent 禁直接跑)", () => {
+      const stdin = JSON.stringify({ tool_name: "Bash", tool_input: { command: "git branch -D feature/add-hello-script" } });
+      const result = evaluateHook(stdin, ["started"], {});
+      expect(result.exitCode).toBe(2);
+      expect(result.message).toContain("git 自救");
+    });
+
+    it("Bash && git branch -D -> exit 2(命令分隔符后是实际命令,拦)", () => {
+      const stdin = JSON.stringify({ tool_name: "Bash", tool_input: { command: "echo done && git branch -D feature/test" } });
+      const result = evaluateHook(stdin, ["started"], {});
+      expect(result.exitCode).toBe(2);
+      expect(result.message).toContain("git 自救");
+    });
+
+    it("Bash git branch -d (小写,-d 不是 -D) -> exit 0(不拦,小写 -d 是安全删除)", () => {
+      const stdin = JSON.stringify({ tool_name: "Bash", tool_input: { command: "git branch -d feature/test" } });
+      const result = evaluateHook(stdin, ["started"], {});
+      expect(result.exitCode).toBe(0);
+    });
+
+    it("Bash echo 'git branch -D' 文本 -> exit 0(不误拦 echo 内容)", () => {
+      const cmd = `echo "禁止:agent 自动运行 git branch -D feature/test 强删分支。"`;
+      const stdin = JSON.stringify({ tool_name: "Bash", tool_input: { command: cmd } });
+      const result = evaluateHook(stdin, ["started"], {});
+      expect(result.exitCode).toBe(0);
+    });
+
+    it("Bash 普通命令(git status / ls / echo)-> exit 0", () => {
+      const commands = ["git status", "ls -la", "echo hello", "git log --oneline"];
+      for (const cmd of commands) {
+        const stdin = JSON.stringify({ tool_name: "Bash", tool_input: { command: cmd } });
+        const result = evaluateHook(stdin, ["started"], {});
+        expect(result.exitCode).toBe(0);
+      }
+    });
+
+    it("Bash git commit -> 返回 checkUnlockedArtifact: true(交 hookGuardCommand 检查)", () => {
+      const stdin = JSON.stringify({ tool_name: "Bash", tool_input: { command: "git commit -m 'test'" } });
+      const result = evaluateHook(stdin, ["started"], {});
+      expect(result.exitCode).toBe(0);
+      expect(result.checkUnlockedArtifact).toBe(true);
+    });
+
+    it("Bash git commit -a -> 返回 checkUnlockedArtifact: true", () => {
+      const stdin = JSON.stringify({ tool_name: "Bash", tool_input: { command: "git commit -am 'test'" } });
+      const result = evaluateHook(stdin, ["started"], {});
+      expect(result.exitCode).toBe(0);
+      expect(result.checkUnlockedArtifact).toBe(true);
+    });
+
+    it("Bash 非 git commit 命令 -> checkUnlockedArtifact 未设置", () => {
+      const stdin = JSON.stringify({ tool_name: "Bash", tool_input: { command: "git status" } });
+      const result = evaluateHook(stdin, ["started"], {});
+      expect(result.checkUnlockedArtifact).toBeUndefined();
+    });
+
     it("Read 工具 -> exit 0(只拦写)", () => {
       const stdin = JSON.stringify({ tool_name: "Read", tool_input: { file_path: "src/foo.ts" } });
       const result = evaluateHook(stdin, ["started"], {});
@@ -175,10 +321,10 @@ describe("alloy _hook-guard", () => {
       expect(result.message).toContain("question");
     });
 
-    it("Pi(PI_CODING_AGENT=true)拦截消息含 ctx.ui", () => {
+    it("Pi(PI_CODING_AGENT=true)拦截消息含 alloy-question", () => {
       const stdin = JSON.stringify({ tool_name: "Write", tool_input: { file_path: "src/foo.ts" } });
       const result = evaluateHook(stdin, ["started"], { PI_CODING_AGENT: "true" }, undefined, ["gate-a"]);
-      expect(result.message).toContain("ctx.ui");
+      expect(result.message).toContain("alloy-question");
     });
   });
 

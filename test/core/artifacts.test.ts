@@ -91,4 +91,32 @@ describe("computeArtifactHash", () => {
 
     expect(hashA).toBe(hashB);
   });
+
+  it("排除 '> 生成时间:' 行,hash 不随时间戳变化", async () => {
+    await writeFile(join(changeDir, "tasks.md"),
+      "> 生成时间: 2026-07-20 08:00:00\n\n- [x] T1\n",
+      "utf-8");
+    const hash1 = await computeArtifactHash(changeDir, "tasks");
+
+    await writeFile(join(changeDir, "tasks.md"),
+      "> 生成时间: 2026-07-20 09:00:00\n\n- [x] T1\n",
+      "utf-8");
+    const hash2 = await computeArtifactHash(changeDir, "tasks");
+
+    expect(hash1).toBe(hash2);
+  });
+
+  it("内容变化(非时间戳行)时 hash 变化", async () => {
+    await writeFile(join(changeDir, "tasks.md"),
+      "> 生成时间: 2026-07-20 08:00:00\n\n- [x] T1\n",
+      "utf-8");
+    const hash1 = await computeArtifactHash(changeDir, "tasks");
+
+    await writeFile(join(changeDir, "tasks.md"),
+      "> 生成时间: 2026-07-20 08:00:00\n\n- [x] T1\n- [x] T2\n",
+      "utf-8");
+    const hash2 = await computeArtifactHash(changeDir, "tasks");
+
+    expect(hash1).not.toBe(hash2);
+  });
 });

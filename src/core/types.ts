@@ -9,6 +9,8 @@ export interface AgentInfo {
   globalBase?: string;
   globalOnly?: boolean;
   interactiveTool?: "askuserquestion" | "question" | "alloy-question" | "partial" | "none";
+  /** 大写显示名(如 "AskUserQuestion"),用于 getAgentToolHint / 错误提示。不设则用 interactiveTool */
+  askToolDisplay?: string;
   settingsFile?: string;
   settingsContent?: Record<string, unknown>;
 }

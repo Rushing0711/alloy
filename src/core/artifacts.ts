@@ -53,8 +53,15 @@ export async function computeArtifactHash(
       }
       return computeHash(Buffer.concat(contents));
     } else {
-      const content = await readFile(fullPath);
-      return computeHash(content);
+      const content = await readFile(fullPath, "utf-8");
+      // 排除动态时间戳行(> 生成时间: ...),避免 hash 随时间戳变化触发重锁
+      // 原因:_retro scaffold / agent 生成制品时写 "> 生成时间: <ts>" 行,
+      // agent 后续修改 checkbox 等内容时可能更新时间戳,导致 hash 变化 -> 重锁
+      const filtered = content
+        .split("\n")
+        .filter(line => !line.startsWith("> 生成时间:"))
+        .join("\n");
+      return computeHash(filtered);
     }
   } catch {
     return null;

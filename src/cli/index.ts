@@ -42,8 +42,8 @@ Commands:
 
 Internal commands (agent 调用,可直接使用):
   _state _skill _guard _phase _verify _artifact _record _config
-  _checkpoint _archive _archive-dir _worktree-cleanup _worktree-create _retro _env _progress
-  _precheck _infra-commit _pre-commit-check _hook-guard _stop-guard
+  _checkpoint _archive _archive-dir _worktree-cleanup _worktree-create _finish-cleanup _retro _env _progress
+  _precheck _infra-commit _chore-commit _fix _pre-commit-check _hook-guard _stop-guard
   _branch _change _start
   详见 skills/alloy-shared/references/cli-reference.md
 
@@ -468,6 +468,11 @@ async function main() {
       await worktreeCleanupCommand(restArgs);
       break;
     }
+    case "_finish-cleanup": {
+      const { finishCleanupCommand } = await import("./commands/internal/finish-cleanup.js");
+      await finishCleanupCommand(restArgs);
+      break;
+    }
     case "_worktree-create": {
       const { worktreeCreateCommand } = await import("./commands/internal/worktree-create.js");
       await worktreeCreateCommand(restArgs);
@@ -501,6 +506,16 @@ async function main() {
     case "_infra-commit": {
       const { infraCommitCommand } = await import("./commands/internal/infra-commit.js");
       await infraCommitCommand(restArgs);
+      break;
+    }
+    case "_chore-commit": {
+      const { choreCommitCommand } = await import("./commands/internal/chore-commit.js");
+      await choreCommitCommand(restArgs);
+      break;
+    }
+    case "_fix": {
+      const { fixCommand } = await import("./commands/internal/fix.js");
+      await fixCommand(restArgs);
       break;
     }
     case "_branch": {

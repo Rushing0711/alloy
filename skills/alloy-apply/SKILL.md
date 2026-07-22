@@ -28,11 +28,11 @@ behaviors:
 
 **核心原则：先 TDD 再代码，先验证再复盘。** 所有阶段制品（verify / retrospective）以 hash-lock + 单独 commit 入 records，禁直接编辑。
 
-**交互规则：** `🔴 STOP` 等价 `USER_GATE`，首次呈现即必须调用平台原生交互工具——禁"先文本展示 1./2. 再等待用户打字"。Claude Code 用 `AskUserQuestion`,OpenCode 用 `question` 工具(字段名 `multiple` 非 `multiSelect`,可选 `custom`),Pi 用 `alloy-question` 工具(alloy-question extension 注册);Copilot CLI / Gemini CLI 无原生交互工具,降级为结构化文本选项。三平台调用示例见 `alloy-shared/references/interaction-style.md` §审查窗口标准模式。含"沉默 ≠ 授权"通用禁令——禁批量打包、禁基于 diff 短/无 conflict 跳过、禁 agent 回填精确字符串。跳过任何 USER_GATE = 违反 Iron Law。
+**交互规则:** `🔴 STOP` 等价 `USER_GATE`--首次呈现即必须调平台原生交互工具(禁"先文本展示 1./2. 再等用户打字")。Claude Code: `AskUserQuestion`;OpenCode: `question`;Pi: `alloy-question`。完整规则 + 平台调用示例见 `alloy-shared/references/interaction-style.md`;USER_GATE pending/clear/reset 流程见 `alloy-shared/references/gate-ceremony.md`。跳过 USER_GATE / 批量打包 / 基于内容跳过 = 违反 Iron Law。
 
-**状态符号：** `⛔` = HARD_STOP / PRECONDITION_FAIL，`🔴` = USER_GATE，`⚠️` = WARN（视觉规范 §七）。
+**状态符号:** `⛔` = HARD_STOP / PRECONDITION_FAIL,`🔴` = USER_GATE,`⚠️` = WARN(完整含义见 `alloy-shared/references/hard-stop-meaning.md`)。
 
-**输出规则：** 阶段入口/出口必须按 `docs/specification/02-visual-spec.md` 输出 Phase 框（`┌─┐` Unicode 单线框，38 字符宽）、Step 标题（`[Step N/M]` + 38 字符 `─` 下划线）、`>` 块引用、`→` 引导行。**skill md 中的 Phase 框代码块是必须输出到终端的格式，不是文档示例。** 审查窗口、制品汇总表同理。
+**输出规则:** 阶段入口/出口按 `alloy-shared/references/phase-frame.md` 输出 Phase 框 + Step 标题 + 块引用 + 引导行。skill md 中的 Phase 框代码块是必须输出到终端的格式,不是文档示例。完整规范见 `docs/specification/02-visual-spec.md`。
 
 **调用外部命令或技能前，先输出标题和状态描述，再执行操作。**
 
@@ -102,9 +102,8 @@ git rev-parse --git-dir
 
 提交前置状态（worktree 创建前确保 .alloy.yaml 变更已落地；若 `_phase start` 之后无新变更则自动跳过）：
 ```bash
-# §5.2.1: git add 限路径，禁 -A 无路径
-git add openspec/changes/<name>/.alloy.yaml
-git diff --cached --quiet || git commit -m "chore(<name>): apply 阶段开始前状态快照"
+# §5.2.1: git add 限路径(原子命令完成 add + commit,幂等;禁 -A 无路径)
+alloy _chore-commit openspec/changes/<name> --msg "chore(<name>): apply 阶段开始前状态快照" --paths "openspec/changes/<name>/.alloy.yaml"
 ```
 
 前置检查通过：plans.md ✓  phase ✓  git ✓  技能 ✓
@@ -133,10 +132,9 @@ SKILL_USAGE=$(alloy _state read openspec/changes/<name> skill_usage)
 **档位 A：apply 早期（worktree 未创建 + SDD/EP 未启动）→ 允许回退到 brainstorming**
 
 两个标志位都满足"未创建/未启动"时，apply 阶段仍可回退。走 plan.md 的检查点回退流程：
-- 废弃未 commit 信息（git restore）
 - 回退前创建 progress 检查点（`_checkpoint create --kind progress --reason "apply 早期回退前快照"`）——保护当前 apply 进度，供放弃变更时切回
 - 列出 brainstorming 检查点让用户选（USER_GATE，筛选 brainstorming- 前缀）
-- _checkpoint switch 回退到所选 brainstorming 检查点
+- `_checkpoint switch` 回退到所选 brainstorming 检查点(CLI 内部自动清理未 commit 变更,agent 禁跑 git restore)
 - 重走 start.md 步骤 9-11（brainstorming → draft → 检查点 → _phase complete start）→ 重新走 plan → 重新进 apply
 
 > apply 早期回退成本极低（无 worktree、无代码），强行 discard 重开太重。复用 plan 阶段的检查点回退机制即可。
@@ -234,6 +232,11 @@ alloy _guard user-gate require openspec/changes/<name> apply:worktree-choice
 
 🔴 USER_GATE（必须平台原生交互工具）: 确认 worktree 选择。**选项描述必须如实映射任务规模,禁说反：**
 
+> question 文案要求(header 突出决策性,禁用模糊技术描述):
+> - header: "是否创建 worktree?"
+> - question: "apply 阶段是否创建 worktree 隔离?(任务大→创建,任务小→跳过)"
+> - 选项 label + description 见下方,禁改 label 加"推荐"后缀
+
 > Worktree 隔离当前工作区，在独立目录+独立分支执行 apply，不影响 feature 分支现场。
 > - **特点：** 执行期间可随时切回 feature/main 分支处理其他任务，apply 工作不受干扰
 > - 选项描述（必须如实映射,禁说反）：
@@ -249,8 +252,7 @@ alloy _guard user-gate require openspec/changes/<name> apply:worktree-choice
 alloy _skill log openspec/changes/<name> apply superpowers:using-git-worktrees
 # _skill log 写入后必须 commit——后续 worktree 创建基于 HEAD，
 # 不 commit 会导致此条记录在 worktree 中丢失
-git add openspec/changes/<name>/.alloy.yaml
-git diff --cached --quiet || git commit -m "chore(<name>): 记录 using-git-worktrees 技能使用"
+alloy _chore-commit openspec/changes/<name> --msg "chore(<name>): 记录 using-git-worktrees 技能使用" --paths "openspec/changes/<name>/.alloy.yaml"
 ```
 
 > **[HARD_STOP] `_skill log` 后必须立即 commit，禁止未 commit 就 EnterWorktree。**
@@ -269,8 +271,7 @@ git diff --cached --quiet || git commit -m "chore(<name>): 记录 using-git-work
 
 **用户选择不创建：** `alloy _state write openspec/changes/<name> worktree skipped`,然后 commit（与 worktree 创建路径一样,_skill log + state write 后必须 commit,避免 .alloy.yaml 残留未提交变更）：
 ```bash
-git add openspec/changes/<name>/.alloy.yaml
-git diff --cached --quiet || git commit -m "chore(<name>): 记录 worktree 决策 skipped"
+alloy _chore-commit openspec/changes/<name> --msg "chore(<name>): 记录 worktree 决策 skipped" --paths "openspec/changes/<name>/.alloy.yaml"
 ```
 > commit message 用"记录 worktree 决策 skipped",不用"记录 using-git-worktrees 技能使用（skipped）"——前者明确这是 worktree 决策记录,与上方 _skill log commit 语义区分;后者含"using-git-worktrees"会与上方 commit 看起来重复。
 跳到 Step 1 完成框。
@@ -361,13 +362,21 @@ alloy _worktree-create openspec/changes/<name>
 
 4. 🔴 USER_GATE（必须平台原生交互工具）: 选择执行策略（`subagent-driven-development` / `executing-plans`）。必须等用户选择后才加载技能。
 
+   > **多 agent 适配（命令执行顺序,必读）:**
+   > - **Claude Code / OpenCode:** 先设 gate(下方命令),再调问答工具问用户选 SDD/EP,根据选择走对应路径。
+   > - **Pi:** ⛔ [HARD_STOP] **禁调问答工具问 SDD/EP**--Pi 无原生 subagent,选 SDD 也会被 guard 强制走 EP。Pi agent 直接调下方 `_guard user-gate require` 命令(检测 `PI_CODING_AGENT=true` 自动通过 + 输出 `-> 走 EP 路径`),按输出走下方"EP 路径"段。
+   > - 违反字面 = 违反精神:哪怕"用户想看选项再决定",Pi 也不许问--问 SDD 选项对 Pi 是误导(选了也走 EP),浪费一轮交互。
+
    ⛔ [HARD_STOP] 必须执行以下命令设置 pending_gate(不是说明,是必跑命令):
 
    ```bash
    alloy _guard user-gate require openspec/changes/<name> apply:sdd-ep-choice
    ```
 
-   > **Pi 下此 gate 自动通过**:guard 检测 `PI_CODING_AGENT=true` 直接返回 `✓ 自动通过(Pi 不支持 SDD)` + 输出 `-> 走 EP 路径`。agent 按输出走下方"EP 路径"段,Claude Code/OpenCode 正常调问答工具问用户。
+   > **worktree 模式下 OpenCode 必须传 `workdir` 参数:** worktree 创建后,OpenCode 的 bash 工具 session cwd 不解绑(不像 Claude Code 的 EnterWorktree),调本命令必须传 `workdir=<worktree-path>`(如 `.worktrees/<name>` 对应的绝对路径)。主仓调会被 `worktree-create` 写入的 state 触发 HARD_STOP 拦截:`worktree 模式下,此命令必须在 worktree 内执行,当前在主仓`。
+   > 正例:`bash(command="alloy _guard user-gate require openspec/changes/<name> apply:sdd-ep-choice", workdir="/path/to/.worktrees/<name>")`
+   > 反例:`bash(command="alloy _guard user-gate require openspec/changes/<name> apply:sdd-ep-choice")`(主仓调,被拦)
+   > Claude Code 不传 workdir(EnterWorktree 已解绑 session cwd)。
 
    > ⛔ [HARD_STOP] options label 必须用技能全称 `subagent-driven-development` / `executing-plans`，禁缩写（SDD/EP）——SDD 缩写会被误解为 "Single Developer Direct"（单开发者直接执行），与实际 "Subagent-Driven Development"（子 agent 驱动）语义相反。
    > 违反字面 = 违反精神：哪怕"缩写更简洁用户易选"，也算违反——缩写歧义导致 agent 误述描述（把 SDD 说成"任务少、简单直接"），误导用户选错策略。
@@ -520,24 +529,7 @@ echo "✓ skill_usage 校验通过：apply 阶段必需技能 + 审查技能已�
 worktree 模式下，所有子 agent 变更应落在 worktree 分支。主仓工作目录若 dirty，说明子 agent 误用主仓绝对路径 Edit，变更"游离"在 feature 工作目录——破坏 worktree 隔离。读取 `references/subagent-commit.md` 规则 4-5 执行完整校验：
 
 ```bash
-WORKTREE=$(alloy _state read openspec/changes/<name> worktree)
-if [ "$WORKTREE" != "skipped" ] && [ -n "$WORKTREE" ] && [ "$WORKTREE" != "null" ]; then
-  MAIN_ROOT=$(git rev-parse --git-common-dir | xargs dirname)
-  # 禁用管道结构--管道右边 exit 1 只退 subshell,不退整个脚本,导致校验失效后仍输出"通过"
-  # 用变量捕获 git status 输出,非管道结构保证 exit 1 传播
-  MAIN_DIRTY=$(cd "$MAIN_ROOT" && git status --porcelain)
-  if [ -n "$MAIN_DIRTY" ]; then
-    echo "⛔ [PRECONDITION_FAIL] 主仓工作目录有未提交变更（worktree 模式下应全部落在 worktree 分支）"
-    (cd "$MAIN_ROOT" && git status --short)
-    echo ""
-    echo "  可能原因：子 agent 用主仓绝对路径 Edit 了文件，绕过 worktree 隔离"
-    echo "  修复路径："
-    echo "    1) 确认 worktree 分支已有正确版本（git log worktree-<name> --oneline）"
-    echo "    2) 丢弃主仓误改：git checkout -- <误改文件>"
-    echo "  禁止：agent 自动 git checkout -- 丢弃变更——必须用户确认 worktree 分支版本正确后手动丢弃。"
-    exit 1
-  fi
-fi
+alloy _guard main-clean openspec/changes/<name>
 ```
 
 跳过 worktree 模式（`worktree=skipped`）不跑此校验——主仓 dirty 是正常的。
@@ -763,6 +755,8 @@ git reset HEAD~1                                              # 退回 phase com
 > 禁止 agent 自动 `git reset --hard` / `git checkout .` 清场（§3.5.1）。违反字面 = 违反精神：哪怕"清理一下让流程重启"也算违反——退出 skill 让用户决策是唯一合法路径。详见 `alloy-shared/references/phase-downgrade-path.md`。
 
 > 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question/alloy-question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级。
+
+> ℹ️ `apply:phase-complete` gate 已由 `_phase complete apply` 自动设。以下 `user-gate require` 命令幂等可省略--agent 也可手动调(覆盖相同值,无冲突)。
 
 ⛔ [HARD_STOP] 必须执行以下命令设置 pending_gate(不是说明,是必跑命令):
 

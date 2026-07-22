@@ -100,6 +100,38 @@ describe("alloy _phase complete", () => {
     const log = gitLog();
     expect(log).toContain("记录 finish 阶段完成时间，推进到 finished");
   });
+  it("finish 阶段 tag 残留时拒绝推进 phase(防 agent 跳过 _checkpoint clean)", async () => {
+    const state = await readState(changeDir);
+    state.phase = "archived";
+    state.phase_timings = {
+      finish: { started_at: "2020-01-01 15:00:00", completed_at: null },
+    };
+    const { writeState } = await import("../../../src/cli/utils/state.js");
+    await writeState(changeDir, state);
+
+    // 先 commit 让 HEAD 存在(才能创建 tag)
+    execSync('git add .', { cwd: tmpDir, stdio: "pipe" });
+    execSync('git commit -q -m "init"', { cwd: tmpDir, stdio: "pipe" });
+    // 创建残留的 checkpoint tag(模拟 agent 跳过 _checkpoint clean)
+    const changeName = changeDir.split("/").pop()!;
+    execSync(`git tag -a "alloy-checkpoint-${changeName}-brainstorming-1" -m "test residue"`, { cwd: tmpDir, stdio: "pipe" });
+
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await phaseCommand(["complete", changeDir, "finish"]);
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errSpy.mock.calls.some(c => String(c[0]).includes("finish 阶段未清理 checkpoint tag"))).toBe(true);
+    expect(errSpy.mock.calls.some(c => String(c[0]).includes("_checkpoint clean"))).toBe(true);
+
+    // phase 不应推进
+    const after = await readState(changeDir);
+    expect(after.phase).toBe("archived");
+
+    exitSpy.mockRestore();
+    errSpy.mockRestore();
+  });
 
   it("finish 阶段 complete 写顶层 completed_at", async () => {
     const yaml = [
@@ -171,6 +203,55 @@ describe("alloy _phase complete", () => {
     const state = await readState(changeDir);
     expect(state.phase_timings?.start?.started_at).toBe("2020-01-01 10:00:00");
     expect(state.phase_timings?.start?.completed_at).toBeTruthy();
+  });
+
+  it("#3 下沉:_phase complete 后自动设 <phase>:phase-complete gate(非 finish 阶段)", async () => {
+    await phaseCommand(["complete", changeDir, "start"]);
+
+    const state = await readState(changeDir);
+    expect(state.pending_gate).toBe("start:phase-complete");
+  });
+
+  it("#3 下沉:finish 阶段 complete 不设 gate(无下一阶段)", async () => {
+    // finish 阶段需要 checkpoint tag 已清理,先模拟
+    const state = await readState(changeDir);
+    state.phase = "finishing";
+    state.phase_timings = {
+      start: { started_at: "2020-01-01 10:00:00", completed_at: "2020-01-01 11:00:00" },
+      plan: { started_at: "2020-01-01 12:00:00", completed_at: "2020-01-01 13:00:00" },
+      apply: { started_at: "2020-01-01 14:00:00", completed_at: "2020-01-01 15:00:00" },
+      archive: { started_at: "2020-01-01 16:00:00", completed_at: "2020-01-01 17:00:00" },
+      finish: { started_at: "2020-01-01 18:00:00", completed_at: null },
+    };
+    state.gate_history = [
+      "start:phase-complete",
+      "plan:phase-complete",
+      "apply:phase-complete",
+      "archive:phase-complete",
+    ];
+    const { writeState } = await import("../../../src/cli/utils/state.js");
+    await writeState(changeDir, state);
+
+    await phaseCommand(["complete", changeDir, "finish"]);
+
+    const after = await readState(changeDir);
+    expect(after.pending_gate ?? null).toBeNull(); // finish 不设 gate
+  });
+
+  it("#3 下沉:phase-complete gate 不阻塞同阶段 complete 重试(幂等)", async () => {
+    // 第一次 complete -> 设 start:phase-complete gate
+    await phaseCommand(["complete", changeDir, "start"]);
+    const after1 = await readState(changeDir);
+    expect(after1.pending_gate).toBe("start:phase-complete");
+
+    // 第二次 complete(重试)--不应被 gate 拦
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    await phaseCommand(["complete", changeDir, "start"]);
+    expect(exitSpy).not.toHaveBeenCalled();
+    exitSpy.mockRestore();
+
+    const after2 = await readState(changeDir);
+    expect(after2.phase).toBe("started");
   });
 
   it("started_at 缺失时 PRECONDITION_FAIL（agent 跳过 _phase start 的防御）", async () => {
@@ -525,9 +606,10 @@ describe("alloy _phase complete gate 下沉检查", () => {
   });
 
   it("当前阶段 pending_gate 未 clear:HARD_STOP exit 1", async () => {
-    // 设置 start:phase-complete 的 pending_gate
+    // 设置 start:lock-draft 的 pending_gate(制品 gate,complete 前必须 clear)
+    // 注:start:phase-complete 由 _phase complete 自动设(#3 下沉),重试 complete 时放行,不拦
     const state = await readState(changeDir);
-    state.pending_gate = "start:phase-complete";
+    state.pending_gate = "start:lock-draft";
     const { writeState } = await import("../../../src/cli/utils/state.js");
     await writeState(changeDir, state);
 
@@ -538,7 +620,7 @@ describe("alloy _phase complete gate 下沉检查", () => {
 
     expect(exitSpy).toHaveBeenCalledWith(1);
     expect(errSpy.mock.calls.some(c => String(c[0]).includes("HARD_STOP"))).toBe(true);
-    expect(errSpy.mock.calls.some(c => String(c[0]).includes("start:phase-complete"))).toBe(true);
+    expect(errSpy.mock.calls.some(c => String(c[0]).includes("start:lock-draft"))).toBe(true);
     expect(errSpy.mock.calls.some(c => String(c[0]).includes("user-gate pass"))).toBe(true);
 
     // phase 未推进

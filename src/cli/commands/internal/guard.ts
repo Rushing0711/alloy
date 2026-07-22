@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join, basename } from "node:path";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { join, basename, dirname, resolve, isAbsolute } from "node:path";
 import { execSync } from "node:child_process";
 import { readState, writeState, readProjectConfig, setPendingGate, addClearedGate, removeClearedGate } from "../../utils/state.js";
 import { assertInWorktree } from "../../utils/worktree-guard.js";
@@ -37,6 +37,15 @@ export async function guardCommand(args: string[]): Promise<void> {
   }
   if (subCommand === "user-gate") {
     return userGateGuard(args.slice(1));
+  }
+  if (subCommand === "main-clean") {
+    return mainCleanGuard(args.slice(1));
+  }
+  if (subCommand === "parallel-phase") {
+    return parallelPhaseGuard(args.slice(1));
+  }
+  if (subCommand === "dirty-check") {
+    return dirtyCheckGuard(args.slice(1));
   }
 
   // 原有 phase 转换校验逻辑
@@ -476,6 +485,185 @@ async function userGateGuard(args: string[]): Promise<void> {
 }
 
 /**
+ * alloy _guard parallel-phase <phase1,phase2,...> [--exclude <name>]
+ *
+ * 扫描所有 change(活跃 + 归档),统计 phase 在指定列表中的 change 数量。
+ * 用于多 change 并行检测(alloy-plan/archive/finish 都有此检查)。
+ *
+ * 行为:
+ * - 0 个 -> 输出 "none"
+ * - 1 个 -> 输出 "single:<name>"
+ * - >1 个 -> 输出 "parallel:N" + 列出所有 change 名
+ * - --exclude <name>:排除指定 change(用于 alloy-archive 排除当前 change)
+ * - exit 0 始终(WARN 不阻断,由 SKILL.md 决定是否继续)
+ */
+async function parallelPhaseGuard(args: string[]): Promise<void> {
+  let targetPhases: string[] = [];
+  let excludeName: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--exclude") {
+      excludeName = args[++i];
+    } else if (targetPhases.length === 0) {
+      targetPhases = a.split(",").map(p => p.trim()).filter(Boolean);
+    }
+  }
+
+  if (targetPhases.length === 0) {
+    console.error("用法: alloy _guard parallel-phase <phase1,phase2,...> [--exclude <name>]");
+    console.error("  扫描所有 change,统计指定 phase 的数量(用于多 change 并行检测)");
+    console.error("  --exclude <name>:排除指定 change(用于排除当前 change)");
+    console.error("  输出: none / single:<name> / parallel:N + 列表");
+    process.exit(1);
+    return;
+  }
+
+  const projectRoot = process.cwd();
+  const changesDir = join(projectRoot, "openspec", "changes");
+
+  const matching: string[] = [];
+
+  const scanDir = (dir: string, skipArchive: boolean) => {
+    if (!existsSync(dir)) return;
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      if (skipArchive && entry.name === "archive") continue;
+      const changeDir = join(dir, entry.name);
+      const stateFile = join(changeDir, ".alloy.yaml");
+      try {
+        const content = readFileSync(stateFile, "utf-8");
+        const match = content.match(/^phase:\s*(.+)$/m);
+        if (match) {
+          const phase = match[1].trim().replace(/^["']|["']$/g, "");
+          if (targetPhases.includes(phase)) {
+            // 剥离 archive 日期前缀(YYYY-MM-DD-<name>)
+            const changeName = entry.name.replace(/^\d{4}-\d{2}-\d{2}-/, "");
+            if (excludeName && changeName === excludeName) continue;
+            matching.push(changeName);
+          }
+        }
+      } catch {
+        // .alloy.yaml 不存在或读取失败,跳过
+      }
+    }
+  };
+
+  scanDir(changesDir, true); // 活跃 change
+  scanDir(join(changesDir, "archive"), false); // 归档 change
+
+  if (matching.length === 0) {
+    console.log("none");
+    return;
+  }
+
+  if (matching.length === 1) {
+    console.log(`single:${matching[0]}`);
+    return;
+  }
+
+  console.log(`parallel:${matching.length}`);
+  for (const name of matching) {
+    console.log(`  - ${name}`);
+  }
+}
+
+/**
+ * alloy _guard main-clean <change-dir>
+ *
+ * 检查主仓 git status 是否 clean(worktree 模式下,主仓应 clean)。
+ * 用于 alloy-apply Step 2 完成前主仓清洁度校验 + EnterWorktree 前主仓 clean 校验。
+ *
+ * 行为:
+ * - 读 .alloy.yaml 的 worktree 字段
+ * - worktree=skipped/null -> 输出 "skipped(worktree 模式未启用,不检查主仓 clean)"
+ * - worktree 模式 -> 检查主仓 git status --porcelain
+ *   - 非空 -> exit 1 + 输出 dirty 文件列表 + 修复路径
+ *   - 空 -> 输出 "✓ 主仓 clean(worktree 模式校验通过)"
+ */
+async function mainCleanGuard(args: string[]): Promise<void> {
+  const changeDir = args[0];
+  if (!changeDir) {
+    console.error("用法: alloy _guard main-clean <change-dir>");
+    console.error("  检查主仓 git status 是否 clean(worktree 模式下,主仓应 clean)");
+    process.exit(1);
+    return;
+  }
+
+  let worktree: string = "null";
+  try {
+    const state = await readState(changeDir);
+    worktree = state.worktree ?? "null";
+  } catch {
+    // .alloy.yaml 不存在或解析失败,跳过(worktree 字段默认 null)
+  }
+
+  if (worktree === "skipped" || worktree === "null" || !worktree) {
+    console.log("skipped(worktree 模式未启用,不检查主仓 clean)");
+    return;
+  }
+
+  let mainRoot: string;
+  try {
+    const gitCommonDir = execSync("git rev-parse --git-common-dir", {
+      cwd: changeDir,
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+    }).trim();
+    if (isAbsolute(gitCommonDir)) {
+      // worktree 模式:git-common-dir 返回主仓 .git 绝对路径(/path/to/main/.git)
+      mainRoot = dirname(gitCommonDir);
+    } else {
+      // 主仓模式:git-common-dir 返回相对路径(如 .git 或 ../../.git)
+      // 用 show-toplevel 获取主仓 root(绝对路径)
+      mainRoot = execSync("git rev-parse --show-toplevel", {
+        cwd: changeDir,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
+      }).trim();
+    }
+  } catch {
+    console.error("⛔ [PRECONDITION_FAIL] 非 git 仓库或 git 命令失败");
+    process.exit(1);
+    return;
+  }
+
+  let dirty: string = "";
+  try {
+    dirty = execSync("git status --porcelain", {
+      cwd: mainRoot,
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+    }).trim();
+  } catch {
+    console.log("WARN: git status 失败,跳过主仓 clean 校验");
+    return;
+  }
+
+  if (dirty) {
+    console.error("⛔ [PRECONDITION_FAIL] 主仓工作目录有未提交变更(worktree 模式下应全部落在 worktree 分支)");
+    console.error("");
+    console.error(dirty);
+    console.error("");
+    console.error("  可能原因:子 agent 用主仓绝对路径 Edit 了文件,绕过 worktree 隔离");
+    console.error("  修复路径:");
+    console.error("    1) 确认 worktree 分支已有正确版本(git log worktree-<name> --oneline)");
+    console.error("    2) 丢弃主仓误改:git checkout -- <误改文件>");
+    console.error("  禁止:agent 自动 git checkout -- 丢弃变更--必须用户确认 worktree 分支版本正确后手动丢弃。");
+    process.exit(1);
+    return;
+  }
+
+  console.log("✓ 主仓 clean(worktree 模式校验通过)");
+}
+
+/**
  * git add .alloy.yaml + commit(无变更跳过)。
  * 用于 user-gate require/pass 后自动提交 pending_gate 修改,避免 worktree 内 .alloy.yaml dirty。
  * 在 changeDir 下执行(cwd=changeDir),git 自动找仓库根,git add .alloy.yaml 限路径。
@@ -486,4 +674,41 @@ async function userGateGuard(args: string[]): Promise<void> {
  */
 function commitPendingGateChange(_changeDir: string, _commitMsg: string): void {
   void _changeDir; void _commitMsg;
+}
+
+/**
+ * alloy _guard dirty-check [cwd]
+ *
+ * 检查工作目录 git status 是否 clean。
+ * 用于 alloy-start L99 / alloy-plan L296-308 的 dirty 检测(替代手写 git status --porcelain)。
+ *
+ * 行为:
+ * - dirty -> exit 1 + 输出 dirty 文件列表
+ * - clean -> 输出 "✓ 工作目录 clean"
+ * - 非 git 仓库 -> exit 1 + PRECONDITION_FAIL
+ */
+async function dirtyCheckGuard(args: string[]): Promise<void> {
+  const cwd = args[0] || process.cwd();
+  let dirty = "";
+  try {
+    dirty = execSync("git status --porcelain", {
+      cwd,
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+    }).trim();
+  } catch {
+    console.error("⛔ [PRECONDITION_FAIL] 非 git 仓库或 git 命令失败: " + cwd);
+    process.exit(1);
+    return;
+  }
+  if (dirty) {
+    console.error("⛔ [HARD_STOP] 工作目录有未提交变更:");
+    console.error(dirty);
+    console.error("");
+    console.error("  修复:先 commit 或 stash,再继续。");
+    console.error("  详见 alloy-shared/references/git-self-rescue-ban.md(禁自动 reset --hard / checkout . 清场)。");
+    process.exit(1);
+    return;
+  }
+  console.log("✓ 工作目录 clean");
 }

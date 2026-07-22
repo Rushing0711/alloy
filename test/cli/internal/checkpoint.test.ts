@@ -1,10 +1,12 @@
 // test/cli/internal/checkpoint.test.ts
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdir, writeFile, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
 import { checkpointCommand } from "../../../src/cli/commands/internal/checkpoint.js";
+import { readState } from "../../../src/cli/utils/state.js";
 
 describe("alloy _checkpoint", () => {
   let tmpDir: string;
@@ -176,6 +178,134 @@ describe("alloy _checkpoint", () => {
 
       exitSpy.mockRestore();
       errSpy.mockRestore();
+    });
+
+    it("--kind progress 时允许 dirty(越界回退场景)", async () => {
+      // 创建脏文件(模拟 user-gate reset 修改 .alloy.yaml + 未锁定制品 untracked)
+      await writeFile(join(changeDir, ".alloy.yaml"), "phase: planning\n", "utf-8");
+      await writeFile(join(changeDir, "plans.md"), "untracked artifact", "utf-8");
+      execSync("git add openspec/changes/test-change/.alloy.yaml", { cwd: tmpDir, stdio: "pipe" });
+      await writeFile(join(changeDir, ".alloy.yaml"), "phase: planning\npending_gate: null\n", "utf-8");
+
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      // 应该成功创建 progress 检查点(不报 PRECONDITION_FAIL)
+      await checkpointCommand(["create", changeDir, "--kind", "progress", "--reason", "回退前快照"]);
+
+      const tags = listTags();
+      expect(tags.length).toBe(1);
+      expect(tags[0]).toContain("progress-");
+
+      // 应该输出 dirty 告知信息
+      expect(logSpy.mock.calls.some((c) => String(c[0]).includes("progress 检查点允许 dirty"))).toBe(true);
+
+      logSpy.mockRestore();
+    });
+
+    it("--kind brainstorming 时仍拒绝非 .alloy.yaml dirty(锚点语义严格)", async () => {
+      await writeFile(join(tmpDir, "dirty.txt"), "dirty", "utf-8");
+
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+      const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      await checkpointCommand(["create", changeDir, "--kind", "brainstorming"]);
+
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(errSpy.mock.calls.some((c) => String(c[0]).includes("未提交变更"))).toBe(true);
+      expect(listTags().length).toBe(0);
+
+      exitSpy.mockRestore();
+      errSpy.mockRestore();
+    });
+
+    it("--kind brainstorming 时仅 .alloy.yaml dirty(_skill log 写入)自动 commit 后创建检查点", async () => {
+      // 模拟越界回退场景:_skill log 写 .alloy.yaml 不 commit,draft hash 未变 _artifact commit 跳过
+      // 先正常锁定 draft(写 records + commit)
+      await writeFile(join(changeDir, "draft.md"), "draft content", "utf-8");
+      execSync("git add openspec/changes/test-change/draft.md", { cwd: tmpDir, stdio: "pipe" });
+      execSync('git commit -q -m "lock draft"', { cwd: tmpDir, stdio: "pipe" });
+      const draftHash = execSync('node -e "const crypto=require(\'crypto\');const fs=require(\'fs\');const c=fs.readFileSync(\'' + join(changeDir, "draft.md") + '\',\'utf-8\').replace(/^> 生成时间:.*$/m,\'\');console.log(crypto.createHash(\'sha256\').update(c).digest(\'hex\').slice(0,12))"', { encoding: "utf-8" }).trim();
+      const stateContent = `phase: started\nrecords:\n  - artifact: draft\n    hash: ${draftHash}\n    committed_at: "2026-07-21 08:00:00"\n    approver: emon\n`;
+      await writeFile(join(changeDir, ".alloy.yaml"), stateContent, "utf-8");
+      execSync("git add openspec/changes/test-change/.alloy.yaml", { cwd: tmpDir, stdio: "pipe" });
+      execSync('git commit -q -m "records"', { cwd: tmpDir, stdio: "pipe" });
+
+      // 模拟 _skill log 写 .alloy.yaml(不 commit)
+      const { writeState } = await import("../../../src/cli/utils/state.js");
+      const state = await readState(changeDir);
+      state.skill_usage = [{
+        skill: "superpowers:brainstorming",
+        stage: "start",
+        used: true,
+        called_at: "2026-07-21 09:00:00",
+        count: 1,
+      }];
+      await writeState(changeDir, state);
+      // 此时 .alloy.yaml dirty(未 commit),draft.md 未变
+
+      vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await checkpointCommand(["create", changeDir, "--kind", "brainstorming", "--reason", "发起变更后重新生成 draft"]);
+
+      // 应自动 commit .alloy.yaml 后创建检查点
+      const tags = listTags();
+      expect(tags.length).toBe(1);
+      expect(tags[0]).toContain("brainstorming-1");
+
+      // working tree 应 clean(自动 commit 后)
+      const status = execSync("git status --porcelain", { cwd: tmpDir, encoding: "utf-8" }).trim();
+      expect(status).toBe("");
+    });
+
+    it("--kind brainstorming 时 draft hash 不一致 -> PRECONDITION_FAIL(防 agent 跳 _artifact commit)", async () => {
+      // 先正常锁定 draft(写 records + commit)
+      await writeFile(join(changeDir, "draft.md"), "original draft content", "utf-8");
+      execSync("git add openspec/changes/test-change/draft.md", { cwd: tmpDir, stdio: "pipe" });
+      execSync('git commit -q -m "lock draft"', { cwd: tmpDir, stdio: "pipe" });
+      // 写 records(含 draft hash)
+      const draftHash = execSync('node -e "const crypto=require(\'crypto\');const fs=require(\'fs\');const c=fs.readFileSync(\'' + join(changeDir, "draft.md") + '\',\'utf-8\').replace(/^> 生成时间:.*$/m,\'\');console.log(crypto.createHash(\'sha256\').update(c).digest(\'hex\').slice(0,12))"', { encoding: "utf-8" }).trim();
+      const stateContent = `phase: started\nrecords:\n  - artifact: draft\n    hash: ${draftHash}\n    committed_at: "2026-07-21 08:00:00"\n    approver: emon\n`;
+      await writeFile(join(changeDir, ".alloy.yaml"), stateContent, "utf-8");
+      execSync("git add openspec/changes/test-change/.alloy.yaml", { cwd: tmpDir, stdio: "pipe" });
+      execSync('git commit -q -m "records"', { cwd: tmpDir, stdio: "pipe" });
+
+      // agent 跳过 _artifact commit,直接 Write 修改 draft.md(模拟 Pi 会话 L113)
+      await writeFile(join(changeDir, "draft.md"), "modified draft content (agent direct Write)", "utf-8");
+      // git add + commit(agent 也跑了 git commit,但 records hash 未更新)
+      execSync("git add openspec/changes/test-change/draft.md", { cwd: tmpDir, stdio: "pipe" });
+      execSync('git commit -q -m "agent direct commit"', { cwd: tmpDir, stdio: "pipe" });
+
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+      const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      await checkpointCommand(["create", changeDir, "--kind", "brainstorming", "--reason", "发起变更后重新生成 draft"]);
+
+      // 应拒绝:records hash 与 draft.md 文件 hash 不一致
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(errSpy.mock.calls.some((c) => String(c[0]).includes("draft hash 不一致"))).toBe(true);
+      expect(listTags().length).toBe(0);
+
+      exitSpy.mockRestore();
+      errSpy.mockRestore();
+    });
+
+    it("--kind brainstorming 时 draft hash 一致 -> 成功创建", async () => {
+      // 正常流程:锁定 draft + 写 records(hash 一致)
+      await writeFile(join(changeDir, "draft.md"), "draft content", "utf-8");
+      execSync("git add openspec/changes/test-change/draft.md", { cwd: tmpDir, stdio: "pipe" });
+      execSync('git commit -q -m "lock draft"', { cwd: tmpDir, stdio: "pipe" });
+      const draftHash = execSync('node -e "const crypto=require(\'crypto\');const fs=require(\'fs\');const c=fs.readFileSync(\'' + join(changeDir, "draft.md") + '\',\'utf-8\').replace(/^> 生成时间:.*$/m,\'\');console.log(crypto.createHash(\'sha256\').update(c).digest(\'hex\').slice(0,12))"', { encoding: "utf-8" }).trim();
+      const stateContent = `phase: started\nrecords:\n  - artifact: draft\n    hash: ${draftHash}\n    committed_at: "2026-07-21 08:00:00"\n    approver: emon\n`;
+      await writeFile(join(changeDir, ".alloy.yaml"), stateContent, "utf-8");
+      execSync("git add openspec/changes/test-change/.alloy.yaml", { cwd: tmpDir, stdio: "pipe" });
+      execSync('git commit -q -m "records"', { cwd: tmpDir, stdio: "pipe" });
+
+      // hash 一致,应成功创建
+      await checkpointCommand(["create", changeDir, "--kind", "brainstorming", "--reason", "draft 锁定"]);
+
+      const tags = listTags();
+      expect(tags.length).toBe(1);
+      expect(tags[0]).toContain("brainstorming-1");
     });
   });
 
@@ -378,6 +508,83 @@ describe("alloy _checkpoint", () => {
       const tagCommit = execSync(`git rev-parse ${tag}^{}`, { cwd: tmpDir, encoding: "utf-8" }).trim();
       expect(headAfter).toBe(tagCommit);
     });
+
+    it("切换前自动清理未提交 tracked 修改(dirty working tree)", async () => {
+      await checkpointCommand(["create", changeDir]);
+      const tag = listTags()[0];
+
+      // 在 feature 分支做新 commit(让 HEAD 超前 tag)
+      await writeFile(join(changeDir, "committed.md"), "committed", "utf-8");
+      execSync("git add openspec/", { cwd: tmpDir, stdio: "pipe" });
+      execSync('git commit -q -m "committed"', { cwd: tmpDir, stdio: "pipe" });
+
+      // 制造未 commit 的 tracked 修改
+      await writeFile(join(changeDir, "draft.md"), "dirty modification", "utf-8");
+      const dirty = execSync("git status --porcelain", { cwd: tmpDir, encoding: "utf-8" }).trim();
+      expect(dirty).toContain("draft.md");
+
+      // 切换应自动清理 dirty,不报错
+      await checkpointCommand(["switch", changeDir, tag]);
+
+      // HEAD 应指向 tag commit
+      const headAfter = execSync("git rev-parse HEAD", { cwd: tmpDir, encoding: "utf-8" }).trim();
+      const tagCommit = execSync(`git rev-parse ${tag}^{}`, { cwd: tmpDir, encoding: "utf-8" }).trim();
+      expect(headAfter).toBe(tagCommit);
+    });
+
+    it("切换前自动清理 untracked 制品文件(design.md 等残留)", async () => {
+      await checkpointCommand(["create", changeDir]);
+      const tag = listTags()[0];
+
+      // 在 feature 分支做新 commit(让 HEAD 超前 tag)
+      await writeFile(join(changeDir, "committed.md"), "committed", "utf-8");
+      execSync("git add openspec/", { cwd: tmpDir, stdio: "pipe" });
+      execSync('git commit -q -m "committed"', { cwd: tmpDir, stdio: "pipe" });
+
+      // 制造 untracked 制品文件(模拟 plan 阶段生成的 design.md 未锁定就回退)
+      await writeFile(join(changeDir, "design.md"), "untracked design content", "utf-8");
+      await writeFile(join(changeDir, "proposal.md"), "untracked proposal", "utf-8");
+      await mkdir(join(changeDir, "specs"), { recursive: true });
+      await writeFile(join(changeDir, "specs", "spec.md"), "untracked spec", "utf-8");
+
+      // 制造用户自定义文件(不应被删)
+      await writeFile(join(changeDir, "notes.md"), "user notes", "utf-8");
+
+      // 切换--应清理 untracked 制品,保留 notes.md
+      await checkpointCommand(["switch", changeDir, tag]);
+
+      // untracked 制品文件应被删除
+      expect(existsSync(join(changeDir, "design.md"))).toBe(false);
+      expect(existsSync(join(changeDir, "proposal.md"))).toBe(false);
+      expect(existsSync(join(changeDir, "specs"))).toBe(false);
+
+      // 用户自定义文件应保留
+      expect(existsSync(join(changeDir, "notes.md"))).toBe(true);
+    });
+
+    it("切换前清理 untracked 制品只删当前 change(不误删其他 change)", async () => {
+      // 创建第二个 change 目录
+      const otherChangeDir = join(tmpDir, "openspec", "changes", "other-change");
+      await mkdir(otherChangeDir, { recursive: true });
+      await writeFile(join(otherChangeDir, ".alloy.yaml"), "phase: planning\n", "utf-8");
+      await writeFile(join(otherChangeDir, "design.md"), "other change design", "utf-8");
+      execSync("git add openspec/changes/other-change/", { cwd: tmpDir, stdio: "pipe" });
+      execSync('git commit -q -m "other change"', { cwd: tmpDir, stdio: "pipe" });
+
+      // 在主 change 打 tag + 做新 commit + 制造 untracked 制品
+      await checkpointCommand(["create", changeDir]);
+      const tag = listTags()[0];
+      await writeFile(join(changeDir, "committed.md"), "committed", "utf-8");
+      execSync("git add openspec/", { cwd: tmpDir, stdio: "pipe" });
+      execSync('git commit -q -m "committed"', { cwd: tmpDir, stdio: "pipe" });
+      await writeFile(join(changeDir, "design.md"), "main change untracked", "utf-8");
+
+      // 切换--应只删主 change 的 design.md,不动 other-change 的 design.md
+      await checkpointCommand(["switch", changeDir, tag]);
+
+      expect(existsSync(join(changeDir, "design.md"))).toBe(false);
+      expect(existsSync(join(otherChangeDir, "design.md"))).toBe(true);
+    });
   });
 
   describe("clean", () => {
@@ -443,6 +650,21 @@ describe("alloy _checkpoint", () => {
 
       expect(logs.join("\n")).toContain("无 checkpoint tag 需清理");
       spy.mockRestore();
+    });
+
+    it("--verify 清理后校验通过(无残留)", async () => {
+      await checkpointCommand(["create", changeDir]);
+      expect(listTags().length).toBe(1);
+
+      const logs: string[] = [];
+      const logSpy = vi.spyOn(console, "log").mockImplementation((...args) => logs.push(args.join(" ")));
+
+      await checkpointCommand(["clean", changeDir, "--verify"]);
+
+      expect(listTags().length).toBe(0);
+      expect(logs.some(l => l.includes("--verify 校验通过"))).toBe(true);
+
+      logSpy.mockRestore();
     });
   });
 

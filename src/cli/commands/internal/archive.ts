@@ -195,4 +195,34 @@ export async function archiveCommand(args: string[]): Promise<void> {
   } else {
     console.log(`  ℹ️ spec-less change，跳过 spec sync`);
   }
+
+  // 归档变更提交(原子完成 git add + commit,限路径;替代 SKILL.md 手写 _chore-commit)
+  // 限路径:openspec/specs/ + openspec/changes/(禁 git add -A,避免卷入无关 working tree 变更)
+  // 幂等:无 staged 改动跳过 commit(openspec archive CLI 已 commit 时)
+  try {
+    execSync("git add openspec/specs/ openspec/changes/", {
+      cwd: gitRoot.root,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    let hasStaged = true;
+    try {
+      execSync("git diff --cached --quiet", { cwd: gitRoot.root, stdio: ["pipe", "pipe", "pipe"] });
+      hasStaged = false;
+    } catch {
+      hasStaged = true;
+    }
+    if (hasStaged) {
+      const commitMsg = `chore(${changeName}): 归档目录移动`;
+      execSync(`git commit -m "${commitMsg}"`, {
+        cwd: gitRoot.root,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      console.log(`✓ 归档变更已 commit: ${commitMsg}`);
+    } else {
+      console.log(`✓ 归档变更已提交,无新增改动跳过 commit(幂等)`);
+    }
+  } catch (e) {
+    console.error(`⚠️ 归档变更 commit 失败: ${(e as Error).message}`);
+    console.error(`  agent 需手动: git add openspec/specs/ openspec/changes/ && git commit -m "chore(${changeName}): 归档目录移动"`);
+  }
 }

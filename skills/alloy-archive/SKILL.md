@@ -30,7 +30,7 @@ verify.md FAIL / merge 冲突 / git status dirty 任一存在 = 拒绝归档
 
 **调用外部命令或技能前，先输出标题和状态描述，再执行操作。**
 
-**输出规则：** 阶段入口/出口必须按 `docs/specification/02-visual-spec.md` 输出 Phase 框（`┌─┐` Unicode 单线框，38 字符宽）、Step 标题（`[Step N/M]` + 38 字符 `─` 下划线）、`>` 块引用、`->` 引导行。**skill md 中的 Phase 框代码块是必须输出到终端的格式，不是文档示例。** 制品汇总表同理。
+**输出规则:** 阶段入口/出口按 `alloy-shared/references/phase-frame.md` 输出 Phase 框 + Step 标题 + 块引用 + 引导行。skill md 中的 Phase 框代码块是必须输出到终端的格式,不是文档示例。完整规范见 `docs/specification/02-visual-spec.md`。
 
 ---
 
@@ -109,13 +109,10 @@ FAIL -> "verify.md 有阻塞问题。请先修复。" PASS/WARNING -> 继续。
 **4. 多 change 并行 archive 检测（WARN，task #14）：** Delta Spec 合并顺序敏感--同期多个 change 在 archive 状态时，先归档晚开始的可能导致主 spec 状态错乱。
 
 ```bash
-PARALLEL=$(find openspec/changes -maxdepth 2 -name .alloy.yaml \
-  -exec grep -l "phase: archiving\|phase: archived" {} \; 2>/dev/null \
-  | grep -v "/<name>/" | wc -l)
-if [ "$PARALLEL" -gt 0 ]; then
-  echo "⚠️ [WARN] 检测到 $PARALLEL 个其他 change 处于 archiving/archived 状态："
-  find openspec/changes -maxdepth 2 -name .alloy.yaml \
-    -exec grep -l "phase: archiving\|phase: archived" {} \; 2>/dev/null | grep -v "/<name>/"
+PARALLEL=$(alloy _guard parallel-phase archiving,archived --exclude <name>)
+if [[ "$PARALLEL" == parallel:* ]]; then
+  echo "⚠️ [WARN] 检测到 ${PARALLEL#parallel:} 个其他 change 处于 archiving/archived 状态："
+  alloy _guard parallel-phase archiving,archived --exclude <name> | tail -n +2
   echo ""
   echo "  Delta Spec 合并顺序敏感，建议按 archive 启动时间串行处理。"
   echo "  继续当前 archive 前请确认其他 change 不会同时归档。"
@@ -160,8 +157,7 @@ CHANGE_DIR="openspec/changes/<name>"
 
 # 前置:确保 worktree 内的 .alloy.yaml 已 commit
 # (apply 阶段或 archive 早期可能写入 .alloy.yaml 未 commit,会导致 _worktree-cleanup 的 worktree remove 失败)
-git add "$CHANGE_DIR/.alloy.yaml"
-git diff --cached --quiet || git commit -m "chore(<name>): 同步 .alloy.yaml 状态(archive 前置)"
+alloy _chore-commit "$CHANGE_DIR" --msg "chore(<name>): 同步 .alloy.yaml 状态(archive 前置)" --paths "$CHANGE_DIR/.alloy.yaml"
 
 WORKTREE_PATH=$(alloy _state read "$CHANGE_DIR" worktree 2>/dev/null)
 FEATURE_BRANCH=$(alloy _state read "$CHANGE_DIR" feature_branch 2>/dev/null)
@@ -284,7 +280,7 @@ alloy _archive openspec/changes/<name>
 > ⛔ [HARD_STOP §3.5.1] `alloy _archive` 失败时禁自动 `git reset --hard` / `git checkout .` / `git restore .` / `git stash` / `git clean -fd` 清场。
 > 违反字面 = 违反精神：哪怕"工作树脏了清一下重试",也算违反--破坏性命令会丢失用户已 stage 的工作,必须报告问题让用户决策。
 
-> `alloy _archive` 不 commit--归档变更提交由后续步骤（USER_GATE 审查 diff 后）执行。`openspec archive` CLI 内部可能产生 commit，agent 不自行 commit 归档目录移动。
+> `alloy _archive` 内部完成归档变更提交(git add openspec/specs/ openspec/changes/ + commit,限路径 + 幂等)。`openspec archive` CLI 内部可能产生 commit,`_archive` 兜底确保归档变更已 commit,agent 无需手写归档 commit。
 
 **Delta Spec 合并审查（USER_GATE，task #22 强制 diff 注入）：**
 
@@ -345,14 +341,9 @@ alloy _guard user-gate require "$ARCHIVE_DIR" archive:delta-spec-review
 
 **违反字面 = 违反精神：** 哪怕 diff 看似"明显合理"或"diff 为空"，没经过用户明确选择 1 = 不算授权。禁止 agent 基于"diff 短"、"无 conflict"或"specs/ 原本为空"自动跳过此 USER_GATE。
 
-**归档变更提交（HARD_STOP §5.2.1 git add 限路径）：** **禁止 `git add -A` 无路径--只 add `openspec/specs/ openspec/changes/` 两个明确路径，避免把无关 working tree 变更卷入归档 commit（§5.2.1）。**
+**归档变更提交：** 由 `alloy _archive` 内部完成(git add openspec/specs/ openspec/changes/ + commit,限路径 + 幂等)。agent 无需手写归档 commit。
 
-```bash
-git add openspec/specs/ openspec/changes/
-git diff --cached --quiet || git commit -m "chore(<name>): 归档目录移动"
-```
-
-`git commit` 失败 -> ⛔ `[HARD_STOP] 归档 commit 失败，archive 中止。检查 git 状态后重试。`
+> `_archive` 内部完成归档变更提交后,如 commit 失败会输出 ⚠️ 提示,agent 需手动 git add openspec/specs/ openspec/changes/ && git commit 修复。
 
 **记录完成时间并推进 phase--原子命令 `alloy _phase complete` 内部完成 completed_at 写入 + phase 推进 + git add 限路径 + commit：**
 
@@ -374,11 +365,8 @@ alloy _verify phase-exit archive "$ARCHIVE_DIR" && alloy _phase complete "$ARCHI
 **§5.2.3 路径 B 降级（HARD_STOP）：** 若 `_phase complete` 失败，降级路径（archive 阶段降级 -> `applied`）：
 
 ```bash
-# 用户须手动回滚 phase：
-# phase 字段受管(_state write 拦截),需逃生阀 ALLOY_FORCE_PHASE=1
-ALLOY_FORCE_PHASE=1 alloy _state write "$ARCHIVE_DIR" phase applied
-git checkout HEAD~1 -- "$ARCHIVE_DIR/.alloy.yaml"  # 撤销 phase commit 中的状态变更
-git reset HEAD~1                                  # 退回 phase commit
+# 用户须手动回滚 phase(用 _phase downgrade 替代 ALLOY_FORCE_PHASE=1 逃生阀):
+alloy _phase downgrade "$ARCHIVE_DIR" applied
 ```
 
 > 禁止 agent 自动运行 `git reset --hard` / `git checkout .` 清场（§3.5.1）。详见 `alloy-shared/references/phase-downgrade-path.md`。
@@ -402,6 +390,8 @@ git reset HEAD~1                                  # 退回 phase commit
 > 违反字面 = 违反精神：哪怕"用户肯定要进 finish"、"gate 是形式主义",也算违反--gate 是流程节点,不是可选步骤。
 
 > 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级。
+
+> ℹ️ `archive:phase-complete` gate 已由 `_phase complete archive` 自动设。以下 `user-gate require` 命令幂等可省略--agent 也可手动调(覆盖相同值,无冲突)。
 
 ⛔ [HARD_STOP] 必须执行以下命令设置 pending_gate(不是说明,是必跑命令):
 

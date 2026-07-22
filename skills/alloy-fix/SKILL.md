@@ -29,7 +29,7 @@ NO FIX WITHOUT DIAGNOSIS - EVERY CALL
 违反字面 = 违反精神：哪怕"用户重复调用同一命令"/"用户说直接改"/"上一次已诊断过"，也禁跳过诊断直接 Edit 代码
 ```
 
-**交互规则：** `🔴 STOP` = 硬交互确认点，首次呈现即必须调用平台原生交互工具--禁"先文本展示 1./2. 再等待用户打字"。Claude Code 用 `AskUserQuestion`,OpenCode 用 `question` 工具(字段名 `multiple` 非 `multiSelect`,可选 `custom`),Pi 用 `alloy-question` 工具(alloy-question extension 注册);Copilot CLI / Gemini CLI 无原生交互工具,降级为结构化文本选项。三平台调用示例见 `alloy-shared/references/interaction-style.md` §审查窗口标准模式。含"沉默 ≠ 授权"通用禁令--禁批量打包、禁基于内容跳过、禁 agent 回填精确字符串。跳过任何 🔴 STOP = 违反 Iron Law。
+**交互规则:** `🔴 STOP` 等价 `USER_GATE`--首次呈现即必须调平台原生交互工具(禁"先文本展示 1./2. 再等用户打字")。Claude Code: `AskUserQuestion`;OpenCode: `question`;Pi: `alloy-question`。完整规则 + 平台调用示例见 `alloy-shared/references/interaction-style.md`;USER_GATE pending/clear/reset 流程见 `alloy-shared/references/gate-ceremony.md`。跳过 USER_GATE / 批量打包 / 基于内容跳过 = 违反 Iron Law。
 
 **调用外部命令或技能前，先输出标题和状态描述，再执行操作。**
 
@@ -118,8 +118,7 @@ alloy _config read . main_branch 2>/dev/null
 
 ```bash
 # 输入：$USER_DESC（用户原始描述）+ $DIAGNOSIS（诊断结论）
-KEYWORDS="优化|性能|performance|refactor|重构|改造|增强|enhancement|提升|更好|更快"
-HIT=$(echo "$USER_DESC $DIAGNOSIS" | grep -Eo "$KEYWORDS" | sort -u | tr '\n' ' ')
+HIT=$(alloy _fix detect-keywords $USER_DESC $DIAGNOSIS)
 ```
 
 `$HIT` 非空 -> 🔴 USER_GATE（必须平台原生交互工具）：

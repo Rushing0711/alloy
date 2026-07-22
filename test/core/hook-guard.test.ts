@@ -260,4 +260,61 @@ describe("hook-guard guardCheck", () => {
       expect(result.reason).toContain("gate-b");
     });
   });
+
+  describe("main 分支检测(禁止在 main 分支直接改代码)", () => {
+    it("main 分支 + 非白名单 src/ -> 拦截", () => {
+      const result = guardCheck({ filePath: "src/foo.ts", phases: ["applying"], currentBranch: "main", mainBranch: "main" });
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toContain("main 分支");
+      expect(result.reason).toContain("feature/<name>");
+    });
+
+    it("main 分支 + 非白名单 scripts/ -> 拦截", () => {
+      const result = guardCheck({ filePath: "scripts/hello.sh", phases: ["applying"], currentBranch: "main", mainBranch: "main" });
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toContain("main 分支");
+    });
+
+    it("main 分支 + 白名单 .alloy.yaml -> 放行(状态文件允许)", () => {
+      const result = guardCheck({ filePath: ".alloy.yaml", phases: [], currentBranch: "main", mainBranch: "main" });
+      expect(result.allowed).toBe(true);
+    });
+
+    it("main 分支 + 白名单 docs/foo.md -> 放行(文档允许)", () => {
+      const result = guardCheck({ filePath: "docs/guide.md", phases: [], currentBranch: "main", mainBranch: "main" });
+      expect(result.allowed).toBe(true);
+    });
+
+    it("main 分支 + 白名单 openspec/ -> 放行(制品允许)", () => {
+      const result = guardCheck({ filePath: "openspec/changes/foo/proposal.md", phases: [], currentBranch: "main", mainBranch: "main" });
+      expect(result.allowed).toBe(true);
+    });
+
+    it("main 分支 + apply 阶段 + 非白名单 -> 仍拦截(main 分支检测优先级最高)", () => {
+      const result = guardCheck({ filePath: "src/foo.ts", phases: ["applying"], currentBranch: "main", mainBranch: "main" });
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toContain("main 分支");
+    });
+
+    it("feature 分支 + 非白名单 + apply 阶段 -> 放行(不触发 main 分支检测)", () => {
+      const result = guardCheck({ filePath: "src/foo.ts", phases: ["applying"], currentBranch: "feature/foo", mainBranch: "main" });
+      expect(result.allowed).toBe(true);
+    });
+
+    it("currentBranch undefined -> 不触发 main 分支检测(走原有逻辑)", () => {
+      const result = guardCheck({ filePath: "src/foo.ts", phases: ["applying"], mainBranch: "main" });
+      expect(result.allowed).toBe(true);
+    });
+
+    it("mainBranch undefined -> 不触发 main 分支检测(走原有逻辑)", () => {
+      const result = guardCheck({ filePath: "src/foo.ts", phases: ["applying"], currentBranch: "main" });
+      expect(result.allowed).toBe(true);
+    });
+
+    it("main 分支 + 自定义 main_branch 名(master)-> 拦截", () => {
+      const result = guardCheck({ filePath: "src/foo.ts", phases: [], currentBranch: "master", mainBranch: "master" });
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toContain("master");
+    });
+  });
 });

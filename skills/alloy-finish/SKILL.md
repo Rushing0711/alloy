@@ -28,11 +28,11 @@ phase != archived / 分支不存在 / merge 问答工具确认未通过 / spec �
 
 **核心原则：只做代码合入，不碰 spec。** spec 已归档封存，任何 spec 级变更应走新 change（[HARD_STOP]）。
 
-**交互规则：** `🔴 STOP` 等价 `USER_GATE`，首次呈现即必须调用平台原生交互工具--禁"先文本展示 1./2. 再等待用户打字"。Claude Code 用 `AskUserQuestion`,OpenCode 用 `question` 工具(字段名 `multiple` 非 `multiSelect`,可选 `custom`),Pi 用 `alloy-question` 工具(alloy-question extension 注册);Copilot CLI / Gemini CLI 无原生交互工具,降级为结构化文本选项。三平台调用示例见 `alloy-shared/references/interaction-style.md` §审查窗口标准模式。含"沉默 ≠ 授权"通用禁令--禁批量打包、禁基于内容跳过、禁 agent 回填精确字符串。跳过任何 USER_GATE = 违反 Iron Law。
+**交互规则:** `🔴 STOP` 等价 `USER_GATE`--首次呈现即必须调平台原生交互工具(禁"先文本展示 1./2. 再等用户打字")。Claude Code: `AskUserQuestion`;OpenCode: `question`;Pi: `alloy-question`。完整规则 + 平台调用示例见 `alloy-shared/references/interaction-style.md`;USER_GATE pending/clear/reset 流程见 `alloy-shared/references/gate-ceremony.md`。跳过 USER_GATE / 批量打包 / 基于内容跳过 = 违反 Iron Law。
 
-**状态符号：** `⛔` = HARD_STOP / PRECONDITION_FAIL，`🔴` = USER_GATE，`⚠️` = WARN（视觉规范 §七）。
+**状态符号:** `⛔` = HARD_STOP / PRECONDITION_FAIL,`🔴` = USER_GATE,`⚠️` = WARN(完整含义见 `alloy-shared/references/hard-stop-meaning.md`)。
 
-**输出规则：** 阶段入口/出口必须按 `docs/specification/02-visual-spec.md` 输出 Phase 框（`┌─┐` Unicode 单线框，38 字符宽）、Step 标题（`[Step N/M]` + 38 字符 `─` 下划线）、`>` 块引用、`->` 引导行。**skill md 中的 Phase 框代码块是必须输出到终端的格式，不是文档示例。**
+**输出规则:** 阶段入口/出口按 `alloy-shared/references/phase-frame.md` 输出 Phase 框 + Step 标题 + 块引用 + 引导行。skill md 中的 Phase 框代码块是必须输出到终端的格式,不是文档示例。完整规范见 `docs/specification/02-visual-spec.md`。
 
 **调用外部命令或技能前，先输出标题和状态描述，再执行操作。**
 
@@ -76,7 +76,7 @@ phase != archived / 分支不存在 / merge 问答工具确认未通过 / spec �
 > `openspec/changes/<name>/` 为空目录，直接调用会误创建残留 `.alloy.yaml`。
 
 ```bash
-ARCHIVE_DIR=$(ls -d openspec/changes/archive/*-<name> 2>/dev/null | sort -r | head -1)
+ARCHIVE_DIR=$(alloy _archive-dir <name>)
 CHANGE_DIR="${ARCHIVE_DIR:-openspec/changes/<name>}"
 alloy _phase start "$CHANGE_DIR" finish
 ```
@@ -91,7 +91,7 @@ alloy _phase start "$CHANGE_DIR" finish
 
 **1. phase 检查（PRECONDITION_FAIL）：**
 ```bash
-alloy _guard precheck openspec/changes/<name> finishing
+alloy _guard precheck "$CHANGE_DIR" finishing
 ```
 不匹配时读取 `alloy-shared/references/phase-routing.md` 自动跳转。phase 必须 = finishing，否则 `⛔ PRECONDITION_FAIL`。
 
@@ -105,10 +105,10 @@ git branch --list <feature_branch>
 
 **4. 多 change 并行检查（WARN，task #14）：**
 ```bash
-alloy status --json 2>/dev/null | grep -c '"phase":"archived"' || true
+PARALLEL=$(alloy _guard parallel-phase archived)
 ```
 
-返回 > 1 -> 输出：
+输出 parallel:N(N>1) 时 -> 输出：
 > ⚠️ WARN: 检测到多个 change 处于 phase=archived 状态。多个 change 并行 finish 会导致 squash merge 顺序与 archive 顺序错配，建议串行处理。当前 change：`<name>`，其他 archived change 列表见 `alloy status`。继续？
 
 WARN 不阻断流程，但提醒用户人工确认顺序后再继续。
@@ -118,21 +118,9 @@ WARN 不阻断流程，但提醒用户人工确认顺序后再继续。
 **[PRECONDITION_FAIL] 本步骤为强制步骤，不可跳过。** change 封存后 checkpoint tag 无恢复价值，残留 tag 会污染后续 change 的 `_checkpoint list` 输出与 retrospective 检查点统计。清理后必须校验无残留--有残留说明清理未生效，禁止继续推进 phase。
 
 ```bash
-ARCHIVE_DIR=$(ls -d openspec/changes/archive/*-<name> 2>/dev/null | sort -r | head -1)
+ARCHIVE_DIR=$(alloy _archive-dir <name>)
 CHANGE_DIR="${ARCHIVE_DIR:-openspec/changes/<name>}"
-alloy _checkpoint clean "$CHANGE_DIR"
-
-# 后置校验：清理后再 list，必须无残留
-RAW_NAME=$(basename "$CHANGE_DIR")
-CHANGE_NAME=${RAW_NAME#[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-}
-REMAINING=$(git tag -l "alloy-checkpoint-${CHANGE_NAME}-*")
-if [ -n "$REMAINING" ]; then
-  echo "⛔ [PRECONDITION_FAIL] checkpoint tag 清理未完成，仍有残留："
-  echo "$REMAINING"
-  echo "  禁止继续推进 phase。请手动排查：git tag -d <tag> 逐个删除，或检查 CHANGE_DIR 路径是否正确。"
-  exit 1
-fi
-echo "✓ checkpoint tag 已全部清理"
+alloy _checkpoint clean "$CHANGE_DIR" --verify
 ```
 
 `_checkpoint clean` 内部用 `basename(changeDir)` 推导 change name，传 archive 路径即可正确匹配 `alloy-checkpoint-<name>-*` tag。后置校验用同样的 name 推导逻辑（剥离 `YYYY-MM-DD-` 前缀）再 list 一次，确保清理真正生效，避免 agent 跳过 clean 或 clean 静默失败导致 tag 残留。
@@ -235,7 +223,7 @@ alloy _guard user-gate require "$CHANGE_DIR" finish:confirm-merge
 
 用户选"确认执行"后执行 squash merge:
 ```bash
-ARCHIVE_DIR=$(ls -d openspec/changes/archive/*-<name> 2>/dev/null | sort -r | head -1)
+ARCHIVE_DIR=$(alloy _archive-dir <name>)
 CHANGE_DIR="${ARCHIVE_DIR:-openspec/changes/<name>}"
 
 # 记录完成时间 + 推进 phase（在 squash merge 之前--§5.2.3 路径 B）
@@ -290,12 +278,11 @@ git merge --squash <feature_branch>
 # 2. COMMIT_LOG 范围必须 <main_branch>..<feature_branch>,禁 git log <feature_branch>（会包含 main 历史）
 # 违反字面 = 违反精神：哪怕"feat 更准确描述内容",也禁--合入 commit 用 chore 是惯例
 COMMIT_LOG=$(git log <main_branch>..<feature_branch> --format="* %s")
-# 用 -F 文件方式提交,避免 heredoc + 变量展开在部分 agent 平台(Claude Code Bash 用 eval)触发 "command too long"
-cat > .git/squash-merge-msg.txt <<EOF
-chore(<name>): 合入 main（squash merge）
-
-${COMMIT_LOG}
-EOF
+# 用 echo 重定向写 squash-merge-msg,避免 cat heredoc 被 hook 拦截(hook 拦 cat << / <<EOF)
+# 不用 git commit -m "$COMMIT_LOG":Claude Code Bash 用 eval 触发 "command too long"
+echo "chore(<name>): 合入 main（squash merge）" > .git/squash-merge-msg.txt
+echo "" >> .git/squash-merge-msg.txt
+echo "$COMMIT_LOG" >> .git/squash-merge-msg.txt
 git commit -F .git/squash-merge-msg.txt
 rm -f .git/squash-merge-msg.txt
 
@@ -304,20 +291,11 @@ rm -f .git/squash-merge-msg.txt
 # 而非 git commit hash。git 历史变化（squash / rebase）不影响已归档制品的不可篡改性。
 # 因此 squash 后无需重录任何 hash；finish 阶段不再调 alloy _record write。
 
-# [PRECONDITION_FAIL] git branch -D 前必须校验变量--
-# <feature_branch> 是模板占位符，agent 在执行前必须替换为实际分支名。
-# 如果替换缺失或意外指向 main_branch，强删会丢失主分支引用。
-if [ -z "<feature_branch>" ] || [ "<feature_branch>" = "<main_branch>" ] || [ "<feature_branch>" = "main" ] || [ "<feature_branch>" = "master" ]; then
-  echo "[PRECONDITION_FAIL] feature_branch 变量未替换或与主分支同名，拒绝执行 git branch -D"
-  echo "  feature_branch=<feature_branch>"
-  echo "  main_branch=<main_branch>"
-  echo "  禁止：agent 自动猜测分支名继续执行。退出 skill 让用户检查 .alloy.yaml。"
-  exit 1
-fi
-# [HARD_STOP] 直接用 -D 强删--禁先试 `git branch -d` 再改 -D
-# squash merge 不保留 ancestry,`git branch -d` 必然失败（not fully merged）
-# 先试 -d 失败再 -D 是无谓重试,偏离 skill md 设计。直接 -D,上方变量校验已保证安全
-git branch -D <feature_branch>
+# [HARD_STOP] git branch -D 下沉到 alloy _finish-cleanup,agent 禁直接跑
+# 原因:hook-guard 拦截 `git branch -D`(§3.5.1 禁令),Pi 无 hook 兜底也会误跑
+# _finish-cleanup 内部校验:变量替换 + 非主分支 + 分支存在 + 当前在 main + squash merge 已完成
+# 任何校验失败 -> exit 1,agent 不自动猜测分支名继续执行
+alloy _finish-cleanup "$CHANGE_DIR" "<feature_branch>"
 ```
 
 `git pull` 失败按上述 USER_GATE 三选项（重试 / 跳过 pull / 中止）处理；agent 不得自动绕过。`git merge --squash` 冲突时列出冲突文件让用户手动解决，禁止 `git merge --abort`（详见 §3.5.1）。
@@ -326,7 +304,7 @@ git branch -D <feature_branch>
 
 先记录完成时间并推进 phase（原子命令）：
 ```bash
-ARCHIVE_DIR=$(ls -d openspec/changes/archive/*-<name> 2>/dev/null | sort -r | head -1)
+ARCHIVE_DIR=$(alloy _archive-dir <name>)
 CHANGE_DIR="${ARCHIVE_DIR:-openspec/changes/<name>}"
 # [§5.2.3 路径 B] phase 推进发生在 PR 创建之前。PR 后续被 close / 不合入时，
 # 用户须手动按以下 3 步回退（与选项 1 同款手动回退路径）：
@@ -358,13 +336,12 @@ PR 审查反馈的处理规范：
 
 记录延期时间戳供后续 `alloy status` 统计：
 ```bash
-ARCHIVE_DIR=$(ls -d openspec/changes/archive/*-<name> 2>/dev/null | sort -r | head -1)
+ARCHIVE_DIR=$(alloy _archive-dir <name>)
 CHANGE_DIR="${ARCHIVE_DIR:-openspec/changes/<name>}"
 DEFERRED_AT=$(date "+%Y-%m-%d %H:%M:%S")
 alloy _state merge "$CHANGE_DIR" phase_timings "{\"finish\":{\"deferred_at\":\"${DEFERRED_AT}\"}}"
 # ⛔ [HARD_STOP §5.2.1] git add 限路径--禁 -A/-a/.,只 add $CHANGE_DIR/.alloy.yaml
-git add "$CHANGE_DIR/.alloy.yaml"
-git commit -m "chore(<name>): finish 延期，分支已保留"
+alloy _chore-commit "$CHANGE_DIR" --msg "chore(<name>): finish 延期，分支已保留" --paths "$CHANGE_DIR/.alloy.yaml"
 ```
 
 > ⚠️ WARN（task #27）：finish 延期已记录 deferred_at=${DEFERRED_AT}。

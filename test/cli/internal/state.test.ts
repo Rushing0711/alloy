@@ -444,4 +444,78 @@ describe("alloy _state", () => {
       exitSpy.mockRestore();
     });
   });
+
+  describe("git 仓库 + --commit", () => {
+    let tmpDir: string;
+    let changeDir: string;
+
+    beforeEach(async () => {
+      tmpDir = join(tmpdir(), `alloy-state-commit-test-${Date.now()}`);
+      changeDir = join(tmpDir, "openspec", "changes", "test-change");
+      await mkdir(changeDir, { recursive: true });
+      const { execSync } = await import("node:child_process");
+      execSync("git init -b main", { cwd: tmpDir, stdio: "pipe" });
+      execSync('git config user.name "test"', { cwd: tmpDir, stdio: "pipe" });
+      execSync('git config user.email "test@test.com"', { cwd: tmpDir, stdio: "pipe" });
+      await writeFile(join(tmpDir, "README.md"), "init", "utf-8");
+      execSync("git add README.md && git commit -m 'chore: init'", { cwd: tmpDir, stdio: "pipe" });
+      const yaml = [
+        "worktree: null",
+        "schema_version: 1",
+        "phase: started",
+        'created_at: "2020-01-01T00:00:00Z"',
+        'updated_at: "2020-01-01T00:00:00Z"',
+        "records: []",
+      ].join("\n");
+      await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
+      execSync("git add openspec/ && git commit -m 'chore: setup state'", { cwd: tmpDir, stdio: "pipe" });
+    });
+
+    afterEach(async () => {
+      await rm(tmpDir, { recursive: true, force: true });
+      vi.restoreAllMocks();
+    });
+
+    it("--commit 写 state 后 commit", async () => {
+      const { execSync } = await import("node:child_process");
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      // 修改 feature_branch 字段 + --commit
+      await stateCommand(["write", changeDir, "feature_branch", "feature/test-change", "--commit"]);
+
+      // 验证 state 写入
+      const state = await readState(changeDir);
+      expect(state.feature_branch).toBe("feature/test-change");
+
+      // 验证 commit 创建(含 _state write feature_branch)
+      const log = execSync("git log --oneline -1", { cwd: tmpDir, encoding: "utf-8", stdio: "pipe" }).trim();
+      expect(log).toContain("_state write feature_branch");
+
+      exitSpy.mockRestore();
+      logSpy.mockRestore();
+    });
+
+    it("无 --commit 时不创建 commit", async () => {
+      const { execSync } = await import("node:child_process");
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+      // 先记录当前 commit 数
+      const logBefore = execSync("git log --oneline", { cwd: tmpDir, encoding: "utf-8", stdio: "pipe" }).trim();
+      const commitCountBefore = logBefore.split("\n").length;
+
+      // 修改字段,无 --commit
+      await stateCommand(["write", changeDir, "feature_branch", "feature/no-commit"]);
+
+      // 验证 state 写入但未 commit
+      const state = await readState(changeDir);
+      expect(state.feature_branch).toBe("feature/no-commit");
+
+      const logAfter = execSync("git log --oneline", { cwd: tmpDir, encoding: "utf-8", stdio: "pipe" }).trim();
+      const commitCountAfter = logAfter.split("\n").length;
+      expect(commitCountAfter).toBe(commitCountBefore); // commit 数不变
+
+      exitSpy.mockRestore();
+    });
+  });
 });

@@ -229,6 +229,39 @@ describe("alloy _start", () => {
       exitSpy.mockRestore();
       errSpy.mockRestore();
     });
+
+    it("越界回退场景(phase=starting + records 有 draft)拒绝执行:PRECONDITION_FAIL exit 1", async () => {
+      // 模拟越界回退到 brainstorming-N 后的状态:phase=starting + records 有 draft
+      const state = await readState(changeDir);
+      state.phase = "starting";
+      state.records = [{
+        artifact: "draft",
+        hash: "a1b6752c9bdb",
+        committed_at: "2020-01-01 00:00:00",
+        approver: "test-user",
+      }];
+      const { writeState } = await import("../../../src/cli/utils/state.js");
+      await writeState(changeDir, state);
+      execSync("git add openspec/", { cwd: tmpDir, stdio: "pipe" });
+      execSync('git commit -q -m "simulate brainstorming-N switch"', { cwd: tmpDir, stdio: "pipe" });
+
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+      const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await startCommand(["finalize", changeDir]);
+
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(errSpy.mock.calls.some(c => String(c[0]).includes("越界回退场景禁调 _start finalize"))).toBe(true);
+      expect(errSpy.mock.calls.some(c => String(c[0]).includes("步骤 9-11"))).toBe(true);
+
+      // phase 不应推进
+      const finalState = await readState(changeDir);
+      expect(finalState.phase).toBe("starting");
+
+      exitSpy.mockRestore();
+      errSpy.mockRestore();
+    });
   });
 
   describe("precheck", () => {

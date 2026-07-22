@@ -23,3 +23,9 @@ Alloy 共享背景知识。本 skill 不直接执行，只被其他 alloy skill 
 | 校验分支状态 | references/branch-validation.md | 分支校验逻辑 |
 | 调用 alloy CLI 命令前查正确用法 | references/cli-reference.md | CLI 命令速查（语法/参数/选项/易错点） |
 | 调用 opsx command(explore/new/continue/verify/archive)前查触发方式 | references/opsx-commands.md | opsx command 多 agent 触发规则(冒号 vs 横线) |
+| 写 Iron Law 抗合理化第二层措辞 | references/iron-law-violation-pattern.md | "违反字面 = 违反精神"标准措辞模板 |
+| 设 USER_GATE pending/clear/reset | references/gate-ceremony.md | _guard user-gate require/pass/reset 流程 + hook-guard 协同 |
+| git 自救禁令(merge --abort / reset --hard 等) | references/git-self-rescue-ban.md | 破坏性 git 命令禁令清单 + 嵌入位置 |
+| git add 限路径 + 敏感文件清单 | references/git-add-path-ban.md | 禁 git add -A / git add . 的 WHY + 已由 _pre-commit-check 拦截 |
+| Phase 框 / Step 标题 视觉规范 | references/phase-frame.md | Unicode 单线框 + [Step N/M] 格式 + 状态符号映射 |
+| 状态符号含义(⛔ / 🔴 / ⚠️) | references/hard-stop-meaning.md | PRECONDITION_FAIL / HARD_STOP / USER_GATE / WARN 四类节点区分 |

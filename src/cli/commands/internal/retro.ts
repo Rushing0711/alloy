@@ -154,6 +154,57 @@ function buildCheckpoints(changeDir: string, gitRoot: string, _base: string): st
   ].join("\n");
 }
 
+function buildDeviationDetection(base: string, gitRoot: string): string {
+  if (!base) return "（base 不可用，跳过偏差检测）";
+
+  const deviations: string[] = [];
+
+  // 扫"重锁" commit(制品 hash-lock 失效后重锁,message 含"重锁"关键词)
+  // 解决 P1 bug 2 行为层漏勾:retro §7 自检指令已极致,但 agent 仍漏勾重锁。
+  // 机制层兜底:retro.ts 自动扫,检测到则在 §0 显示,提示 agent 必勾 §7 "其他"。
+  const relockLog = git(`git log ${base}..HEAD --format="%h %s" --grep="重锁"`, gitRoot);
+  if (relockLog) {
+    const lines = relockLog.split("\n").filter(Boolean);
+    deviations.push(`**重锁 commit(${lines.length} 个)**:`);
+    for (const line of lines) {
+      deviations.push(`- ${line}`);
+    }
+    deviations.push("> 必勾 §7 \"其他\" 并描述重锁原因(制品为何需要重锁)");
+  }
+
+  // 扫 git 自救 reflog(reset --hard / checkout . / stash drop / merge --abort / clean -fd)
+  // reflog 包含所有 git 操作记录,扫最近 50 条找破坏性命令
+  const reflogRaw = git(`git reflog -n 50`, gitRoot);
+  if (reflogRaw) {
+    const dangerousPatterns = [
+      { re: /reset --hard/, name: "reset --hard" },
+      { re: /checkout \./, name: "checkout ." },
+      { re: /stash drop/, name: "stash drop" },
+      { re: /merge --abort/, name: "merge --abort" },
+      { re: /clean -fd/, name: "clean -fd" },
+    ];
+    const dangerous: string[] = [];
+    for (const line of reflogRaw.split("\n")) {
+      for (const { re, name } of dangerousPatterns) {
+        if (re.test(line)) {
+          dangerous.push(`- [${name}] ${line}`);
+          break;
+        }
+      }
+    }
+    if (dangerous.length > 0) {
+      deviations.push(`**git 自救 reflog(${dangerous.length} 个)**:`);
+      deviations.push(...dangerous.slice(0, 5));
+      deviations.push("> 必勾 §7 \"git 自救\" 项(破坏性 git 命令)");
+    }
+  }
+
+  if (deviations.length === 0) {
+    return "✓ 无偏差检测信号(未检测到重锁/git 自救等模式)";
+  }
+  return deviations.join("\n");
+}
+
 function buildSkillAudit(skillUsage: SkillUsageEntry[]): string {
   if (!skillUsage || skillUsage.length === 0) {
     return "> ⚠️ 当前 change 无 skill_usage 记录（旧 change），以下数据不可用。";
@@ -307,6 +358,9 @@ export async function retroCommand(args: string[]): Promise<void> {
     "```",
     commitLog || "（base 不可用或无 commit）",
     "```",
+    "",
+    "### 偏差检测(自动扫描)",
+    buildDeviationDetection(base, gitRoot),
     "",
     "## §4 全周期技能审计",
     "",

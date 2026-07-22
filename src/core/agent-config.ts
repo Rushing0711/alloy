@@ -241,9 +241,11 @@ const ALLOY_HOOK_CONFIGS: Record<string, string> = {
 };
 
 // matcher 含 AskUserQuestion:问答工具调用时触发 hook-guard,自动 clearAllPendingGates。
+// matcher 含 Bash:拦截 cat heredoc 写文件 + git reset --hard 等自救命令(P0 拦截)。
 // 旧 matcher 只有 Write|Edit,问答工具不触发 -> pending_gate 残留。alloy init/update 升级到新 matcher。
 const LEGACY_HOOK_MATCHER = "Write|Edit";
-const ALLOY_HOOK_MATCHER = "Write|Edit|AskUserQuestion";
+const PREVIOUS_HOOK_MATCHER = "Write|Edit|AskUserQuestion";
+const ALLOY_HOOK_MATCHER = "Write|Edit|AskUserQuestion|Bash";
 
 /**
  * hook command 用绝对路径,不依赖 PATH/alias。
@@ -292,9 +294,9 @@ export async function hasHookConfig(projectPath: string, agentId: string): Promi
     if (!Array.isArray(preToolUse)) return false;
 
     const hookCommand = getHookCommand();
-    // 兼容旧 matcher(Write|Edit)和新 matcher(Write|Edit|AskUserQuestion)
+    // 兼容旧 matcher(Write|Edit)、上一版(Write|Edit|AskUserQuestion)和新版(含 Bash)
     return preToolUse.some((entry: PreToolUseEntry) =>
-      (entry?.matcher === ALLOY_HOOK_MATCHER || entry?.matcher === LEGACY_HOOK_MATCHER) &&
+      (entry?.matcher === ALLOY_HOOK_MATCHER || entry?.matcher === PREVIOUS_HOOK_MATCHER || entry?.matcher === LEGACY_HOOK_MATCHER) &&
       Array.isArray(entry.hooks) &&
       entry.hooks.some((h) => h?.command === hookCommand)
     );
@@ -332,13 +334,13 @@ export async function writeHookConfig(projectPath: string, agentId: string): Pro
 
   const hookCommand = getHookCommand();
 
-  // 找同 matcher 的 entry(兼容旧 matcher,升级到新 matcher)
-  let entry = preToolUse.find((e) => e?.matcher === ALLOY_HOOK_MATCHER || e?.matcher === LEGACY_HOOK_MATCHER);
+  // 找同 matcher 的 entry(兼容旧 matcher / 上一版 matcher,升级到新 matcher)
+  let entry = preToolUse.find((e) => e?.matcher === ALLOY_HOOK_MATCHER || e?.matcher === PREVIOUS_HOOK_MATCHER || e?.matcher === LEGACY_HOOK_MATCHER);
   if (!entry) {
     entry = { matcher: ALLOY_HOOK_MATCHER, hooks: [] };
     preToolUse.push(entry);
-  } else if (entry.matcher === LEGACY_HOOK_MATCHER) {
-    // 旧 matcher 升级为含 AskUserQuestion 的新 matcher
+  } else if (entry.matcher === LEGACY_HOOK_MATCHER || entry.matcher === PREVIOUS_HOOK_MATCHER) {
+    // 旧 matcher / 上一版 matcher 升级为含 Bash 的新 matcher
     entry.matcher = ALLOY_HOOK_MATCHER;
   }
   if (!Array.isArray(entry.hooks)) entry.hooks = [];
@@ -879,10 +881,28 @@ function generateOpenCodePluginContent(alloyCliPath: string): string {
     "        return;",
     "      }",
     "",
-    "      // 只拦截 write/edit",
-    '      if (toolName !== "write" && toolName !== "edit") return;',
+    "      // 拦截 write/edit/bash(其他放行)",
+    '      if (toolName !== "write" && toolName !== "edit" && toolName !== "bash") return;',
     "",
-    "      // OpenCode write/edit 工具参数名是 filePath(驼峰),优先取;兼容 path/file_path",
+    "      // Bash 工具:转发 command 到 _hook-guard(检测 cat heredoc / git 自救)",
+    '      if (toolName === "bash") {',
+    "        const command = args?.command ?? args?.cmd ?? \"\";",
+    "        const bashStdin = JSON.stringify({",
+    '          tool_name: "Bash",',
+    "          tool_input: { command },",
+    "        });",
+    "        try {",
+    `          execSync("node ${alloyCliPath} _hook-guard", {`,
+    "            input: bashStdin,",
+    '            stdio: ["pipe", "ignore", "pipe"],',
+    "          });",
+    "        } catch (err: any) {",
+    "          throw new Error(err.stderr?.toString() ?? 'alloy hook 拦截');",
+    "        }",
+    "        return;",
+    "      }",
+    "",
+    "      // write/edit 工具:OpenCode 参数名是 filePath(驼峰),优先取;兼容 path/file_path",
     "      const filePath = args?.filePath ?? args?.path ?? args?.file_path;",
     "      if (!filePath) return;",
     "",

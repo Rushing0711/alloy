@@ -134,12 +134,12 @@ describe("evaluateStopGuard(纯逻辑,exit 2 + stderr 模式)", () => {
     expect(result.message).toContain("question 工具");
   });
 
-  it("Pi(PI_CODING_AGENT=true)提示含 ctx.ui", () => {
+  it("Pi(PI_CODING_AGENT=true)提示含 alloy-question", () => {
     const stdin = JSON.stringify({
       last_assistant_message: "🔴 USER_GATE\n(a) 确认\n(b) 调整",
     });
     const result = evaluateStopGuard(stdin, { PI_CODING_AGENT: "true" });
     expect(result.exitCode).toBe(2);
-    expect(result.message).toContain("ctx.ui");
+    expect(result.message).toContain("alloy-question");
   });
 });

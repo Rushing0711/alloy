@@ -28,11 +28,11 @@ behaviors:
 
 **核心原则：按 schema DAG 依赖顺序逐一产出制品，每步有审查闸门，不跳过上游直接产下游。** 5 制品（proposal/design/specs/tasks/plans）以 hash-lock + 单独 commit 入 records，禁直接编辑，禁互相替代。
 
-**交互规则：** `🔴 STOP` 等价 `USER_GATE`，首次呈现即必须调用平台原生交互工具——禁"先文本展示 1./2. 再等待用户打字"。Claude Code 用 `AskUserQuestion`,OpenCode 用 `question` 工具(字段名 `multiple` 非 `multiSelect`,可选 `custom`),Pi 用 `alloy-question` 工具(alloy-question extension 注册);Copilot CLI / Gemini CLI 无原生交互工具,降级为结构化文本选项。三平台调用示例见 `alloy-shared/references/interaction-style.md` §审查窗口标准模式。含"沉默 ≠ 授权"通用禁令——禁批量打包、禁基于内容跳过、禁 agent 回填精确字符串。跳过任何 USER_GATE = 违反 Iron Law。
+**交互规则:** `🔴 STOP` 等价 `USER_GATE`--首次呈现即必须调平台原生交互工具(禁"先文本展示 1./2. 再等用户打字")。Claude Code: `AskUserQuestion`;OpenCode: `question`;Pi: `alloy-question`。完整规则 + 平台调用示例见 `alloy-shared/references/interaction-style.md`;USER_GATE pending/clear/reset 流程见 `alloy-shared/references/gate-ceremony.md`。跳过 USER_GATE / 批量打包 / 基于内容跳过 = 违反 Iron Law。
 
-**状态符号：** `⛔` = HARD_STOP / PRECONDITION_FAIL，`🔴` = USER_GATE，`⚠️` = WARN（视觉规范 §七）。
+**状态符号:** `⛔` = HARD_STOP / PRECONDITION_FAIL,`🔴` = USER_GATE,`⚠️` = WARN(完整含义见 `alloy-shared/references/hard-stop-meaning.md`)。
 
-**输出规则：** 阶段入口/出口必须按 `docs/specification/02-visual-spec.md` 输出 Phase 框（`┌─┐` Unicode 单线框，38 字符宽）、Step 标题（`[Step N/M]` + 38 字符 `─` 下划线）、`>` 块引用、`→` 引导行。**skill md 中的 Phase 框代码块是必须输出到终端的格式，不是文档示例。** 审查窗口、制品汇总表同理。
+**输出规则:** 阶段入口/出口按 `alloy-shared/references/phase-frame.md` 输出 Phase 框 + Step 标题 + 块引用 + 引导行。skill md 中的 Phase 框代码块是必须输出到终端的格式,不是文档示例。完整规范见 `docs/specification/02-visual-spec.md`。
 
 **调用外部命令或技能前，先输出标题和状态描述，再执行操作。**
 
@@ -107,9 +107,10 @@ alloy _phase start openspec/changes/<name> plan
 6. **多 change 并行检查**（⚠️ WARN）：扫描其他 change 是否处于 plan/apply 阶段，提示用户 plan 阶段是单 change 串行（避免 schema DAG 跨 change 干扰）：
 
    ```bash
-   ACTIVE=$(find openspec/changes -maxdepth 2 -name '.alloy.yaml' -exec grep -l 'phase: \(started\|planned\|applied\)' {} \; 2>/dev/null | wc -l | tr -d ' ')
-   if [ "$ACTIVE" -gt 1 ]; then
-     echo "⚠️ WARN: 检测到 $ACTIVE 个活跃 change，建议串行处理"
+   PARALLEL=$(alloy _guard parallel-phase started,planned,applied)
+   if [[ "$PARALLEL" == parallel:* ]]; then
+     echo "⚠️ WARN: 检测到 ${PARALLEL#parallel:} 个活跃 change,建议串行处理"
+     alloy _guard parallel-phase started,planned,applied | tail -n +2
    fi
    ```
 
@@ -286,61 +287,49 @@ alloy _guard user-gate require openspec/changes/<name> plan:lock-<artifact>
 
   **越界变更检查点流程**（情况二选 1，或情况一选 2 后进入）：
 
-    **[HARD_STOP] 禁止 agent 自行 `git stash` / `git reset` / 手动 `git tag` 处理未提交变更。**
-    **违反字面 = 违反精神：git stash 绕过 CLI 校验 + 用户无法追踪 stash 去向，git reset 违反 §3.5.1。**
-    **检查点（checkpoint）是 git tag 指向 HEAD commit，未提交变更不在 tag 保护范围内。**
+    **[HARD_STOP] 禁止 agent 自行 `git stash` / `git reset` / `git restore .` / `git checkout HEAD --` / 手动 `git tag` 处理未提交变更。**
+    **违反字面 = 违反精神:哪怕"用户已 USER_GATE 授权越界回退,我自己跑 git restore 清场效率更高",也算违反--agent 跑任何 §3.5.1 禁令命令都是违规,清场必须下沉到 `alloy _checkpoint switch` 内部(CLI 跑,不经过 hook)。**
+    **检查点(checkpoint)是 git tag 指向 HEAD commit,未提交变更不在 tag 保护范围。**
+    **[HARD_STOP] agent 禁让用户输命令字面(如"请手动执行 `git restore .`")。**用户手动 = 用户 shell 执行,agent 不解读用户输入的命令文本。详见 `alloy-shared/references/git-self-rescue-ban.md` "用户输命令禁令"节。
 
-    **核心机制：用 git checkout 回退到 brainstorming 检查点，替代原地清理。**
-    回退 = `git checkout -B feature/<name> <tag>`，HEAD 回到检查点 commit，.alloy.yaml/records/phase_timings/skill_usage 随 tag 状态恢复，plan 阶段的 commit/records/phase_timings 自然消失（不在 HEAD 链）。无需原地清理。
+    **核心机制:`alloy _checkpoint switch` 内部自动清理未提交变更 + git checkout -B 回退到 brainstorming 检查点。agent 只调 CLI,禁跑任何 git 自救命令。**
+    `_checkpoint switch` 内部:检测 dirty -> `git restore --staged .` + `git restore .` 清 tracked 修改(untracked 保留,agent 重新生成时覆盖) -> `git checkout -B feature/<name> <tag>` 回退。HEAD 回到检查点 commit,.alloy.yaml/records/phase_timings/skill_usage 随 tag 状态恢复,plan 阶段的 commit/records/phase_timings 自然消失(不在 HEAD 链)。
 
-    **执行流程：**
+    **执行流程:**
 
-    1. **废弃未 commit 信息**（不问用户——未 commit = 未采纳 = 废弃）：
+    1. **回退前创建 plan 检查点**(保护当前 plan 进度,用户反悔可切回;除非无新 commit 可存档):
        ```bash
-       # 检测未提交变更
-       DIRTY=$(git status --porcelain 2>/dev/null)
-       if [ -n "$DIRTY" ]; then
-         echo "已丢弃未提交的变更（未锁定 = 未采纳，回退后无需保留）："
-         echo "$DIRTY"
-         git restore .
-       fi
+       # 仅当当前 HEAD 不在最新 brainstorming 检查点时才创建(有新 commit 才需保护)
+       alloy _checkpoint create openspec/changes/<name> --kind progress --reason "回退前进度快照(放弃变更回退点)"
        ```
-       > 显式告知用户丢弃了什么文件，但不给选择机会——流程上未锁定的制品就是中间态，不该保留。
-       >
-       > **[§3.5.1 例外说明]** 此处 `git restore .` 是合法例外——用户已在 Step 1 USER_GATE 确认越界回退，未 commit 的中间态明确放弃。与 line 166 禁令的"agent 自动清场失败状态"语义不同：禁令针对 agent 自作主张清场，此处是流程内已授权的丢弃。
+       > **progress 检查点允许 dirty**(user-gate reset 修改的 .alloy.yaml 临时状态 + 未锁定制品 untracked 都 OK)--tag 指向当前 HEAD commit(已 commit 进度),dirty 部分不在 tag 保护范围,switch 时自动清理。brainstorming 检查点必须 clean(锚点语义严格)。
 
-    2. **回退前创建 plan 检查点**（保护当前 plan 进度，用户反悔可切回；除非无新 commit 可存档）：
-       ```bash
-       # 仅当当前 HEAD 不在最新 brainstorming 检查点时才创建（有新 commit 才需保护）
-       alloy _checkpoint create openspec/changes/<name> --kind progress --reason "回退前进度快照（放弃变更回退点）"
-       ```
-
-    3. **列出所有 brainstorming 检查点，让用户选回到哪个：**
+    2. **列出所有 brainstorming 检查点,让用户选回到哪个:**
        ```bash
        alloy _checkpoint list openspec/changes/<name>
        ```
-       筛选 `alloy-checkpoint-<name>-brainstorming-*` 的 tag，展示给用户。
+       筛选 `alloy-checkpoint-<name>-brainstorming-*` 的 tag,展示给用户。
 
-    4. **🔴 USER_GATE（平台原生交互工具）：用户选回到哪个 brainstorming 检查点**
-       > 检测到越界变更，选择回到哪个 brainstorming 检查点重新沟通：
-       > 1. brainstorming-<N>（最新）—— 基于最新 draft 继续沟通
-       > 2. brainstorming-<N-1> —— 回到上一版 draft（丢弃最新 draft）
+    3. **🔴 USER_GATE(平台原生交互工具):用户选回到哪个 brainstorming 检查点**
+       > 检测到越界变更,选择回到哪个 brainstorming 检查点重新沟通:
+       > 1. brainstorming-<N>(最新) -- 基于最新 draft 继续沟通
+       > 2. brainstorming-<N-1> -- 回到上一版 draft(丢弃最新 draft)
        > ...
-       > (z) 放弃变更——保持当前，继续 plan
+       > (z) 放弃变更--保持当前,继续 plan
 
-       > 选项是 tag 名 + 注释摘要（制品/commit数/时间），禁让用户输命令。
+       > 选项是 tag 名 + 注释摘要(制品/commit数/时间),禁让用户输命令。
        > 用户可选"从头开始"(brainstorming-1) 或"基于累加版本"(brainstorming-N) 继续沟通。
 
-    5. **用户选定后执行回退**：
+    4. **用户选定后执行回退**(CLI 内部自动清理未提交变更,agent 禁跑任何 git 自救命令):
        ```bash
        alloy _checkpoint switch openspec/changes/<name> <用户选择的tag>
        ```
-       > `_checkpoint switch` 内部：git checkout -B feature/<name> <tag>。
+       > `_checkpoint switch` 内部:检测 dirty -> `git restore --staged .` + `git restore .` 清 tracked 修改 -> `git checkout -B feature/<name> <tag>` 回退。
        > **[HARD_STOP §3.5.1 例外]** _checkpoint switch 是 git reset 的合法形式：当且仅当用户
        > 在上方 USER_GATE 已确认后才允许，由 CLI 内置 phase 校验保护。
        > 切换后 phase/records/phase_timings 自动回到 tag 状态（plan 阶段的全部消失）。
 
-    6. **回退后以文件为准重新走 start 流程**（适用整个开区间：brainstorming-1 创建 → apply worktree/代码生成前）：
+    5. **回退后以文件为准重新走 start 流程**(适用整个开区间:brainstorming-1 创建 -> apply worktree/代码生成前):
 
        > ⚠️ **上下文已过时，以文件为准。** git checkout 回退了代码和 .alloy.yaml，但你的会话上下文还停留在回退前的阶段（plan 或 apply）。**禁凭上下文记忆行动**——必须重新读 .alloy.yaml 确认当前状态，按文件状态决定下一步。
 
@@ -351,23 +340,42 @@ alloy _guard user-gate require openspec/changes/<name> plan:lock-<artifact>
        ```
 
        **按读取的 phase + records 决定下一步**：
-       - phase=started + records 无 draft → 回到 brainstorming 前，需重新 brainstorming + 生成 draft
-       - phase=started + records 有 draft（本次回退目标）→ draft 已锁定，**停在 start 阶段等待用户指示进 plan**（NO AUTO ADVANCE）
-       - 其他状态 → 异常，退出 skill 让用户排查
+       - phase=starting + records 有 draft -> 越界回退场景(brainstorming-N tag 在 `_phase complete` 之前打,switch 回去 phase=starting),走步骤 9-10(沟通 + reset records + 重生成 draft + 审查) + 步骤 11(`_start finalize` 收尾,和全新开始路径一致)
+       - phase=started + records 无 draft -> 回到 brainstorming 前,需重新 brainstorming + 生成 draft
+       - phase=started + records 有 draft(本次回退目标)-> draft 已锁定,**停在 start 阶段等待用户指示进 plan**(NO AUTO ADVANCE)
+       - 其他状态 -> 异常,退出 skill 让用户排查
+
+       > ⛔ [HARD_STOP] 步骤 10 `_artifact reset draft` 之前禁调 `alloy _start finalize`:
+       > `_start finalize` 假设 records 无 draft。越界回退场景步骤 10 之前 records 有 draft,直接调 `_start finalize` 会因 hash 未变跳过 commit + `.alloy.yaml` 的 `_skill log` 修改没被 commit + `_checkpoint create brainstorming` 因 dirty 失败。
+       > **必须先走步骤 10 `_artifact reset draft`**(清 records 的 draft hash),之后 records 无 draft,步骤 11 调 `_start finalize` 正常执行(CLI 拦截条件 `phase=starting + records 有 draft` 不满足)。
+       > 违反字面 = 违反精神:哪怕"`_start finalize` 看起来等价于步骤 11",也算违反--时序约束,步骤 10 reset 是步骤 11 finalize 的前置。
+
+       **[HARD_STOP] 重走 start 流程禁直接 Write + git commit,必须通过 `_artifact commit`(手动调或 `_start finalize` 内部调)来 commit draft:**
+       **违反字面 = 违反精神:哪怕"Write 覆盖 draft.md 后 git commit 效率更高",也算违反--直接 git commit 不会写 records hash,导致 brainstorming 检查点创建时 draft hash 不一致(CLI 层会拦)+ 下游 _record check 失败。**
+       **实测踩坑:Pi 会话 agent Write 覆盖 draft.md + git add + git commit 跳过 _artifact commit,records hash 旧,plan 阶段 _record check draft FAIL,流程卡死。**
 
        **本次回退是"发起变更"——重走 start.md 步骤 9-11**（用户因越界变更回来重新沟通需求）：
-       - **步骤9**：`_skill log openspec/changes/<name> start superpowers:brainstorming`（called_at 更新，count++）+ 加载 brainstorming 技能重新沟通需求
-       - **步骤10**：`alloy _artifact reset openspec/changes/<name> draft`（清掉旧 draft）→ brainstorming 产出新 draft（**禁用 `/opsx:continue`**——draft 属于 start 阶段）→ 审查窗口 → `alloy _artifact commit draft`
-       - **步骤11**：打新 brainstorming-(N+1) 检查点（必须在 `_phase complete start` 之前，让 tag 指向 draft commit）→ `alloy _phase complete start`（start 重新完成，completed_at 更新为新时刻）
+       - **步骤9**：`_skill log openspec/changes/<name> start superpowers:brainstorming`（called_at 更新，count++）+ 加载 brainstorming 技能**基于已有 draft 基线,只沟通变更点**(禁重走完整 brainstorming + 禁重设 topic-confirm gate)
+         > ⚠️ **越界回退场景的主题和原 draft 基线都已确认**(brainstorming-N tag 锁定了 draft = 主题 + 设计都已审查通过),步骤 9 只需沟通**用户提出的变更点**,不是从头重新 brainstorming。
+         > **禁重设 `start:topic-confirm` gate**--主题不变,无需重新确认。原 draft 已锁定 = 主题已确认。
+         > **禁重问已有 draft 里已确认的设计要点**--只问变更点相关的决策。例:原 draft 已确认 shebang + chmod +x,用户提"支持 2 个参数",只问"2 个参数的输出格式",不重问 shebang/权限。
+         > **实测踩坑:Pi 会话 agent 越界回退后重新设 topic-confirm gate + 重问 3 个设计要点(shebang/参数/输出格式),shebang 在原 draft 已确认不该重问,浪费用户时间。**
+       - **步骤10**：`alloy _artifact reset openspec/changes/<name> draft`（清掉旧 draft 的 records hash,让步骤 11 的 `_start finalize` 不被 CLI 拦）-> brainstorming 产出新 draft（**禁用 `/opsx:continue`**--draft 属于 start 阶段,新 draft = 原 draft 基线 + 变更点合并）-> 审查窗口(USER_GATE 确认锁定,禁手动 `_artifact commit draft`,让步骤 11 的 `_start finalize` 内部 commit)
+         > 步骤 10 reset 后 records 无 draft,步骤 11 才能调 `_start finalize`(否则 CLI 拦截 `phase=starting + records 有 draft`)。
+         > 步骤 10 禁手动 `_artifact commit draft`--`_start finalize` 内部第 1 步会 commit,手动 commit 会导致 `_start finalize` 第 1 步 hash 未变幂等跳过(虽不致命,但多 1 次命令)。
+       - **步骤11**：调 `alloy _start finalize openspec/changes/<name>`(4 步原子,和全新开始路径一致):
          ```bash
-         alloy _checkpoint create openspec/changes/<name> --kind brainstorming --reason "发起变更后重新生成 draft"
-         alloy _phase complete openspec/changes/<name> start
+         alloy _start finalize openspec/changes/<name>
          ```
-         > 顺序约束：`_artifact commit draft` → `_checkpoint create` → `_phase complete start`，与 start.md 步骤 11 一致。
-         > tag 必须在 `_phase complete` 之前打，否则 tag 会指向阶段完成 commit 而非 draft commit。
-         > start.completed_at 由 `_phase complete start` 自然写入，无需补写。
+         > `alloy _start finalize` 原子完成 4 步(任一步失败 exit 1,不继续):
+         > 1. `_artifact commit draft` -- draft hash-lock + commit(步骤 10 已 write 落盘,这里 commit)
+         > 2. `_checkpoint create brainstorming` -- 打 brainstorming-(N+1) 检查点(tag 指向 draft commit)
+         > 3. `_verify phase-exit start` -- start 阶段出口校验
+         > 4. `_phase complete start` -- 推进 phase=started,写 completed_at
+         > **顺序约束**:tag 必须在 `_phase complete` 之前打(已内化到 `_start finalize`),否则 tag 会指向阶段完成 commit 而非 draft commit。
+         > start.completed_at 由 `_phase complete start` 自然写入,无需补写。
 
-    7. **输出感知信息（自然语言，禁让用户输命令）：**
+    6. **输出感知信息(自然语言,禁让用户输命令):**
        ```
        ✓ 已回退到 <选中的tag>，重新沟通完成，draft 已重新生成
        ✓ 已保存新进度为 brainstorming-<N+1>
@@ -395,7 +403,7 @@ alloy _guard user-gate require openspec/changes/<name> plan:lock-<artifact>
        > 3. 取消——保持当前，不切换
 
     选 1：先 `alloy _checkpoint create --kind progress --reason "放弃变更前保存当前"` → 再 `alloy _checkpoint switch <tag>`。
-    选 2：先废弃未 commit 信息（git restore）→ 直接 `alloy _checkpoint switch <tag>`。
+    选 2：直接 `alloy _checkpoint switch <tag>`(CLI 内部自动清理未 commit 变更,agent 禁跑 git restore)。
     选 3：不切换，继续当前。
 
     > 切换后 phase/records/phase_timings 自动回到 tag 状态（progress-<ts> 含打点时的完整状态）。
@@ -413,10 +421,10 @@ alloy _guard user-gate require openspec/changes/<name> plan:lock-<artifact>
     2. **筛选 brainstorming- 前缀的 tag**（progress-<ts> 是放弃变更用，不在此列）展示给用户
     3. 若无 brainstorming-N → 提示用户"无 draft 锚点可回，需先完成 start 生成 draft"，不切换
     4. 若有 → AskUserQuestion 让用户选具体哪个 brainstorming-N（选项是 tag 名 + 注释摘要）
-    5. 用户选定后 → 执行"越界变更检查点流程"的步骤 2 + 步骤 5-7（跳过步骤 1 的 git restore——路径1 不在越界检测场景，未 commit 信息按情况处理；跳过步骤 3-4 的 USER_GATE——路径1 步骤 4 已完成检查点选择）：
-       - **步骤2**：回退前打 progress-<ts>（保护当前 plan 进度，供放弃变更时切回）
-       - **步骤5**：`_checkpoint switch` 到所选 brainstorming-N
-       - **步骤6-7**：重走 start 9-11 + 输出感知信息
+    5. 用户选定后 -> 执行"越界变更检查点流程"的步骤 1 + 步骤 4-6(路径1 不在越界检测场景,未 commit 信息由 _checkpoint switch 内部清理;跳过步骤 2-3 的 USER_GATE--路径1 步骤 3 已完成检查点选择):
+       - **步骤1**:回退前打 progress-<ts>(保护当前 plan 进度,供放弃变更时切回)
+       - **步骤4**:`_checkpoint switch` 到所选 brainstorming-N
+       - **步骤5-6**:重走 start 9-11 + 输出感知信息
 
   **无论哪条路径，都不直接编辑已生成的制品文件**（违反字面 = 违反精神：制品禁直接编辑）。
 
@@ -574,6 +582,8 @@ alloy _state set openspec/changes/<name> phase started
 
 > 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question/alloy-question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级。
 
+> ℹ️ `plan:phase-complete` gate 已由 `_phase complete plan` 自动设。以下 `user-gate require` 命令幂等可省略--agent 也可手动调(覆盖相同值,无冲突)。
+
 ⛔ [HARD_STOP] 必须执行以下命令设置 pending_gate(不是说明,是必跑命令):
 
 ```bash
@@ -586,23 +596,26 @@ alloy _guard user-gate require openspec/changes/<name> plan:phase-complete
 > 违反字面 = 违反精神:哪怕"纯文本效果一样"、"直接 Skill 更流畅"、"用户已授权提示一下也行",也算违反——AskUserQuestion 强制结构化选项,避免 agent 用模糊措辞让用户回 yes 蒙混过关（§4.1）。
 > 常见违规模式:
 > - 纯文本输出"运行 /alloy-apply 进入执行阶段"让用户手动输入
-> - 纯文本列"1. 进入 apply / 2. 暂停 / 3. 其他"让用户回复
+> - 纯文本列"1. 进入 apply / 2. 调整需求 / 3. 其他"让用户回复
 > - 用户选 1 后提示"请运行 /alloy-apply"让用户手动输入——应直接 Skill 加载
 > 非 Claude Code 平台按 `alloy-shared/references/interaction-style.md` §平台工具对照 降级。
 
 > 选项:
-> - 1. 进入 apply 阶段——加载 `alloy-apply` skill 推进执行
-> - 2. 暂停——审视规划制品,或查看状态(`alloy status`)
-> - 3. 其他——用户自定义下一步
+> - 1. 进入 apply 阶段--加载 `alloy-apply` skill 推进执行
+> - 2. 调整需求--回 brainstorming 重新讨论(plans 已锁定,改需求 = 越界回退)
+> - 3. 其他--用户自定义下一步
 
 > 用户选 1 后,agent **必须直接加载 `alloy-apply` skill(多 agent 适配,见 `alloy-shared/references/skill-loading.md`):
 - Claude Code / OpenCode: 调 `skill({ name: "alloy-apply", args: "<change-name>" })`
 - Pi: `read .pi/skills/alloy-apply/SKILL.md`(read 后按 SKILL.md 指引执行,change name 通过上下文传入)**
 
 > ⛔ [HARD_STOP] 禁止输出"请运行 /alloy-xxx"让用户手动输入命令--用户已在 USER_GATE 授权,阶段转换已触发,再让用户输入命令 = 违反 Iron Law。
-> 违反字面 = 违反精神:哪怕"提示一下更友好"、"用户可能想暂停",也算违反--用户要暂停会在 USER_GATE 选"暂停",选"进入"就是授权直接加载。
-> 用户选 2 后,agent **必须先调 `alloy _guard user-gate reset openspec/changes/<name> plan:phase-complete`**(把 gate 从 gate_history 移除 + 重新设为 pending_gate),再停止,输出"已暂停。需要时运行 /alloy-apply <name> 继续。"
->   原因:hook-guard 检测到问答工具调用时无条件 clear pending_gate + 加入 gate_history,用户选"暂停"本意是拒绝通过 gate,语义被吞了。reset 恢复 gate 状态,用户"继续"时 agent 调 require(幂等)+ 问答工具重新询问。
+> 违反字面 = 违反精神:哪怕"提示一下更友好"、"用户可能想调整",也算违反--用户要调整会在 USER_GATE 选"调整需求",选"进入"就是授权直接加载。
+> 用户选 2 后,agent **必须先调 `alloy _guard user-gate reset openspec/changes/<name> plan:phase-complete`**(把 gate 从 gate_history 移除 + 重新设为 pending_gate),再走本 SKILL.md 的"路径1:发起变更"流程(创建 plan 检查点保护当前进度 + `_checkpoint switch brainstorming-1` + 越界回退步骤 9-11):
+>   - plan 完成后 phase=planned,records 有 draft/proposal/design/specs/tasks/plans,brainstorming-1 tag 存在。
+>   - 走"路径1:发起变更"步骤 1(创建 plan 检查点)+ 步骤 4(`_checkpoint switch brainstorming-1`)+ 步骤 5-6(越界回退步骤 9-11:重新 brainstorming 沟通变更点 + 重生成 draft + `_start finalize`)。
+>   - 跳过路径1 步骤 2-3 的 USER_GATE(用户已在 phase-complete gate 选"调整需求",意图明确,不需再问"放弃变更 vs 调整需求")。
+>   原因:hook-guard 检测到问答工具调用时无条件 clear pending_gate + 加入 gate_history,用户选"调整需求"本意是拒绝通过 gate,语义被吞了。reset 恢复 gate 状态,走完越界回退后 agent 重新调 require(幂等)+ 问答工具重新询问。
 > 用户选 3 后,agent 同样调 reset,再停止,等用户后续命令。
 
 > **提示：apply 阶段早期的需求变更处理**

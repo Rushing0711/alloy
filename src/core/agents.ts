@@ -10,6 +10,7 @@ export const KNOWN_AGENTS: AgentInfo[] = [
     supportsColonCommands: true,
     commandsDir: ".claude/commands/",
     interactiveTool: "askuserquestion",
+    askToolDisplay: "AskUserQuestion",
     settingsFile: ".claude/settings.json",
     settingsContent: { worktree: { baseRef: "head" } },
   },
@@ -20,6 +21,7 @@ export const KNOWN_AGENTS: AgentInfo[] = [
     commandsDir: ".opencode/commands/",
     globalBase: ".config/opencode",
     interactiveTool: "question",
+    askToolDisplay: "question",
   },
   {
     id: "pi",
@@ -28,6 +30,7 @@ export const KNOWN_AGENTS: AgentInfo[] = [
     commandsDir: ".pi/prompts/",
     globalBase: ".pi/agent",
     interactiveTool: "alloy-question",
+    askToolDisplay: "alloy-question",
   },
 ];
 

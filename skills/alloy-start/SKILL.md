@@ -31,11 +31,11 @@ behaviors:
 
 > **`<TIMESTAMP>`：** 每次渲染阶段头部时执行 `date "+%Y-%m-%d %H:%M:%S"` 获取本地时间。`<START_TIME>` 是"全新开始"路径中捕获的时间——agent 捕获后复用于 header 和 phase_timings。`<created_at>` 从 `.alloy.yaml` 读取。
 
-**交互规则：** `🔴 STOP` 等价 `USER_GATE`，首次呈现即必须调用平台原生交互工具--禁"先文本展示 1./2. 再等待用户打字"。Claude Code 用 `AskUserQuestion`,OpenCode 用 `question` 工具(字段名 `multiple` 非 `multiSelect`,可选 `custom`),Pi 用 `alloy-question` 工具(alloy-question extension 注册);Copilot CLI / Gemini CLI 无原生交互工具,降级为结构化文本选项。三平台调用示例见 `alloy-shared/references/interaction-style.md` §审查窗口标准模式。含"沉默 ≠ 授权"通用禁令。跳过任何 USER_GATE / 批量打包 / 基于内容跳过 = 违反 Iron Law。
+**交互规则:** `🔴 STOP` 等价 `USER_GATE`--首次呈现即必须调平台原生交互工具(禁"先文本展示 1./2. 再等用户打字")。Claude Code: `AskUserQuestion`;OpenCode: `question`;Pi: `alloy-question`。完整规则 + 平台调用示例见 `alloy-shared/references/interaction-style.md`;USER_GATE pending/clear/reset 流程见 `alloy-shared/references/gate-ceremony.md`。跳过 USER_GATE / 批量打包 / 基于内容跳过 = 违反 Iron Law。
 
-**状态符号：** `⛔` = HARD_STOP / PRECONDITION_FAIL，`🔴` = USER_GATE，`⚠️` = WARN（视觉规范 §七）。
+**状态符号:** `⛔` = HARD_STOP / PRECONDITION_FAIL,`🔴` = USER_GATE,`⚠️` = WARN(完整含义见 `alloy-shared/references/hard-stop-meaning.md`)。
 
-**输出规则：** 阶段入口/出口必须按 `docs/specification/02-visual-spec.md` 输出 Phase 框（`┌─┐` Unicode 单线框，38 字符宽）、Step 标题（`[Step N/M]` + 38 字符 `─` 下划线）、`>` 块引用、`→` 引导行。**skill md 中的 Phase 框代码块是必须输出到终端的格式，不是文档示例。** 制品汇总表同理。
+**输出规则:** 阶段入口/出口按 `alloy-shared/references/phase-frame.md` 输出 Phase 框 + Step 标题 + 块引用 + 引导行。skill md 中的 Phase 框代码块是必须输出到终端的格式,不是文档示例。完整规范见 `docs/specification/02-visual-spec.md`。
 
 ---
 
@@ -207,6 +207,7 @@ dirty 时 -> 🔴 USER_GATE:检测到未提交变更,如何处理?
 > - agent thinking 决策"使用 AskUserQuestion"但实际输出纯文本编号列表(1./2./3.)——决策→执行断裂
 > 主题确认 USER_GATE 只确认 topic 本身——禁合并设计细节问题到本次 AskUserQuestion（详见上方 #X2 HARD_STOP）。
 
+> 此 USER_GATE 是 explore 阶段的"主题确认",不设 pending_gate(非 start:topic-confirm gate)。用户选"调整"时,直接回 explore 重新探测,**禁调 `alloy _guard user-gate reset`**(change 未创建,reset 会 ENOENT)。start:topic-confirm gate 在步骤 3 `_start bootstrap` 后才设(见下方"主题确认 gate"段)。
 > 主题确认后**直接进入步骤 1（change name + 分支决策）**，不要求用户重新输入 `/alloy-start <topic>`——主题已在流程内确认。
 
 ---
@@ -311,6 +312,25 @@ dirty 时 -> 🔴 USER_GATE:检测到未提交变更,如何处理?
    > **`--feature-branch "$FEATURE_BRANCH"`** 一次成型写入 feature_branch--用步骤 1 分支决策选定的分支名(变量),禁写死 `feature/<name>`。选 3 用当前分支时 `$FEATURE_BRANCH` = 当前分支名。
 
 
+### 主题确认 gate（start:topic-confirm，Step 2 brainstorming 前必做）
+
+> change 目录已由步骤 3 `_start bootstrap` 创建,现在用 gate 强制确认主题。
+> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具调用自动 clear。
+
+⛔ [HARD_STOP] 必须执行以下命令设置 pending_gate(不是说明,是必跑命令):
+
+```bash
+alloy _guard user-gate require openspec/changes/<name> start:topic-confirm
+```
+
+🔴 USER_GATE（必须平台原生交互工具调用,首次呈现即调--禁先文本列选项）: 确认主题
+
+> ⛔ [HARD_STOP] 主题确认 gate 不可跳过--即使 topic 明确,也必须用平台原生交互工具让用户确认 topic 或调整。
+> 违反字面 = 违反精神:哪怕"topic 已明确不用再确认",也算违反--主题确认是 brainstorming 前的必经闸门。
+> 用户选"确认"后,agent 继续 Step 2 brainstorming。
+> 用户选"调整"后,agent 必须先调 `alloy _guard user-gate reset openspec/changes/<name> start:topic-confirm`(用真实 change name,非 placeholder),再回到 Step 1 explore 重新探测。若 change 未创建(<name> 未知),禁调 reset(会 ENOENT),直接回 Step 1 explore。
+
+
 4. **[Step 2] 需求设计——brainstorming（change 目录已存在，实时记录技能使用）：**
 
    **捕获 superpowers:brainstorming 开始时间（实时记录，不用补录）：**
@@ -401,7 +421,7 @@ dirty 时 -> 🔴 USER_GATE:检测到未提交变更,如何处理?
 
     > ⛔ [PRECONDITION_FAIL] `_start finalize` 前置条件(任一不满足 CLI exit 1,agent 须先修复再调):
     > 1. **lock-draft gate 已 cleared**:步骤 5 的 USER_GATE 必须已用问答工具确认(hook-guard 自动 clear)或手动 `alloy _guard user-gate pass`。若 pending_gate 仍为 `start:lock-draft`,`_phase complete` 会 exit 1 拒绝推进。
-    > 2. **working tree clean**(仅 .alloy.yaml 临时状态除外):`_start finalize` 内部会 `git commit`,working tree dirty 时 checkpoint create 会失败。若有非 .alloy.yaml 文件未 commit,先 commit 或 stash。
+    > 2. **working tree clean**(仅 .alloy.yaml + draft.md 临时状态除外):`_start finalize` 内部会 `git commit`,working tree dirty 时 checkpoint create 会失败。draft.md 未 commit 允许(第 1 步 `_artifact commit draft` 会 commit);其他文件未 commit 须先 commit 或 stash。
     > 3. **phase-complete gate 未提前设置**:`start:phase-complete` gate 在 `_start finalize` 成功后才设(步骤"完成"部分),提前设会阻塞 `_phase complete` exit 1。
     >
     > 违反字面 = 违反精神:哪怕"先设 phase-complete gate 防忘"、"gate 没 clear 但 finalize 应该能跑",也算违反--gate 下沉检查是物理拦截,不 clear 就 exit 1。
@@ -445,6 +465,8 @@ dirty 时 -> 🔴 USER_GATE:检测到未提交变更,如何处理?
 
 > 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question/alloy-question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级。
 
+> ℹ️ `start:phase-complete` gate 已由 `_phase complete start`(或 `_start finalize` 内部)自动设。以下 `user-gate require` 命令幂等可省略--agent 也可手动调(覆盖相同值,无冲突)。
+
 ⛔ [HARD_STOP] 必须执行以下命令设置 pending_gate(不是说明,是必跑命令):
 
 ```bash
@@ -457,23 +479,25 @@ alloy _guard user-gate require openspec/changes/<name> start:phase-complete
 > 违反字面 = 违反精神:哪怕"纯文本效果一样"、"直接 Skill 更流畅"、"用户已授权提示一下也行",也算违反——AskUserQuestion 强制结构化选项,避免 agent 用模糊措辞让用户回 yes 蒙混过关（§4.1）。
 > 常见违规模式:
 > - 纯文本输出"等待用户输入下一个命令"——不是 AskUserQuestion
-> - 纯文本列"1. 进入 plan / 2. 暂停 / 3. 其他"让用户回复
+> - 纯文本列"1. 进入 plan / 2. 调整需求 / 3. 其他"让用户回复
 > - 用户选 1 后提示"请运行 /alloy-plan <name>"让用户手动输入——应直接 Skill 加载
 > 非 Claude Code 平台按 `alloy-shared/references/interaction-style.md` §平台工具对照 降级。
 
 > 选项:
-> - 1. 进入 plan 阶段——加载 `alloy-plan` skill 推进制品生成
-> - 2. 暂停——查看状态(`alloy status`)或思考 draft 内容
-> - 3. 其他——用户自定义下一步
+> - 1. 进入 plan 阶段--加载 `alloy-plan` skill 推进制品生成
+> - 2. 调整需求--回 brainstorming 重新讨论(draft 已锁定,改需求 = 越界回退)
+> - 3. 其他--用户自定义下一步
 
 > 用户选 1 后,agent **必须直接加载 `alloy-plan` skill(多 agent 适配,见 `alloy-shared/references/skill-loading.md`):
 - Claude Code / OpenCode: 调 `skill({ name: "alloy-plan", args: "<change-name>" })`
 - Pi: `read .pi/skills/alloy-plan/SKILL.md`(read 后按 SKILL.md 指引执行,change name 通过上下文传入)**
 
 > ⛔ [HARD_STOP] 禁止输出"请运行 /alloy-xxx"让用户手动输入命令--用户已在 USER_GATE 授权,阶段转换已触发,再让用户输入命令 = 违反 Iron Law。
-> 违反字面 = 违反精神:哪怕"提示一下更友好"、"用户可能想暂停",也算违反--用户要暂停会在 USER_GATE 选"暂停",选"进入"就是授权直接加载。
-> 用户选 2 后,agent **必须先调 `alloy _guard user-gate reset openspec/changes/<name> start:phase-complete`**(把 gate 从 gate_history 移除 + 重新设为 pending_gate),再停止,输出"已暂停。需要时运行 /alloy-plan <name> 继续。"
->   原因:hook-guard 检测到问答工具调用时无条件 clear pending_gate + 加入 gate_history,用户选"暂停"本意是拒绝通过 gate,语义被吞了。reset 恢复 gate 状态,用户"继续"时 agent 调 require(幂等)+ 问答工具重新询问。
+> 违反字面 = 违反精神:哪怕"提示一下更友好"、"用户可能想调整",也算违反--用户要调整会在 USER_GATE 选"调整需求",选"进入"就是授权直接加载。
+> 用户选 2 后,agent **必须先调 `alloy _guard user-gate reset openspec/changes/<name> start:phase-complete`**(把 gate 从 gate_history 移除 + 重新设为 pending_gate),再走"发起变更"流程:
+>   - start 完成后 phase=started,brainstorming-1 tag 已存在(`_start finalize` 时打的),直接调 `alloy _checkpoint switch openspec/changes/<name> alloy-checkpoint-<name>-brainstorming-1` 回到 phase=starting + records 有 draft 状态。
+>   - 然后走 `alloy-plan` SKILL.md 的越界回退步骤 9-11(`_skill log brainstorming` + `_artifact reset draft` + 重新 brainstorming 沟通变更点 + 重生成 draft + `_start finalize`)。不需要创建 plan 检查点(未进过 plan,无进度可保护)。
+>   原因:hook-guard 检测到问答工具调用时无条件 clear pending_gate + 加入 gate_history,用户选"调整需求"本意是拒绝通过 gate,语义被吞了。reset 恢复 gate 状态,走完越界回退后 agent 重新调 require(幂等)+ 问答工具重新询问。
 > 用户选 3 后,agent 同样调 reset,再停止,等用户后续命令。
 
 > **§5.2.3 路径 B 边界说明：** start 是 phase 推进起点（无前序 phase），phase=started 写入失败时降级路径只有"重跑 /alloy-start"——不存在 phase 回退场景。本阶段无 §5.2.3 适用空间。

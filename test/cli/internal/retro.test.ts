@@ -376,4 +376,30 @@ describe("alloy _retro scaffold", () => {
     exitSpy.mockRestore();
     logSpy.mockRestore();
   });
+
+  it("检测到重锁 commit -> §0 偏差检测段显示重锁 commit", async () => {
+    // 创建一个"重锁"commit
+    await writeFile(join(tmpDir, "f2.txt"), "x", "utf-8");
+    execSync('git add f2.txt && git commit -m "docs(test-change): 重锁 tasks [aaa111->bbb222]"', { cwd: tmpDir, stdio: "pipe" });
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    await retroCommand(["scaffold", changeDir]);
+    const content = await readFile(join(changeDir, "retrospective.md"), "utf-8");
+    const deviationSection = content.split("### 偏差检测(自动扫描)")[1]?.split("###")[0] ?? "";
+    expect(deviationSection).toContain("重锁 commit(1 个)");
+    expect(deviationSection).toContain("重锁 tasks");
+    exitSpy.mockRestore();
+    logSpy.mockRestore();
+  });
+
+  it("无重锁 commit -> §0 偏差检测段显示无信号", async () => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    await retroCommand(["scaffold", changeDir]);
+    const content = await readFile(join(changeDir, "retrospective.md"), "utf-8");
+    const deviationSection = content.split("### 偏差检测(自动扫描)")[1]?.split("###")[0] ?? "";
+    expect(deviationSection).toContain("无偏差检测信号");
+    exitSpy.mockRestore();
+    logSpy.mockRestore();
+  });
 });

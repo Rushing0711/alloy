@@ -26,6 +26,10 @@ export interface GuardInput {
   pendingGates?: string[];
   /** 是否 alloy 项目(有 openspec/changes/ 目录)。默认 true(安全优先:不传视为 alloy 项目)。alloy 项目即使无活跃 change 也走拦截逻辑 */
   isAlloyProject?: boolean;
+  /** 当前 git 分支名(用于 main 分支检测;undefined=非 git 项目或 git 命令失败,跳过检测) */
+  currentBranch?: string;
+  /** 配置的 main 分支名(从 openspec/config.yaml 读;默认 "main") */
+  mainBranch?: string;
 }
 
 export interface GuardResult {
@@ -60,7 +64,7 @@ const NON_APPLY_WHITELIST: RegExp[] = [
 ];
 
 export function guardCheck(input: GuardInput): GuardResult {
-  const { filePath, phases } = input;
+  const { filePath, phases, currentBranch, mainBranch } = input;
   const pendingGates = input.pendingGates ?? [];
   const isAlloyProject = input.isAlloyProject ?? true;
 
@@ -71,6 +75,16 @@ export function guardCheck(input: GuardInput): GuardResult {
 
   const normalizedPath = filePath.replace(/^\.\//, "");
   const inWhitelist = NON_APPLY_WHITELIST.some((p) => p.test(normalizedPath));
+
+  // 1.5. main 分支检测:禁止在 main 分支直接改代码(白名单内允许,如 .alloy.yaml/docs/.md)
+  // 优先级在 pending_gate / phase 检查之前--即使在 apply 阶段,也不应该在 main 上改源码
+  // finish 阶段 squash merge 是 git 命令(不是 Write/Edit),不会被 hook 拦截
+  if (currentBranch && mainBranch && currentBranch === mainBranch && !inWhitelist) {
+    return {
+      allowed: false,
+      reason: `禁止在 main 分支(${mainBranch})直接改代码: ${normalizedPath}。请先创建 feature 分支: git checkout -b feature/<name>`,
+    };
+  }
 
   // 2. 有 pending_gate:非白名单拦截(强制先问答;优先级高于 apply 阶段)
   if (pendingGates.length > 0) {

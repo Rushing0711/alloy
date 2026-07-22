@@ -1,6 +1,6 @@
 // src/cli/commands/internal/stop-guard.ts
 import { readFileSync } from "node:fs";
-import { detectAgent } from "../../../core/agents.js";
+import { detectAgent, KNOWN_AGENTS } from "../../../core/agents.js";
 import type { AgentId } from "../../../core/types.js";
 
 interface StopHookInput {
@@ -12,12 +12,9 @@ interface StopHookInput {
  * 根据 agent 返回 USER_GATE 应用的交互工具提示。
  */
 function getAgentToolHint(agent: AgentId | null): string {
-  switch (agent) {
-    case "claude-code": return "AskUserQuestion 工具";
-    case "opencode": return "question 工具";
-    case "pi": return "ctx.ui select(alloy ask-question 扩展)";
-    default: return "平台原生交互工具(AskUserQuestion / question / ctx.ui)";
-  }
+  if (!agent) return "平台原生交互工具(AskUserQuestion / question / alloy-question)";
+  const agentInfo = KNOWN_AGENTS.find(a => a.id === agent);
+  return agentInfo?.askToolDisplay ? agentInfo.askToolDisplay + " 工具" : "平台原生交互工具(AskUserQuestion / question / alloy-question)";
 }
 
 /**

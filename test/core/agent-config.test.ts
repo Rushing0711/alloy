@@ -311,7 +311,7 @@ describe("writeHookConfig", () => {
     const settings = JSON.parse(await readFile(join(tmpDir, ".claude/settings.json"), "utf-8"));
     const preToolUse = settings.hooks.PreToolUse;
     expect(Array.isArray(preToolUse)).toBe(true);
-    const alloyEntry = preToolUse.find((e: { matcher: string }) => e.matcher === "Write|Edit|AskUserQuestion");
+    const alloyEntry = preToolUse.find((e: { matcher: string }) => e.matcher === "Write|Edit|AskUserQuestion|Bash");
     expect(alloyEntry).toBeTruthy();
     expect(alloyEntry.hooks.some((h: { command: string }) => h.command === expectedHookCommand)).toBe(true);
   });
@@ -328,7 +328,7 @@ describe("writeHookConfig", () => {
     const settings = JSON.parse(await readFile(join(tmpDir, ".claude/settings.json"), "utf-8"));
     const preToolUse = settings.hooks.PreToolUse;
     const alloyEntries = preToolUse.filter((e: { matcher: string; hooks: { command: string }[] }) =>
-      e.matcher === "Write|Edit|AskUserQuestion" && e.hooks.some((h) => h.command === expectedHookCommand)
+      e.matcher === "Write|Edit|AskUserQuestion|Bash" && e.hooks.some((h) => h.command === expectedHookCommand)
     );
     expect(alloyEntries).toHaveLength(1);
   });
@@ -360,7 +360,7 @@ describe("writeHookConfig", () => {
     await writeHookConfig(tmpDir, "claude-code");
 
     const settings = JSON.parse(await readFile(join(tmpDir, ".claude/settings.json"), "utf-8"));
-    const entry = settings.hooks.PreToolUse.find((e: { matcher: string }) => e.matcher === "Write|Edit|AskUserQuestion");
+    const entry = settings.hooks.PreToolUse.find((e: { matcher: string }) => e.matcher === "Write|Edit|AskUserQuestion|Bash");
     expect(entry.hooks).toHaveLength(2);
     expect(entry.hooks.some((h: { command: string }) => h.command === "other-hook")).toBe(true);
     expect(entry.hooks.some((h: { command: string }) => h.command === expectedHookCommand)).toBe(true);
@@ -506,6 +506,9 @@ describe("writeOpenCodeHookTools / hasOpenCodeHookTools", () => {
     expect(pluginContent).toContain("Edit");
     // OpenCode write/edit 工具参数名是 filePath(驼峰),plugin 必须取这个字段才能拦截
     expect(pluginContent).toContain("args?.filePath");
+    // bash 工具转发(检测 cat heredoc / git 自救)
+    expect(pluginContent).toContain("bash");
+    expect(pluginContent).toContain("args?.command");
   });
 
   it("writeOpenCodeHookTools 幂等", async () => {

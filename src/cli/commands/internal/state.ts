@@ -205,6 +205,28 @@ export async function stateCommand(args: string[]): Promise<void> {
       }
       (state as unknown as Record<string, unknown>)[field] = coerceValue(field, value);
       await writeState(changeDir, state);
+
+      // --commit: 写 state 后原子完成 git add .alloy.yaml + git commit
+      if (args.includes("--commit")) {
+        try {
+          execSync("git add .alloy.yaml", { cwd: changeDir, stdio: ["pipe", "pipe", "pipe"] });
+          let hasStaged = true;
+          try {
+            execSync("git diff --cached --quiet", { cwd: changeDir, stdio: ["pipe", "pipe", "pipe"] });
+            hasStaged = false;
+          } catch {
+            hasStaged = true;
+          }
+          if (hasStaged) {
+            execSync(`git commit -m "chore: _state write ${field}"`, { cwd: changeDir, stdio: ["pipe", "pipe", "pipe"] });
+            console.log(`✓ _state write ${field} 已 commit`);
+          } else {
+            console.log(`✓ _state write ${field} 无变更跳过 commit(幂等)`);
+          }
+        } catch (e) {
+          console.error(`⚠️ _state write commit 失败: ${(e as Error).message}`);
+        }
+      }
       break;
     }
     case "merge": {
