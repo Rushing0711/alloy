@@ -64,6 +64,6 @@ SKILL.md 里设 USER_GATE 时,引用本文件代替内联说明(避免 16 处复
 hook-guard 在 PreToolUse 事件里:
 1. 读 `.alloy.yaml` 的 `pending_gate` 字段
 2. 如果有 pending_gate 且当前工具是 Write/Edit(非白名单),exit 2 拦截
-3. 如果当前工具是问答工具(AskUserQuestion/question/alloy-question),调 `clearAllPendingGates` 内部函数自动 clear(扫描主仓 + 所有 git worktree,`setPendingGate(null)` + `addClearedGate(gate)`,不调 `_guard user-gate pass` CLI 命令--那是 agent 手动降级用的)
+3. 如果当前工具是问答工具(AskUserQuestion/question/alloy-question),调 `clearAllPendingGates` 内部函数自动 clear(扫描主仓 + 所有 git worktree,`setPendingGate(null)` + `addClearedGate(gate)`)。**不自动 commit**(gate_history 改动随下一个 `_artifact commit` / `_state write --commit` 一起落地,避免 `chore: clear USER_GATE` 污染历史);worktree 场景的 gate_history 同步由 `_worktree-create` 的 `syncGateHistoryFromMainRepo` 负责(读主仓工作区版本,同步到 worktree .alloy.yaml)。不调 `_guard user-gate pass` CLI 命令--那是 agent 手动降级用的(不自动 commit,pending_gate 作为临时状态 dirty)
 
 详见 `alloy-shared/references/cli-reference.md` `_guard user-gate` 章节。

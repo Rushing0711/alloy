@@ -764,6 +764,13 @@ describe("alloy _phase start 检查上阶段 phase-complete gate(防跳过闸门
     ].join("\n");
     await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
 
+    // 产出 plan 阶段制品(制品完整性检查要求:_phase start apply 检查 plan 制品已产出)
+    await mkdir(join(changeDir, "specs"), { recursive: true });
+    await writeFile(join(changeDir, "proposal.md"), "# proposal", "utf-8");
+    await writeFile(join(changeDir, "design.md"), "# design", "utf-8");
+    await writeFile(join(changeDir, "tasks.md"), "# tasks", "utf-8");
+    await writeFile(join(changeDir, "plans.md"), "# plans", "utf-8");
+
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -794,6 +801,13 @@ describe("alloy _phase start 检查上阶段 phase-complete gate(防跳过闸门
     ].join("\n");
     await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
 
+    // 产出 plan 阶段制品(制品完整性检查要求:_phase start apply 检查 plan 制品已产出)
+    await mkdir(join(changeDir, "specs"), { recursive: true });
+    await writeFile(join(changeDir, "proposal.md"), "# proposal", "utf-8");
+    await writeFile(join(changeDir, "design.md"), "# design", "utf-8");
+    await writeFile(join(changeDir, "tasks.md"), "# tasks", "utf-8");
+    await writeFile(join(changeDir, "plans.md"), "# plans", "utf-8");
+
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -803,6 +817,43 @@ describe("alloy _phase start 检查上阶段 phase-complete gate(防跳过闸门
     expect(after.phase).toBe("applying");
     // lock-proposal 不应被清掉(它是 plan 阶段内部 gate,不是 phase-complete)
     expect(after.pending_gate).toBe("plan:lock-proposal");
+  });
+
+  it("进入 apply 阶段:plan 制品缺失 -> HARD_STOP(堵'设 gate 跳过制品'漏洞)", async () => {
+    // 场景:agent 设 plan:phase-complete gate + 问答 clear(跳过 plan 制品产出)
+    //       _phase start apply 通过 gate 检查,但制品检查 exit 1
+    const yaml = [
+      "phase: planned",
+      "schema_version: 1",
+      "worktree: null",
+      'created_at: "2020-01-01 00:00:00"',
+      'updated_at: "2020-01-01 00:00:00"',
+      "phase_timings:",
+      "  plan:",
+      '    started_at: "2020-01-01 10:00:00"',
+      '    completed_at: "2020-01-01 11:00:00"',
+      "records: []",
+      "skill_usage: []",
+      "pending_gate: null",
+      "gate_history:",
+      "  - plan:phase-complete",
+    ].join("\n");
+    await writeFile(join(changeDir, ".alloy.yaml"), yaml, "utf-8");
+
+    // 不产出 plan 制品(模拟 agent 跳过 plan 制品产出)
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await phaseCommand(["start", changeDir, "apply"]);
+
+    // 验证 exit 1 + 制品缺失提示
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    const errCalls = errSpy.mock.calls.map(c => String(c[0])).join("\n");
+    expect(errCalls).toContain("plan 阶段制品缺失");
+    expect(errCalls).toContain("设 gate + 问答确认 ≠ 完成 plan 阶段");
+
+    exitSpy.mockRestore();
+    errSpy.mockRestore();
   });
 
   it("无 pending_gate:正常推进,不报错", async () => {

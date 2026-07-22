@@ -248,6 +248,9 @@ export async function clearAllPendingGates(projectRoot: string): Promise<void> {
           await setPendingGate(changeDir, null);
           // 把 cleared gate 加入 gate_history,供 _guard user-gate require 前置检查 + _phase complete 检查
           await addClearedGate(changeDir, gate);
+          // 不主动 commit:gate_history 改动随下一次 _artifact commit / _state write --commit 落地
+          // 原因:主动 commit 会产生 `chore: clear USER_GATE <gate>` 污染历史(违反 d4b5db4 规范)
+          // worktree 场景(EnterWorktree 从 HEAD 创建)的 gate_history 同步由 _worktree-create 负责
         }
       }
     } catch (e) {

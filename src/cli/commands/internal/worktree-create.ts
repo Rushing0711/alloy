@@ -13,7 +13,7 @@
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import path, { join, basename } from "node:path";
-import { readState, formatTimestamp } from "../../utils/state.js";
+import { readState, formatTimestamp, setPendingGate, addClearedGate } from "../../utils/state.js";
 
 function gitExec(cmd: string, opts: { cwd?: string } = {}): { ok: boolean; stdout: string; stderr: string } {
   try {
@@ -26,6 +26,55 @@ function gitExec(cmd: string, opts: { cwd?: string } = {}): { ok: boolean; stdou
       stdout: err.stdout?.toString().trim() ?? "",
       stderr: err.stderr?.toString().trim() ?? "",
     };
+  }
+}
+
+/**
+ * 同步主仓 .alloy.yaml 的 gate_history + pending_gate 到 worktree .alloy.yaml。
+ *
+ * 场景:Claude Code EnterWorktree / OpenCode _worktree-create 从 HEAD 创建 worktree,
+ * worktree 内 .alloy.yaml 是 HEAD 版本,缺主仓工作区的 gate_history 改动
+ * (clearAllPendingGates 不再主动 commit,改动留在主仓工作区)。
+ * 不同步会导致 worktree 内 _guard user-gate require <gate> exit 1(gate_history 缺 gate)。
+ *
+ * 实现:
+ * 1. 用 git rev-parse --git-common-dir 定位主仓 root(在 worktree 内执行,返回主仓 .git)
+ * 2. 读主仓 .alloy.yaml(工作区版本,含未 commit 的 gate_history 改动)
+ * 3. 在 worktree 内:setPendingGate(null)(如果主仓 pending_gate=null)
+ * 4. 在 worktree 内:addClearedGate(主仓 gate_history 的每个 gate,幂等)
+ *
+ * 多 agent:
+ * - Claude Code --record-only:在 worktree 内执行,cwd=worktree
+ * - OpenCode 非 --record-only:在主仓执行,但 worktreeChangeDir 是绝对路径,能定位 worktree .alloy.yaml
+ * - Pi 不支持 worktree,不调本函数
+ */
+async function syncGateHistoryFromMainRepo(changeDir: string, worktreeChangeDir: string): Promise<void> {
+  // 定位主仓 root:git rev-parse --git-common-dir 在 worktree 内返回主仓 .git 路径
+  const gitCommonDir = gitExec("git rev-parse --git-common-dir", { cwd: worktreeChangeDir }).stdout;
+  if (!gitCommonDir) return;
+  const absGitDir = path.isAbsolute(gitCommonDir) ? gitCommonDir : path.resolve(worktreeChangeDir, gitCommonDir);
+  const mainRoot = path.dirname(absGitDir);
+  const mainChangeDir = path.join(mainRoot, changeDir);
+
+  if (!existsSync(join(mainChangeDir, ".alloy.yaml"))) return;
+
+  // 读主仓 .alloy.yaml(工作区版本,含未 commit 改动)
+  let mainState;
+  try {
+    mainState = await readState(mainChangeDir);
+  } catch {
+    return;
+  }
+
+  // 同步 pending_gate:主仓 null -> worktree null(幂等)
+  if (mainState.pending_gate === null || mainState.pending_gate === undefined) {
+    await setPendingGate(worktreeChangeDir, null);
+  }
+
+  // 同步 gate_history:主仓每个 gate -> worktree(幂等,已存在不重复追加)
+  const history = mainState.gate_history ?? [];
+  for (const gate of history) {
+    await addClearedGate(worktreeChangeDir, gate);
   }
 }
 
@@ -152,6 +201,9 @@ export async function worktreeCreateCommand(args: string[]): Promise<void> {
   const worktreeChangeDir = join(absWorktreePath, changeDir);
   const createdAt = formatTimestamp();
 
+  // 同步主仓 gate_history 到 worktree(git worktree add 从 HEAD 创建,worktree 内 .alloy.yaml 是 HEAD 版本)
+  await syncGateHistoryFromMainRepo(changeDir, worktreeChangeDir);
+
   // _state write worktree 字段(worktree 内执行,守卫放行)
   const stateWrites = [
     `alloy _state write "${changeDir}" worktree "${worktreePath}"`,
@@ -205,6 +257,9 @@ async function worktreeRecordOnly(args: string[], changeDir: string): Promise<vo
   const branchIdx = args.indexOf("--branch");
   const worktreePath = pathIdx >= 0 ? args[pathIdx + 1] : "";
   const worktreeBranch = branchIdx >= 0 ? args[branchIdx + 1] : "";
+  // 转绝对路径:防止存相对路径(如 .claude/worktrees/<name>),worktree 内 cwd 变了后相对路径失效
+  // 实测 Claude Code task-brief 脚本用 state.worktree 拼路径,相对路径在 worktree 内解析失败
+  const absWorktreePath = path.isAbsolute(worktreePath) ? worktreePath : path.resolve(worktreePath);
 
   if (!worktreePath || !worktreeBranch) {
     console.error("用法: alloy _worktree-create --record-only <change-dir> --path <worktree-path> --branch <worktree-branch>");
@@ -217,9 +272,14 @@ async function worktreeRecordOnly(args: string[], changeDir: string): Promise<vo
 
   const createdAt = formatTimestamp();
 
+  // 同步主仓 gate_history 到 worktree(EnterWorktree 从 HEAD 创建,worktree 内 .alloy.yaml 是 HEAD 版本)
+  // --record-only 模式在 worktree 内执行(cwd=worktree),worktreeChangeDir = 相对 cwd 解析
+  const worktreeChangeDir = path.resolve(changeDir);
+  await syncGateHistoryFromMainRepo(changeDir, worktreeChangeDir);
+
   // 写 state 三字段(在 worktree 内执行,cwd 是 worktree)
   const stateWrites = [
-    `alloy _state write "${changeDir}" worktree "${worktreePath}"`,
+    `alloy _state write "${changeDir}" worktree "${absWorktreePath}"`,
     `alloy _state write "${changeDir}" worktree_branch "${worktreeBranch}"`,
     `alloy _state write "${changeDir}" worktree_created_at "${createdAt}"`,
   ];
@@ -245,7 +305,7 @@ async function worktreeRecordOnly(args: string[], changeDir: string): Promise<vo
 
   console.log("");
   console.log("✓ worktree 记录完成(--record-only 模式):");
-  console.log(`  ✓ worktree 路径: ${worktreePath}`);
+  console.log(`  ✓ worktree 路径: ${absWorktreePath}`);
   console.log(`  ✓ worktree 分支: ${worktreeBranch}`);
   console.log("  ✓ state 三字段已写入: worktree / worktree_branch / worktree_created_at");
   console.log(`  ✓ worktree_created_at: ${createdAt}`);

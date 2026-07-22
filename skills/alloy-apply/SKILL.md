@@ -293,7 +293,7 @@ alloy _worktree-create openspec/changes/<name>
 
 **创建后状态记录 + worktree 内分支锁定**：
 
-- Claude Code:EnterWorktree 创建后,在 worktree 内手动写三字段(`alloy _state write` x3 + commit);OpenCode:`_worktree-create` 已自动完成,跳过此步
+- Claude Code:EnterWorktree 创建后,在 worktree 内调 `alloy _worktree-create --record-only <change-dir> --path <worktree-path> --branch worktree-<name>`(原子记录 state 三字段 + commit,替代手动 _state write x3);OpenCode:`_worktree-create` 已自动完成,跳过此步
 - 技能执行完毕后，**必须验证已在 worktree 内**（`GIT_DIR != GIT_COMMON`），否则 ⛔ PRECONDITION_FAIL--禁 fallback 到主仓写入（元信息写到 feature 分支会导致 worktree 内状态分裂）
 - ⛔ [HARD_STOP] 在 worktree 内**必须**写入 worktree / worktree_branch / worktree_created_at **三字段**并 commit（断点恢复）。三字段缺一不可——worktree_created_at 漏写会导致 archive 阶段时间链断裂。
   违反字面 = 违反精神：哪怕"worktree 路径已记录、created_at 可推断"、"先写两个字段后面补",也算违反——worktree_created_at 是 worktree 创建时间的唯一来源,archive 阶段清理 worktree 时需要这个字段计算 worktree 存活时长。

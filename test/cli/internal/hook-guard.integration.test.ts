@@ -106,6 +106,11 @@ describe("alloy _hook-guard worktree 兜底扫描(真实 git worktree)", () => {
     // 验证 worktree 内 pending_gate 被 clear(关键:不漏 worktree)
     const worktreeAfter = await readState(worktreeChangeDir);
     expect(worktreeAfter.pending_gate).toBeNull();
+    // 验证 gate_history 已更新(cleared gate 加入)
+    expect(worktreeAfter.gate_history).toContain("apply:lock-retrospective");
+    // 验证 .alloy.yaml 有工作区改动(clear 不再 commit,改动留在工作区,随下一次 _artifact commit 落地)
+    const status = git("git status --porcelain", worktreePath);
+    expect(status).toContain(".alloy.yaml");
   });
 
   it("collectPendingGates:主仓 worktree=null 时,git worktree list 兜底收集 worktree 内 pending_gate", () => {

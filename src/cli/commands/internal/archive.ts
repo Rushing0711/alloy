@@ -2,7 +2,7 @@
 import { execSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { basename, relative, resolve } from "node:path";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { readState, writeState, formatTimestamp } from "../../utils/state.js";
 import type { PhaseTimings } from "../../../core/types.js";
@@ -131,18 +131,22 @@ export async function archiveCommand(args: string[]): Promise<void> {
   const archiveSpecsDir = join(archiveDir, "specs");
   if (existsSync(archiveSpecsDir)) {
     const missingSpecs: string[] = [];
-    for (const capDir of readdirSync(archiveSpecsDir)) {
-      const capPath = join(archiveSpecsDir, capDir);
-      if (!existsSync(capPath)) continue;
-      const mainSpec = join(gitRoot.root, "openspec/specs", capDir, "spec.md");
+    for (const entry of readdirSync(archiveSpecsDir)) {
+      const entryPath = join(archiveSpecsDir, entry);
+      if (!existsSync(entryPath)) continue;
+      // 区分目录(capability 结构)与文件(直接 spec)
+      const isDir = statSync(entryPath).isDirectory();
+      const mainSpec = isDir
+        ? join(gitRoot.root, "openspec/specs", entry, "spec.md")
+        : join(gitRoot.root, "openspec/specs", entry);
       if (!existsSync(mainSpec)) {
-        missingSpecs.push(capDir);
+        missingSpecs.push(entry);
       }
     }
 
     if (missingSpecs.length > 0) {
       console.error(`⛔ [PRECONDITION_FAIL] Delta Spec 未 promote 到主 spec：`);
-      console.error(`  缺失 capabilities: ${missingSpecs.join(" ")}`);
+      console.error(`  缺失: ${missingSpecs.join(" ")}`);
       console.error(`  归档目录: ${archiveSpecsDir}`);
       console.error(`  主 spec:  ${join(gitRoot.root, "openspec/specs")}`);
       console.error(`  openspec archive CLI 未执行真正的 spec sync。`);

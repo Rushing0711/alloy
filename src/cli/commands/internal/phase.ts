@@ -1,9 +1,10 @@
 // src/cli/commands/internal/phase.ts
-import { realpathSync } from "node:fs";
-import { basename, relative } from "node:path";
+import { realpathSync, existsSync } from "node:fs";
+import { basename, relative, join } from "node:path";
 import { execSync } from "node:child_process";
 import { readState, writeState } from "../../utils/state.js";
 import type { AlloyState, PhaseTimings } from "../../../core/types.js";
+import { ARTIFACT_CHECKS } from "./guard.js";
 
 const PHASE_START_TARGETS: Record<string, string> = {
   start: "starting",
@@ -222,17 +223,18 @@ async function phaseStart(args: string[]): Promise<void> {
       if (!history.includes(prevGate)) {
         console.error(`⛔ [HARD_STOP] 进入 ${phase} 阶段前未通过 ${prevGate} gate`);
         console.error("");
-        console.error("  原因:agent 可能跳过了上阶段 phase-complete gate,直接 _phase start");
-        console.error("  SKILL.md 要求阶段转换前设 phase-complete gate + 问答工具确认,用户需确认进入下一阶段");
+        console.error(`  ${prevGate} gate 是 ${prevPhase} 阶段完成的标志,不是跳过 ${prevPhase} 的通行证。`);
+        console.error(`  必须先完成 ${prevPhase} 阶段(产出制品 + 走完 ${prevPhase} SKILL.md 流程),再设 gate + 问答确认。`);
         console.error("");
         console.error("  合法路径:");
-        console.error(`    1. alloy _guard user-gate require ${changeDir} ${prevGate}`);
-        console.error("    2. 问答工具确认(Claude Code AskUserQuestion / OpenCode question / Pi alloy-question)");
+        console.error(`    1. 走完 ${prevPhase} SKILL.md 流程,产出 ${prevPhase} 阶段制品`);
+        console.error(`    2. alloy _guard user-gate require ${changeDir} ${prevGate}`);
+        console.error("    3. 问答工具确认(Claude Code AskUserQuestion / OpenCode question / Pi alloy-question)");
         console.error("       -> hook-guard 检测到问答工具调用,自动 clear pending_gate + 加入 gate_history");
-        console.error(`    3. alloy _phase start ${changeDir} ${phase}`);
+        console.error(`    4. alloy _phase start ${changeDir} ${phase}`);
         console.error("");
-        console.error("  违反字面 = 违反精神:哪怕'用户已口头同意'、'流程很顺不用确认',也算违反--");
-        console.error("  phase-complete gate 必须用问答工具物理确认,口头同意不算授权。");
+        console.error("  违反字面 = 违反精神:哪怕'用户已口头同意'、'流程很顺不用确认'、'制品简单可以跳过',也算违反--");
+        console.error(`  ${prevGate} gate 必须在 ${prevPhase} 阶段制品完成后用问答工具物理确认,口头同意不算授权。`);
         return process.exit(1);
       }
       // 上阶段 phase-complete gate 已通过,如果 pending_gate 残留是 prevGate,自动 clear(防御性)
@@ -243,6 +245,40 @@ async function phaseStart(args: string[]): Promise<void> {
       }
     } catch {
       // state 读失败让后续 ensureStartedAt 报错,这里不重复报
+    }
+
+    // 制品完整性检查:堵"设 gate 跳过制品"漏洞
+    // 原因:agent 可设 prevGate pending_gate + 问答 clear(跳过 prev 阶段制品产出),gate_history 含 prevGate,
+    // _phase start 通过 gate 检查。本检查复用 _guard --apply 的 ARTIFACT_CHECKS,确保 prev 阶段制品已产出。
+    // prevPhase -> transition 映射:plan->started->planned(plan 制品)/ apply->applied->archived(verify.md)/
+    // archive->archived->finished(retrospective.md)。start 无制品检查(只检查 start:phase-complete gate)。
+    const PREV_PHASE_TRANSITION: Record<string, string> = {
+      plan: "started->planned",
+      apply: "applied->archived",
+      archive: "archived->finished",
+    };
+    const transition = PREV_PHASE_TRANSITION[prevPhase];
+    if (transition) {
+      const artifacts = ARTIFACT_CHECKS[transition];
+      if (artifacts && artifacts.length > 0) {
+        const missing: string[] = [];
+        for (const a of artifacts) {
+          if (!existsSync(join(changeDir, a))) missing.push(a);
+        }
+        if (missing.length > 0) {
+          console.error(`⛔ [HARD_STOP] 进入 ${phase} 阶段前,${prevPhase} 阶段制品缺失:`);
+          console.error(`  缺失: ${missing.join(", ")}`);
+          console.error("");
+          console.error(`  ${prevPhase}:phase-complete gate 已通过,但 ${prevPhase} 阶段制品未产出。`);
+          console.error(`  设 gate + 问答确认 ≠ 完成 ${prevPhase} 阶段--必须先产出制品(走 ${prevPhase} SKILL.md 流程)。`);
+          console.error("");
+          console.error(`  违反字面 = 违反精神:哪怕'用户已口头同意进 ${phase}'、'制品简单可以跳过',也算违反--`);
+          console.error(`  制品缺失 = ${prevPhase} 阶段未完成,${prevPhase}:phase-complete gate 不该通过。`);
+          console.error("");
+          console.error(`  修复:走完 ${prevPhase} SKILL.md 流程,产出缺失的制品,再 _phase start ${changeDir} ${phase}。`);
+          return process.exit(1);
+        }
+      }
     }
   }
 

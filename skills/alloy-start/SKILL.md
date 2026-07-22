@@ -293,6 +293,7 @@ dirty 时 -> 🔴 USER_GATE:检测到未提交变更,如何处理?
      --opsx-new-at "$OPSX_NEW_START" \
      --feature-branch "$FEATURE_BRANCH"
    ```
+   > ⚠️ `$START_TIME` / `$OPSX_NEW_START` 跨 bash 调用丢失(OpenCode 独立 shell / Claude Code bash 无状态持久化):步骤 3 必须从上下文读取内联字面时间戳,不传 `$OPSX_NEW_START` 变量(实测 OpenCode/Claude Code 踩坑:步骤 2 捕获变量,步骤 3 用 `$OPSX_NEW_START` 为空,`_start bootstrap` exit 1)。
    > `alloy _start bootstrap` 原子完成 6 步(任一步失败 exit 1,不继续):
    > 1. state init(写 started_at + feature_branch,先于 phase start / skill log)
    > 2. infra-commit(基础设施 commit,幂等)
