@@ -2,6 +2,12 @@
 
 本文件记录 @flyin-ai/alloy 的所有版本变更。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.5.1] - 2026-07-23
+
+### Fixed
+
+- **Windows 路径兼容**:hook 命令(pre-commit hook + Claude Code/opencode/Pi 的 PreToolUse/Stop hook)用正斜杠 + 双引号包路径,修复 Windows 上 bash/sh 执行时反斜杠被当转义符吃掉导致 `Cannot find module` 的 bug。macOS/Linux 无变化(路径本来就正斜杠)。
+
 ## [0.5.0] - 2026-07-22
 
 本版本将 agent 缩减为 3 个(Claude Code/OpenCode/Pi)并完成 3 轮完全测试(含需求变更全流程),新增 hook 主动闸门机制(PreToolUse + USER_GATE + 制品检查),重设计 init 交互,下沉模块化 CLI 原子命令。
