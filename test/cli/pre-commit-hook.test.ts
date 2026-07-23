@@ -54,10 +54,10 @@ describe("ensurePreCommitHook", () => {
     expect(content).toContain("_pre-commit-check");
   });
 
-  it("hook 内容含绝对路径(node <path>/dist/cli/index.js)", async () => {
+  it("hook 内容含绝对路径(node \"<path>/dist/cli/index.js\")", async () => {
     await ensurePreCommitHook(tmpDir);
     const hookPath = join(tmpDir, ".git", "hooks", "pre-commit");
     const content = await readFile(hookPath, "utf-8");
-    expect(content).toMatch(/node\s+\S+\/dist\/cli\/index\.js\s+_pre-commit-check/);
+    expect(content).toMatch(/node\s+"[^"]+\/dist\/cli\/index\.js"\s+_pre-commit-check/);
   });
 });

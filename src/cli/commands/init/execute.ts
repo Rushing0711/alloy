@@ -17,7 +17,7 @@ import {
   writeQuestionConfig, getQuestionSupportedAgents,
 } from "../../../core/agent-config.js";
 import { runHealthCheck } from "../../../core/health.js";
-import { getPackageRoot } from "../../../utils/fs.js";
+import { getPackageRoot, getAlloyCliPath } from "../../../utils/fs.js";
 import { readProjectConfig, writeProjectConfig } from "../../utils/state.js";
 import type { ActionPlan } from "./plan.js";
 import type { DeployOptions } from "../../../core/types.js";
@@ -99,8 +99,8 @@ export async function ensureGitattributes(projectPath: string): Promise<void> {
  */
 export async function ensurePreCommitHook(projectPath: string): Promise<void> {
   const hookPath = join(projectPath, ".git", "hooks", "pre-commit");
-  const alloyCliPath = join(getPackageRoot(), "dist", "cli", "index.js");
-  const alloyCheck = `node ${alloyCliPath} _pre-commit-check`;
+  const alloyCliPath = getAlloyCliPath();
+  const alloyCheck = `node "${alloyCliPath}" _pre-commit-check`;
 
   let existing = "";
   try {

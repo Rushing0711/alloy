@@ -230,7 +230,7 @@ export async function writePermissionsConfig(projectPath: string, agentId: strin
 
 // --- PreToolUse hook 配置(alloy _hook-guard) ---
 
-import { getPackageRoot } from "../utils/fs.js";
+import { getAlloyCliPath } from "../utils/fs.js";
 
 /**
  * 支持 PreToolUse hook 的 agent 配置--alloy init 可项目级注入。
@@ -254,8 +254,8 @@ const ALLOY_HOOK_MATCHER = "Write|Edit|AskUserQuestion|Bash";
  * 绝对路径确保 hook 总是调用当前 alloy 包的 CLI。
  */
 function getHookCommand(): string {
-  const alloyCliPath = join(getPackageRoot(), "dist", "cli", "index.js");
-  return `node ${alloyCliPath} _hook-guard`;
+  const alloyCliPath = getAlloyCliPath();
+  return `node "${alloyCliPath}" _hook-guard`;
 }
 
 /** 返回支持 hook 闸门的 agent id 列表(claude-code 用 settings.json,pi 用扩展,opencode 用 plugin) */
@@ -378,8 +378,8 @@ const ALLOY_STOP_HOOK_CONFIGS: Record<string, string> = {
 };
 
 function getStopHookCommand(): string {
-  const alloyCliPath = join(getPackageRoot(), "dist", "cli", "index.js");
-  return `node ${alloyCliPath} _stop-guard`;
+  const alloyCliPath = getAlloyCliPath();
+  return `node "${alloyCliPath}" _stop-guard`;
 }
 
 /** 返回支持 Stop hook 的 agent id 列表 */
@@ -515,7 +515,7 @@ function generatePiExtensionContent(alloyCliPath: string): string {
     '    if (toolName === "alloy-question") {',
     "      try {",
     '        const stdin = JSON.stringify({ tool_name: "alloy-question" });',
-    `        execSync("node ${alloyCliPath} _hook-guard", {`,
+    `        execSync('node "${alloyCliPath}" _hook-guard', {`,
     "          input: stdin,",
     '          stdio: ["pipe", "ignore", "pipe"],',
     "        });",
@@ -538,7 +538,7 @@ function generatePiExtensionContent(alloyCliPath: string): string {
     "    });",
     "",
     "    try {",
-    `      execSync("node ${alloyCliPath} _hook-guard", {`,
+    `      execSync('node "${alloyCliPath}" _hook-guard', {`,
     "        input: stdin,",
     '        stdio: ["pipe", "ignore", "pipe"],',
     "      });",
@@ -551,7 +551,7 @@ function generatePiExtensionContent(alloyCliPath: string): string {
     "  // Stop:agent 完全停止后调 _stop-guard(检测文本输出代替 AskUserQuestion)",
     '  pi.on("agent_settled", async () => {',
     "    try {",
-    `      execSync("node ${alloyCliPath} _stop-guard", {`,
+    `      execSync('node "${alloyCliPath}" _stop-guard', {`,
     '        stdio: ["pipe", "ignore", "pipe"],',
     "      });",
     "    } catch {",
@@ -576,7 +576,7 @@ export async function hasPiHookExtension(projectPath: string): Promise<boolean> 
 
 /** 写入 Pi hook 扩展(.pi/extensions/alloy-guard.ts) */
 export async function writePiHookExtension(projectPath: string): Promise<boolean> {
-  const alloyCliPath = join(getPackageRoot(), "dist", "cli", "index.js");
+  const alloyCliPath = getAlloyCliPath();
   const extPath = join(projectPath, PI_EXTENSION_FILE);
   const content = generatePiExtensionContent(alloyCliPath);
   await mkdir(join(extPath, ".."), { recursive: true });
@@ -871,7 +871,7 @@ function generateOpenCodePluginContent(alloyCliPath: string): string {
     '      if (toolName === "question") {',
     "        try {",
     '          const stdin = JSON.stringify({ tool_name: "question" });',
-    `          execSync("node ${alloyCliPath} _hook-guard", {`,
+    `          execSync('node "${alloyCliPath}" _hook-guard', {`,
     "            input: stdin,",
     '            stdio: ["pipe", "ignore", "pipe"],',
     "          });",
@@ -892,7 +892,7 @@ function generateOpenCodePluginContent(alloyCliPath: string): string {
     "          tool_input: { command },",
     "        });",
     "        try {",
-    `          execSync("node ${alloyCliPath} _hook-guard", {`,
+    `          execSync('node "${alloyCliPath}" _hook-guard', {`,
     "            input: bashStdin,",
     '            stdio: ["pipe", "ignore", "pipe"],',
     "          });",
@@ -912,7 +912,7 @@ function generateOpenCodePluginContent(alloyCliPath: string): string {
     "      });",
     "",
     "      try {",
-    `        execSync("node ${alloyCliPath} _hook-guard", {`,
+    `        execSync('node "${alloyCliPath}" _hook-guard', {`,
     "          input: stdin,",
     '          stdio: ["pipe", "ignore", "pipe"],',
     "        });",
@@ -925,7 +925,7 @@ function generateOpenCodePluginContent(alloyCliPath: string): string {
     "    // Stop:session 空闲时调 _stop-guard(检测文本输出代替问答)",
     '    "session.idle": async () => {',
     "      try {",
-    `        execSync("node ${alloyCliPath} _stop-guard", {`,
+    `        execSync('node "${alloyCliPath}" _stop-guard', {`,
     '          stdio: ["pipe", "ignore", "pipe"],',
     "        });",
     "      } catch {",
@@ -951,7 +951,7 @@ export async function hasOpenCodeHookTools(projectPath: string): Promise<boolean
 
 /** 写入 OpenCode hook 插件(.opencode/plugins/alloy-guard.ts) */
 export async function writeOpenCodeHookTools(projectPath: string): Promise<boolean> {
-  const alloyCliPath = join(getPackageRoot(), "dist", "cli", "index.js");
+  const alloyCliPath = getAlloyCliPath();
   const pluginPath = join(projectPath, OPENCODE_PLUGIN_FILE);
   const content = generateOpenCodePluginContent(alloyCliPath);
   await mkdir(join(pluginPath, ".."), { recursive: true });

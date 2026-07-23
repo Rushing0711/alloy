@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { injectAgentConfigs, hasPermissionsConfig, writePermissionsConfig, ALLOY_PERMISSIONS, getPermissionSupportedAgents, hasHookConfig, writeHookConfig, getHookSupportedAgents, writePiHookExtension, hasPiHookExtension, writeOpenCodeHookTools, hasOpenCodeHookTools, writePiQuestionExtension, hasPiQuestionExtension, writeQuestionConfig, getQuestionSupportedAgents, hasQuestionConfig } from "../../src/core/agent-config.js";
 import { getPackageRoot } from "../../src/utils/fs.js";
 
-const expectedHookCommand = `node ${getPackageRoot()}/dist/cli/index.js _hook-guard`;
+const expectedHookCommand = `node "${getPackageRoot()}/dist/cli/index.js" _hook-guard`;
 import type { AgentInfo, DeployOptions } from "../../src/core/types.js";
 
 const claudeCode: AgentInfo = {

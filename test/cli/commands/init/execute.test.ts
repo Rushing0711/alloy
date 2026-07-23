@@ -31,7 +31,7 @@ vi.mock("../../../../src/core/agent-config.js", () => ({
   getQuestionSupportedAgents: vi.fn(() => []),
 }));
 vi.mock("../../../../src/core/health.js", () => ({ runHealthCheck: vi.fn() }));
-vi.mock("../../../../src/utils/fs.js", () => ({ getPackageRoot: vi.fn() }));
+vi.mock("../../../../src/utils/fs.js", () => ({ getPackageRoot: vi.fn(), getAlloyCliPath: vi.fn() }));
 vi.mock("../../../../src/utils/output.js", () => ({
   section: vi.fn(),
   check: vi.fn(),
@@ -52,7 +52,7 @@ import { installSuperpowers } from "../../../../src/core/superpowers.js";
 import { deploySkills, deploySchema } from "../../../../src/core/skills.js";
 import { injectAgentConfigs, writePermissionsConfig, writeHookConfig, writeStopHookConfig } from "../../../../src/core/agent-config.js";
 import { runHealthCheck } from "../../../../src/core/health.js";
-import { getPackageRoot } from "../../../../src/utils/fs.js";
+import { getPackageRoot, getAlloyCliPath } from "../../../../src/utils/fs.js";
 import { readProjectConfig, writeProjectConfig } from "../../../../src/cli/utils/state.js";
 import { readFile } from "node:fs/promises";
 import { execute } from "../../../../src/cli/commands/init/execute.js";
@@ -76,6 +76,7 @@ beforeEach(() => {
   vi.mocked(writePermissionsConfig).mockResolvedValue(true);
   vi.mocked(runHealthCheck).mockResolvedValue([]);
   vi.mocked(getPackageRoot).mockReturnValue("/fake/package");
+  vi.mocked(getAlloyCliPath).mockReturnValue("/fake/package/dist/cli/index.js");
   vi.mocked(readProjectConfig).mockResolvedValue({ schema: "alloy", alloy: {} });
   // readFile 模拟文件不存在(ENOENT),让 ensureGitignore 等函数走"新建"分支
   vi.mocked(readFile).mockRejectedValue(Object.assign(new Error("ENOENT"), { code: "ENOENT" }));
