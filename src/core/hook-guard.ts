@@ -49,6 +49,7 @@ const APPLY_PHASES = new Set(["applying", "applied", "finishing", "finished"]);
  * - openspec/:change 产物(proposal/design/specs/tasks/plans/verify/retrospective)
  * - .alloy.yaml:state 文件(由 _state 命令写)
  * - .claude/、.agents/、.opencode/、.pi/:agent 配置 + 共享 skills 运行时(npx skills add 装到 .agents/skills/)
+ * - .superpowers/:superpowers 运行时目录(brainstorming Visual Companion 布局文件等,已 gitignore)
  * - docs/:文档
  * - *.md:markdown 文件(任意位置,含 README/CLAUDE.md/AGENTS.md)
  * - .gitignore、.gitattributes:git 配置
@@ -60,6 +61,7 @@ const NON_APPLY_WHITELIST: RegExp[] = [
   /^\.claude\//,  /^\.agents\//,
   /^\.opencode\//,
   /^\.pi\//,
+  /^\.superpowers\//,
   /^docs\//,
   /\.md$/,
   /^\.gitignore$/,

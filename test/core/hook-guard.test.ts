@@ -99,6 +99,11 @@ describe("hook-guard guardCheck", () => {
       expect(result.allowed).toBe(true);
     });
 
+    it("planning 阶段放行 .superpowers/(brainstorming Visual Companion 运行时)", () => {
+      const result = guardCheck({ filePath: ".superpowers/brainstorm/123/content/layout.html", phases: ["planning"] });
+      expect(result.allowed).toBe(true);
+    });
+
     it("放行 .md 文件(任意位置)", () => {
       const result = guardCheck({ filePath: "README.md", phases: ["started"] });
       expect(result.allowed).toBe(true);
