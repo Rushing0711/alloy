@@ -67,7 +67,7 @@ describe("hook-guard guardCheck", () => {
       expect(result.allowed).toBe(true);
     });
 
-    it("finished 阶段放行 src/", () => {
+    it("finished 阶段放行 src/(pre-commit-check 放行 squash merge commit 用)", () => {
       const result = guardCheck({ filePath: "src/foo.ts", phases: ["finished"] });
       expect(result.allowed).toBe(true);
     });

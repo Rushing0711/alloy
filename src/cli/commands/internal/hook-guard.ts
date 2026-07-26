@@ -117,20 +117,35 @@ function scanAllChangeDirs(projectRoot: string): string[] {
 }
 
 /**
+ * 从 .alloy.yaml 内容读 phase(去引号),用于跳过 finished change。
+ * 已完成(phase=finished)的 change 不应影响 alloy--不再收集其 phase/pending_gate/worktree,
+ * 也不再被 clearAllPendingGates 改写。
+ */
+function readPhase(content: string): string | null {
+  const match = content.match(/^phase:\s*(.+)$/m);
+  if (!match) return null;
+  return match[1].trim().replace(/^["']|["']$/g, "");
+}
+
+/**
  * 扫描所有 change(活跃 + 归档,主仓 + 所有 worktree)的 .alloy.yaml,收集所有 phase。
  * 非 alloy 项目(无 openspec/changes/)返回空数组。
- * 含 archive/ 下的 archived/finishing/finished phase(用于 guardCheck 放行 finish 阶段合入)。
+ * 含 archive/ 下的 archived/finishing phase(finished 默认跳过--已完成 change 不影响 alloy)。
+ *
+ * includeFinished=true 时含 finished:仅 pre-commit-check 用--finish 阶段 squash merge commit
+ * 发生在 _phase complete finish 后(phase=finished),git commit 触发 pre-commit,需放行 staged src/。
+ * PreToolUse hook(hook-guard)用默认值(false),已完成 change 不放行新写源码。
  */
-export function collectPhases(projectRoot: string): string[] {
+export function collectPhases(projectRoot: string, includeFinished = false): string[] {
   const phases: string[] = [];
   for (const changeDir of scanAllChangeDirs(projectRoot)) {
     const stateFile = join(changeDir, ".alloy.yaml");
     try {
       const content = readFileSync(stateFile, "utf-8");
-      const match = content.match(/^phase:\s*(.+)$/m);
-      if (match) {
-        phases.push(match[1].trim().replace(/^["']|["']$/g, ""));
-      }
+      const phase = readPhase(content);
+      if (!phase) continue;
+      if (!includeFinished && phase === "finished") continue; // 已完成 change 不影响 alloy(PreToolUse 跳过)
+      phases.push(phase);
     } catch {
       // 文件不存在,跳过
     }
@@ -148,6 +163,7 @@ export function collectPendingGates(projectRoot: string): string[] {
     const stateFile = join(changeDir, ".alloy.yaml");
     try {
       const content = readFileSync(stateFile, "utf-8");
+      if (readPhase(content) === "finished") continue; // 已完成 change 不影响 alloy
       const match = content.match(/^pending_gate:\s*(.+)$/m);
       if (match) {
         const gate = match[1].trim().replace(/^["']|["']$/g, "");
@@ -185,6 +201,7 @@ export function collectWorktreePaths(projectRoot: string): string[] {
     const stateFile = join(changeDir, ".alloy.yaml");
     try {
       const content = readFileSync(stateFile, "utf-8");
+      if (readPhase(content) === "finished") continue; // 已完成 change 不影响 alloy
       const match = content.match(/^worktree:\s*(.+)$/m);
       if (match) {
         const wt = match[1].trim().replace(/^["']|["']$/g, "");
@@ -241,6 +258,7 @@ export async function clearAllPendingGates(projectRoot: string): Promise<void> {
     const stateFile = join(changeDir, ".alloy.yaml");
     try {
       const content = readFileSync(stateFile, "utf-8");
+      if (readPhase(content) === "finished") continue; // 已完成 change 不被改写--alloy 不影响它
       const match = content.match(/^pending_gate:\s*(.+)$/m);
       if (match) {
         const gate = match[1].trim().replace(/^["']|["']$/g, "");

@@ -97,7 +97,7 @@ function readStagedFiles(): string[] {
  */
 export async function preCommitCheckCommand(args: string[]): Promise<void> {
   const projectRoot = process.cwd();
-  const phases = collectPhases(projectRoot);
+  const phases = collectPhases(projectRoot, true); // 含 finished:放行 finish 阶段 squash merge commit
   const pendingGates = collectPendingGates(projectRoot);
   const isAlloy = isAlloyProject(projectRoot);
   const mergeInProgress = isMergeInProgress(projectRoot);

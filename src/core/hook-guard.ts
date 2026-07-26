@@ -37,7 +37,11 @@ export interface GuardResult {
   reason: string;
 }
 
-/** 允许写源码的阶段:apply(写源码)+ finishing/finished(finish 阶段合入 main 的 squash merge commit) */
+/** 允许写源码的阶段:apply(写源码)+ finishing/finished(finish 阶段合入 main 的 squash merge commit)。
+ * finished 保留:pre-commit-check 放行 squash merge commit(_phase complete finish 后 phase=finished,
+ * 随后 git commit 触发 pre-commit,需放行 staged src/)。
+ * PreToolUse hook(hook-guard)的 collectPhases 默认跳过 finished,故 Write/Edit 不受已完成 change 影响。
+ * finished 在此保留是为 pre-commit-check 的纯函数判定(guardCheck({phases:["finished"]}) 放行)。 */
 const APPLY_PHASES = new Set(["applying", "applied", "finishing", "finished"]);
 
 /**
