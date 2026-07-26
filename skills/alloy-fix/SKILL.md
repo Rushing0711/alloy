@@ -130,22 +130,29 @@ HIT=$(alloy _fix detect-keywords $USER_DESC $DIAGNOSIS)
 >
 > 选项：
 > 1. 这是真正的 bug 修复--spec 行为坏了（继续 fix）
-> 2. 这是新需求 / 重构 / 优化--自动接续 `/alloy-start`（agent invoke Skill 工具，args = $USER_DESC）
-> 3. 两者混合--自动接续 `/alloy-start`，剩余 bug 再回 fix
+> 2. 这是新需求 / 重构 / 优化--接续 `/alloy-start`（agent 读 alloy-shared + alloy-start SKILL.md 执行，主题 = $USER_DESC）
+> 3. 两者混合--接续 `/alloy-start`，剩余 bug 再回 fix
 
 **⛔ HARD_STOP** agent 不得基于"用户用了 fix 命令所以一定是 bug"自动选 1--必须用户物理选择。命中关键词且未经 USER_GATE 直接进 Step 3 = 违反 Iron Law。
 
 **违反字面 = 违反精神：** 哪怕"用户描述里说了 bug 字样"或"诊断结论看着像 bug"，只要命中关键词就必须 USER_GATE。fix 流程跳过新 change 闸门 = spec 与代码分叉的隐蔽路径。
 
-**选 2/3. 后自动接续 start（禁止让用户手动输命令）：**
+**选 2/3. 后接续 start（禁止让用户手动输命令）：**
 
-用户选 2 或 3. -> agent 直接 invoke `alloy-start` Skill 工具，`args = "$USER_DESC"`（用户原始描述）。**不输出 "CANCELLED，请运行 /alloy-start" 让用户手动输**--那是体验断裂。agent 交接：
+`alloy-start` 设了 `disable-model-invocation: true`（frontmatter），禁止 agent 用 Skill 工具调用。原因：start 是用户意图入口，防 agent 在其他场景自行滥用开 change。fix 在 USER_GATE 授权后接续属于例外--不走 Skill 工具，改读 SKILL.md 执行：
+
+1. 先读 `skills/alloy-shared/SKILL.md`（alloy-start REQUIRED BACKGROUND: Understand alloy-shared，跳过会缺交互规则/状态符号/输出规则等上下文）
+2. 再读 `skills/alloy-start/SKILL.md`，按其指引执行（环境检测 -> 路由 -> 主题确认 -> 分支创建 -> brainstorming 全走完）
+
+用户选 2 或 3. -> agent 读 SKILL.md 执行，`$USER_DESC`（用户原始描述）作为 start 的主题输入。**不输出 "CANCELLED，请运行 /alloy-start" 让用户手动输**--那是体验断裂。agent 交接：
 
 ```
 Alloy · Bug 修复 - HANDOFF -> /alloy-start
 诊断结论：spec 变更（非 bug）
-交接：自动调用 /alloy-start "$USER_DESC"，start 流程接管
+交接：读 alloy-shared + alloy-start SKILL.md，以 "$USER_DESC" 为主题执行 start 流程
 ```
+
+**为何不用 Skill 工具：** `disable-model-invocation` 是全局的，无法区分"agent 滥用 start"和"fix 在 USER_GATE 授权后接续"。读 SKILL.md 执行是可行路径--alloy 的 hard_stop 由 CLI 层硬约束（`alloy _guard`/`alloy _phase`），agent 绕不过，纪律不因加载方式而放松。
 
 **交接后 agent 不得：** 跳过 start 的任何 USER_GATE（环境检测 / 路由 / 主题确认 / 分支创建 / brainstorming 全走完）。start 流程的纪律不因"从 fix 接续而来"而放松--start.md 的 Iron Law 同样适用。
 
@@ -247,7 +254,7 @@ alloy _skill log openspec/changes/<name> fix superpowers:verification-before-com
 
 > 修复中发现 spec 可能需要变更：<问题描述>。
 > 🔴 STOP: 是否开新 change？
-> 1. 开新 change -> 自动接续 /alloy-start（agent invoke Skill 工具，args = "<问题描述>"）
+> 1. 开新 change -> 接续 `/alloy-start`（agent 读 alloy-shared + alloy-start SKILL.md 执行，主题 = "<问题描述>"）
 > 2. 暂不开 -> 结束 fix
 
 正常修复完成 -> 不提示。
