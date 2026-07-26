@@ -127,7 +127,7 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   // 阶段 3: plan + display + 确认
   const actionPlan = await plan(
     collectResult,
-    { scope, targetAgents, mainBranch },
+    { scope, targetAgents, mainBranch, force: opts.force },
     opts.projectPath
   );
   const confirmed = await displayAndConfirm(actionPlan, opts.force ?? false);

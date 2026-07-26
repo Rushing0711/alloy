@@ -140,16 +140,13 @@ export async function updateOpenSpecCommands(
   const home = process.env.HOME || process.env.USERPROFILE || "~";
   const targetPath = scope === "global" ? home : projectPath;
 
-  const TOOL_MAP: Record<string, string> = {
-    "claude-code": "claude",    "opencode": "opencode",
-    "pi": "pi",
-  };
-  const tools = agents.map(a => TOOL_MAP[a.id] ?? "claude").join(",");
-
+  // openspec update 只支持 --force,不支持 --tools/--profile(那是 openspec init 的选项)。
+  // update 基于项目已有 openspec 配置 + XDG_CONFIG_HOME 下的 profile config 识别 tools,
+  // 不需要也不接受 --tools/--profile。此前误传 --tools 导致 "unknown option '--tools'" 失败。
   const profile = createCustomProfile();
   try {
     execSync(
-      `openspec update ${JSON.stringify(targetPath)} --tools ${tools} --profile custom`,
+      `openspec update ${JSON.stringify(targetPath)}`,
       { stdio: "pipe", timeout: 120_000, env: profile.env },
     );
     return "updated";

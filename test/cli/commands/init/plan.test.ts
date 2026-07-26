@@ -265,4 +265,14 @@ describe("plan", () => {
     expect(result.targetAgents).toEqual([claudeAgent]);
     expect(result.mainBranch).toBe("develop");
   });
+
+  it("force=true 时 alloy-skills 已装+版本相同(canUpgrade=false)仍 action=upgrade", async () => {
+    // baseCollectResult 的 alloySkills: version=0.4.0, canUpgrade=false(版本相同)
+    // 无 force -> skip; 有 force -> upgrade(强制覆盖)
+    const noForce = await plan(baseCollectResult, { scope: "project", targetAgents: [claudeAgent], mainBranch: "main" }, "/test");
+    expect(noForce.agentActions.find(a => a.product === "alloy-skills")?.action).toBe("skip");
+
+    const withForce = await plan(baseCollectResult, { scope: "project", targetAgents: [claudeAgent], mainBranch: "main", force: true }, "/test");
+    expect(withForce.agentActions.find(a => a.product === "alloy-skills")?.action).toBe("upgrade");
+  });
 });

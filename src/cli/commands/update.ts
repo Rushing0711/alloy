@@ -132,6 +132,7 @@ export async function updateCommand(
     scope,
     targetAgents,
     mainBranch: config.alloy?.main_branch ?? "main",
+    force, // -f: 强制覆盖更新,忽略版本检测
   }, projectPath);
 
   // 3. displayAndConfirm(force 跳过)

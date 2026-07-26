@@ -92,7 +92,7 @@ alloy update [path] [options]
 刷新 init 写过的所有产物到当前 alloy 版本。从 openspec/config.yaml 读 install_scope + target_agents,复用 init 的矩阵展示 + execute 流程。用户模式额外升级 alloy CLI + OpenSpec CLI + Superpowers;开发模式跳过 npm/npx 升级。
 
 选项:
-  --force, -f    跳过确认（执行清单 / 升级 alloy CLI），自动化场景使用
+  --force, -f    强制覆盖更新：忽略版本检测，已装 alloy skills 强制重新部署到当前 alloy 版本（同时跳过执行清单确认）。Superpowers 由 update 本身每次重装，无需 -f。开发模式测试源码改动时用
   --help, -h     显示本帮助
 `;
     case "clean":
@@ -332,10 +332,7 @@ async function main() {
       const { values, positionals } = parseArgs({
         args: restArgs,
         options: {
-          force: { type: "boolean", default: false },
-        },
-        short: {
-          f: "force",
+          force: { type: "boolean", short: "f", default: false },
         },
         strict: true,
         allowPositionals: true,
@@ -352,10 +349,7 @@ async function main() {
         args: restArgs,
         options: {
           scope: { type: "string" },
-          force: { type: "boolean", default: false },
-        },
-        short: {
-          f: "force",
+          force: { type: "boolean", short: "f", default: false },
         },
         strict: true,
         allowPositionals: true,

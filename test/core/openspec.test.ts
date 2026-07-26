@@ -254,7 +254,7 @@ describe("updateOpenSpecCommands", () => {
     vi.mocked(mkdtempSync).mockReturnValue("/tmp/alloy-openspec-profile-XXXXX");
   });
 
-  it("scope=project 时调 openspec update <projectPath> --tools <agents>", async () => {
+  it("scope=project 时调 openspec update <projectPath>(不带 --tools/--profile)", async () => {
     vi.mocked(execSync).mockReturnValue("");
 
     const result = await updateOpenSpecCommands(
@@ -265,7 +265,7 @@ describe("updateOpenSpecCommands", () => {
 
     expect(result).toBe("updated");
     expect(execSync).toHaveBeenCalledWith(
-      expect.stringMatching(/openspec update .* --tools claude,opencode --profile custom/),
+      expect.stringMatching(/^openspec update "\/test\/project"$/),
       expect.any(Object)
     );
   });

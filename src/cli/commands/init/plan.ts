@@ -60,6 +60,15 @@ export interface PlanChoices {
   scope: "global" | "project";
   targetAgents: AgentInfo[];
   mainBranch: string;
+  /**
+   * 强制覆盖更新(update -f):忽略版本检测,已装 alloy skills 强制重新部署。
+   * - alloy-skills:已装但版本相同(canUpgrade=false)时,action 从 skip 改为 upgrade
+   * - Superpowers 不受 force 影响:用户模式 `alloy update` 每次都调 installSuperpowers
+   *   (npx 重装,失败则用当前 alloy 包内 vendor 覆盖),本就强制更新,无需 force
+   * - 未装/breaking/canUpgrade 的产物不受影响(本就要装/升)
+   * init 不传(保持原语义:init 的 -f 是跳确认,与版本判定无关)
+   */
+  force?: boolean;
 }
 
 /**
@@ -148,7 +157,7 @@ export async function plan(
         targetVersion: currentAlloyVersion,
         reason: `${status.alloySkills.version} 不满足 compat.yaml "${compat.compatible.alloy}"`,
       });
-    } else if (status.alloySkills.canUpgrade) {
+    } else if (status.alloySkills.canUpgrade || choices.force) {
       agentActions.push({
         agentId: agent.id,
         product: "alloy-skills",
