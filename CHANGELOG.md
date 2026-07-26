@@ -2,6 +2,15 @@
 
 本文件记录 @flyin-ai/alloy 的所有版本变更。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.5.2] - 2026-07-27
+
+### Fixed
+
+- **hook-guard 白名单补 .superpowers/ 运行时目录**: start 阶段 superpowers brainstorming 写 `.superpowers/brainstorm/<id>/layout.html` 被拦截,白名单增加 `/^\.superpowers\//` 规则
+- **hook-guard 跳过已归档 finished change**: `collectPhases` 默认跳过 phase=finished,避免已归档 change 影响新流程执行;pre-commit-check 用 `collectPhases(..., includeFinished: true)` 放行 finish 阶段 squash merge commit
+- **update/clean/init 命令修复 + -f/--force 语义增强**: `parseArgs` short 别名改选项定义内 `short: "f"`; `update -f` / `init --force` 忽略版本检测,强制覆盖已装 alloy skills; `update` 修复 `openspec update` 误传 `--tools/--profile` 导致的 `unknown option`
+- **alloy-fix 接续流程**: alloy-fix 自动接续被 `disable-model-invocation: true` 拦截的 `/alloy-start` 调用,改读 alloy-shared + alloy-start SKILL.md 执行
+
 ## [0.5.1] - 2026-07-23
 
 ### Fixed
