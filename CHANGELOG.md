@@ -2,6 +2,19 @@
 
 本文件记录 @flyin-ai/alloy 的所有版本变更。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.5.3] - 2026-07-27
+
+### Fixed
+
+- **Windows 兼容性修复 - 移除 Unix-only shell 命令**:Windows PowerShell/cmd.exe 不识别 `cat`/`grep`/`command -v`/`2>/dev/null`/`cd && git` 等 Unix 命令,导致 alloy 在 Windows 上执行 `/alloy-start` 报 `PRECONDITION_FAIL: Alloy 环境不完整`(env.ts 用 `cat` 读 `config.yaml` 触发)。逐个改用 Node API(`readFileSync`)+ 跨平台命令(`where`/`which` 按 `process.platform` 分支)+ `opts.cwd` 替代 `cd && git`。修复涉及 6 个源文件 10+ 处问题(env.ts/precheck.ts/git.ts/worktree-create.ts/worktree-cleanup.ts/finish-cleanup.ts),新增 9 个回归测试 `test/core/windows-compat.test.ts` 静态扫描源码防止回归。
+- **env.ts `cat` -> `readFileSync`**:`cat openspec/config.yaml` 改用 `readFileSync(configPath, { encoding: "utf-8" })` + 正则 `/^schema:\s*alloy\b/m` 检测 `schema: alloy`,PowerShell 无 `cat` 不再误报 config 缺失
+- **precheck.ts `command -v` -> `where`/`which`**:`command -v openspec` 是 bash builtin,改用 `process.platform === "win32" ? "where openspec" : "which openspec"`,Windows 自带 `where`,Unix 用 `which`
+- **git.ts 移除 `2>/dev/null`**:`git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null` 的 `2>/dev/null` 在 PowerShell/cmd 不识别,gitExec 已 try/catch 兜底,直接移除重定向
+- **worktree-create.ts `grep -q` -> `readFileSync` + 正则**:`grep -q "^\.worktrees/" .gitignore` 改用 `readFileSync(gitignorePath, "utf-8")` + 正则 `/^\.worktrees\//m`,PowerShell 无 `grep` 不再误判 `.worktrees/` 规则缺失
+- **worktree-create.ts/worktree-cleanup.ts 拆 `&& ... ||` 链式调用**:`git add ... && git diff --cached --quiet || git commit` 拆为顺序 `gitExec` 调用,cmd.exe 解析嵌套引号 + 链式运算符不稳定,拆开后每步独立 try/catch
+- **worktree-cleanup.ts `cd && git` -> `opts.cwd`**:`cd "${worktreePath}" && git status --porcelain` 改用 `gitExec("git status --porcelain", { cwd: worktreePath })`,避免 cmd.exe 下 `cd` 路径含空格解析问题
+- **worktree-cleanup.ts/finish-cleanup.ts 移除 `2>/dev/null`**:同 git.ts,gitExec 已兜底,移除 PowerShell 不识别的重定向
+
 ## [0.5.2] - 2026-07-27
 
 ### Fixed
