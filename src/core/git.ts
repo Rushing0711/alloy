@@ -78,7 +78,8 @@ export function isHeadUnborn(projectPath: string): boolean {
 export function detectMainBranch(projectPath: string): string | null {
   // 1. remote HEAD
   try {
-    const out = execSync("git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null", {
+    // Windows 兼容:移除 `2>/dev/null`(PowerShell/cmd 不识别),gitExec 已 try/catch
+    const out = execSync("git symbolic-ref refs/remotes/origin/HEAD", {
       cwd: projectPath,
       encoding: "utf-8",
       stdio: "pipe",

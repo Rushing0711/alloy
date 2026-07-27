@@ -71,7 +71,8 @@ export async function finishCleanupCommand(args: string[]): Promise<void> {
   }
 
   // 3. 校验 feature-branch 存在
-  const branchCheck = gitExec(`git rev-parse --verify "${featureBranchArg}" 2>/dev/null`);
+  // Windows 兼容:移除 `2>/dev/null`,gitExec 已 try/catch + .ok 字段
+  const branchCheck = gitExec(`git rev-parse --verify "${featureBranchArg}"`);
   if (!branchCheck.ok) {
     console.error(`⛔ [PRECONDITION_FAIL] feature 分支 ${featureBranchArg} 不存在`);
     console.error("  可能原因:分支已删 / 未创建 / 名字不匹配。退出 skill 让用户检查。");

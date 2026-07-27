@@ -1,5 +1,5 @@
 // src/cli/commands/internal/env.ts
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { detectDeployedAgents } from "../../../core/agents.js";
@@ -26,11 +26,12 @@ export function checkEnvIntegrity(projectPath: string): EnvCheckResult {
   }
 
   // 2. openspec/config.yaml 含 schema: alloy
+  // Windows 兼容:用 readFileSync 替代 `cat <file>`(PowerShell 无 cat)
   const configPath = join(projectPath, "openspec", "config.yaml");
   let configOk = false;
   if (existsSync(configPath)) {
     try {
-      const content = execSync(`cat "${configPath}"`, { encoding: "utf-8" });
+      const content = readFileSync(configPath, { encoding: "utf-8" });
       configOk = /^schema:\s*alloy\b/m.test(content);
     } catch {
       configOk = false;

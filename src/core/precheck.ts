@@ -108,10 +108,14 @@ function isCmdReady(cmd: string, agent: AgentInfo, projectPath: string): boolean
   return false;
 }
 
-/** 检测 openspec CLI 是否可用(opsx 命令依赖 openspec 二进制) */
+/** 检测 openspec CLI 是否可用(opsx 命令依赖 openspec 二进制)
+ * Windows 兼容:不用 bash builtin `command -v`,改用 `where`(Windows)/`which`(Unix)
+ */
 function isOpenspecCliReady(): boolean {
   try {
-    execSync("command -v openspec", { stdio: "pipe" });
+    // Windows 用 where(自带),Unix 用 which
+    const cmd = process.platform === "win32" ? "where openspec" : "which openspec";
+    execSync(cmd, { stdio: "pipe" });
     return true;
   } catch {
     return false;

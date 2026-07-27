@@ -19,13 +19,16 @@ vi.mock("../../../src/cli/utils/state.js", () => ({
   addClearedGate: (...args: unknown[]) => addClearedGateMock(...args),
 }));
 
-// mock existsSync(默认 false,测试可临时改 true 验证 gate_history 同步)
+// mock existsSync + readFileSync
+// existsSync 默认 true:.gitignore 校验 + syncGateHistoryFromMainRepo 内 .alloy.yaml 检查都通过
+// readFileSync 默认返回 ".worktrees/\n":.gitignore 含 .worktrees/ 规则(替代原 grep -q)
 vi.mock("node:fs", () => ({
-  existsSync: vi.fn(() => false),
+  existsSync: vi.fn(() => true),
+  readFileSync: vi.fn(() => ".worktrees/\n"),
 }));
 
 import { worktreeCreateCommand } from "../../../src/cli/commands/internal/worktree-create.js";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 const CHANGE_DIR = "openspec/changes/test-change";
 const CHANGE_NAME = "test-change";
@@ -41,7 +44,8 @@ describe("alloy _worktree-create", () => {
     readStateMock.mockReset();
     setPendingGateMock.mockReset();
     addClearedGateMock.mockReset();
-    vi.mocked(existsSync).mockReturnValue(false);
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue(".worktrees/\n");
   });
 
   afterEach(async () => {
@@ -128,8 +132,7 @@ describe("alloy _worktree-create", () => {
       if (cmd === "git rev-parse --git-common-dir") return "/main/.git\n";
       if (cmd === "git branch --show-current") return "feature/test-change\n";
       if (cmd === "git status --porcelain") return ""; // clean
-      if (cmd === "grep -q '^.worktrees/' .gitignore") return ""; // .gitignore 有规则
-      if (cmd === `git rev-parse --verify ${WORKTREE_BRANCH} 2>/dev/null`) return "abc123\n"; // 分支已存在
+      if (cmd === `git rev-parse --verify ${WORKTREE_BRANCH}`) return "abc123\n"; // 分支已存在
       return "";
     });
 
@@ -153,12 +156,13 @@ describe("alloy _worktree-create", () => {
       if (cmd === "git rev-parse --git-common-dir") return "/main/.git\n";
       if (cmd === "git branch --show-current") return "feature/test-change\n";
       if (cmd === "git status --porcelain") return ""; // clean
-      if (cmd === "grep -q '^.worktrees/' .gitignore") return ""; // .gitignore 有规则
-      if (cmd === `git rev-parse --verify ${WORKTREE_BRANCH} 2>/dev/null`) {
+      if (cmd === `git rev-parse --verify ${WORKTREE_BRANCH}`) {
         throw new Error("branch not found"); // 分支不存在(校验通过)
       }
       if (cmd === "git rev-parse --show-toplevel") return "/main\n";
       if (cmd.startsWith('git worktree add')) return "Preparing worktree\n";
+      // git diff --cached --quiet:exit 1(有变化,触发 commit)
+      if (cmd === "git diff --cached --quiet") throw new Error("has staged changes");
       return "";
     });
 
@@ -225,8 +229,7 @@ describe("alloy _worktree-create", () => {
       if (cmd === "git rev-parse --git-common-dir") return "/main/.git\n";
       if (cmd === "git branch --show-current") return "feature/test-change\n";
       if (cmd === "git status --porcelain") return "";
-      if (cmd === "grep -q '^.worktrees/' .gitignore") return "";
-      if (cmd === `git rev-parse --verify ${WORKTREE_BRANCH} 2>/dev/null`) {
+      if (cmd === `git rev-parse --verify ${WORKTREE_BRANCH}`) {
         throw new Error("branch not found");
       }
       if (cmd === "git rev-parse --show-toplevel") return "/main\n";

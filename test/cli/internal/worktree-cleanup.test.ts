@@ -26,7 +26,7 @@ const STATE_YAML = `worktree: /path/to/wt\nfeature_branch: feature/test\nworktre
 // mock 前置:worktree 分支存在 + git show 读 state
 function mockBranchAndState(extra?: (cmd: string) => string | undefined) {
   execSyncMock.mockImplementation((cmd: string) => {
-    if (cmd === `git rev-parse --verify ${WORKTREE_BRANCH} 2>/dev/null`) return "abc123\n";
+    if (cmd === `git rev-parse --verify ${WORKTREE_BRANCH}`) return "abc123\n";
     if (cmd === `git show ${WORKTREE_BRANCH}:${CHANGE_DIR}/.alloy.yaml`) return STATE_YAML + "\n";
     return extra?.(cmd) ?? "";
   });
@@ -62,7 +62,7 @@ describe("alloy _worktree-cleanup", () => {
 
   it("worktree 分支不存在 -> PRECONDITION_FAIL", async () => {
     execSyncMock.mockImplementation((cmd: string) => {
-      if (cmd === `git rev-parse --verify ${WORKTREE_BRANCH} 2>/dev/null`) {
+      if (cmd === `git rev-parse --verify ${WORKTREE_BRANCH}`) {
         throw new Error("unknown revision");
       }
       return "";
@@ -80,7 +80,7 @@ describe("alloy _worktree-cleanup", () => {
 
   it("无法从 worktree 分支读 .alloy.yaml -> PRECONDITION_FAIL", async () => {
     execSyncMock.mockImplementation((cmd: string) => {
-      if (cmd === `git rev-parse --verify ${WORKTREE_BRANCH} 2>/dev/null`) return "abc123\n";
+      if (cmd === `git rev-parse --verify ${WORKTREE_BRANCH}`) return "abc123\n";
       if (cmd === `git show ${WORKTREE_BRANCH}:${CHANGE_DIR}/.alloy.yaml`) {
         throw Object.assign(new Error("not found"), {
           stdout: Buffer.from(""), stderr: Buffer.from("fatal: pathspec"),
@@ -255,7 +255,7 @@ describe("alloy _worktree-cleanup", () => {
           stdout: Buffer.from(""), stderr: Buffer.from("contains untracked files"),
         });
       }
-      if (cmd === "cd \"/path/to/wt\" && git status --porcelain") return "?? test_hello.sh\n";
+      if (cmd === "git status --porcelain") return "?? test_hello.sh\n";
       if (cmd === "git worktree remove --force \"/path/to/wt\"") return "";
       if (cmd === "git branch -d worktree-test") return "Deleted branch worktree-test\n";
       return "";
@@ -286,7 +286,7 @@ describe("alloy _worktree-cleanup", () => {
           stdout: Buffer.from(""), stderr: Buffer.from("contains modified files"),
         });
       }
-      if (cmd === "cd \"/path/to/wt\" && git status --porcelain") return ` M ${CHANGE_DIR}/.alloy.yaml\n`;
+      if (cmd === "git status --porcelain") return ` M ${CHANGE_DIR}/.alloy.yaml\n`;
       if (cmd === "git worktree remove --force \"/path/to/wt\"") return "";
       if (cmd === "git branch -d worktree-test") return "Deleted branch worktree-test\n";
       return "";
@@ -317,7 +317,7 @@ describe("alloy _worktree-cleanup", () => {
           stdout: Buffer.from(""), stderr: Buffer.from("contains modified files"),
         });
       }
-      if (cmd === "cd \"/path/to/wt\" && git status --porcelain") return " M src/some-file.ts\n";
+      if (cmd === "git status --porcelain") return " M src/some-file.ts\n";
       return "";
     });
     const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);

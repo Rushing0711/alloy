@@ -11,7 +11,7 @@
 //
 // 约定:worktree 分支名 = worktree-<change-name>(不是 feature 分支),路径 .worktrees/<change-name>
 import { execSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path, { join, basename } from "node:path";
 import { readState, formatTimestamp, setPendingGate, addClearedGate } from "../../utils/state.js";
 
@@ -164,7 +164,18 @@ export async function worktreeCreateCommand(args: string[]): Promise<void> {
   }
 
   // 4. 校验 .worktrees/ 已在 .gitignore
-  const gitignoreCheck = gitExec("grep -q '^.worktrees/' .gitignore").ok;
+  // Windows 兼容:不用 `grep -q`(PowerShell 无 grep),改用 readFileSync + 正则
+  // 原 BRE `^.worktrees/` 中 `.` 是字面字符,JS 正则需转义为 `^\.worktrees\/`
+  let gitignoreCheck = false;
+  const gitignorePath = join(process.cwd(), ".gitignore");
+  if (existsSync(gitignorePath)) {
+    try {
+      const gitignoreContent = readFileSync(gitignorePath, { encoding: "utf-8" });
+      gitignoreCheck = /^\.worktrees\//m.test(gitignoreContent);
+    } catch {
+      gitignoreCheck = false;
+    }
+  }
   if (!gitignoreCheck) {
     console.error("⛔ [PRECONDITION_FAIL] .gitignore 缺少 .worktrees/ 规则");
     console.error("  alloy init 应写入此规则,可能 init 未完成或 .gitignore 被改");
@@ -174,7 +185,8 @@ export async function worktreeCreateCommand(args: string[]): Promise<void> {
   }
 
   // 5. 校验 worktree 分支不存在(避免重复创建)
-  const branchCheck = gitExec(`git rev-parse --verify ${worktreeBranch} 2>/dev/null`);
+  // Windows 兼容:移除 `2>/dev/null`,gitExec 已 try/catch + .ok 字段
+  const branchCheck = gitExec(`git rev-parse --verify ${worktreeBranch}`);
   if (branchCheck.ok) {
     console.error(`⛔ [PRECONDITION_FAIL] worktree 分支 ${worktreeBranch} 已存在`);
     console.error(`  可能原因:之前创建过 worktree 但未清理(state.worktree 可能残留)`);
@@ -222,10 +234,17 @@ export async function worktreeCreateCommand(args: string[]): Promise<void> {
   }
 
   // 8. git add .alloy.yaml + commit(worktree 内)
-  const commitResult = gitExec(
-    `git add openspec/changes/${changeName}/.alloy.yaml && git diff --cached --quiet || git commit -m "chore(${changeName}): 记录 worktree 状态"`,
-    { cwd: absWorktreePath }
-  );
+  // Windows 兼容:拆开 `git add ... && git diff --cached --quiet || git commit` 链式调用
+  // cmd.exe 对 && || 解析受引号嵌套影响,跨平台行为不一致
+  const stateAddResult = gitExec(`git add openspec/changes/${changeName}/.alloy.yaml`, { cwd: absWorktreePath });
+  let commitResult = stateAddResult;
+  if (stateAddResult.ok) {
+    // git diff --cached --quiet:exit 0=无变化,exit 1=有变化
+    const diffResult = gitExec(`git diff --cached --quiet`, { cwd: absWorktreePath });
+    if (!diffResult.ok) {
+      commitResult = gitExec(`git commit -m "chore(${changeName}): 记录 worktree 状态"`, { cwd: absWorktreePath });
+    }
+  }
   if (!commitResult.ok) {
     console.error("⚠️  worktree state 已写入但 commit 失败(不致命,后续命令会 commit)");
     console.error(`  ${commitResult.stderr}`);
@@ -294,9 +313,15 @@ async function worktreeRecordOnly(args: string[], changeDir: string): Promise<vo
   }
 
   // git add .alloy.yaml + commit(在 worktree 内)
-  const commitResult = gitExec(
-    `git add openspec/changes/${changeName}/.alloy.yaml && git diff --cached --quiet || git commit -m "chore(${changeName}): 记录 worktree 状态(--record-only)"`
-  );
+  // Windows 兼容:拆开 && || 链式调用,见上方说明
+  const addResult = gitExec(`git add openspec/changes/${changeName}/.alloy.yaml`);
+  let commitResult = addResult;
+  if (addResult.ok) {
+    const diffResult = gitExec(`git diff --cached --quiet`);
+    if (!diffResult.ok) {
+      commitResult = gitExec(`git commit -m "chore(${changeName}): 记录 worktree 状态(--record-only)"`);
+    }
+  }
   if (!commitResult.ok) {
     console.error(`⚠️ worktree state 已写入但 commit 失败: ${commitResult.stderr}`);
   } else {

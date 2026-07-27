@@ -48,7 +48,8 @@ export async function worktreeCleanupCommand(args: string[]): Promise<void> {
   const worktreeBranch = `worktree-${changeName}`;
 
   // 校验 worktree 分支存在
-  const branchCheck = gitExec(`git rev-parse --verify ${worktreeBranch} 2>/dev/null`);
+  // Windows 兼容:移除 `2>/dev/null`,gitExec 已 try/catch + .ok 字段
+  const branchCheck = gitExec(`git rev-parse --verify ${worktreeBranch}`);
   if (!branchCheck.ok) {
     console.error(`⛔ [PRECONDITION_FAIL] worktree 分支 ${worktreeBranch} 不存在`);
     console.error(`  change-dir: ${changeDir}`);
@@ -108,7 +109,14 @@ export async function worktreeCleanupCommand(args: string[]): Promise<void> {
         // retrospective 用 worktree_created_at + worktree_merged_at 算存活时长,不依赖 worktree 字段
         state.worktree = null;
         await writeState(changeDir, state);
-        gitExec(`git add "${changeDir}/.alloy.yaml" && git diff --cached --quiet || git commit -m "chore: 记录 worktree 合并时间"`);
+        // Windows 兼容:拆开 `git add ... && git diff --cached --quiet || git commit` 链式调用
+        const __addResult = gitExec(`git add "${changeDir}/.alloy.yaml"`);
+        if (__addResult.ok) {
+          const __diffResult = gitExec(`git diff --cached --quiet`);
+          if (!__diffResult.ok) {
+            gitExec(`git commit -m "chore: 记录 worktree 合并时间"`);
+          }
+        }
         console.log("✓ worktree_merged_at 已记录,worktree 字段已清空");
       } catch {
         console.error(`⚠️ 无法读取 state: ${changeDir}/.alloy.yaml（merge 后再试）`);
@@ -277,7 +285,8 @@ export async function worktreeCleanupCommand(args: string[]): Promise<void> {
   console.log(`ℹ️ 删除 worktree 目录: ${worktreePath}`);
   const removeResult = gitExec(`git worktree remove "${worktreePath}"`);
   if (!removeResult.ok) {
-    const status = gitExec(`cd "${worktreePath}" && git status --porcelain`).stdout;
+    // Windows 兼容:不用 `cd "${path}" && git status`,改用 opts.cwd(cmd.exe 下 cd 路径含空格不稳定)
+    const status = gitExec(`git status --porcelain`, { cwd: worktreePath }).stdout;
     const lines = status.split("\n").filter((l) => l.trim());
 
     if (lines.length > 0) {
@@ -349,7 +358,14 @@ export async function worktreeCleanupCommand(args: string[]): Promise<void> {
     // retrospective 用 worktree_created_at + worktree_merged_at 算存活时长,不依赖 worktree 字段
     state.worktree = null;
     await writeState(changeDir, state);
-    gitExec(`git add "${changeDir}/.alloy.yaml" && git diff --cached --quiet || git commit -m "chore: 记录 worktree 合并时间"`);
+    // Windows 兼容:拆开 `git add ... && git diff --cached --quiet || git commit` 链式调用
+    const __addResult = gitExec(`git add "${changeDir}/.alloy.yaml"`);
+    if (__addResult.ok) {
+      const __diffResult = gitExec(`git diff --cached --quiet`);
+      if (!__diffResult.ok) {
+        gitExec(`git commit -m "chore: 记录 worktree 合并时间"`);
+      }
+    }
   } catch {
     console.error(`⚠️ 无法读取 state: ${changeDir}/.alloy.yaml（merge 后路径应存在，请检查）`);
     console.error("  worktree 已清理，但 worktree_merged_at 未记录--请手动检查");
