@@ -98,3 +98,16 @@ openspec/schemas/ # 制品 schema 定义
 ```
 
 **合并方式：** 推荐 squash and merge（包括本地 merge）。所有分支合并默认 `git merge --squash`，产生的单个 commit 使用 Conventional Commits 格式。这保持历史干净，每个功能/修复一个入口点。
+
+## 发布规范
+
+发版按以下顺序执行：
+
+1. **文档对齐检查**——改过 CLI/代码后，发版前检查 `skills/alloy-shared/references/cli-reference.md` + `docs/specification/` 与 `src/` 实际实现是否一致，有漂移先修复
+2. **版本号变更**——语义化版本：有 feat → 次版本号（0.5.3 → 0.6.0）；纯修复 → 修订号；不兼容变更 → 主版本号。`npm version X.Y.Z --no-git-tag-version`（同步 package.json + package-lock.json），commit `chore(release): X.Y.Z`
+3. **CHANGELOG**——追加 `## [X.Y.Z] - <日期>` 章节（Keep a Changelog 格式），commit `chore: update CHANGELOG for X.Y.Z`
+4. **测试 + build**——`npm test` 全量通过 + `npm run build`
+5. **tag + push**——`git tag vX.Y.Z`，push main + tags
+6. **GitHub release**——`gh release create vX.Y.Z`，title 用 `vX.Y.Z - <主变更概述>`，notes 参考 CHANGELOG
+7. **npm publish**（用户手动）
+8. **release 快照分支**——从 `vX.Y.Z` tag 指向的 commit 创建 `release/<version>` 分支并 push 远端，作为发布快照保留（既有惯例：release/0.3.1 ~ release/0.6.0）
