@@ -1,4 +1,4 @@
-import { readFile, writeFile, readdir, mkdir } from "node:fs/promises";
+import { readFile, writeFile, readdir, mkdir, rename } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import type { AlloyState, ProjectConfig } from "../../core/types.js";
@@ -57,6 +57,14 @@ export async function readState(changePath: string): Promise<AlloyState> {
   return state;
 }
 
+
+/** 原子写文件(tmp + rename):防止并发写撕裂(见 writeState 注释) */
+async function writeFileAtomic(path: string, content: string): Promise<void> {
+  const tmpPath = `${path}.tmp-${process.pid}`;
+  await writeFile(tmpPath, content, "utf-8");
+  await rename(tmpPath, path);
+}
+
 export async function writeState(
   changePath: string,
   state: AlloyState
@@ -65,7 +73,13 @@ export async function writeState(
   state.updated_at = formatTimestamp();
   const content = stringifyYaml(state);
   await mkdir(dirname(yamlPath), { recursive: true });
-  await writeFile(yamlPath, content, "utf-8");
+  // 原子写:tmp 文件 + rename,避免并发写撕裂状态文件。
+  // 实测(2026-08-02 OpenCode 会话):agent 一条消息内并行调 3 个 _skill log,
+  // 并发 writeFile 直接覆盖把 .alloy.yaml 撕裂成 `completed_at: null\null`,
+  // 后续 _artifact commit 报 YAMLParseError。
+  // 原子写消除撕裂;"丢失更新"(最后写者覆盖)由 SKILL.md 的"同一消息禁止并行
+  // 调用多个写状态命令"约束(见 cli-reference.md)。
+  await writeFileAtomic(yamlPath, content);
 }
 
 /**
@@ -104,7 +118,7 @@ export async function setPendingGate(
     const withNewline = content.endsWith("\n") ? content : content + "\n";
     newContent = withNewline + `pending_gate: ${value}\n`;
   }
-  await writeFile(yamlPath, newContent, "utf-8");
+  await writeFileAtomic(yamlPath, newContent);
 }
 
 /**
@@ -117,7 +131,7 @@ export async function setPendingGate(
  * 写入时机:
  * - _guard user-gate pass(手动通过)
  * - hook-guard clearAllPendingGates(问答工具调用自动 clear)
- * - Pi 自动通过(PI_CODING_AGENT=true 时 worktree-choice/sdd-ep-choice)
+ * - Pi/Codex 自动通过(PI_CODING_AGENT=true 或 CODEX 会话时 worktree-choice;Pi 另含 sdd-ep-choice)
  *
  * 检查时机:
  * - _guard user-gate require apply:sdd-ep-choice 时检查 apply:worktree-choice 是否在 gate_history
@@ -158,17 +172,17 @@ export async function addClearedGate(
   if (gateIdx === -1) {
     // gate_history 不存在,追加新段
     const withNewline = content.endsWith("\n") ? content : content + "\n";
-    await writeFile(yamlPath, withNewline + "gate_history:\n" + newElem + "\n", "utf-8");
+    await writeFileAtomic(yamlPath, withNewline + "gate_history:\n" + newElem + "\n");
   } else if (lastElemIdx === -1) {
     // gate_history 存在但无元素(可能是 "gate_history: []" 或 "gate_history:")
     // 替换 gate_history 行为 "gate_history:" + 插入新元素
     lines[gateIdx] = "gate_history:";
     lines.splice(gateIdx + 1, 0, newElem);
-    await writeFile(yamlPath, lines.join("\n"), "utf-8");
+    await writeFileAtomic(yamlPath, lines.join("\n"));
   } else {
     // 在最后一个元素后追加
     lines.splice(lastElemIdx + 1, 0, newElem);
-    await writeFile(yamlPath, lines.join("\n"), "utf-8");
+    await writeFileAtomic(yamlPath, lines.join("\n"));
   }
 }
 
@@ -216,7 +230,7 @@ export async function removeClearedGate(
 
   if (gateIdx !== -1 && targetElemIdx !== -1) {
     lines.splice(targetElemIdx, 1);
-    await writeFile(yamlPath, lines.join("\n"), "utf-8");
+    await writeFileAtomic(yamlPath, lines.join("\n"));
   }
   // gate 不在 gate_history(gateIdx=-1 或 targetElemIdx=-1):只设 pending_gate,不动 gate_history
 }

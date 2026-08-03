@@ -29,7 +29,7 @@ NO FIX WITHOUT DIAGNOSIS - EVERY CALL
 违反字面 = 违反精神：哪怕"用户重复调用同一命令"/"用户说直接改"/"上一次已诊断过"，也禁跳过诊断直接 Edit 代码
 ```
 
-**交互规则:** `🔴 STOP` 等价 `USER_GATE`--首次呈现即必须调平台原生交互工具(禁"先文本展示 1./2. 再等用户打字")。Claude Code: `AskUserQuestion`;OpenCode: `question`;Pi: `alloy-question`。完整规则 + 平台调用示例见 `alloy-shared/references/interaction-style.md`;USER_GATE pending/clear/reset 流程见 `alloy-shared/references/gate-ceremony.md`。跳过 USER_GATE / 批量打包 / 基于内容跳过 = 违反 Iron Law。
+**交互规则:** `🔴 STOP` 等价 `USER_GATE`--首次呈现即必须调平台原生交互工具(禁"先文本展示 1./2. 再等用户打字")。Claude Code: `AskUserQuestion`;OpenCode: `question`;Pi: `alloy-question`;Codex: `request_user_input`(init 已开启 Default 模式支持)。完整规则 + 平台调用示例见 `alloy-shared/references/interaction-style.md`;USER_GATE pending/clear/reset 流程见 `alloy-shared/references/gate-ceremony.md`。跳过 USER_GATE / 批量打包 / 基于内容跳过 = 违反 Iron Law。
 
 **调用外部命令或技能前，先输出标题和状态描述，再执行操作。**
 
@@ -102,6 +102,7 @@ alloy _config read . main_branch 2>/dev/null
 加载 `systematic-debugging` skill(多 agent 适配见 `alloy-shared/references/skill-loading.md`)。禁止跳过--普通对话无法替代系统化调试(复现 -> 假设 -> 验证 -> 定位):
 - Claude Code / OpenCode: 调 `skill({ name: "systematic-debugging" })`
 - Pi: `read .pi/skills/systematic-debugging/SKILL.md`
+- Codex: `$systematic-debugging` 或 `read .agents/skills/systematic-debugging/SKILL.md`
 
 ```bash
 [ -n "<name>" ] && alloy _skill log openspec/changes/<name> fix superpowers:systematic-debugging

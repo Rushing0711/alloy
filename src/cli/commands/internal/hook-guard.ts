@@ -156,6 +156,11 @@ export function collectPhases(projectRoot: string, includeFinished = false): str
 /**
  * 扫描所有 change(活跃 + 归档,主仓 + 所有 worktree)的 .alloy.yaml,收集所有未通过的 user-gate。
  * pending_gate 为 null/空/不存在 -> 跳过。
+ *
+ * worktree 模式下跳过主仓 stale 副本:gate 只在 worktree 内 pass/clear(assertInWorktree 守卫),
+ * 主仓副本的 pending_gate 是残留(实测 2026-08-02 Codex 会话:apply:worktree-choice 在主仓
+ * require、worktree 内 pass,主仓副本残留导致 worktree 内 commit 被 pre-commit 误拦)。
+ * 判定:changeDir 不在任何 worktree 路径内 + 自身 worktree 字段非 null/skipped -> 主仓 stale 副本。
  */
 export function collectPendingGates(projectRoot: string): string[] {
   const gates: string[] = [];
@@ -164,6 +169,15 @@ export function collectPendingGates(projectRoot: string): string[] {
     try {
       const content = readFileSync(stateFile, "utf-8");
       if (readPhase(content) === "finished") continue; // 已完成 change 不影响 alloy
+      // 主仓 stale 副本跳过:changeDir 是 projectRoot 子路径(纯字符串 relative 判定,
+      // 避免 /var vs /private/var 符号链接差异)+ 该 change 处于 worktree 模式
+      // (worktree 字段非空)。worktree 副本天然不满足"projectRoot 子路径"(relative 以 .. 开头)。
+      const relToRoot = relative(projectRoot, changeDir);
+      const isMainCopy = !relToRoot.startsWith("..") && !isAbsolute(relToRoot);
+      if (isMainCopy) {
+        const wtField = content.match(/^worktree:\s*(.+)$/m)?.[1]?.trim().replace(/^["']|["']$/g, "");
+        if (wtField && wtField !== "null" && wtField !== "skipped") continue;
+      }
       const match = content.match(/^pending_gate:\s*(.+)$/m);
       if (match) {
         const gate = match[1].trim().replace(/^["']|["']$/g, "");
@@ -289,8 +303,8 @@ function readStdin(): string {
   }
 }
 
-/** 问答工具名(Claude Code 的 AskUserQuestion / OpenCode 的 question / Pi 的 alloy-question) */
-const ASK_TOOLS = new Set(["AskUserQuestion", "question", "ask", "alloy-question"]);
+/** 问答工具名(Claude Code 的 AskUserQuestion / OpenCode 的 question / Pi 的 alloy-question / Codex 的 request_user_input) */
+const ASK_TOOLS = new Set(["AskUserQuestion", "question", "ask", "alloy-question", "request_user_input"]);
 
 /** 根据 agent 返回 USER_GATE 应用的交互工具提示 */
 function getAgentToolHint(agent: AgentId | null): string {
@@ -359,7 +373,7 @@ export function evaluateHook(
         "  应改用 Write/Edit 工具写文件,避免 heredoc + 变量展开问题(Claude Code Bash 用 eval 触发 command too long)。",
         "  详见 alloy-shared/references/cli-reference.md _chore-commit 章节(用 -F 文件方式提交)。",
         "",
-        "  如确需绕过(仅限修复畸形状态),设置 ALLOY_FORCE_WRITE=1。",
+        "  如需手动绕过(仅限修复畸形状态),请退出 skill 由用户在终端处理。",
       ].join("\n");
       return { exitCode: 2, message };
     }
@@ -380,7 +394,7 @@ export function evaluateHook(
         "  这些命令会丢失用户已 stage 的工作,退出 skill 让用户处理是唯一合法路径。",
         "  详见 alloy-shared/references/git-self-rescue-ban.md。",
         "",
-        "  如确需绕过(仅限修复畸形状态),设置 ALLOY_FORCE_WRITE=1。",
+        "  如需手动绕过(仅限修复畸形状态),请退出 skill 由用户在终端处理。",
       ].join("\n");
       return { exitCode: 2, message };
     }
@@ -395,6 +409,21 @@ export function evaluateHook(
     return { exitCode: 0 };
   }
 
+  // Codex 的 apply_patch:写文件工具(实测 0.146.0 tool_name="apply_patch",
+  // tool_input.command 是 patch 文本)。从 patch 提取文件名,逐个按 Write/Edit 判定。
+  // Claude Code/OpenCode/Pi 无此工具名,分支不生效。
+  if (input.tool_name === "apply_patch") {
+    const patch = input.tool_input?.command ?? "";
+    const files = [...patch.matchAll(/^\*\*\* (?:Add|Update|Delete) File: (.+)$/gm)]
+      .map(m => m[1].trim())
+      .filter(Boolean);
+    for (const filePath of files) {
+      const verdict = checkFilePath(filePath, { projectRoot, phases, gates, wtPaths, isAlloyProject, currentBranch, mainBranch, env });
+      if (verdict.exitCode !== 0) return verdict;
+    }
+    return { exitCode: 0 };
+  }
+
   // 只拦截 Write/Edit
   if (input.tool_name !== "Write" && input.tool_name !== "Edit") {
     return { exitCode: 0 };
@@ -404,6 +433,30 @@ export function evaluateHook(
   if (!filePath) {
     return { exitCode: 0 };
   }
+
+  return checkFilePath(filePath, { projectRoot, phases, gates, wtPaths, isAlloyProject, currentBranch, mainBranch, env });
+}
+
+interface CheckFilePathCtx {
+  projectRoot?: string;
+  phases: string[];
+  gates: string[];
+  wtPaths: string[];
+  isAlloyProject?: boolean;
+  currentBranch?: string;
+  mainBranch?: string;
+  env: Record<string, string | undefined>;
+}
+
+/**
+ * 单个文件写入判定(Write/Edit 与 apply_patch 共用):
+ * worktree 路径校验 + guardCheck 白名单判定,exit 0(放行)/ 2(拦截)。
+ */
+function checkFilePath(
+  filePath: string,
+  ctx: CheckFilePathCtx
+): { exitCode: number; message?: string } {
+  const { projectRoot, phases, gates, wtPaths, isAlloyProject, currentBranch, mainBranch, env } = ctx;
 
   // 转相对路径
   let relPath: string;
@@ -417,8 +470,8 @@ export function evaluateHook(
   // worktree 路径校验:worktree 模式下,write/edit 必须用 worktree 绝对路径
   // 原因:OpenCode 的 write/edit 工具与 bash 独立进程,不共享 cwd。
   // bash 里传 workdir 不影响 write/edit,相对路径按 session cwd(主仓)解析,文件落主仓。
+  // Codex 的 apply_patch 同理:相对路径落 session cwd,必须用 worktree 绝对路径(SKILL.md 已要求)。
   // Pi 不支持 worktree,不会进 worktree 模式,不触发本校验。
-  // 解决:有 worktree 模式 change 时,write/edit 源码/制品路径必须是 worktree 绝对路径。
   if (wtPaths.length > 0 && isAlloyProject !== false) {
     const absFilePath = isAbsolute(filePath) ? filePath : join(projectRoot ?? process.cwd(), filePath);
     const isInWorktree = wtPaths.some(wt => absFilePath.startsWith(wt + "/") || absFilePath === wt);
@@ -427,17 +480,17 @@ export function evaluateHook(
       const sourcePattern = /^(scripts\/|src\/|openspec\/changes\/[^/]+\/(?!.*\.alloy\.yaml))/;
       if (sourcePattern.test(relPath)) {
         const message = [
-          `⛔ [alloy hook] worktree 模式下,write/edit 必须用 worktree 绝对路径`,
+          `⛔ [alloy hook] worktree 模式下,write/edit/apply_patch 必须用 worktree 绝对路径`,
           `  当前路径: ${filePath}`,
           `  worktree 路径: ${wtPaths.join(", ")}`,
           "",
-          "  原因:OpenCode 的 write/edit 工具与 bash 独立进程,不共享 cwd。",
-          "  bash 里传 workdir 不影响 write/edit,相对路径按 session cwd(主仓)解析,文件落主仓。",
+          "  原因:OpenCode 的 write/edit、Codex 的 apply_patch 与 bash 独立进程,不共享 cwd。",
+          "  bash 里传 workdir 不影响 write/edit/apply_patch,相对路径按 session cwd(主仓)解析,文件落主仓。",
           "",
           "  修复:用 worktree 绝对路径前缀:",
           ...wtPaths.map(wt => `    ${wt}/${relPath}`),
           "",
-          "  逃生阀:ALLOY_FORCE_WRITE=1 绕过(仅限修复畸形状态)。",
+          "  如需手动绕过(仅限修复畸形状态),请退出 skill 由用户在终端处理。",
         ].join("\n");
         return { exitCode: 2, message };
       }
@@ -459,20 +512,20 @@ export function evaluateHook(
         `⛔ [alloy hook] ${result.reason}`,
         `  请先用 ${toolHint} 与用户确认,`,
         "  或调 alloy _guard user-gate pass <change-dir> 手动降级。",
-        "  如确需紧急绕过,设置 ALLOY_FORCE_WRITE=1。",
+        "  如需手动绕过(仅限修复畸形状态),请退出 skill 由用户在终端处理。",
       ].join("\n")
     : phases.length === 0
       ? [
           `⛔ [alloy hook] ${result.reason}`,
           "  alloy 项目无活跃 change,禁止直接写源码。",
           "  请先调 /alloy-start <topic> 创建 change 并走完 plan -> apply 流程。",
-          "  如确需紧急绕过,设置 ALLOY_FORCE_WRITE=1。",
+          "  如需手动绕过(仅限修复畸形状态),请退出 skill 由用户在终端处理。",
         ].join("\n")
       : [
           `⛔ [alloy hook] ${result.reason}`,
           "  当前阶段不允许写源码。请先进入 apply 阶段:",
           "    alloy _phase start <change-dir> apply",
-          "  如确需紧急修复畸形状态,设置 ALLOY_FORCE_WRITE=1 绕过。",
+          "  如需手动绕过(仅限修复畸形状态),请退出 skill 由用户在终端处理。",
         ].join("\n");
 
   return { exitCode: 2, message };
@@ -609,7 +662,7 @@ function checkUnlockedArtifact(projectRoot: string): { exitCode: number; message
           `  ${file}`,
           `  制品 ${artifact} 不在 records(未通过 alloy _artifact commit 锁定)。`,
           `  请用 alloy _artifact commit <change-dir> ${artifact} 完成锁定 + commit。`,
-          `  如确需绕过(仅限修复畸形状态),设置 ALLOY_FORCE_WRITE=1。`,
+          `  如需手动绕过(仅限修复畸形状态),请退出 skill 由用户在终端处理。`,
         ].join("\n"),
       };
     }

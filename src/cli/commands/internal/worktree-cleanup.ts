@@ -1,8 +1,63 @@
 // src/cli/commands/internal/worktree-cleanup.ts
 import { execSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path, { join } from "node:path";
-import { readState, writeState, formatTimestamp } from "../../utils/state.js";
+import { parse as parseYaml } from "yaml";
+import { readState, writeState, formatTimestamp, setPendingGate, addClearedGate } from "../../utils/state.js";
+
+/**
+ * 把 worktree 工作区 .alloy.yaml 的 gate 状态(gate_history + pending_gate)同步到主仓副本。
+ *
+ * 原因:worktree 内 gate 回答后的状态变更(clearAllPendingGates / user-gate pass 写
+ * gate_history + pending_gate)按设计不自动 commit,留在 worktree 工作区;
+ * _worktree-cleanup 的 force-remove 会丢弃这些未 commit 修改,主仓副本的
+ * gate_history 缺失该 gate + 残留 stale pending_gate。
+ * 实测(2026-08-02):Claude Code 归档后 gate_history 缺 archive:worktree-cleanup;
+ * Codex 会话主仓副本残留 apply:worktree-choice 导致 worktree 内 commit 被 pre-commit 误拦。
+ *
+ * 方向:worktree -> 主仓(worktree 内是最新状态)。pending_gate 以 worktree 为准,
+ * 一并清除主仓 stale 副本的残留 gate。同步后不主动 commit(状态变更随后续
+ * _archive 等命令的 git add .alloy.yaml 一起落地,避免 chore 独占 commit 噪音)。
+ */
+async function syncWorktreeGateStateToMain(changeDir: string, worktreePath: string): Promise<void> {
+  const wtYaml = join(worktreePath, changeDir, ".alloy.yaml");
+  const mainChangeDir = join(process.cwd(), changeDir);
+  const mainYaml = join(mainChangeDir, ".alloy.yaml");
+  if (!existsSync(wtYaml) || !existsSync(mainYaml)) return;
+
+  let wtState: { gate_history?: string[]; pending_gate?: string | null };
+  let mainState: { gate_history?: string[]; pending_gate?: string | null };
+  try {
+    wtState = parseYaml(readFileSync(wtYaml, "utf-8")) as typeof wtState;
+    mainState = parseYaml(readFileSync(mainYaml, "utf-8")) as typeof mainState;
+  } catch {
+    return; // 解析失败不阻断清理
+  }
+
+  const wtGates = wtState?.gate_history ?? [];
+  const mainGates = mainState?.gate_history ?? [];
+  const wtPending = wtState?.pending_gate ?? null;
+  const mainPending = mainState?.pending_gate ?? null;
+
+  const newGates = wtGates.filter((g) => !mainGates.includes(g));
+  if (newGates.length === 0 && mainPending === wtPending) return; // 无差异
+
+  for (const gate of newGates) {
+    try {
+      await addClearedGate(mainChangeDir, gate);
+    } catch {
+      // 单 gate 失败不阻断
+    }
+  }
+  if (mainPending !== wtPending) {
+    try {
+      await setPendingGate(mainChangeDir, wtPending);
+    } catch {
+      // 失败不阻断
+    }
+  }
+  console.log(`ℹ️ worktree gate 状态已同步到主仓副本(+${newGates.length} 个 gate_history${mainPending !== wtPending ? ", pending_gate 已对齐" : ""})`);
+}
 
 function gitExec(cmd: string, opts: { cwd?: string } = {}): { ok: boolean; stdout: string; stderr: string } {
   try {
@@ -316,6 +371,10 @@ export async function worktreeCleanupCommand(args: string[]): Promise<void> {
         console.log(`  untracked 文件(将被删除):`);
         untrackedLines.forEach((l) => console.log(`    ${l}`));
       }
+      // force-remove 前:同步 worktree 工作区 .alloy.yaml 的 gate 状态到主仓副本
+      // (force-remove 丢弃 worktree 工作区未 commit 修改,gate_history/pending_gate 会丢;
+      //  实测 2026-08-02:Claude Code 归档后 gate_history 缺 archive:worktree-cleanup)
+      await syncWorktreeGateStateToMain(changeDir, worktreePath);
       const forceRemove = gitExec(`git worktree remove --force "${worktreePath}"`);
       if (!forceRemove.ok) {
         console.error("⛔ [HARD_STOP] git worktree remove --force 失败");

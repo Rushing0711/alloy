@@ -15,6 +15,18 @@ export const KNOWN_AGENTS: AgentInfo[] = [
     settingsContent: { worktree: { baseRef: "head" } },
   },
   {
+    id: "codex",
+    label: "Codex",
+    supportsColonCommands: false,
+    // Codex 读 .agents/skills/(REPO)+ ~/.agents/skills/(USER),与 OpenCode/Pi 共享目录
+    // commandsDir 第一段 ".agents" 即 skills base;Codex 无 commands 目录(getCommandsTargetDir 不被 codex 调用)
+    // 证据:learn.chatgpt.com/docs/build-skills
+    commandsDir: ".agents/skills/",
+    // request_user_input 仅 Plan mode 可用(Default 模式报错),降级为文本选项
+    interactiveTool: "partial",
+    askToolDisplay: "request_user_input",
+  },
+  {
     id: "opencode",
     label: "OpenCode",
     supportsColonCommands: false,
@@ -39,20 +51,23 @@ export const KNOWN_AGENTS: AgentInfo[] = [
  *
  * 优先级:
  * 0. AI_AGENT 环境变量(格式 <agent-id>_<version>_agent,多 agent 工具通用规范)--最优先
- * 1. agent 运行时自注入 env--Claude Code/OpenCode/Pi 三个 agent 启动时给子进程注入标识 env
+ * 1. agent 运行时自注入 env--Claude Code/OpenCode/Pi/Codex 启动时给子进程注入标识 env
  *
  * 兜底:无法确定时返回 null(调用方按工具参数名兼容取 file_path ?? filePath ?? path)。
  *
  * 证据见 docs/reference/agent-instruction-files.md §14。
  */
 export function detectAgent(env: Record<string, string | undefined> = process.env): AgentId | null {
+  // Codex 检测必须最先(codex 会话继承用户 shell env,实测含 CLAUDECODE=1 + AI_AGENT=claude-code_*_agent,
+  // 若不先检测 CODEX_CI/CODEX_THREAD_ID 会被 0 层 AI_AGENT 或 A 层 CLAUDECODE 误判为 claude-code)
+  if (env.CODEX_CI === "1" || env.CODEX_THREAD_ID) return "codex";
   // 0 层:AI_AGENT 通用规范(格式 <agent-id>_<version>_agent)
   const aiAgent = env.AI_AGENT;
   if (aiAgent) {
     const match = aiAgent.match(/^(.+?)_[\d-]+_agent$/);
     const id = match ? match[1] : aiAgent;
-    if (id === "claude-code" || id === "opencode" || id === "pi") return id;
-    // AI_AGENT 是已知 3 个 agent 之外的值,无法识别,走兜底
+    if (id === "claude-code" || id === "opencode" || id === "pi" || id === "codex") return id;
+    // AI_AGENT 是已知 4 个 agent 之外的值,无法识别,走兜底
   }
   // A 层:agent 运行时自注入 env(优先,最可靠)
   if (env.CLAUDECODE === "1") return "claude-code";

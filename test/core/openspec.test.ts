@@ -291,3 +291,4 @@ describe("updateOpenSpecCommands", () => {
     expect(result).toBe("failed");
   });
 });
+

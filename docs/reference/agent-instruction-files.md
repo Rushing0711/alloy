@@ -1,28 +1,28 @@
 # 各 AI Agent 配置体系参考
 
 > **用途:** Alloy 的 agent 适配依赖此文档。新增 agent 或验证现有 agent 行为时,先更新本文档(附证据来源),再调整代码。
-> **目标 agent:** Claude Code / OpenCode / Pi
+> **目标 agent:** Claude Code / OpenCode / Pi / Codex
 > **证据来源:** 每个结论标注来源(官方文档 URL 或 GitHub 文件路径)
-> **调研日期:** 2026-06-24 初版,2026-07-11 全面重写(补全 12 个特性 + 证据),2026-07-13 OpenCode/Pi hook 机制(OpenCode 有 plugin `tool.execute.before`/`session.idle` 原生 hook,非"无独立 hook";Pi 有 `agent_settled` 等 33 事件,Stop 可实现),2026-07-14 新增第 14 章(运行时标识 env + 工具参数名,detectAgent 方案),2026-07-15 移除 Codex 支持(用户实测体验差),B 层 ALLOY_AGENT 补位机制随之删除,目标 agent 改为 3 个
+> **调研日期:** 2026-06-24 初版,2026-07-11 全面重写(补全 12 个特性 + 证据),2026-07-13 OpenCode/Pi hook 机制,2026-07-14 新增第 14 章(运行时标识 env + 工具参数名,detectAgent 方案),2026-07-15 移除 Codex 支持(用户实测体验差),B 层 ALLOY_AGENT 补位机制随之删除,目标 agent 改为 3 个;2026-08-02 **重新加入 Codex**(实测验证:env 注入 CODEX_CI/CODEX_THREAD_ID、request_user_input 工具存在但仅 Plan mode 可用、PreToolUse hook 同款协议触发正常、skills 规范改为共享 .agents/skills/),目标 agent 改为 4 个;**同日修正 worktree 误判**--实测 exec_command 有 `workdir` 参数 + apply_patch 支持绝对路径,Codex 与 OpenCode 同机制支持 worktree(早期依据"无 EnterWorktree 工具"误判为不支持)
 
 ## 特性对比总表
 
-| 特性 | Claude Code | OpenCode | Pi |
-|------|-------------|----------|-----|
-| 指令文件 | `CLAUDE.md` | `AGENTS.md`(回退 `CLAUDE.md`) | `AGENTS.md`(回退 `CLAUDE.md`) |
-| 本地指令 | `CLAUDE.local.md` | 无 per-project(有全局) | 不支持 |
-| 配置文件 | `.claude/settings.json` | `opencode.json` | `.pi/settings.json` |
-| Hook | PreToolUse/Stop(外部脚本,exit 2) | plugin `tool.execute.before`/`session.idle`(原生 hook) | TS 扩展(`tool_call`/`agent_settled`) |
-| Permissions | `allow/deny`(`Bash(cmd *)`) | `opencode.json` permission(allow/ask/deny) | `.pi/permissions.json` |
-| 交互工具 | `AskUserQuestion` | `question` 工具 | `alloy-question` 工具(alloy extension 注册) |
-| Skills | `.claude/skills/` → `~/.claude/skills/` → `~/.claude/plugins/` | `.opencode/skills/` + `.claude/skills/` + `.agents/skills/` | `.pi/skills/` + `.agents/skills/` |
-| Plugins | `/plugin install`(marketplace) | `opencode.json` plugin 数组 | `pi install` |
-| Commands | `.claude/commands/*.md` | `.opencode/commands/*.md` | `.pi/prompts/*.md` |
-| Worktree | `settings.json` `worktree.baseRef` | Worktree 服务(无 baseRef) | 不支持 |
-| Subagent | 无原生 | `opencode.json` agent + `.opencode/agents/` | 无原生(SDK 嵌套) |
-| 补全 | `alloy completion` | `opencode completion` | 不支持 |
-| **运行时标识 env** | `CLAUDECODE=1` | `OPENCODE=1` | `PI_CODING_AGENT=true` |
-| **write/edit 参数名** | `file_path` | `filePath`(驼峰) | `path`(主)/`file_path`(兼容) |
+| 特性 | Claude Code | OpenCode | Pi | Codex |
+|------|-------------|----------|-----|-------|
+| 指令文件 | `CLAUDE.md` | `AGENTS.md`(回退 `CLAUDE.md`) | `AGENTS.md`(回退 `CLAUDE.md`) | `AGENTS.md`(+`AGENTS.override.md` 覆盖链) |
+| 本地指令 | `CLAUDE.local.md` | 无 per-project(有全局) | 不支持 | 不支持 |
+| 配置文件 | `.claude/settings.json` | `opencode.json` | `.pi/settings.json` | `~/.codex/config.toml`(全局)+ `.codex/hooks.json`(项目) |
+| Hook | PreToolUse/Stop(外部脚本,exit 2) | plugin `tool.execute.before`/`session.idle`(原生 hook) | TS 扩展(`tool_call`/`agent_settled`) | PreToolUse/Stop 等(协议同 Claude Code,exit 2;`hooks.json` 载体) |
+| Permissions | `allow/deny`(`Bash(cmd *)`) | `opencode.json` permission(allow/ask/deny) | `.pi/permissions.json` | config.toml 全局(非项目级,alloy 不自动配置) |
+| 交互工具 | `AskUserQuestion` | `question` 工具 | `alloy-question` 工具(alloy extension 注册) | `request_user_input`(Default 模式可用,需 init 开启 feature;exec 降级文本) |
+| Skills | `.claude/skills/` → `~/.claude/skills/` → `~/.claude/plugins/` | `.opencode/skills/` + `.claude/skills/` + `.agents/skills/` | `.pi/skills/` + `.agents/skills/` | `.agents/skills/` → `~/.agents/skills/`(共享目录,无专属路径) |
+| Plugins | `/plugin install`(marketplace) | `opencode.json` plugin 数组 | `pi install` | plugin 分发(`.codex-plugin/plugin.json`,代码层) |
+| Commands | `.claude/commands/*.md` | `.opencode/commands/*.md` | `.pi/prompts/*.md` | `~/.codex/prompts/*.md`(全局,CODEX_HOME) |
+| Worktree | `settings.json` `worktree.baseRef` | Worktree 服务(无 baseRef) | 不支持 | 支持(exec_command `workdir` + apply_patch 绝对路径,同 OpenCode 机制) |
+| Subagent | 无原生 | `opencode.json` agent + `.opencode/agents/` | 无原生(SDK 嵌套) | 支持(`collaboration__spawn_agent`,TOML 配置) |
+| 补全 | `alloy completion` | `opencode completion` | 不支持 | 不支持 |
+| **运行时标识 env** | `CLAUDECODE=1` | `OPENCODE=1` | `PI_CODING_AGENT=true` | `CODEX_CI=1` / `CODEX_THREAD_ID`(无 `CODEX=1`) |
+| **write/edit 参数名** | `file_path` | `filePath`(驼峰) | `path`(主)/`file_path`(兼容) | Bash 工具为 `exec_command`(`command` 参数) |
 
 ---
 
@@ -44,7 +44,14 @@
 - 父目录遍历: 从当前目录向上查找
 - 证据: [Pi resource-loader.ts](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/core/resource-loader.ts)
 
-**关键洞察:** 3 个 agent 中,OpenCode/Pi 都读 `AGENTS.md`;Claude Code 只读 `CLAUDE.md`;OpenCode/Pi 兼容 `CLAUDE.md` 回退。
+### Codex
+- 项目级: `AGENTS.md`(每级目录依次检查 `AGENTS.override.md` → `AGENTS.md` → `project_doc_fallback_filenames` 备用名,每目录最多取一个)
+- 全局级: `~/.codex/AGENTS.md`(存在 `~/.codex/AGENTS.override.md` 则读它,`CODEX_HOME` 可改)
+- 合并顺序: 全局文件最先 → 仓库根 → 嵌套目录(越靠近 CWD 覆盖力越强,根到当前目录拼接)
+- 加载上限: `project_doc_max_bytes`(默认 32 KiB)
+- 证据: [Codex AGENTS.md](https://learn.chatgpt.com/docs/agent-configuration/agents-md)
+
+**关键洞察:** 4 个 agent 中,OpenCode/Pi/Codex 都读 `AGENTS.md`(Codex 还有 override 覆盖链);Claude Code 只读 `CLAUDE.md`;OpenCode/Pi 兼容 `CLAUDE.md` 回退。
 
 ---
 
@@ -64,7 +71,11 @@
 - **不支持**(无 `.local.` 变体,`resource-loader.ts` 仅查找 `AGENTS.md`/`CLAUDE.md`)
 - 证据: [Pi resource-loader.ts](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/core/resource-loader.ts)
 
-**alloy 适配:** OpenCode 无 per-project local,可用全局或 instructions 字段;Pi 不支持。
+### Codex
+- **不支持**(无 `.local.` 变体,指令文件只有 `AGENTS.md`/`AGENTS.override.md`)
+- 证据: [Codex AGENTS.md](https://learn.chatgpt.com/docs/agent-configuration/agents-md)
+
+**alloy 适配:** OpenCode 无 per-project local,可用全局或 instructions 字段;Pi/Codex 不支持。
 
 ---
 
@@ -88,6 +99,12 @@
 - 全局级: `~/.pi/agent/settings.json` + `~/.pi/agent/extensions/*.ts`
 - 格式: JSON
 - 证据: [Pi settings](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/settings.md)
+
+### Codex
+- 全局级: `~/.codex/config.toml`(权限 profile、模型、skills 开关等,`CODEX_HOME` 可改)
+- 项目级: `.codex/hooks.json`(hook 配置,与 settings.json 的 hooks 段同构)+ `.codex/agents/*.toml`(自定义 subagent)
+- 格式: TOML / JSON
+- 证据: [Codex config basics](https://learn.chatgpt.com/docs/config-file/config-basics) + [Codex hooks](https://learn.chatgpt.com/docs/hooks)
 
 ---
 
@@ -131,37 +148,48 @@
 - 生产验证: `damage-control` 扩展用 `tool_call` 拦截 bash 和文件修改
 - 证据: [Pi extensions.md](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md)(`agent_settled` 描述:"Use agent_settled for status integrations that need to know Pi will not continue running automatically")
 
-**alloy 闸门层:** Claude Code 用外部脚本 hook 协议(PreToolUse/Stop,exit 2);OpenCode 用 plugin `tool.execute.before` + `session.idle`(原生 hook,可拦截所有工具);Pi 用 TS 扩展 `tool_call` + `agent_settled`。业务逻辑(`hook-guard.ts` / `stop-guard.ts`)共用,入口适配层不同。
+### Codex
+- 形态: 外部脚本,**协议与 Claude Code 同款**(stdin JSON + exit 2 阻断 + `permissionDecision: deny` + `additionalContext`)
+- 配置: `<repo>/.codex/hooks.json`(项目级,需项目被 trust)/ `~/.codex/hooks.json`(全局),或 config.toml `[hooks]` 内联;结构 `{"hooks": {"PreToolUse": [{"matcher": "...", "hooks": [{"type": "command", "command": "..."}]}]}}` 与 settings.json 同构
+- 事件全集: PreToolUse/PostToolUse/PermissionRequest/PreCompact/PostCompact/UserPromptSubmit/SubagentStart/SubagentStop/Stop/SessionStart/SessionEnd
+- PreToolUse stdin JSON: `session_id` / `cwd` / `hook_event_name` / `tool_name`(实测 `Bash`)/ `tool_input.command` / `permission_mode`
+- block: exit 2 + stderr(实测 0.146.0:"Command blocked by PreToolUse hook");新格式 `{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "..."}}`
+- **trust 机制:** 项目级 hooks.json 需用户 trust(CLI `/hooks` 审查,或 `--dangerously-bypass-hook-trust` 绕过);未 trust 时 `codex exec` 会挂起等待(实测)
+- 证据: [Codex hooks](https://learn.chatgpt.com/docs/hooks)
+
+**alloy 闸门层:** Claude Code 用外部脚本 hook 协议(PreToolUse/Stop,exit 2);OpenCode 用 plugin `tool.execute.before` + `session.idle`(原生 hook,可拦截所有工具);Pi 用 TS 扩展 `tool_call` + `agent_settled`;Codex 用 `hooks.json` 外部脚本(协议同 Claude Code,实测复用 `_hook-guard`/`_stop-guard` 脚本即可)。业务逻辑(`hook-guard.ts` / `stop-guard.ts`)共用,入口适配层不同。
 
 **三层 hook 对照(alloy 流程防护):**
 
-| 层 | 作用 | claude-code | opencode | pi |
-|----|------|-------------|----------|-----|
-| **PreToolUse**(拦截非白名单写入 + user-gate + 检测问答工具 clear pending_gate) | `_hook-guard` | ✅ settings.json PreToolUse | ✅ plugin `tool.execute.before`(可拦截所有工具) | ✅ extension `tool_call` |
-| **Stop**(检测文本输出代替问答) | `_stop-guard` | ✅ settings.json Stop | ✅ plugin `session.idle` | ✅ extension `agent_settled` |
-| **pre-commit**(兜底 PreToolUse 盲区) | `_pre-commit-check` | ✅ `.git/hooks/pre-commit`(git 仓库级,所有 agent 共用) | ✅ 同左 | ✅ 同左 |
+| 层 | 作用 | claude-code | opencode | pi | codex |
+|----|------|-------------|----------|-----|-------|
+| **PreToolUse**(拦截非白名单写入 + user-gate + 检测问答工具 clear pending_gate) | `_hook-guard` | ✅ settings.json PreToolUse | ✅ plugin `tool.execute.before`(可拦截所有工具) | ✅ extension `tool_call` | ✅ `.codex/hooks.json` PreToolUse(同款协议) |
+| **Stop**(检测文本输出代替问答) | `_stop-guard` | ✅ settings.json Stop | ✅ plugin `session.idle` | ✅ extension `agent_settled` | ✅ `.codex/hooks.json` Stop(实测触发) |
+| **pre-commit**(兜底 PreToolUse 盲区) | `_pre-commit-check` | ✅ `.git/hooks/pre-commit`(git 仓库级,所有 agent 共用) | ✅ 同左 | ✅ 同左 | ✅ 同左 |
 
 **PreToolUse 层的问答工具检测(三平台统一机制):**
 
-三个 agent 的 PreToolUse 层都会检测问答工具调用,自动 clear 所有 pending_gate(通过 `_hook-guard` 的 `clearAllPendingGates`):
+四个 agent 的 PreToolUse 层都会检测问答工具调用,自动 clear 所有 pending_gate(通过 `_hook-guard` 的 `clearAllPendingGates`):
 
 | agent | 检测的工具名 | 触发方式 | 证据(代码) |
 |-------|------------|---------|------------|
 | Claude Code | `AskUserQuestion` | `_hook-guard` 从 stdin 读 `tool_name`,匹配 `ASK_TOOLS` 集合 | `hook-guard.ts` `ASK_TOOLS = {"AskUserQuestion", "question", "ask", "alloy-question"}` |
 | OpenCode | `question` | plugin `tool.execute.before` 检测 `toolName === "question"`,调 `_hook-guard` | `.opencode/plugins/alloy-guard.ts` |
 | Pi | `alloy-question` | extension `tool_call` 检测 `toolName === "alloy-question"`,调 `_hook-guard` | `.pi/extensions/alloy-guard.ts` |
+| Codex | `request_user_input` | hook stdin 的 `tool_name` 匹配 `ASK_TOOLS`(实测 PreToolUse stdin 含 tool_name) | `hook-guard.ts` `ASK_TOOLS`(含 request_user_input) |
 
 **关键:** Pi 的问答工具检测在 `alloy-guard.ts` extension(不是 `alloy-question.ts` extension)。`alloy-question.ts` 只负责注册工具 + 弹 TUI;`alloy-guard.ts` 订阅 `tool_call` 事件,检测到 `alloy-question` 工具调用时调 `_hook-guard` 触发 clear。两个 extension 协作:`alloy-question` 提供工具,`alloy-guard` 检测调用并 clear gate。
 
 **用户级 vs 项目级(各 agent hook 路径分级):**
 
-3 个 agent 的 hook 都支持用户级(全局)和项目级两层路径:
+4 个 agent 的 hook 都支持用户级(全局)和项目级两层路径:
 
 | agent | 项目级 | 用户级(全局) | 出处 |
 |-------|--------|--------------|------|
 | Claude Code | `.claude/settings.json` | `~/.claude/settings.json` | [settings](https://code.claude.com/docs/en/settings)(User/Project/Local 三级,优先级 Managed > CLI > Local > Project > User) |
 | OpenCode | `.opencode/plugins/*.ts` | `~/.config/opencode/plugins/` | [plugins.mdx](https://github.com/anomalyco/opencode/blob/main/packages/web/src/content/docs/plugins.mdx)(全局 config -> 项目 config -> 全局 plugin -> 项目 plugin) |
 | Pi | `.pi/extensions/*.ts` | `~/.pi/agent/extensions/*.ts` | [extensions.md](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md) |
+| Codex | `.codex/hooks.json`(需 trust) | `~/.codex/hooks.json` | [hooks](https://learn.chatgpt.com/docs/hooks)(四层发现:~/.codex/hooks.json → config.toml → repo/.codex/hooks.json → repo/config.toml,多层合并加载) |
 
 **alloy 设计决策:hook / permissions / question extension 仅限项目级,作为项目资源。** 即使 `alloy init --scope global`,hook/permissions/question extension 仍装项目级路径(`.claude/settings.json` / `.opencode/plugins/` / `.pi/extensions/alloy-guard.ts` / `.pi/extensions/alloy-question.ts`),不装用户级。理由:
 1. **hook 绑定 alloy CLI 绝对路径**--`node <alloy-dist>/cli/index.js _hook-guard`。全局装会让所有项目指向单一 alloy 路径,多版本(开发版 + npm 全局版)冲突
@@ -174,8 +202,9 @@
 - Claude Code:三层全配 ✅(PreToolUse 检测 AskUserQuestion 自动 clear pending_gate)
 - OpenCode:**三层全配 ✅**(PreToolUse 用 plugin `tool.execute.before`,检测 `question` 工具自动 clear pending_gate;Stop 用 plugin `session.idle`,同一文件 `.opencode/plugins/alloy-guard.ts`;旧 custom tool 方案已迁移)
 - Pi:**三层全配 ✅**(PreToolUse 用 extension `tool_call`,检测 `alloy-question` 工具自动 clear pending_gate;Stop 用 extension `agent_settled`,同一文件 `.pi/extensions/alloy-guard.ts`)
+- Codex:**三层全配 ✅**(2026-08-02 实测:PreToolUse/Stop 协议与 Claude Code 同款,载体 `.codex/hooks.json`,复用 `_hook-guard`/`_stop-guard` 脚本;注意项目 hooks 需用户 trust)
 
-**3 个 agent 三层 hook 全部对齐 + 问答工具检测全配。** pre-commit 是 git 仓库级(`.git/hooks/pre-commit`),所有 agent 共用。问答工具检测(clear pending_gate)三平台统一通过 `_hook-guard` 的 `ASK_TOOLS` 集合 + `clearAllPendingGates` 实现,入口适配层不同(Claude Code stdin / OpenCode plugin / Pi extension)。
+**4 个 agent 三层 hook 全部对齐 + 问答工具检测全配。** pre-commit 是 git 仓库级(`.git/hooks/pre-commit`),所有 agent 共用。问答工具检测(clear pending_gate)统一通过 `_hook-guard` 的 `ASK_TOOLS` 集合 + `clearAllPendingGates` 实现,入口适配层不同(Claude Code stdin / OpenCode plugin / Pi extension / Codex hooks.json stdin)。
 
 **OpenCode 旧 custom tool 盲区(已修复):** 早期方案 `.opencode/tools/write.ts+edit.ts` 覆盖内置 write/edit,只在 agent 调这两个工具时触发 hook,检测不到 `question` 工具调用,导致 `pending_gate` 设了无法自动 clear。已迁移到 plugin `tool.execute.before`(可拦截所有工具,检测到 question 时自动 `clear-all` pending_gate)。`alloy clean` 仍兼容清理旧 tools 路径(迁移前部署的项目)。
 
@@ -207,13 +236,20 @@
 - 三态: allow/deny(Deny always wins)
 - 证据: [pi-permissions npm](https://www.npmjs.com/package/pi-permissions)
 
-**alloy 适配:** Claude Code/Pi 用 `Bash(cmd *)` 格式(一致);OpenCode 用工具级 + glob(格式不同,需 `toOpenCodeBashPermissions` 转换)。
+### Codex
+- 配置: `~/.codex/config.toml`(全局,非项目级)--`approval_policy` / `permission_mode`(default/acceptEdits/plan/dontAsk/bypassPermissions)
+- 项目级: 不支持(与 Pi/Claude Code 不同,无项目级 permissions 文件)
+- 动态决策: `PermissionRequest` hook(工具即将请求审批时,可 allow/deny 或不做决定)
+- **alloy 适配:** 不自动配置项目级 permissions(同当年结论);闸门靠 hook 层 + SKILL.md 硬约束
+- 证据: [Codex hooks](https://learn.chatgpt.com/docs/hooks)(PermissionRequest 事件)+ [config reference](https://learn.chatgpt.com/docs/config-file/config-reference)
+
+**alloy 适配:** Claude Code/Pi 用 `Bash(cmd *)` 格式(一致);OpenCode 用工具级 + glob(格式不同,需 `toOpenCodeBashPermissions` 转换);Codex 仅全局,不自动配置。
 
 ---
 
 ## 6. 交互工具(AskUserQuestion 对应)
 
-> **用途:** alloy SKILL.md 里的 `🔴 USER_GATE` / `🔴 STOP` 需要平台原生交互工具让用户物理选择。三平台机制不同,alloy 通过 `alloy-shared/references/interaction-style.md` 统一调用示例。
+> **用途:** alloy SKILL.md 里的 `🔴 USER_GATE` / `🔴 STOP` 需要平台原生交互工具让用户物理选择。四平台机制不同,alloy 通过 `alloy-shared/references/interaction-style.md` 统一调用示例。
 
 ### Claude Code
 - **工具:** `AskUserQuestion`(内置,无需 alloy 部署)
@@ -232,6 +268,13 @@
 - **清理:** 无需
 - plan-mode prompt 中明确引用为 "AskUserQuestion tool"
 - 证据: [packages/opencode/src/tool/question.ts](https://github.com/anomalyco/opencode/blob/main/packages/opencode/src/tool/question.ts)
+
+### Codex
+- **工具:** `request_user_input`(内置,无需 alloy 部署)
+- **schema:** `{ id: string(必填), header, question, options: [{label, description}], isOther?: boolean, isSecret?: boolean }`;无 `multiSelect`;1-5 个问题;响应 `{ answers: { <id>: { answers: [label] } } }`
+- **可用性(源码 + 实测 0.146.0):** 源码 `protocol/src/config_types.rs` 的 `allows_request_user_input()` 只匹配 `ModeKind::Plan`;Default 模式需开启实验 feature `default_mode_request_user_input`(features/src/lib.rs,UnderDevelopment,默认关闭)。实测:开启后 Default 模式(TUI)可用,报错从 "unavailable in Default mode" 变为 "not supported in exec mode"(仅 exec 非交互不可用,合理)
+- **alloy 适配:** `interactiveTool: "partial"`--init/update 自动写 `~/.codex/config.toml` 的 `[features] default_mode_request_user_input = true`(幂等);exec 非交互模式报错后降级为结构化文本选项,不反复重试;`ASK_TOOLS` 含 `request_user_input`(调用可触发 clear pending_gate)
+- 证据: [openai/codex features/src/lib.rs](https://github.com/openai/codex/blob/main/codex-rs/features/src/lib.rs)(FeatureSpec DefaultModeRequestUserInput)+ [tool_config.rs](https://github.com/openai/codex/blob/main/codex-rs/tools/src/tool_config.rs)(request_user_input_available_modes)+ [Codex SDK RequestUserInput](https://codex-sdk.hexdocs.pm/0.16.0/Codex.Protocol.RequestUserInput.md)
 
 ### Pi
 - **无内置交互工具**--内置工具仅 `read/bash/edit/write/grep/find/ls`(7 个)
@@ -327,7 +370,7 @@
 
 **实现位置:** `src/core/agent-config.ts` 的 `generatePiQuestionExtensionContent()` 函数生成完整 extension TS 字符串,内联 `OptionList` 类 + `showSingleSelect` / `showMultiSelect` 函数 + ANSI 颜色常量。`alloy init` / `alloy update` 部署到 `.pi/extensions/alloy-question.ts`。
 
-### 三平台对比
+### 四平台对比
 
 | agent | 工具名 | 来源 | 多选 | 部署 | 清理 |
 |-------|--------|------|------|------|------|
@@ -361,19 +404,29 @@
 5. CLI: `--skill <path>`(repeatable)
 - 证据: [Pi skills.md](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/skills.md)、[package-manager.ts](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/core/package-manager.ts)(npm L1999-2000,git L2039,2028)
 
+### Codex
+1. REPO 级: `$CWD/.agents/skills/`、`$CWD/../.agents/skills/`、`$REPO_ROOT/.agents/skills/`(从 CWD 逐级向上)
+2. USER 级: `~/.agents/skills/`
+3. ADMIN 级: `/etc/codex/skills`
+4. SYSTEM: 随 Codex 内置(skill-creator、plan 等)
+- 支持符号链接的 skill 文件夹;技能变更自动检测(未出现则重启 Codex)
+- 禁用: `~/.codex/config.toml` 的 `[[skills.config]]` 条目
+- 证据: [Build skills](https://learn.chatgpt.com/docs/build-skills)(加载位置表)
+
 **关键洞察:**
-- 所有 3 个 agent 都读 `.agents/skills/`(项目级)和 `~/.agents/skills/`(全局级,**除 Claude Code**)
+- 所有 4 个 agent 中,OpenCode/Pi/Codex 都读 `.agents/skills/`(项目级)和 `~/.agents/skills/`(全局级,**除 Claude Code**)
 - Claude Code 只读 `.claude/skills/` 和 `~/.claude/skills/`(不读 `.agents/skills/`)
-- npx skills add 为 Claude Code/Pi 创建符号链接到 `.agents/skills/`
+- npx skills add 为 Claude Code/Pi 创建符号链接到 `.agents/skills/`;OpenCode/Codex 直接读共享目录
 
 **FAQ:为什么 init 矩阵中所有 agent 都显示"✓ 全局共享"?**
 
-`~/.agents/skills/` 是 npx skills 的共享存放目录,3 个 agent 的读取方式:
+`~/.agents/skills/` 是 npx skills 的共享存放目录,4 个 agent 的读取方式:
 - **OpenCode**: 直接读 `~/.agents/skills/`(官方文档明确,无符号链接)
 - **Pi**: 读 `~/.pi/agent/skills/`(符号链接)+ `~/.agents/skills/`(直接读,双路径)
 - **Claude Code**: 读 `~/.claude/skills/`(符号链接到 `~/.agents/skills/`)
+- **Codex**: 直接读 `~/.agents/skills/`(官方文档 USER 级路径,无符号链接)
 
-所以 `~/.agents/skills/brainstorming` 存在时,3 个 agent 都能读到,显示"✓ 全局共享"是**正确的**,不是误判。只有 Claude Code 依赖符号链接(若 `~/.claude/skills/<name>` 符号链接丢失,Claude Code 才读不到);其他 agent 直接读 `~/.agents/skills/`,无符号链接丢失风险。
+所以 `~/.agents/skills/brainstorming` 存在时,4 个 agent 都能读到,显示"✓ 全局共享"是**正确的**,不是误判。只有 Claude Code 依赖符号链接(若 `~/.claude/skills/<name>` 符号链接丢失,Claude Code 才读不到);其他 agent 直接读 `~/.agents/skills/`,无符号链接丢失风险。
 
 证据:
 - OpenCode 官方:[skills 文档](https://opencode.ai/docs/skills) "Global agent-compatible: `~/.agents/skills/*/SKILL.md`"
@@ -385,15 +438,23 @@
 
 > **用途:** alloy skill md 里调用外部 skill(opsx/superpowers)时,各 agent 的加载机制不同。本章节是 `alloy-shared/references/skill-loading.md` 的证据源。
 > **调研日期:** 2026-07-16
-> **核心差异:** Claude Code/OpenCode 有 `skill({ name })` 工具;**Pi 没有该工具,agent 需自己 `read` SKILL.md**。
+> **核心差异:** Claude Code/OpenCode 有 `skill({ name })` 工具;**Pi/Codex 没有该工具,agent 需自己 `read` SKILL.md 或用平台提及语法(`$skill-name`)**。
 
-### 三平台 skill 加载工具对比
+### 四平台 skill 加载工具对比
 
 | agent | skill 加载工具 | 机制 | 证据 |
 |-------|--------------|------|------|
 | Claude Code | 有 `skill({ name })` 工具 | agent 主动调用工具,平台加载 SKILL.md 全文 | [Claude Code skills](https://docs.claude.com/en/docs/claude-code/skills) |
 | OpenCode | 有 `skill({ name })` 工具 | agent 主动调用工具,平台加载 SKILL.md 全文 | [OpenCode skills.mdx](https://github.com/anomalyco/opencode/blob/main/packages/web/src/content/docs/skills.mdx) |
 | **Pi** | **无 `skill()` 工具** | agent 自己 `read` SKILL.md(或用户 `/skill:name` 强制) | [Pi skills.md "How Skills Work"](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/skills.md) |
+| **Codex** | **无 `skill()` 工具**(实测 0.146.0) | 渐进式披露:宿主按 description 匹配自动加载;显式:`$skill-name` 提及或 `read` SKILL.md | [Build skills](https://learn.chatgpt.com/docs/build-skills) |
+
+### Codex 的 skill 加载机制
+
+- **渐进式披露:** 宿主初始只加载每个 skill 的 name + description(总预算 ≤2% 上下文或 8,000 字符),被选中后才加载完整 SKILL.md 正文
+- **隐式触发:** 任务匹配 description 时宿主自动选择(description 是主要触发机制,需前置关键用例和触发词)
+- **显式触发:** Codex CLI/IDE 中 `$skill-name` 提及或 `/skills` 列表
+- **实测工具集无 `skill()` 工具**(0.146.0:exec_command/write_stdin/update_plan/request_user_input/apply_patch/view_image/collaboration__* 等),alloy SKILL.md 里应写 `$skill-name` 或 `read .agents/skills/<name>/SKILL.md`
 
 ### Pi 的 skill 加载机制(官方文档确认)
 
@@ -424,9 +485,10 @@ alloy skill md 里调用外部 skill 时,用多 agent 适配格式(见 `alloy-sh
 加载 `<skill-name>` skill(多 agent 适配见 `alloy-shared/references/skill-loading.md`):
 - Claude Code / OpenCode: 调 `skill({ name: "<skill-name>" })`
 - Pi: `read .pi/skills/<skill-name>/SKILL.md`
+- Codex: `$<skill-name>` 提及或 `read .agents/skills/<skill-name>/SKILL.md`
 ```
 
-**反例(对 Pi 无效):**
+**反例(对 Pi/Codex 无效):**
 ```markdown
 调 `skill({ name: "openspec-explore" })` 加载 opsx skill
 ```
@@ -470,9 +532,9 @@ alloy 早期 SKILL.md 只写 `skill({ name: "xxx" })`(Claude Code 语法),对 Pi
 1. 装到 `.agents/skills/`(共享目录)
 2. 为 claude-code 创建 `.claude/skills/<name>` 符号链接 → `../../.agents/skills/<name>`
 3. 为 pi 创建 `.pi/skills/<name>` 符号链接 → `../../.agents/skills/<name>`
-4. **OpenCode 直接读 `.agents/skills/`**(不需要符号链接)
+4. **OpenCode/Codex 直接读 `.agents/skills/`**(不需要符号链接)
 
-- 所有 3 个 agent 都能用 npx 最新版
+- 所有 4 个 agent 都能用 npx 最新版(Codex 官方规范 USER 级 `~/.agents/skills/` 与共享目录一致)
 - skills CLI 来源: [vercel-labs/skills](https://github.com/vercel-labs/skills)
 - Supported Agents 表: https://github.com/vercel-labs/skills#supported-agents
 
@@ -507,6 +569,13 @@ alloy 早期 SKILL.md 只写 `skill({ name: "xxx" })`(Claude Code 语法),对 Pi
 - package 含: extensions/skills/prompt-templates/themes
 - 证据: [Pi packages.md](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/packages.md)、[package-manager.ts](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/core/package-manager.ts) L1999-2000(npm),L2039,2028(git)
 
+### Codex
+- 安装: plugin 分发(`.codex-plugin/plugin.json` 清单指向 skills 目录),可捆绑 MCP 连接器
+- 插件位置: ChatGPT/Codex 通用插件目录(桌面端/CLI)
+- 可捆绑 hooks(plugin manifest 或 `defaulthooks/hooks.json`),收到 `PLUGIN_ROOT`/`PLUGIN_DATA` env
+- **alloy 不涉及**:独立 skill 文件夹(.agents/skills/)已覆盖 alloy 场景,无需打包 plugin
+- 证据: [Skills & Plugins](https://learn.chatgpt.com/docs/skills-and-plugins) + [Hooks](https://learn.chatgpt.com/docs/hooks)
+
 ---
 
 ## 10. Commands / Prompt Templates
@@ -516,6 +585,9 @@ alloy 早期 SKILL.md 只写 `skill({ name: "xxx" })`(Claude Code 语法),对 Pi
 | Claude Code | `.claude/commands/*.md` | `~/.claude/commands/` | `/命令名` | Markdown |
 | OpenCode | `.opencode/commands/*.md` | `~/.config/opencode/commands/` | `/命令名` | JSON 或 Markdown |
 | Pi | `.pi/prompts/*.md` | `~/.pi/agent/prompts/` | `/模板名` | Markdown |
+| Codex | 无项目级 | `~/.codex/prompts/*.md`(`CODEX_HOME` 可改) | `/提示词名` | Markdown(frontmatter: description/argument-hint) |
+
+> **Codex 说明:** 无项目级 prompts(openspec CLI 的 codex adapter 装全局 `~/.codex/prompts/opsx-*.md`,证据:openspec-cli `dist/core/command-generation/adapters/codex.js`)。alloy 不给 Codex 装 command wrapper(Codex 的 skill 显式调用是 `$skill-name`,不是 `/` 列表)
 
 - 证据: 各 agent 官方文档
 
@@ -575,19 +647,30 @@ alloy 早期 SKILL.md 只写 `skill({ name: "xxx" })`(Claude Code 语法),对 Pi
   2. **bash 工具无 per-call cwd 参数:** Pi bash 工具 schema 仅 `command` + `timeout`,cwd 在 `createBashToolDefinition(cwd, options)` 创建时闭包绑定,agent 调用时无法指定 cwd
   3. **session cwd 不解绑:** 即使 `alloy _worktree-create` 用 `git worktree add` 创建了 worktree 目录,Pi 的 session cwd 仍在主仓,后续所有 bash/write/edit 在主仓执行
 - **实测后果(2026-07-17):** Pi 下 apply 阶段创建 worktree 后,agent 后续 bash 命令在主仓执行,SDD 子 agent 的 `git commit` 落 feature 分支(不在 worktree 分支),破坏 worktree 隔离。commit `a3c799d`/`53fbd22` 落 feature 分支,worktree 分支只有 `_worktree-create` 的初始 commit
-- **对比 OpenCode 为什么正常:** OpenCode bash 工具有 `workdir` 参数,agent 每次调用传 worktree 路径,命令在 worktree 内执行,SDD commit 落 worktree 分支
+- **对比 OpenCode/Codex 为什么正常:** OpenCode bash 工具有 `workdir` 参数;Codex 的 `exec_command` 也有 `workdir` 参数(实测 0.146.0,`cwd` 参数名无效),agent 每次调用传 worktree 路径,命令在 worktree 内执行,SDD commit 落 worktree 分支
 - **alloy 适配:** Pi 下 `alloy _guard worktree-status` 检测 `PI_CODING_AGENT=true` 直接返回 `skipped`;apply SKILL.md 检测 Pi 跳过 worktree-choice USER_GATE,直接走 skipped 路径(apply 在 feature 分支执行)
 - **证据:** [Pi bash.ts](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/core/tools/bash.ts)(`createBashToolDefinition(cwd, options)`,cwd 闭包绑定)、[Pi args.ts](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/cli/args.ts)(无 `--worktree` flag)、[Pi tools 源码目录](https://github.com/earendil-works/pi/tree/main/packages/coding-agent/src/core/tools/)(7 个工具,无 worktree/session 切换)
 
-### 11.5 alloy worktree 调度策略
+### 11.5 Codex(支持 worktree,同 OpenCode 机制)
+
+- **支持:** ✅(2026-08-02 实测修正--早期误判为不支持,依据"工具集无 EnterWorktree"不充分)
+- **机制(与 OpenCode 同构,无 EnterWorktree 工具):**
+  1. **`exec_command` 有 `workdir` 参数**(实测 0.146.0:传 `workdir=<worktree>` 后 `pwd` 返回 worktree 路径;注意参数名是 `workdir` 不是 `cwd`,`cwd` 会被忽略回退 session 目录)
+  2. **`apply_patch` 支持绝对路径**(实测:绝对路径成功写入 worktree 目录;相对路径落 session cwd 主仓)
+  3. **官方 worktree 概念:** 桌面 app 有 Worktree 环境类型 + Codex-managed worktrees(`$CODEX_HOME/worktrees`)+ Handoff 流程;CLI 开发者模式为 `git worktree add` + `cd <worktree> && codex`
+- **alloy 适配:** 同 OpenCode--`alloy _worktree-create <change-dir>` 创建(路径 `.worktrees/<name>`),agent 每个 bash 传 `workdir=<worktree>`,`apply_patch` 用绝对路径写 worktree 内文件
+- **证据:** 实测(codex-cli 0.146.0)+ [Worktrees(learn.chatgpt.com)](https://learn.chatgpt.com/docs/environments/git-worktrees)
+
+### 11.6 alloy worktree 调度策略
 
 | Agent | worktree 创建方式 | state 写入 | apply 执行位置 |
 |-------|------------------|-----------|--------------|
 | Claude Code | `EnterWorktree(name)` 工具(harness 层) | agent 在 worktree 内手动写三字段 | worktree 内(session cwd 已切) |
 | OpenCode | `alloy _worktree-create <change-dir>`(CLI 原子命令) | 命令内部在 worktree 内写三字段 + commit | worktree 内(agent 传 `workdir`) |
 | Pi | **不创建**(强制 skipped) | `worktree: skipped` | feature 分支(无 worktree 隔离) |
+| Codex | `alloy _worktree-create <change-dir>`(CLI 原子命令) | 命令内部在 worktree 内写三字段 + commit | worktree 内(agent 传 `workdir`;apply_patch 用绝对路径) |
 
-**设计原则(不变):** worktree state(`worktree`/`worktree_branch`/`worktree_created_at`)只在 worktree 分支写,主仓 feature 分支保持 `null`。防止 merge worktree -> feature 时 .alloy.yaml 冲突。Claude Code(EnterWorktree 解绑 session cwd)和 OpenCode(agent 传 workdir)都能让 agent 在 worktree 内操作,读 worktree 分支 state,守卫正常工作。Pi 无法满足"agent 在 worktree 内操作"前提,因此强制 skipped,不破坏该原则。
+**设计原则(不变):** worktree state(`worktree`/`worktree_branch`/`worktree_created_at`)只在 worktree 分支写,主仓 feature 分支保持 `null`。防止 merge worktree -> feature 时 .alloy.yaml 冲突。Claude Code(EnterWorktree 解绑 session cwd)、OpenCode 和 Codex(agent 传 workdir)都能让 agent 在 worktree 内操作,读 worktree 分支 state,守卫正常工作。Pi 无法满足"agent 在 worktree 内操作"前提,因此强制 skipped,不破坏该原则。
 
 ---
 
@@ -615,6 +698,15 @@ alloy 早期 SKILL.md 只写 `skill({ name: "xxx" })`(Claude Code 语法),对 Pi
 - alloy 适配: apply 阶段 SDD/EP USER_GATE 检测 Pi 时**只给 `executing-plans` 选项**(隐藏 SDD),用 EP 在当前 session 顺序执行
 - 证据: [Pi README](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/README.md)、[pi-tools.md subagents](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/skills.md)("Pi core does not ship a standard subagent tool")
 
+### Codex
+- **支持:** ✅(默认启用 subagent workflows)
+- **工具:** `collaboration__spawn_agent` / `collaboration__send_message` / `collaboration__wait_agent` 等(实测 0.146.0 工具集)
+- **配置:** `~/.codex/agents/*.toml`(个人)/ `.codex/agents/*.toml`(项目);字段 `name`/`description`/`developer_instructions` + 可选 `model`/`sandbox_mode`/`mcp_servers`/`skills.config`
+- **内置 agent:** `default`(通用)/ `worker`(实现/修复)/ `explorer`(只读探索)
+- **并发上限:** `[agents] max_concurrent_threads_per_session`
+- **alloy 适配:** SDD 可用(不强制 EP,与 Claude Code/OpenCode 相同走正常 USER_GATE 选择)
+- 证据: [Codex Subagents](https://learn.chatgpt.com/docs/agent-configuration/subagents)
+
 **alloy SDD 调度策略:**
 
 | Agent | SDD 可用 | 分派方式 | EP 降级 |
@@ -622,6 +714,7 @@ alloy 早期 SKILL.md 只写 `skill({ name: "xxx" })`(Claude Code 语法),对 Pi
 | Claude Code | ✅ | Agent 工具(`subagent_type: general-purpose`) | 可选 |
 | OpenCode | ✅ | OpenCode subagent 机制(`@mention` 或自动派发) | 可选 |
 | Pi | ❌ | 无原生 subagent(alloy 不依赖 pi-subagents 可选包) | **强制 EP** |
+| Codex | ✅ | `collaboration__spawn_agent`(TOML 配置 worker/explorer) | 可选 |
 
 ---
 
@@ -643,13 +736,17 @@ alloy 早期 SKILL.md 只写 `skill({ name: "xxx" })`(Claude Code 语法),对 Pi
 - 无 `completion` 命令(仅 install/remove/update/list/config)
 - 证据: [Pi args.ts](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/cli/args.ts)
 
+### Codex
+- 支持: ❌(无 `codex completion` 命令)
+- 证据: [Codex CLI reference](https://learn.chatgpt.com/docs/codex/developer-commands)(无 completion 子命令)
+
 ---
 
 ## 14. 运行时标识环境变量与工具参数名
 
 > **用途:** alloy 运行时(被 hook/plugin/extension 调用时)感知当前是哪个 agent,用于差异化处理(如工具参数名 `filePath` vs `file_path` vs `path`、worktree 路径、错误提示文案等)。
 > **调研日期:** 2026-07-14
-> **方案:** A 层优先--A 层读 agent 运行时自注入的 env(3 个 agent),兜底返回 null。
+> **方案:** A 层优先--A 层读 agent 运行时自注入的 env(4 个 agent),兜底返回 null。
 
 ### 14.1 运行时标识 env(A 层:agent 自注入,alloy 被动读)
 
@@ -658,8 +755,12 @@ alloy 早期 SKILL.md 只写 `skill({ name: "xxx" })`(Claude Code 语法),对 Pi
 | Claude Code | `CLAUDECODE` | `1` | 所有子进程(Bash/PowerShell/hook/MCP) | [env-vars](https://code.claude.com/docs/en/env-vars)("Set to 1 in subprocesses Claude Code spawns") |
 | OpenCode | `OPENCODE` | `1` | `packages/opencode/src/index.ts` 启动时 `process.env.OPENCODE = "1"` | [index.ts](https://github.com/anomalyco/opencode/blob/main/packages/opencode/src/index.ts) |
 | Pi | `PI_CODING_AGENT` | `true` | `packages/coding-agent/src/cli.ts` 启动时 `process.env.PI_CODING_AGENT = "true"` | [cli.ts](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/cli.ts) |
+| Codex | `CODEX_CI` | `1`(exec 非交互模式) | codex exec 注入(`codex exec` 实测 env 含 `CODEX_CI=1` + `CODEX_THREAD_ID=<session-id>`) | 实测 0.146.0 + [is-ai-agent](https://docs.rs/crate/is-ai-agent/0.3.0)(CODEX_THREAD_ID/CODEX_SANDBOX/CODEX_CI) |
+| Codex | `CODEX_THREAD_ID` | 会话 id(交互/exec 均注入) | 每次 codex 会话注入,值如 `019fc195-...` | 同上 |
 
-**关键:** 这 3 个 env 是 agent 运行时自己注入的,alloy 被动读取,不依赖 alloy init 配置。即使 alloy init 生成的 plugin/extension 全坏,这 3 个 agent 仍能被感知。
+**关键:** 这 4 个 env 是 agent 运行时自己注入的(Codex 无 `CODEX=1`,只有 `CODEX_CI`/`CODEX_THREAD_ID`),alloy 被动读取,不依赖 alloy init 配置。即使 alloy init 生成的 plugin/extension 全坏,这 4 个 agent 仍能被感知。
+
+**Codex 检测优先级陷阱(实测 2026-08-02):** codex 会话的 shell 继承用户 shell env(用户若全局 `export CLAUDECODE=1`,codex 子进程里也有 `CLAUDECODE=1`)。`detectAgent` 必须先检测 `CODEX_CI`/`CODEX_THREAD_ID` 再检测 `CLAUDECODE`,否则 codex 会话被误判为 claude-code。
 
 ### 14.2 hook 进程拿 agent 上下文的途径
 
@@ -668,6 +769,7 @@ alloy 早期 SKILL.md 只写 `skill({ name: "xxx" })`(Claude Code 语法),对 Pi
 | Claude Code | stdin JSON + env | stdin:`tool_name`/`tool_input`/`session_id`/`cwd`/`hook_event_name`;env:`CLAUDE_PROJECT_DIR`/`CLAUDECODE` |
 | OpenCode | plugin 回调参数(非 env) | `input.tool`/`input.sessionID`/`input.callID` + `output.args`;env:`OPENCODE`(进程继承) |
 | Pi | extension 回调参数(非 env) | `event.toolName`/`event.toolCallId`/`event.input`;env:`PI_CODING_AGENT`(进程继承) |
+| Codex | stdin JSON + env | stdin:`tool_name`/`tool_input`/`session_id`/`cwd`/`hook_event_name`/`permission_mode`(实测与 Claude Code 同构);env:`CODEX_CI`/`CODEX_THREAD_ID` |
 
 ### 14.3 write/edit 工具参数名(关键差异,曾导致 OpenCode 拦截失效)
 
@@ -676,6 +778,7 @@ alloy 早期 SKILL.md 只写 `skill({ name: "xxx" })`(Claude Code 语法),对 Pi
 | Claude Code | `file_path` | `file_path` | [Claude Code tools](https://docs.claude.com/en/docs/claude-code/...) |
 | OpenCode | `filePath`(驼峰) | `filePath`(驼峰) | [write.ts](https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/tool/write.ts)/[edit.ts](https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/tool/edit.ts) `Parameters = Schema.Struct({ filePath: ... })` |
 | Pi | `path`(主)/`file_path`(兼容) | `filePath`(主)/`file_path`(兼容) | [write.ts](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/core/tools/write.ts)`args?.file_path ?? args?.path` |
+| Codex | 无独立 write/edit 工具(用 `apply_patch`);bash 工具是 `exec_command`(`command` 参数) | 同左 | 实测 0.146.0 工具集 |
 
 **历史 bug:** alloy init 生成的 OpenCode plugin 取 `args?.path ?? args?.file_path`,OpenCode write 工具实际参数是 `filePath`,导致拦截失效(commit 274aa23 修复)。
 
@@ -686,6 +789,7 @@ alloy 早期 SKILL.md 只写 `skill({ name: "xxx" })`(Claude Code 语法),对 Pi
 | Claude Code | `_hook-guard` stdin JSON | `tool_name` | `tool_input.file_path` | [hooks](https://docs.claude.com/en/docs/claude-code/hooks) |
 | OpenCode | plugin `tool.execute.before` | `input.tool` | `output.args.filePath`(驼峰) | [plugins.mdx](https://github.com/anomalyco/opencode/blob/main/packages/web/src/content/docs/plugins.mdx) |
 | Pi | extension `tool_call` 事件 | `event.toolName` | `event.input`(可变,write 用 `input.path`/`input.file_path`,edit 用 `input.filePath`/`input.file_path`) | [extensions.md](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md) |
+| Codex | `_hook-guard` stdin JSON(实测 0.146.0) | `tool_name`(实测值 `Bash`,工具列表名是 `exec_command`) | `tool_input.command`(Bash/apply_patch) | [Hooks](https://learn.chatgpt.com/docs/hooks)(PreToolUse stdin 字段) |
 
 **历史 bug(2026-07-16 修复):** alloy-guard extension 早期取 `event?.tool ?? event?.name`(工具名)+ `event?.args?.path`(文件路径),Pi 实际字段是 `event.toolName` + `event.input`,导致 alloy-question 检测和 write/edit 拦截全部失效(5 次 HARD_STOP 需手动降级)。修复:统一用 `event.toolName` + `event.input.path ?? event.input.filePath ?? event.input.file_path`。
 
@@ -693,7 +797,9 @@ alloy 早期 SKILL.md 只写 `skill({ name: "xxx" })`(Claude Code 语法),对 Pi
 
 ```
 detectAgent(env):
+  # 0 层:AI_AGENT 通用规范(格式 <agent-id>_<version>_agent)
   # A 层:agent 运行时自注入 env(优先,不依赖 alloy init)
+  if env.CODEX_CI === "1" or env.CODEX_THREAD_ID: return "codex"  # 必须最先!
   if env.CLAUDECODE === "1": return "claude-code"
   if env.OPENCODE === "1": return "opencode"
   if env.PI_CODING_AGENT === "true": return "pi"
@@ -702,6 +808,8 @@ detectAgent(env):
 ```
 
 **优先级:** A 层优先(A 层是 agent 自注入,最可靠);兜底 null(按工具参数名兼容取 `file_path ?? filePath ?? path`)。
+
+**Codex 检测必须最先(实测 2026-08-02):** codex 会话 shell 继承用户 env(实测 codex exec 的 env 里同时有 `CODEX_CI=1` 和 `CLAUDECODE=1`)。若 `CLAUDECODE` 判断在前,codex 会话会被误判为 claude-code,导致 worktree-status、SDD 降级等逻辑走错分支。Codex 官方 env 文档未列出 `CODEX_CI`/`CODEX_THREAD_ID`(第三方检测库 is-ai-agent/proofkit/Vercel detect-agent 确认),但实测注入稳定。
 
 ---
 
@@ -714,7 +822,7 @@ detectAgent(env):
 - 为 claude-code 创建 `.claude/skills/` 符号链接
 - 为 pi 创建 `.pi/skills/` 符号链接
 - OpenCode 直接读 `.agents/skills/`
-- **所有 3 个 agent 都能用 npx 最新版**
+- **所有 4 个 agent 都能用 npx 最新版**
 
 **fallbackInstall 仅在 npx 失败时(网络问题):**
 - 复制 vendor 到 `.agents/skills/`
@@ -736,6 +844,19 @@ detectAgent(env):
 - Claude Code 不读 `.agents/skills/`(只读 `.claude/skills/`)
 
 ---
+
+## 证据来源汇总(Codex 部分)
+
+- [Build skills(learn.chatgpt.com)](https://learn.chatgpt.com/docs/build-skills): SKILL.md 格式、目录结构、加载位置(REPO/USER/ADMIN)、渐进式披露、`$` 提及
+- [Skills & Plugins(learn.chatgpt.com)](https://learn.chatgpt.com/docs/skills-and-plugins): skill vs plugin 关系、显式/隐式触发
+- [AGENTS.md(learn.chatgpt.com)](https://learn.chatgpt.com/docs/agent-configuration/agents-md): 指令文件层级、override 链、合并顺序、project_doc_max_bytes
+- [Hooks(learn.chatgpt.com)](https://learn.chatgpt.com/docs/hooks): 事件全集、PreToolUse stdin/exit 2/permissionDecision、hooks.json 配置、trust 机制
+- [Environment variables(learn.chatgpt.com)](https://learn.chatgpt.com/docs/config-file/environment-variables): CODEX_HOME/CODEX_API_KEY 等(官方未列出 CODEX_CI/CODEX_THREAD_ID)
+- [Subagents(learn.chatgpt.com)](https://learn.chatgpt.com/docs/agent-configuration/subagents): 默认启用、TOML 配置、内置 worker/explorer、并发上限
+- [is-ai-agent](https://docs.rs/crate/is-ai-agent/0.3.0): CODEX_THREAD_ID/CODEX_SANDBOX/CODEX_CI 检测
+- [openai/codex #3064](https://github.com/openai/codex/issues/3064): 沙箱不继承用户 env(但自注入 agent env)
+- [openspec-cli codex adapter](https://github.com/fission-ai/openspec)(dist/core/command-generation/adapters/codex.js): prompts 装全局 `~/.codex/prompts/opsx-*.md`
+- **实测记录(2026-08-02,codex-cli 0.146.0):** env 注入 CODEX_CI/CODEX_THREAD_ID;request_user_input 默认仅 Plan mode,开启 `default_mode_request_user_input` feature 后 Default 模式可用(仅 exec 不可用);PreToolUse hook 触发 + exit 2 阻断;项目 hooks.json 需 trust;工具集含 collaboration__spawn_agent(有 subagent);exec_command 有 `workdir` 参数 + apply_patch 支持绝对路径(支持 worktree,机制同 OpenCode);无 EnterWorktree 工具(不构成不支持 worktree 的依据)
 
 ## 证据来源汇总
 

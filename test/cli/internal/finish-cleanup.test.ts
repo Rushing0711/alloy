@@ -123,12 +123,13 @@ describe("alloy _finish-cleanup", () => {
     errSpy.mockRestore();
   });
 
-  it("main 最近 commit 不含 squash merge 痕迹 -> PRECONDITION_FAIL", async () => {
+  it("main HEAD 与 feature 分支内容不一致(squash merge 未完成) -> PRECONDITION_FAIL", async () => {
+    // git diff --quiet 有差异时 exit 1,gitExec 视为失败
     execSyncMock.mockImplementation((cmd: string) => {
       if (cmd.startsWith("git rev-parse --verify")) return "abc123\n";
       if (cmd === "git branch --show-current") return MAIN_BRANCH + "\n";
-      if (cmd === `git log ${MAIN_BRANCH} --oneline -5`) {
-        return "def456 feat: some other commit\nabc123 initial commit\n";
+      if (cmd.startsWith("git diff --quiet")) {
+        throw Object.assign(new Error("diff"), { stdout: Buffer.from(""), stderr: Buffer.from("") });
       }
       return "";
     });
@@ -137,7 +138,28 @@ describe("alloy _finish-cleanup", () => {
 
     await finishCleanupCommand([CHANGE_DIR, FEATURE_BRANCH]);
 
-    expect(errSpy.mock.calls.some(c => String(c[0]).includes("squash merge 痕迹"))).toBe(true);
+    expect(errSpy.mock.calls.some(c => String(c[0]).includes("内容不一致"))).toBe(true);
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    exitSpy.mockRestore();
+    errSpy.mockRestore();
+  });
+
+  it("main 最近 commit 含 squash merge 痕迹但内容不一致 -> 仍拦截(语义校验,不看 message)", async () => {
+    // 反例:message 恰好含 "squash merge" 但 tree 不同(agent 只改了 message 没 merge)
+    execSyncMock.mockImplementation((cmd: string) => {
+      if (cmd.startsWith("git rev-parse --verify")) return "abc123\n";
+      if (cmd === "git branch --show-current") return MAIN_BRANCH + "\n";
+      if (cmd.startsWith("git diff --quiet")) {
+        throw Object.assign(new Error("diff"), { stdout: Buffer.from(""), stderr: Buffer.from("") });
+      }
+      return "";
+    });
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await finishCleanupCommand([CHANGE_DIR, FEATURE_BRANCH]);
+
+    expect(errSpy.mock.calls.some(c => String(c[0]).includes("内容不一致"))).toBe(true);
     expect(exitSpy).toHaveBeenCalledWith(1);
     exitSpy.mockRestore();
     errSpy.mockRestore();
@@ -147,9 +169,8 @@ describe("alloy _finish-cleanup", () => {
     execSyncMock.mockImplementation((cmd: string) => {
       if (cmd.startsWith("git rev-parse --verify")) return "abc123\n";
       if (cmd === "git branch --show-current") return MAIN_BRANCH + "\n";
-      if (cmd === `git log ${MAIN_BRANCH} --oneline -5`) {
-        return `def456 chore(add-hello-script): 合入 main（squash merge）\nabc123 initial\n`;
-      }
+      // git diff --quiet 无差异 -> exit 0
+      if (cmd.startsWith("git diff --quiet")) return "";
       if (cmd === `git branch -D "${FEATURE_BRANCH}"`) return `Deleted branch ${FEATURE_BRANCH}\n`;
       return "";
     });
@@ -157,6 +178,7 @@ describe("alloy _finish-cleanup", () => {
 
     await finishCleanupCommand([CHANGE_DIR, FEATURE_BRANCH]);
 
+    expect(execSyncMock).toHaveBeenCalledWith(`git diff --quiet "${FEATURE_BRANCH}" "main"`, expect.anything());
     expect(execSyncMock).toHaveBeenCalledWith(`git branch -D "${FEATURE_BRANCH}"`, expect.anything());
     expect(logSpy.mock.calls.some(c => String(c[0]).includes("已删除 feature 分支"))).toBe(true);
     logSpy.mockRestore();
@@ -166,9 +188,7 @@ describe("alloy _finish-cleanup", () => {
     execSyncMock.mockImplementation((cmd: string) => {
       if (cmd.startsWith("git rev-parse --verify")) return "abc123\n";
       if (cmd === "git branch --show-current") return MAIN_BRANCH + "\n";
-      if (cmd === `git log ${MAIN_BRANCH} --oneline -5`) {
-        return `def456 chore: 合入 main（squash merge）\nabc123 initial\n`;
-      }
+      if (cmd.startsWith("git diff --quiet")) return "";
       if (cmd === `git branch -D "${FEATURE_BRANCH}"`) {
         throw Object.assign(new Error("fail"), {
           stderr: Buffer.from("error: branch not found"),

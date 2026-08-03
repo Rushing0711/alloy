@@ -187,19 +187,29 @@ function detectOpsxCommands(
   for (const agent of targetAgents) {
     let opsxPath: string | null = null;
     let opsxInstalled: boolean;
-    const agentBase = agent.commandsDir.split("/")[0];
-    const commandsSubdir = agent.commandsDir.split("/")[1] || "commands";
-    const commandsDir = join(base, agentBase, commandsSubdir);
-    const opsxDir = join(commandsDir, "opsx");
-    const opsxFile = join(commandsDir, "opsx-explore.md");
-    if (existsSync(opsxDir)) {
-      opsxInstalled = true;
-      opsxPath = opsxDir;
-    } else if (existsSync(opsxFile)) {
-      opsxInstalled = true;
-      opsxPath = opsxFile;
+    // Codex 的 prompts 装全局(openspec CLI codex adapter 写 <CODEX_HOME>/prompts/opsx-*.md),
+    // 与 commandsDir 推导无关,单独处理(证据:openspec-cli dist/core/command-generation/adapters/codex.js)
+    if (agent.id === "codex") {
+      const codexHome = process.env.CODEX_HOME?.trim() || join(home, ".codex");
+      const codexPrompts = join(codexHome, "prompts");
+      const opsxFile = join(codexPrompts, "opsx-explore.md");
+      opsxInstalled = existsSync(opsxFile);
+      opsxPath = opsxInstalled ? opsxFile : null;
     } else {
-      opsxInstalled = false;
+      const agentBase = agent.commandsDir.split("/")[0];
+      const commandsSubdir = agent.commandsDir.split("/")[1] || "commands";
+      const commandsDir = join(base, agentBase, commandsSubdir);
+      const opsxDir = join(commandsDir, "opsx");
+      const opsxFile = join(commandsDir, "opsx-explore.md");
+      if (existsSync(opsxDir)) {
+        opsxInstalled = true;
+        opsxPath = opsxDir;
+      } else if (existsSync(opsxFile)) {
+        opsxInstalled = true;
+        opsxPath = opsxFile;
+      } else {
+        opsxInstalled = false;
+      }
     }
     if (opsxInstalled && opsxPath) {
       paths.push(opsxPath);

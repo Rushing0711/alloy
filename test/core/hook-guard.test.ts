@@ -99,6 +99,16 @@ describe("hook-guard guardCheck", () => {
       expect(result.allowed).toBe(true);
     });
 
+    it("planning 阶段放行 .codex/(codex hook 配置)", () => {
+      const result = guardCheck({ filePath: ".codex/hooks.json", phases: ["planning"] });
+      expect(result.allowed).toBe(true);
+    });
+
+    it("planning 阶段放行 skills-lock.json(npx skills add 锁文件)", () => {
+      const result = guardCheck({ filePath: "skills-lock.json", phases: ["planning"] });
+      expect(result.allowed).toBe(true);
+    });
+
     it("planning 阶段放行 .superpowers/(brainstorming Visual Companion 运行时)", () => {
       const result = guardCheck({ filePath: ".superpowers/brainstorm/123/content/layout.html", phases: ["planning"] });
       expect(result.allowed).toBe(true);

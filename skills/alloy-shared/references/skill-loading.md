@@ -2,15 +2,18 @@
 
 alloy 的 alloy-start/plan/apply/finish/fix 等 skill 调用外部 skill(opsx 系列 + superpowers 系列)完成探查、需求设计、验证等工作。各 agent 的 skill 加载机制不同,本文件是统一对照表。
 
-## 三平台 skill 加载机制差异
+## 四平台 skill 加载机制差异
 
 | agent | skill 加载工具 | 机制 | 证据 |
 |-------|--------------|------|------|
 | Claude Code | 有 `skill({ name })` 工具 | agent 主动调用工具,平台加载 SKILL.md 全文 | [Claude Code skills](https://docs.claude.com/en/docs/claude-code/skills) |
 | OpenCode | 有 `skill({ name })` 工具 | agent 主动调用工具,平台加载 SKILL.md 全文 | [OpenCode skills.mdx](https://github.com/anomalyco/opencode/blob/main/packages/web/src/content/docs/skills.mdx) |
 | **Pi** | **无 `skill()` 工具** | agent 自己 `read` SKILL.md(或用户 `/skill:name` 强制) | [Pi skills.md](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/skills.md) "How Skills Work" |
+| **Codex** | **无 `skill()` 工具(实测 0.146.0 工具集无)** | 隐式:宿主按 description 匹配自动加载;显式:`$skill-name` 提及或 `read` SKILL.md | [Build skills](https://learn.chatgpt.com/docs/build-skills)(渐进式披露 + `$` 提及) |
 
 **Pi 的关键限制:** Pi 内置工具仅 `read/bash/edit/write/grep/find/ls`(7 个),没有 `skill()` 工具。Pi skills.md 明确说:"When a task matches, the agent uses `read` to load the full SKILL.md (models don't always do this)"。alloy SKILL.md 里写 `skill({ name: "xxx" })` 对 Pi 是**死指令**--Pi 不认识这个工具调用,会反复探查找替代方案,浪费 LLM 往返。
+
+**Codex 的加载机制:** Codex 用渐进式披露(宿主先见 name+description,选中后加载全文),`$skill-name` 是官方显式提及语法。实测 Codex 0.146.0 工具集无 `skill()` 工具,SKILL.md 里应写 `$skill-name` 提及或 `read` SKILL.md(路径与 OpenCode/Pi 相同:`.agents/skills/<name>/SKILL.md` 或 `~/.agents/skills/<name>/SKILL.md`)。
 
 ## 统一调用对照表
 
@@ -18,28 +21,28 @@ alloy skill md 里调用外部 skill 时,用下表的多 agent 适配格式,**�
 
 ### opsx 系列 skill
 
-| alloy 逻辑名 | skill 名 | Claude Code / OpenCode | Pi |
-|-------------|---------|----------------------|-----|
-| `opsx:explore` | `openspec-explore` | `skill({ name: "openspec-explore" })` | `read .pi/skills/openspec-explore/SKILL.md` |
-| `opsx:new` | `openspec-new-change` | `skill({ name: "openspec-new-change" })` | `read .pi/skills/openspec-new-change/SKILL.md` |
-| `opsx:continue` | `openspec-continue-change` | `skill({ name: "openspec-continue-change" })` | `read .pi/skills/openspec-continue-change/SKILL.md` |
-| `opsx:verify` | `openspec-verify-change` | `skill({ name: "openspec-verify-change" })` | `read .pi/skills/openspec-verify-change/SKILL.md` |
-| `opsx:archive` | `openspec-archive-change` | `skill({ name: "openspec-archive-change" })` | `read .pi/skills/openspec-archive-change/SKILL.md` |
+| alloy 逻辑名 | skill 名 | Claude Code / OpenCode | Pi | Codex |
+|-------------|---------|----------------------|-----|-------|
+| `opsx:explore` | `openspec-explore` | `skill({ name: "openspec-explore" })` | `read .pi/skills/openspec-explore/SKILL.md` | `$openspec-explore` 或 `read .agents/skills/openspec-explore/SKILL.md` |
+| `opsx:new` | `openspec-new-change` | `skill({ name: "openspec-new-change" })` | `read .pi/skills/openspec-new-change/SKILL.md` | `$openspec-new-change` 或 `read .agents/skills/openspec-new-change/SKILL.md` |
+| `opsx:continue` | `openspec-continue-change` | `skill({ name: "openspec-continue-change" })` | `read .pi/skills/openspec-continue-change/SKILL.md` | `$openspec-continue-change` 或 `read .agents/skills/openspec-continue-change/SKILL.md` |
+| `opsx:verify` | `openspec-verify-change` | `skill({ name: "openspec-verify-change" })` | `read .pi/skills/openspec-verify-change/SKILL.md` | `$openspec-verify-change` 或 `read .agents/skills/openspec-verify-change/SKILL.md` |
+| `opsx:archive` | `openspec-archive-change` | `skill({ name: "openspec-archive-change" })` | `read .pi/skills/openspec-archive-change/SKILL.md` | `$openspec-archive-change` 或 `read .agents/skills/openspec-archive-change/SKILL.md` |
 
 ### superpowers 系列 skill
 
-| alloy 逻辑名 | skill 名(无 `superpowers:` 前缀) | Claude Code / OpenCode | Pi |
-|-------------|--------------------------------|----------------------|-----|
-| `superpowers:brainstorming` | `brainstorming` | `skill({ name: "brainstorming" })` | `read .pi/skills/brainstorming/SKILL.md` |
-| `superpowers:using-git-worktrees` | `using-git-worktrees` | `skill({ name: "using-git-worktrees" })` | `read .pi/skills/using-git-worktrees/SKILL.md` |
-| `superpowers:subagent-driven-development` | `subagent-driven-development` | `skill({ name: "subagent-driven-development" })` | `read .pi/skills/subagent-driven-development/SKILL.md` |
-| `superpowers:executing-plans` | `executing-plans` | `skill({ name: "executing-plans" })` | `read .pi/skills/executing-plans/SKILL.md` |
-| `superpowers:test-driven-development` | `test-driven-development` | `skill({ name: "test-driven-development" })` | `read .pi/skills/test-driven-development/SKILL.md` |
-| `superpowers:requesting-code-review` | `requesting-code-review` | `skill({ name: "requesting-code-review" })` | `read .pi/skills/requesting-code-review/SKILL.md` |
-| `superpowers:verification-before-completion` | `verification-before-completion` | `skill({ name: "verification-before-completion" })` | `read .pi/skills/verification-before-completion/SKILL.md` |
-| `superpowers:finishing-a-development-branch` | `finishing-a-development-branch` | `skill({ name: "finishing-a-development-branch" })` | `read .pi/skills/finishing-a-development-branch/SKILL.md` |
-| `superpowers:systematic-debugging` | `systematic-debugging` | `skill({ name: "systematic-debugging" })` | `read .pi/skills/systematic-debugging/SKILL.md` |
-| `superpowers:writing-plans` | `writing-plans` | `skill({ name: "writing-plans" })` | `read .pi/skills/writing-plans/SKILL.md` |
+| alloy 逻辑名 | skill 名(无 `superpowers:` 前缀) | Claude Code / OpenCode | Pi | Codex |
+|-------------|--------------------------------|----------------------|-----|-------|
+| `superpowers:brainstorming` | `brainstorming` | `skill({ name: "brainstorming" })` | `read .pi/skills/brainstorming/SKILL.md` | `$brainstorming` 或 `read .agents/skills/brainstorming/SKILL.md` |
+| `superpowers:using-git-worktrees` | `using-git-worktrees` | `skill({ name: "using-git-worktrees" })` | `read .pi/skills/using-git-worktrees/SKILL.md` | `$using-git-worktrees` 或 `read .agents/skills/using-git-worktrees/SKILL.md` |
+| `superpowers:subagent-driven-development` | `subagent-driven-development` | `skill({ name: "subagent-driven-development" })` | `read .pi/skills/subagent-driven-development/SKILL.md` | `$subagent-driven-development` 或 `read .agents/skills/subagent-driven-development/SKILL.md` |
+| `superpowers:executing-plans` | `executing-plans` | `skill({ name: "executing-plans" })` | `read .pi/skills/executing-plans/SKILL.md` | `$executing-plans` 或 `read .agents/skills/executing-plans/SKILL.md` |
+| `superpowers:test-driven-development` | `test-driven-development` | `skill({ name: "test-driven-development" })` | `read .pi/skills/test-driven-development/SKILL.md` | `$test-driven-development` 或 `read .agents/skills/test-driven-development/SKILL.md` |
+| `superpowers:requesting-code-review` | `requesting-code-review` | `skill({ name: "requesting-code-review" })` | `read .pi/skills/requesting-code-review/SKILL.md` | `$requesting-code-review` 或 `read .agents/skills/requesting-code-review/SKILL.md` |
+| `superpowers:verification-before-completion` | `verification-before-completion` | `skill({ name: "verification-before-completion" })` | `read .pi/skills/verification-before-completion/SKILL.md` | `$verification-before-completion` 或 `read .agents/skills/verification-before-completion/SKILL.md` |
+| `superpowers:finishing-a-development-branch` | `finishing-a-development-branch` | `skill({ name: "finishing-a-development-branch" })` | `read .pi/skills/finishing-a-development-branch/SKILL.md` | `$finishing-a-development-branch` 或 `read .agents/skills/finishing-a-development-branch/SKILL.md` |
+| `superpowers:systematic-debugging` | `systematic-debugging` | `skill({ name: "systematic-debugging" })` | `read .pi/skills/systematic-debugging/SKILL.md` | `$systematic-debugging` 或 `read .agents/skills/systematic-debugging/SKILL.md` |
+| `superpowers:writing-plans` | `writing-plans` | `skill({ name: "writing-plans" })` | `read .pi/skills/writing-plans/SKILL.md` | `$writing-plans` 或 `read .agents/skills/writing-plans/SKILL.md` |
 
 ## skill md 里的标准写法
 
@@ -49,9 +52,10 @@ alloy skill md 里调用外部 skill 时,用以下格式(不要只写 `skill({ n
 加载 `<skill-name>` skill(多 agent 适配见 `alloy-shared/references/skill-loading.md`):
 - Claude Code / OpenCode: 调 `skill({ name: "<skill-name>" })`
 - Pi: `read .pi/skills/<skill-name>/SKILL.md`
+- Codex: `$<skill-name>` 提及或 `read .agents/skills/<skill-name>/SKILL.md`
 ```
 
-**反例(对 Pi 无效):**
+**反例(对 Pi/Codex 无效):**
 ```markdown
 调 `skill({ name: "openspec-explore" })` 加载 opsx skill
 ```
@@ -61,7 +65,15 @@ alloy skill md 里调用外部 skill 时,用以下格式(不要只写 `skill({ n
 加载 `openspec-explore` skill(多 agent 适配见 `alloy-shared/references/skill-loading.md`):
 - Claude Code / OpenCode: 调 `skill({ name: "openspec-explore" })`
 - Pi: `read .pi/skills/openspec-explore/SKILL.md`
+- Codex: `$openspec-explore` 或 `read .agents/skills/openspec-explore/SKILL.md`
 ```
+
+## Codex 的特殊注意事项
+
+1. **Codex 没有 `skill()` 工具**(实测 0.146.0 工具集无,只有 exec_command/apply_patch/request_user_input 等)--SKILL.md 里应写 `$skill-name` 提及或 `read .agents/skills/<name>/SKILL.md`,不要写 `skill({ name })`。
+2. **Codex 的 skills 路径是共享 `.agents/skills/`** -- 与 OpenCode/Pi 相同,`read` 路径用 `.agents/skills/<name>/SKILL.md`(项目级)或 `~/.agents/skills/<name>/SKILL.md`(用户级),不是 `.codex/skills/`。
+3. **Codex 的显式提及语法是 `$skill-name`** -- 官方支持(`$` 提及 + `/skills` 列表),可用来提示宿主加载指定 skill。宿主按 description 隐式匹配也是主要触发路径。
+4. **Codex 有 subagent** -- `collaboration__spawn_agent` 工具可用(实测),SDD(subagent-driven-development)不需要像 Pi 一样强制降级 EP。
 
 ## Pi 的特殊注意事项
 

@@ -1,4 +1,4 @@
-export type AgentId = "claude-code" | "opencode" | "pi";
+export type AgentId = "claude-code" | "opencode" | "pi" | "codex";
 
 export interface AgentInfo {
   id: AgentId;

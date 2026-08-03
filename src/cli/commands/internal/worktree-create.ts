@@ -153,14 +153,36 @@ export async function worktreeCreateCommand(args: string[]): Promise<void> {
 
   // 3. 校验主仓工作目录清洁(避免 worktree 创建后状态混乱)
   const dirtyResult = gitExec("git status --porcelain");
-  if (dirtyResult.stdout.trim() !== "") {
-    console.error("⛔ [HARD_STOP] 主仓工作目录不清洁,拒绝创建 worktree");
-    console.error("  原因:worktree 创建会基于当前 HEAD,dirty 状态会导致 worktree 内文件不一致");
-    console.error("  未 commit 文件:");
-    console.error(dirtyResult.stdout);
-    console.error("  修复:先 commit 或 stash,再运行 alloy _worktree-create");
-    process.exit(1);
-    return;
+  const dirtyLines = dirtyResult.stdout.split("\n").map(l => l.trim()).filter(Boolean);
+  if (dirtyLines.length > 0) {
+    // 仅 .alloy.yaml dirty -> alloy 临时状态(gate require/clear 按设计不自动 commit),
+    // 自动 commit 后继续(与 _worktree-cleanup 的"仅 .alloy.yaml 自动 commit"对称)。
+    // 实测(2026-08-02):Claude Code/OpenCode 两个 session 都因 gate 状态未落地被
+    // dirty 校验拦下(agent 补 chore-commit 自愈),属高频摩擦点,下沉为原子命令。
+    const nonAlloyDirty = dirtyLines.filter(l => !/^\S+\s+openspec\/changes\/.*\.alloy\.yaml$/.test(l));
+    if (nonAlloyDirty.length === 0) {
+      console.log("ℹ️ 主仓仅 .alloy.yaml 未 commit(alloy 临时状态:gate require/clear),自动 commit 后继续");
+      for (const line of dirtyLines) {
+        const file = line.replace(/^(M|A|\?\?|MM|\s+|M\s+)/, "").trim();
+        if (file) gitExec(`git add "${file}"`);
+      }
+      const commitResult = gitExec('git commit -m "chore: 提交 .alloy.yaml 临时状态(worktree 创建前置)"');
+      if (!commitResult.ok) {
+        console.error("⛔ [HARD_STOP] 自动 commit .alloy.yaml 失败,拒绝创建 worktree");
+        console.error(`  ${commitResult.stderr}`);
+        console.error("  修复:手动 commit 或 stash 后,再运行 alloy _worktree-create");
+        process.exit(1);
+        return;
+      }
+    } else {
+      console.error("⛔ [HARD_STOP] 主仓工作目录不清洁,拒绝创建 worktree");
+      console.error("  原因:worktree 创建会基于当前 HEAD,dirty 状态会导致 worktree 内文件不一致");
+      console.error("  未 commit 文件:");
+      console.error(dirtyResult.stdout);
+      console.error("  修复:先 commit 或 stash,再运行 alloy _worktree-create");
+      process.exit(1);
+      return;
+    }
   }
 
   // 4. 校验 .worktrees/ 已在 .gitignore

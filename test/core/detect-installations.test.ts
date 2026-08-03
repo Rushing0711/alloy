@@ -39,6 +39,13 @@ const opencodeAgent: AgentInfo = {
   commandsDir: ".opencode/commands/",
 };
 
+const codexAgent: AgentInfo = {
+  id: "codex",
+  label: "Codex",
+  supportsColonCommands: false,
+  commandsDir: ".agents/skills/",
+};
+
 const PROJECT = "/test/project";
 const HOME = "/home/user";
 
@@ -167,6 +174,36 @@ describe("detectSkill", () => {
       found: true,
       location: "project-skill",
       path: `${PROJECT}/.claude/skills/superpowers`,
+      version: null,
+    });
+  });
+
+  it("codex 检测 .agents/skills/(REPO 级共享目录)", () => {
+    vi.mocked(existsSync).mockImplementation((p) =>
+      p === `${PROJECT}/.agents/skills/superpowers`
+    );
+
+    const result = detectSkill("superpowers", codexAgent, PROJECT);
+
+    expect(result).toEqual({
+      found: true,
+      location: "project-skill",
+      path: `${PROJECT}/.agents/skills/superpowers`,
+      version: null,
+    });
+  });
+
+  it("codex 检测 ~/.agents/skills/(USER 级共享目录)", () => {
+    vi.mocked(existsSync).mockImplementation((p) =>
+      p === `${HOME}/.agents/skills/superpowers`
+    );
+
+    const result = detectSkill("superpowers", codexAgent, PROJECT);
+
+    expect(result).toEqual({
+      found: true,
+      location: "user-skill",
+      path: `${HOME}/.agents/skills/superpowers`,
       version: null,
     });
   });

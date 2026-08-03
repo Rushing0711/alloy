@@ -18,7 +18,7 @@ alloy init [path] [--scope <project|global>] [--agents <id,id,...>] [--force]
 
 选项:
 - `--scope <project|global>`:安装范围,默认 project(交互式选择)
-- `--agents <id,id,...>`:非交互式指定 agent(逗号分隔)。可用:claude-code, opencode, pi
+- `--agents <id,id,...>`:非交互式指定 agent(逗号分隔)。可用:claude-code, opencode, pi, codex
 - `--force`:跳过所有确认(含 breaking 双重确认)
 - `--help, -h`:显示帮助
 
@@ -68,7 +68,7 @@ alloy status --json                # JSON 输出（程序消费）
 
 **易错**：查特定 change 用 `alloy status <name>`，**禁用 `--change`**（不支持）。
 
-**输出含"当前 agent"行**：在 agent 上下文里运行时(CLAUDECODE/OPENCODE/PI_CODING_AGENT/ALLOY_AGENT env 已设),输出首行显示检测到的 agent;终端直接运行时不显示。
+**输出含"当前 agent"行**：在 agent 上下文里运行时(CLAUDECODE/OPENCODE/PI_CODING_AGENT/CODEX_CI/CODEX_THREAD_ID env 已设),输出首行显示检测到的 agent;终端直接运行时不显示。
 
 ### alloy doctor
 
@@ -209,7 +209,7 @@ alloy _guard dirty-check [cwd]
 - `verify-passed <change-dir>`：读 verify.md 判定，输出 `PASS` / `FAIL` / `WARNING`。退出码 0=PASS/WARNING，1=FAIL。判定规则(`parseVerifyDecision`,retro scaffold 复用同一函数):行首 `- [x]` checkbox + ❌ FAIL -> FAIL;`- [x]` + ⚠️ WARNING -> WARNING;其他(含无标记或纯文本"WARNING: 无"字眼) -> PASS。**禁 grep 整个 verify.md**:OpenCode verify.md 含 "**WARNING:** 无" 描述会被旧 `/WARNING/i` 误判 WARNING
 - `precheck <change-dir> <expected-phase>`：单点 phase 路由校验。`expected-phase` 支持逗号分隔多值（如 `planned,applied`）。输出 `PASS:<phase>` / `FAIL:<reason>`。退出码 0=通过，1=不通过
 - `worktree-status <change-dir>`：输出 `done:<path>:<branch>` / `stale:<path>` / `skipped` / `pending`。退出码始终 0（查询命令）
-- `user-gate require <change-dir> <gate-id>`：设 pending_gate,后续 Write/Edit 非白名单被 hook-guard 拦截(即使 apply 阶段),直到问答工具(AskUserQuestion/question/alloy-question)调用自动 clear,或手动 `user-gate pass` 降级。**实现**:用 `setPendingGate` 精准替换 `pending_gate` 行(正则替换),不触发 writeState 全量重写--保留 worktree_created_at 等字段引号格式;**不自动 commit**(pending_gate 作为临时状态,由下一个 `_artifact commit` / `_phase complete` 等命令的 `git add .alloy.yaml` 一起 commit,合并到有意义的 commit,避免 USER_GATE 独占 commit 噪音)。**worktree cwd 守卫**:worktree 模式下必须在 worktree 内执行,主仓执行 exit 1。守卫双重检测:① state.worktree 字段有值;② git worktree list 有 `worktree-<change-name>` 分支(补救主仓 state 没同步 worktree 分支的盲区)。**前置 gate 检查(防跳过闸门)**:`require apply:sdd-ep-choice` 时检查 `apply:worktree-choice` 是否在 `gate_history`(已通过),未在则 exit 1--SKILL.md HARD_STOP 对 agent 不够强,实测 agent 跳过 worktree-choice 直接设 sdd-ep-choice,CLI 层硬约束兜底。**gate_history 写入时机**:`user-gate pass` / hook-guard clearAllPendingGates / Pi 自动通过 时把 gate 加入 `gate_history`(用 `addClearedGate` 精准追加)。**Pi 自动通过**:`PI_CODING_AGENT=true` 时 `apply:worktree-choice` / `apply:sdd-ep-choice` 不设 pending_gate,直接返回自动通过 + 输出路径引导(`-> 走 skipped 路径` / `-> 走 EP 路径`)+ 写入 gate_history--Pi 不支持 worktree / SDD,SKILL.md 不再做 Pi 软约束(避免 Claude Code/OpenCode 多读 Pi 分支)。**覆盖节点**:start(lock-draft/phase-complete)+ plan(lock-`<artifact>`/phase-complete,5 个制品)+ apply(requirement-change/worktree-choice/sdd-ep-choice/lock-verify/lock-retrospective/phase-complete)+ archive(worktree-cleanup/delta-spec-review/phase-complete)+ discard(confirm-delete)+ finish(choose-method/confirm-merge)。制品锁定 + 阶段完成类 USER_GATE 必须设 pending_gate,防止 agent 用纯文本呈现代替问答工具
+- `user-gate require <change-dir> <gate-id>`：设 pending_gate,后续 Write/Edit 非白名单被 hook-guard 拦截(即使 apply 阶段),直到问答工具(AskUserQuestion/question/alloy-question/request_user_input)调用自动 clear,或手动 `user-gate pass` 降级。**实现**:用 `setPendingGate` 精准替换 `pending_gate` 行(正则替换),不触发 writeState 全量重写--保留 worktree_created_at 等字段引号格式;**不自动 commit**(pending_gate 作为临时状态,由下一个 `_artifact commit` / `_phase complete` 等命令的 `git add .alloy.yaml` 一起 commit,合并到有意义的 commit,避免 USER_GATE 独占 commit 噪音)。**worktree cwd 守卫**:worktree 模式下必须在 worktree 内执行,主仓执行 exit 1。守卫双重检测:① state.worktree 字段有值;② git worktree list 有 `worktree-<change-name>` 分支(补救主仓 state 没同步 worktree 分支的盲区)。**前置 gate 检查(防跳过闸门)**:`require apply:sdd-ep-choice` 时检查 `apply:worktree-choice` 是否在 `gate_history`(已通过),未在则 exit 1--SKILL.md HARD_STOP 对 agent 不够强,实测 agent 跳过 worktree-choice 直接设 sdd-ep-choice,CLI 层硬约束兜底。**gate_history 写入时机**:`user-gate pass` / hook-guard clearAllPendingGates / Pi 自动通过 时把 gate 加入 `gate_history`(用 `addClearedGate` 精准追加)。**Pi/Codex 自动通过**:`PI_CODING_AGENT=true` 时 `apply:worktree-choice` / `apply:sdd-ep-choice` 不设 pending_gate,直接返回自动通过 + 输出路径引导(`-> 走 skipped 路径` / `-> 走 EP 路径`)+ 写入 gate_history--Pi 不支持 worktree / SDD;Codex 会话(`CODEX_CI`/`CODEX_THREAD_ID`)时 `apply:worktree-choice` 同样自动通过(无 worktree 工具),但 `apply:sdd-ep-choice` 正常询问(有 subagent)。SKILL.md 不再做 Pi/Codex 软约束(避免 Claude Code/OpenCode 多读分支)。**覆盖节点**:start(lock-draft/phase-complete)+ plan(lock-`<artifact>`/phase-complete,5 个制品)+ apply(requirement-change/worktree-choice/sdd-ep-choice/lock-verify/lock-retrospective/phase-complete)+ archive(worktree-cleanup/delta-spec-review/phase-complete)+ discard(confirm-delete)+ finish(choose-method/confirm-merge)。制品锁定 + 阶段完成类 USER_GATE 必须设 pending_gate,防止 agent 用纯文本呈现代替问答工具
 - `user-gate pass <change-dir>`：清除 pending_gate(手动降级 / 无问答工具的 agent)。用 `setPendingGate` 精准替换,不自动 commit(与 require 对称)。**pass 时把 cleared gate 加入 `gate_history`**(用 `addClearedGate`),供后续 gate 前置检查 + _phase start 检查
 - `user-gate reset <change-dir> <gate-id>`：把 gate 从 `gate_history` 移除 + 重新设为 `pending_gate`。**用途**:用户在 USER_GATE 选"暂停/取消/需要调整"后,hook-guard 已无条件 clear pending_gate + 加入 gate_history(把"暂停"语义吞了),agent 调 reset 恢复 gate 状态。用 `removeClearedGate` 精准移除 + `setPendingGate` 重新设。**不自动 commit**(与 require/pass 对称)。**worktree cwd 守卫**:与 require/pass 对称。**幂等**:gate 不在 gate_history 时只设 pending_gate,不报错
 - **gate 下沉检查**:`_phase complete <change-dir> <phase>` 在推进阶段前,会检查当前阶段是否有未 clear 的 pending_gate(格式 `<phase>:<action>`)。如果有,拒绝推进(exit 1),强制 agent 先调问答工具或 `user-gate pass`。这是"主动闸门下沉为被动检查"--无论 agent 是否主动调 `user-gate require`,只要推进阶段就必须 clear gate,接近 100% 强制
@@ -394,6 +394,9 @@ alloy _skill log openspec/changes/user-auth start opsx:explore --via start.md
 alloy _skill skip openspec/changes/user-auth apply superpowers:tdd --reason "已有测试覆盖"
 ```
 
+> ⛔ [HARD_STOP] **同一消息禁止并行调用多个写状态命令**(_skill log / _artifact commit / _phase start|complete / _guard user-gate require|pass)。
+> 原因:实测(2026-08-02 OpenCode 会话)一条消息内并行调 3 个 `_skill log`,并发写 `.alloy.yaml` 撕裂状态文件(`completed_at: null\null`),后续命令 YAMLParseError。CLI 已改原子写(tmp+rename)消除撕裂,但并行"读-改-写"仍会丢失更新(后写覆盖先写)。必须串行:一条消息只发一个写状态命令,且 `_skill log` 后立即 `_chore-commit` 落地。
+
 ### alloy _env
 
 环境完整性检测。
@@ -468,7 +471,7 @@ alloy _archive-dir <change-name>
 - 找不到 -> exit 1 + 引导
 - `endsWith` 精确匹配:`test-change` 不误匹配 `test-change-v2`
 
-多 agent 适配:Claude Code / OpenCode / Pi 都用此命令,无平台差异。
+多 agent 适配:Claude Code / OpenCode / Pi / Codex 都用此命令,无平台差异。
 
 ### alloy _chore-commit
 
@@ -498,7 +501,7 @@ alloy _chore-commit <change-dir> --msg <message> --paths <p1,p2,...> [--cwd <dir
 - 归档目录移动 commit
 - finish 延期 deferred_at commit
 
-多 agent 适配:Claude Code / OpenCode / Pi 都用此命令,无平台差异。
+多 agent 适配:Claude Code / OpenCode / Pi / Codex 都用此命令,无平台差异。
 
 ### alloy _fix
 
@@ -519,7 +522,7 @@ alloy _fix detect-keywords <description>
 用于 alloy-fix SKILL.md 的关键词二次 USER_GATE 检测(task L6)。
 替代手写 `KEYWORDS="..." + grep -Eo`(3 行 bash),关键词列表固化在 CLI 代码,避免 agent 误改。
 
-多 agent 适配:Claude Code / OpenCode / Pi 都用此命令,无平台差异。
+多 agent 适配:Claude Code / OpenCode / Pi / Codex 都用此命令,无平台差异。
 
 ### alloy _worktree-create
 
@@ -589,7 +592,9 @@ alloy _finish-cleanup <change-dir> <feature-branch>
 2. feature-branch 不等于 main/master(防误删主分支)
 3. feature-branch 存在(`git rev-parse --verify`)
 4. 当前在 main 分支(squash merge 后应已 `git checkout main`)
-5. main 最近 5 个 commit 含 "squash merge" 痕迹(确认 squash merge 已完成)
+5. main HEAD 与 feature 分支 tree 一致(`git diff --quiet <feature> <main>` 返回 0 = squash merge 已完成,语义校验,与 commit message 内容无关)
+
+> 校验 5 历史:原实现检查 main 最近 commit message 含 "squash merge"/feature 名,与 SKILL.md 模板耦合过紧。实测(2026-08-02 OpenCode session)agent 简化模板(丢 `chore: 合入 main(squash merge)` 标题行)后 message 变成 commit 标题拼接,校验误拦 2 次,agent 弃用 CLI 改手动 `git reset --soft` + `branch -D` 绕过。改为 tree 语义校验后,只要内容已合入即可删分支,不再依赖 message。
 
 **通过校验后**:`git branch -D "<feature-branch>"`。
 

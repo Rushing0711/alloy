@@ -522,7 +522,7 @@ alloy init
 
 - Node.js ≥ 18.0.0
 - git ≥ 2.0.0
-- Claude Code / OpenCode / Pi(3 个 agent 均支持,alloy init 时选择)
+- Claude Code / OpenCode / Pi / Codex(4 个 agent 均支持,alloy init 时选择)
 
 ### Commit 消息格式
 

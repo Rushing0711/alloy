@@ -72,7 +72,7 @@ export async function printStatusDetail(
 
 const AGENT_LABELS: Record<string, string> = {
   "claude-code": "Claude Code",  "opencode": "OpenCode",
-  "pi": "Pi",
+  "pi": "Pi",  "codex": "Codex",
 };
 
 /** 生成"当前 agent"行。detectAgent 返回 null 时(终端直接运行,非 agent 上下文)返回空字符串 */

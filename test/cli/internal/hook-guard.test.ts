@@ -251,10 +251,14 @@ fi`;
       expect(result.exitCode).toBe(0);
     });
 
-    it("拦截消息包含逃生阀提示", () => {
+    it("拦截消息不含逃生阀字样(防 agent 读输出后照做绕过)", () => {
       const stdin = JSON.stringify({ tool_name: "Write", tool_input: { file_path: "src/foo.ts" } });
       const result = evaluateHook(stdin, ["started"], {});
-      expect(result.message).toContain("ALLOY_FORCE_WRITE=1");
+      // 实测(2026-08-02 OpenCode session):hook 输出提示 ALLOY_FORCE_WRITE=1,
+      // agent 读到后下一轮就 `ALLOY_FORCE_WRITE=1 git branch -D` 绕过禁令。
+      // 对 agent 可见的逃生阀 = 对 agent 可用的逃生阀,拦截输出不得提及逃生阀。
+      expect(result.message).not.toContain("ALLOY_FORCE_WRITE");
+      expect(result.message).toContain("由用户在终端处理");
     });
 
     it("拦截消息包含 apply 阶段进入提示", () => {
@@ -728,5 +732,72 @@ fi`;
       expect(result.exitCode).toBe(2);
       expect(result.message).toContain("worktree 绝对路径");
     });
+  });
+});
+
+describe("alloy _hook-guard - apply_patch(Codex 写文件工具)", () => {
+  it("apply_patch 写源码在非 apply 阶段 -> exit 2", () => {
+    const stdin = JSON.stringify({
+      tool_name: "apply_patch",
+      tool_input: { command: "*** Begin Patch\n*** Add File: scripts/hello.sh\n+echo hi\n*** End Patch" },
+    });
+    const result = evaluateHook(stdin, ["started"], {});
+    expect(result.exitCode).toBe(2);
+  });
+
+  it("apply_patch 写 docs/ 白名单 -> exit 0", () => {
+    const stdin = JSON.stringify({
+      tool_name: "apply_patch",
+      tool_input: { command: "*** Begin Patch\n*** Add File: docs/guide.md\n+# doc\n*** End Patch" },
+    });
+    const result = evaluateHook(stdin, ["started"], {});
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("apply_patch 写多个文件,任一非白名单 -> exit 2", () => {
+    const stdin = JSON.stringify({
+      tool_name: "apply_patch",
+      tool_input: { command: "*** Begin Patch\n*** Add File: docs/guide.md\n+# doc\n*** Add File: src/app.ts\n+code\n*** End Patch" },
+    });
+    const result = evaluateHook(stdin, ["started"], {});
+    expect(result.exitCode).toBe(2);
+  });
+
+  it("apply_patch 无 Add/Update/Delete File 行 -> exit 0(非文件操作 patch)", () => {
+    const stdin = JSON.stringify({
+      tool_name: "apply_patch",
+      tool_input: { command: "*** Begin Patch\n+纯文本内容无 File 操作\n*** End Patch" },
+    });
+    const result = evaluateHook(stdin, ["started"], {});
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("apply_patch worktree 模式下相对路径写源码 -> exit 2(防落主仓)", () => {
+    const stdin = JSON.stringify({
+      tool_name: "apply_patch",
+      tool_input: { command: "*** Begin Patch\n*** Add File: scripts/hello.sh\n+echo hi\n*** End Patch" },
+    });
+    const result = evaluateHook(stdin, ["applying"], {}, "/project", [], true, ["/project/.worktrees/foo"]);
+    expect(result.exitCode).toBe(2);
+    expect(result.message).toContain("worktree 绝对路径");
+  });
+
+  it("apply_patch worktree 模式下绝对路径写 worktree 内 -> exit 0", () => {
+    const stdin = JSON.stringify({
+      tool_name: "apply_patch",
+      tool_input: { command: "*** Begin Patch\n*** Add File: /project/.worktrees/foo/scripts/hello.sh\n+echo hi\n*** End Patch" },
+    });
+    const result = evaluateHook(stdin, ["applying"], {}, "/project", [], true, ["/project/.worktrees/foo"]);
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("apply_patch 调 request_user_input 不清 gate(对照:ASK_TOOLS 检测的是 tool_name)", () => {
+    // apply_patch 本身不是问答工具,不应触发 clearPendingGates
+    const stdin = JSON.stringify({
+      tool_name: "apply_patch",
+      tool_input: { command: "*** Begin Patch\n*** Add File: docs/a.md\n+x\n*** End Patch" },
+    });
+    const result = evaluateHook(stdin, ["started"], {});
+    expect(result.exitCode).toBe(0);
   });
 });

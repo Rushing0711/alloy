@@ -90,20 +90,17 @@ export async function finishCleanupCommand(args: string[]): Promise<void> {
     return;
   }
 
-  // 5. 校验 main 分支的 HEAD 含 feature-branch 的 commit(squash merge 已完成)
-  // squash merge 后 feature-branch 的 commit 都在 main 的 HEAD 链上
-  // 用 git log main..feature-branch 检查:有输出说明 feature-branch 有 commit 未合入 main
-  // squash merge 后,main 的 HEAD 是新 commit(含 feature-branch 的所有变更),
-  // 但 feature-branch 的原 commit hash 不在 main 链上(squash 合并产生新 commit)
-  // 所以不能用 git log main..feature-branch 检查(始终有输出)
-  // 改用:检查 main 的最新 commit message 含 "squash merge" 或 feature-branch 名
-  // 这不严格,但足够防止 agent 在 squash merge 前调本命令
-  const recentCommits = gitExec(`git log ${mainBranch} --oneline -5`).stdout;
-  if (!recentCommits.includes("squash merge") && !recentCommits.includes(featureBranchArg)) {
-    console.error(`⛔ [PRECONDITION_FAIL] main 分支最近 5 个 commit 不含 squash merge 痕迹`);
-    console.error("  main 最近 commit:");
-    console.error(`  ${recentCommits.replace(/\n/g, "\n  ")}`);
-    console.error("");
+  // 5. 校验 squash merge 已完成(main HEAD 的 tree 与 feature 分支 tip 一致)
+  // 语义校验:git diff --quiet <feature-branch> <main-branch> 返回 0 = 两边内容一致
+  // 之前校验 main 最近 commit message 含 "squash merge"/"feature/<name>" 字符串,
+  // 依赖 message 内容,与 SKILL.md 模板耦合过紧:
+  // agent 偏离模板(如简化 commit message)时误拦,把 agent 推向手动 git 操作
+  // (实测 OpenCode session 2026-08-02:连续 2 次 PRECONDITION_FAIL 后 agent 弃用 CLI,
+  // 自行 git reset --soft + 手动 branch -D 绕过)。
+  // tree 一致 = squash 内容已合入 main,与 message 无关,才是"squash merge 已完成"的语义。
+  const diffCheck = gitExec(`git diff --quiet "${featureBranchArg}" "${mainBranch}"`);
+  if (!diffCheck.ok) {
+    console.error(`⛔ [PRECONDITION_FAIL] main HEAD 与 feature 分支 ${featureBranchArg} 内容不一致(squash merge 未完成)`);
     console.error("  git branch -D 必须在 squash merge commit 完成后执行。");
     console.error("  请先完成 squash merge(git merge --squash + git commit),再重新运行本命令。");
     process.exit(1);

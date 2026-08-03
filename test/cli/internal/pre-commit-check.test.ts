@@ -48,9 +48,11 @@ describe("alloy _pre-commit-check evaluatePreCommit", () => {
     expect(result.message).not.toContain("openspec/b.md");
   });
 
-  it("拦截消息含 ALLOY_FORCE_WRITE 绕过提示", () => {
+  it("拦截消息不含逃生阀字样(防 agent 读输出后照做绕过)", () => {
     const result = evaluatePreCommit(["src/foo.ts"], ["started"], [], {}, true);
-    expect(result.message).toContain("ALLOY_FORCE_WRITE");
+    // 与 hook-guard 同策略:对 agent 可见的逃生阀 = 对 agent 可用的逃生阀
+    expect(result.message).not.toContain("ALLOY_FORCE_WRITE");
+    expect(result.message).toContain("由用户在终端处理");
   });
 
   it("alloy 项目 + 空 phases + 暂存 src/ -> exit 1(核心修复:防绕过)", () => {

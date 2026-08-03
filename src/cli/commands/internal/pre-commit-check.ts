@@ -66,7 +66,7 @@ export function evaluatePreCommit(
     ...blocked.map((b) => `  ${b}`),
     "",
     "  请先进入 apply 阶段(alloy _phase start <change-dir> apply),",
-    "  或用 ALLOY_FORCE_WRITE=1 绕过(仅限修复畸形状态)。",
+    "  如需手动绕过(仅限修复畸形状态),请退出 skill 由用户在终端处理。",
   ].join("\n");
 
   return { exitCode: 1, message };

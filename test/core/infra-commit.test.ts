@@ -53,6 +53,18 @@ describe("getInfraCommitTargets", () => {
     expect(targets).not.toContain("opencode.json");
   });
 
+  it("含 codex 时加 .codex/hooks.json(项目根 hook 配置)", () => {
+    const codex = KNOWN_AGENTS.find(a => a.id === "codex")!;
+    const targets = getInfraCommitTargets(projectDir, [codex]);
+    expect(targets).toContain(".codex/hooks.json");
+  });
+
+  it("不含 codex 时不加 .codex/hooks.json", () => {
+    const claude = KNOWN_AGENTS.find(a => a.id === "claude-code")!;
+    const targets = getInfraCommitTargets(projectDir, [claude]);
+    expect(targets).not.toContain(".codex/hooks.json");
+  });
+
   it("CLAUDE.md 存在时加入 targets", async () => {
     await writeFile(join(projectDir, "CLAUDE.md"), "# claude", "utf-8");
     const claude = KNOWN_AGENTS.find(a => a.id === "claude-code")!;

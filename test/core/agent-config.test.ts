@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { writeFile, readFile, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { injectAgentConfigs, hasPermissionsConfig, writePermissionsConfig, ALLOY_PERMISSIONS, getPermissionSupportedAgents, hasHookConfig, writeHookConfig, getHookSupportedAgents, writePiHookExtension, hasPiHookExtension, writeOpenCodeHookTools, hasOpenCodeHookTools, writePiQuestionExtension, hasPiQuestionExtension, writeQuestionConfig, getQuestionSupportedAgents, hasQuestionConfig } from "../../src/core/agent-config.js";
+import { injectAgentConfigs, hasPermissionsConfig, writePermissionsConfig, ALLOY_PERMISSIONS, getPermissionSupportedAgents, hasHookConfig, writeHookConfig, getHookSupportedAgents, writePiHookExtension, hasPiHookExtension, writeOpenCodeHookTools, hasOpenCodeHookTools, writePiQuestionExtension, hasPiQuestionExtension, writeQuestionConfig, getQuestionSupportedAgents, hasQuestionConfig, writeCodexFeatures, hasCodexFeatures } from "../../src/core/agent-config.js";
 import { getPackageRoot } from "../../src/utils/fs.js";
 
 const expectedHookCommand = `node "${getPackageRoot()}/dist/cli/index.js" _hook-guard`;
@@ -311,7 +311,7 @@ describe("writeHookConfig", () => {
     const settings = JSON.parse(await readFile(join(tmpDir, ".claude/settings.json"), "utf-8"));
     const preToolUse = settings.hooks.PreToolUse;
     expect(Array.isArray(preToolUse)).toBe(true);
-    const alloyEntry = preToolUse.find((e: { matcher: string }) => e.matcher === "Write|Edit|AskUserQuestion|Bash");
+    const alloyEntry = preToolUse.find((e: { matcher: string }) => e.matcher === "Write|Edit|AskUserQuestion|Bash|request_user_input");
     expect(alloyEntry).toBeTruthy();
     expect(alloyEntry.hooks.some((h: { command: string }) => h.command === expectedHookCommand)).toBe(true);
   });
@@ -328,7 +328,7 @@ describe("writeHookConfig", () => {
     const settings = JSON.parse(await readFile(join(tmpDir, ".claude/settings.json"), "utf-8"));
     const preToolUse = settings.hooks.PreToolUse;
     const alloyEntries = preToolUse.filter((e: { matcher: string; hooks: { command: string }[] }) =>
-      e.matcher === "Write|Edit|AskUserQuestion|Bash" && e.hooks.some((h) => h.command === expectedHookCommand)
+      e.matcher === "Write|Edit|AskUserQuestion|Bash|request_user_input" && e.hooks.some((h) => h.command === expectedHookCommand)
     );
     expect(alloyEntries).toHaveLength(1);
   });
@@ -360,7 +360,7 @@ describe("writeHookConfig", () => {
     await writeHookConfig(tmpDir, "claude-code");
 
     const settings = JSON.parse(await readFile(join(tmpDir, ".claude/settings.json"), "utf-8"));
-    const entry = settings.hooks.PreToolUse.find((e: { matcher: string }) => e.matcher === "Write|Edit|AskUserQuestion|Bash");
+    const entry = settings.hooks.PreToolUse.find((e: { matcher: string }) => e.matcher === "Write|Edit|AskUserQuestion|Bash|request_user_input");
     expect(entry.hooks).toHaveLength(2);
     expect(entry.hooks.some((h: { command: string }) => h.command === "other-hook")).toBe(true);
     expect(entry.hooks.some((h: { command: string }) => h.command === expectedHookCommand)).toBe(true);
@@ -368,12 +368,13 @@ describe("writeHookConfig", () => {
 });
 
 describe("getHookSupportedAgents", () => {
-  it("返回支持 hook 闸门的 agent id 列表(3 个)", () => {
+  it("返回支持 hook 闸门的 agent id 列表(4 个)", () => {
     const agents = getHookSupportedAgents();
     expect(agents).toContain("claude-code");
     expect(agents).toContain("pi");
     expect(agents).toContain("opencode");
-    expect(agents).toHaveLength(3);
+    expect(agents).toContain("codex");
+    expect(agents).toHaveLength(4);
   });
 });
 
@@ -540,5 +541,48 @@ describe("hasHookConfig/writeHookConfig 分派(pi/opencode)", () => {
     expect(await hasHookConfig(tmpDir, "opencode")).toBe(false);
     await writeHookConfig(tmpDir, "opencode");
     expect(await hasHookConfig(tmpDir, "opencode")).toBe(true);
+  });
+});
+
+describe("writeCodexFeatures", () => {
+  let codexHome: string;
+  let origCodexHome: string | undefined;
+
+  beforeEach(() => {
+    codexHome = join(tmpdir(), `alloy-codex-home-${Date.now()}`);
+    origCodexHome = process.env.CODEX_HOME;
+    process.env.CODEX_HOME = codexHome;
+  });
+
+  afterEach(async () => {
+    if (origCodexHome) process.env.CODEX_HOME = origCodexHome;
+    else delete process.env.CODEX_HOME;
+    await rm(codexHome, { recursive: true, force: true });
+  });
+
+  it("config.toml 不存在时创建并写入 [features]", async () => {
+    await writeCodexFeatures();
+    const raw = await readFile(join(codexHome, "config.toml"), "utf-8");
+    expect(raw).toContain("[features]");
+    expect(raw).toContain("default_mode_request_user_input = true");
+    expect(await hasCodexFeatures()).toBe(true);
+  });
+
+  it("幂等:已有配置不重复写入", async () => {
+    await writeCodexFeatures();
+    const first = await readFile(join(codexHome, "config.toml"), "utf-8");
+    await writeCodexFeatures();
+    const second = await readFile(join(codexHome, "config.toml"), "utf-8");
+    expect(second).toBe(first);
+    expect(second.match(/default_mode_request_user_input/g)!.length).toBe(1);
+  });
+
+  it("已有 [features] 段时插入而不破坏其他键", async () => {
+    await mkdir(codexHome, { recursive: true });
+    await writeFile(join(codexHome, "config.toml"), "model = \"gpt-5.6\"\n[features]\nhooks = true\n", "utf-8");
+    await writeCodexFeatures();
+    const raw = await readFile(join(codexHome, "config.toml"), "utf-8");
+    expect(raw).toContain("hooks = true");
+    expect(raw).toContain("default_mode_request_user_input = true");
   });
 });

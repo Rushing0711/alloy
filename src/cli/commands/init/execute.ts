@@ -14,7 +14,7 @@ import { deploySkills, deploySchema, deployOpenCodeCommands, deployPiCommands } 
 import {
   injectAgentConfigs, writePermissionsConfig, writeHookConfig, writeStopHookConfig,
   getHookSupportedAgents, getStopHookSupportedAgents, getPermissionSupportedAgents,
-  writeQuestionConfig, getQuestionSupportedAgents,
+  writeQuestionConfig, getQuestionSupportedAgents, writeCodexFeatures,
 } from "../../../core/agent-config.js";
 import { runHealthCheck } from "../../../core/health.js";
 import { getPackageRoot, getAlloyCliPath } from "../../../utils/fs.js";
@@ -23,7 +23,10 @@ import type { ActionPlan } from "./plan.js";
 import type { DeployOptions } from "../../../core/types.js";
 
 // Alloy + Superpowers 运行时目录(每次逐条检测缺失并补齐)
-const GITIGNORE_RUNTIME_RULES = ["docs/superpowers/", ".claude/worktrees/", ".worktrees/", "worktrees/", ".superpowers/", "skills-lock.json", "*.local.*"];
+// .codex/skills/:openspec CLI 的 codex adapter 过时输出路径(其 config.ts skillsDir: '.codex'),
+// 内容已由 syncCodexOpenSpecSkills 同步到 .agents/skills/(Codex 实际加载路径),
+// ignore 避免 untracked 噪音 + git add . 误提交 legacy 镜像;等待 openspec #1157 迁移后不再产生
+const GITIGNORE_RUNTIME_RULES = ["docs/superpowers/", ".claude/worktrees/", ".worktrees/", "worktrees/", ".superpowers/", "skills-lock.json", "*.local.*", ".codex/skills/"];
 
 // AI 开发工具产物(整组追加,以标记检测是否已写入)
 const GITIGNORE_AI_TOOLS_BLOCK = `### AI 开发工具产物 ###
@@ -320,6 +323,12 @@ export async function execute(
   for (const agentId of permAgentIds) {
     const written = await writePermissionsConfig(projectPath, agentId);
     if (written) success(`${agentId} -> permissions`);
+  }
+
+  // Codex 全局 feature:Default 模式开启 request_user_input(~/.codex/config.toml,幂等)
+  if (targetAgents.some(a => a.id === "codex")) {
+    const written = await writeCodexFeatures();
+    if (written) success("codex -> ~/.codex/config.toml [features] default_mode_request_user_input");
   }
 
   // question extension(Pi 专用:注册 alloy-question 工具供 LLM 调用 USER_GATE)

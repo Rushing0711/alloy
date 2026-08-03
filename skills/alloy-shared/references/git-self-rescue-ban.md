@@ -73,6 +73,18 @@ SKILL.md 里需要写"git 自救禁令"时,引用本文件代替内联(避免 15
 
 但 hook 只在 agent 遵守 settings 时生效。SKILL.md 仍需引用本禁令提醒 agent 不要尝试绕过(例如通过 Bash 间接调用,或让用户输命令字面 agent 代执行)。
 
+## 逃生阀(仅人类用户使用)
+
+hook 拦截输出**不提及**逃生阀(实测 2026-08-02 OpenCode session:拦截提示里写了 `ALLOY_FORCE_WRITE=1`,agent 下一轮就照做绕过禁令--对 agent 可见的逃生阀 = 对 agent 可用的逃生阀)。
+
+人类用户在终端遇到 hook 拦截且确认是"畸形状态"需要放行时,可手动设置环境变量重试:
+
+```bash
+ALLOY_FORCE_WRITE=1 <原命令>
+```
+
+**agent 禁止自动使用逃生阀**--拦截时应停下按下方"冲突时的合法行为"处理。
+
 ## 冲突时的合法行为
 
 1. 报告冲突现场:`git status` + `git diff`

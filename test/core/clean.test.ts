@@ -96,14 +96,14 @@ describe("scanForClean - scope=global", () => {
     expect(plan.openspecConfigFile).toBeNull();
   });
 
-  it("扫描 3 个 agent 的 alloy-* 目录", async () => {
+  it("扫描 4 个 agent 的 alloy-* 目录", async () => {
     // 在 home 下创建 claude-code/opencode/pi 的 alloy skills
     for (const agent of AGENTS) {
       await createAlloySkillsAt(homeDir, agent.id);
     }
     const plan = await scanForClean(projectDir, "global", AGENTS);
-    // 3 个 agent * 2 个 alloy-* 目录(alloy-start + alloy-plan)= 6 个路径
-    expect(plan.alloySkillsPaths.length).toBe(6);
+    // 4 个 agent * 2 个 alloy-* 目录(alloy-start + alloy-plan)= 8 个路径
+    expect(plan.alloySkillsPaths.length).toBe(8);
     // 每个路径都含 alloy- 前缀
     for (const p of plan.alloySkillsPaths) {
       expect(p).toMatch(/alloy-(start|plan)$/);
@@ -167,8 +167,8 @@ describe("scanForClean - scope=global", () => {
       await writeFile(join(skillsDir, ".alloy-version"), "0.4.0\n", "utf-8");
     }
     const plan = await scanForClean(projectDir, "global", AGENTS);
-    // 3 个 agent 各一个 .alloy-version 文件
-    expect(plan.alloyVersionFiles.length).toBe(3);
+    // 4 个 agent 各一个 .alloy-version 文件
+    expect(plan.alloyVersionFiles.length).toBe(4);
     for (const p of plan.alloyVersionFiles) {
       expect(p.endsWith(".alloy-version")).toBe(true);
     }
@@ -181,7 +181,7 @@ describe("scanForClean - scope=project", () => {
       await createAlloySkillsAt(projectDir, agent.id);
     }
     const plan = await scanForClean(projectDir, "project", AGENTS);
-    expect(plan.alloySkillsPaths.length).toBe(6);
+    expect(plan.alloySkillsPaths.length).toBe(8);
   });
 
   it("扫描项目级 opsx 文件", async () => {
@@ -314,7 +314,7 @@ describe("executeClean - scope=global", () => {
 
     const result = await executeClean(projectDir, "global", plan);
 
-    expect(result.removed.length).toBe(6);
+    expect(result.removed.length).toBe(8);
     for (const p of plan.alloySkillsPaths) {
       expect(existsSync(p)).toBe(false);
     }
@@ -340,13 +340,13 @@ describe("executeClean - scope=global", () => {
       await writeFile(join(skillsDir, ".alloy-version"), "0.4.0\n", "utf-8");
     }
     const plan = await scanForClean(projectDir, "global", AGENTS);
-    expect(plan.alloyVersionFiles.length).toBe(3);
+    expect(plan.alloyVersionFiles.length).toBe(4);
     mockedExecSync.mockReturnValue(Buffer.from(""));
 
     const result = await executeClean(projectDir, "global", plan);
 
     // 3 个 .alloy-version 文件都被删
-    expect(result.removed.filter((p) => p.endsWith(".alloy-version")).length).toBe(3);
+    expect(result.removed.filter((p) => p.endsWith(".alloy-version")).length).toBe(4);
     for (const p of plan.alloyVersionFiles) {
       expect(existsSync(p)).toBe(false);
     }

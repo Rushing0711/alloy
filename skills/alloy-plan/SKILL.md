@@ -28,7 +28,7 @@ behaviors:
 
 **核心原则：按 schema DAG 依赖顺序逐一产出制品，每步有审查闸门，不跳过上游直接产下游。** 5 制品（proposal/design/specs/tasks/plans）以 hash-lock + 单独 commit 入 records，禁直接编辑，禁互相替代。
 
-**交互规则:** `🔴 STOP` 等价 `USER_GATE`--首次呈现即必须调平台原生交互工具(禁"先文本展示 1./2. 再等用户打字")。Claude Code: `AskUserQuestion`;OpenCode: `question`;Pi: `alloy-question`。完整规则 + 平台调用示例见 `alloy-shared/references/interaction-style.md`;USER_GATE pending/clear/reset 流程见 `alloy-shared/references/gate-ceremony.md`。跳过 USER_GATE / 批量打包 / 基于内容跳过 = 违反 Iron Law。
+**交互规则:** `🔴 STOP` 等价 `USER_GATE`--首次呈现即必须调平台原生交互工具(禁"先文本展示 1./2. 再等用户打字")。Claude Code: `AskUserQuestion`;OpenCode: `question`;Pi: `alloy-question`;Codex: `request_user_input`(init 已开启 Default 模式支持)。完整规则 + 平台调用示例见 `alloy-shared/references/interaction-style.md`;USER_GATE pending/clear/reset 流程见 `alloy-shared/references/gate-ceremony.md`。跳过 USER_GATE / 批量打包 / 基于内容跳过 = 违反 Iron Law。
 
 **状态符号:** `⛔` = HARD_STOP / PRECONDITION_FAIL,`🔴` = USER_GATE,`⚠️` = WARN(完整含义见 `alloy-shared/references/hard-stop-meaning.md`)。
 
@@ -160,6 +160,7 @@ draft.md 来源已在 Step 0 完成 hash 验证（task #16）。本步聚焦 pha
 加载 `openspec-continue-change` skill(多 agent 适配见 `alloy-shared/references/skill-loading.md`),传入 change name。`opsx:continue` 自动获取 schema 指令并生成制品--不要自行编写,不要一次生成多个。
 - Claude Code / OpenCode: 调 `skill({ name: "openspec-continue-change" })`
 - Pi: `read .pi/skills/openspec-continue-change/SKILL.md`
+- Codex: `$openspec-continue-change` 或 `read .agents/skills/openspec-continue-change/SKILL.md`
 
 **⛔ HARD_STOP：每次调用 `/opsx:continue` 生成制品前必须 `_skill log`。** 跳过 = skill_usage 缺失 = count 不反映实际调用次数。
 > count 语义是"技能实际调用次数"——plan 阶段每生成一个制品调用一次 opsx:continue，count 应累加。
@@ -200,7 +201,7 @@ alloy _progress artifacts openspec/changes/<name>
 
 每个制品生成后,设 USER_GATE pending + 展示完整内容 + 🔴 USER_GATE 审查窗口:
 
-> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question/alloy-question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级。
+> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具调用自动 clear(Codex 例外:request_user_input 不触发 hook,问答后必须立即调 `alloy _guard user-gate pass`)或手动 pass 降级。
 
 ⛔ [HARD_STOP] 必须执行以下命令设置 pending_gate(不是说明,是必跑命令):
 
@@ -456,6 +457,7 @@ DIFF_NEW=$(cat "openspec/changes/<name>/<artifact>.md" 2>/dev/null)
 加载 `writing-plans` skill(多 agent 适配见 `alloy-shared/references/skill-loading.md`)生成 plans.md:
 - Claude Code / OpenCode: 调 `skill({ name: "writing-plans" })`
 - Pi: `read .pi/skills/writing-plans/SKILL.md`
+- Codex: `$writing-plans` 或 `read .agents/skills/writing-plans/SKILL.md`
 
 - 传入 tasks + specs + design 作为上下文
 - **遵循 writing-plans 完整原始流程**——从任务拆解到执行交接
@@ -580,7 +582,7 @@ alloy _phase downgrade openspec/changes/<name> started
 
 **plans 完成后不要自动进入 apply** — 给用户空间审视完整规划。
 
-> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question/alloy-question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级。
+> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具调用自动 clear(Codex 例外:request_user_input 不触发 hook,问答后必须立即调 `alloy _guard user-gate pass`)或手动 pass 降级。
 
 > ℹ️ `plan:phase-complete` gate 已由 `_phase complete plan` 自动设。以下 `user-gate require` 命令幂等可省略--agent 也可手动调(覆盖相同值,无冲突)。
 
@@ -607,7 +609,8 @@ alloy _guard user-gate require openspec/changes/<name> plan:phase-complete
 
 > 用户选 1 后,agent **必须直接加载 `alloy-apply` skill(多 agent 适配,见 `alloy-shared/references/skill-loading.md`):
 - Claude Code / OpenCode: 调 `skill({ name: "alloy-apply", args: "<change-name>" })`
-- Pi: `read .pi/skills/alloy-apply/SKILL.md`(read 后按 SKILL.md 指引执行,change name 通过上下文传入)**
+- Pi: `read .pi/skills/alloy-apply/SKILL.md`(read 后按 SKILL.md 指引执行,change name 通过上下文传入)
+- Codex: `$alloy-apply` 或 `read .agents/skills/alloy-apply/SKILL.md`(read 后按 SKILL.md 指引执行,change name 通过上下文传入)**
 
 > ⛔ [HARD_STOP] 禁止输出"请运行 /alloy-xxx"让用户手动输入命令--用户已在 USER_GATE 授权,阶段转换已触发,再让用户输入命令 = 违反 Iron Law。
 > 违反字面 = 违反精神:哪怕"提示一下更友好"、"用户可能想调整",也算违反--用户要调整会在 USER_GATE 选"调整需求",选"进入"就是授权直接加载。

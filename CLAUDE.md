@@ -64,16 +64,16 @@ openspec/schemas/ # 制品 schema 定义
 5. **提高 agent 执行稳定性是核心目标**——重复出现的多步 bash 序列（状态写入 + commit、hash-lock + commit 等）应下沉为原子 CLI 命令，由 TypeScript 实现并配测试；skill md 只负责编排和调用，不手写这类逻辑。实现指导是"原子性操作"，具体手段是 CLI——**不能为了 CLI 而 CLI**：只有当下沉真能提升稳定性、原子性、可测试性时才做，单次一次性 bash 或纯编排逻辑不必下沉。
 6. **调整 CLI 命令后必须更新 `skills/alloy-shared/references/cli-reference.md`**--避免 skill md 里的命令用法与实际 CLI 偏差。修改 `src/cli/` 或 `src/cli/commands/internal/` 的新增/删除/改签名，都要同步更新 cli-reference.md。
 
-7. **多 agent 适配参考 `docs/reference/agent-instruction-files.md`**--修改 agent 相关代码（`src/core/agents.ts`/`agent-config.ts`/`detect-installations.ts`/`superpowers.ts`/`health.ts` 等）前，先读此文档，了解各 agent 的 skills 路径/Hook/Permissions/指令文件/交互工具等特性。文档含 12 个特性 × 3 个 agent（Claude Code/OpenCode/Pi）对比 + 证据来源（官方文档 URL + GitHub 文件路径）。调研新特性时附证据。
+7. **多 agent 适配参考 `docs/reference/agent-instruction-files.md`**--修改 agent 相关代码（`src/core/agents.ts`/`agent-config.ts`/`detect-installations.ts`/`superpowers.ts`/`health.ts` 等）前，先读此文档，了解各 agent 的 skills 路径/Hook/Permissions/指令文件/交互工具等特性。文档含 12 个特性 × 4 个 agent（Claude Code/OpenCode/Pi/Codex）对比 + 证据来源（官方文档 URL + GitHub 文件路径）。调研新特性时附证据。
 
-8. **多 agent 全局视角，避免局限于某一 agent**--alloy 支持 3 个 agent（Claude Code/OpenCode/Pi），所有 skill md / spec / 文档示例 / 代码实现都要保持全局视角，不能 Claude Code 中心化。具体要求：
-   - **skill md / spec / 文档**：涉及交互工具、hook、worktree、skills 路径等 agent 特性时，不能只写 Claude Code 的做法。要么同时列出 3 个 agent 的等价物，要么用"平台原生交互工具"等中性表述 + 顶部统一说明三平台差异。示例代码要给多平台调用样例（至少 Claude Code + OpenCode + Pi），不能只给 Claude Code。
-   - **代码实现**：不能硬编码某一 agent 的特性，要通过 `agent-config.ts` 等抽象层分派。新增 agent 特性时，3 个 agent 都要考虑（支持的实现，不支持的注明降级或跳过）。
-   - **修改时同步检查**：修改某 agent 相关内容时，同步检查其他 3 个 agent 是否也需更新。典型反例：只给 Claude Code 写了 `AskUserQuestion` 调用示例，OpenCode agent 看到"AskUserQuestion"字眼却无 `question` 工具示例，误降级为文本输出。
-   - **中性表述优先**：用"平台原生交互工具"代替"AskUserQuestion"（除非上下文明确指 Claude Code）；用"3 个 agent"代替"其他平台"（避免暗示 Claude Code 是默认）。
+8. **多 agent 全局视角，避免局限于某一 agent**--alloy 支持 4 个 agent（Claude Code/OpenCode/Pi/Codex），所有 skill md / spec / 文档示例 / 代码实现都要保持全局视角，不能 Claude Code 中心化。具体要求：
+   - **skill md / spec / 文档**：涉及交互工具、hook、worktree、skills 路径等 agent 特性时，不能只写 Claude Code 的做法。要么同时列出 4 个 agent 的等价物，要么用"平台原生交互工具"等中性表述 + 顶部统一说明四平台差异。示例代码要给多平台调用样例（至少 Claude Code + OpenCode + Pi + Codex），不能只给 Claude Code。
+   - **代码实现**：不能硬编码某一 agent 的特性，要通过 `agent-config.ts` 等抽象层分派。新增 agent 特性时，4 个 agent 都要考虑（支持的实现，不支持的注明降级或跳过）。
+   - **修改时同步检查**：修改某 agent 相关内容时，同步检查其他 4 个 agent 是否也需更新。典型反例：只给 Claude Code 写了 `AskUserQuestion` 调用示例，OpenCode agent 看到"AskUserQuestion"字眼却无 `question` 工具示例，误降级为文本输出。
+   - **中性表述优先**：用"平台原生交互工具"代替"AskUserQuestion"（除非上下文明确指 Claude Code）；用"4 个 agent"代替"其他平台"（避免暗示 Claude Code 是默认）。
 
-9. **修改评估必须做多 agent 影响分析**--alloy 是多 agent 适配的 Skill 编排工具,任何修改(缺陷修复 / 功能新增 / SKILL.md 调整 / CLI 改动)在**确定方案前**,必须评估对 3 个 agent(Claude Code / OpenCode / Pi)的影响。具体要求:
-   - **逐 agent 分析**:每个改动点逐一列出对 3 个 agent 的影响(正收益 / 负收益 / 无影响),不能只分析受影响的 agent。
+9. **修改评估必须做多 agent 影响分析**--alloy 是多 agent 适配的 Skill 编排工具,任何修改(缺陷修复 / 功能新增 / SKILL.md 调整 / CLI 改动)在**确定方案前**,必须评估对 4 个 agent(Claude Code / OpenCode / Pi / Codex)的影响。具体要求:
+   - **逐 agent 分析**:每个改动点逐一列出对 4 个 agent 的影响(正收益 / 负收益 / 无影响),不能只分析受影响的 agent。
    - **负收益优先排查**:重点排查"为某 agent 修复问题,是否给其他 agent 带来负收益"(多读分支 / 多调命令 / 流程变复杂)。典型反例:为 Pi 加检测段,Claude Code/OpenCode 多读 Pi 分支 + 多调检测命令。
    - **Pi 迁就警惕**:Pi 平台能力最弱(无 worktree / 无 subagent / bash 无 cwd 参数),容易写成"迁就 Pi"的修复。优先保证 Claude Code/OpenCode 效果,Pi 靠 CLI 层硬约束 + 降级路径适配,不在 SKILL.md 写 Pi 检测段(避免其他 agent 多读)。
    - **报告结论**:修改前向用户报告多 agent 影响分析,确认后再改。

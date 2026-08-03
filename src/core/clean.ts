@@ -326,6 +326,18 @@ async function scanHookConfigs(
           // 读取失败
         }
       }
+    } else if (agent.id === "codex") {
+      // Codex:hooks.json(与 settings.json 同款 hooks 结构)
+      const hooksPath = join(projectPath, ".codex", "hooks.json");
+      try {
+        const raw = await readFile(hooksPath, "utf-8");
+        const settings = JSON.parse(raw);
+        if (settingsHasAlloyHook(settings)) {
+          result.push({ file: hooksPath, agentId: agent.id });
+        }
+      } catch {
+        // 文件不存在或解析失败
+      }
     } else if (agent.id === "opencode") {
       // 新方案:plugin(.opencode/plugins/alloy-guard.ts)
       const pluginPath = join(projectPath, ".opencode", "plugins", "alloy-guard.ts");

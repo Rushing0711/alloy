@@ -15,8 +15,8 @@ import {
 } from "../../src/core/agents.js";
 
 describe("KNOWN_AGENTS", () => {
-  it("应包含 3 个 agent 定义", () => {
-    expect(KNOWN_AGENTS).toHaveLength(3);
+  it("应包含 4 个 agent 定义", () => {
+    expect(KNOWN_AGENTS).toHaveLength(4);
   });
 
   it("每个 agent 应有必需字段", () => {
@@ -40,6 +40,17 @@ describe("KNOWN_AGENTS", () => {
     expect(opencode).toBeDefined();
     expect(opencode?.supportsColonCommands).toBe(false);
     expect(opencode?.commandsDir).toBe(".opencode/commands/");
+  });
+
+  it("应包含 codex agent（读共享 .agents/skills,交互工具为 partial）", () => {
+    const codex = KNOWN_AGENTS.find((a) => a.id === "codex");
+    expect(codex).toBeDefined();
+    expect(codex?.supportsColonCommands).toBe(false);
+    // commandsDir 第一段 ".agents" 即 skills base(与 OpenCode/Pi 共享目录)
+    expect(codex?.commandsDir).toBe(".agents/skills/");
+    // request_user_input 仅 Plan mode 可用,降级为文本选项
+    expect(codex?.interactiveTool).toBe("partial");
+    expect(codex?.askToolDisplay).toBe("request_user_input");
   });
 });
 
@@ -140,7 +151,7 @@ describe("detectAgent(运行时 agent 检测,A+B 组合)", () => {
 
   afterEach(() => {
     // 恢复 env
-    for (const k of ["AI_AGENT", "CLAUDECODE", "OPENCODE", "PI_CODING_AGENT"]) {
+    for (const k of ["AI_AGENT", "CLAUDECODE", "OPENCODE", "PI_CODING_AGENT", "CODEX_CI", "CODEX_THREAD_ID"]) {
       if (k in originalEnv) process.env[k] = originalEnv[k];
       else delete process.env[k];
     }
@@ -190,12 +201,56 @@ describe("detectAgent(运行时 agent 检测,A+B 组合)", () => {
     expect(detectAgent()).toBe("pi");
   });
 
+  it("A 层:CODEX_CI=1 -> codex", () => {
+    delete process.env.AI_AGENT;
+    delete process.env.CLAUDECODE;
+    delete process.env.OPENCODE;
+    delete process.env.PI_CODING_AGENT;
+    delete process.env.CODEX_THREAD_ID;
+    process.env.CODEX_CI = "1";
+    expect(detectAgent()).toBe("codex");
+  });
+
+  it("A 层:CODEX_THREAD_ID 存在 -> codex(交互会话)", () => {
+    delete process.env.AI_AGENT;
+    delete process.env.CLAUDECODE;
+    delete process.env.OPENCODE;
+    delete process.env.PI_CODING_AGENT;
+    delete process.env.CODEX_CI;
+    process.env.CODEX_THREAD_ID = "019fc195-9b0b-7040-83ca-af496f33b684";
+    expect(detectAgent()).toBe("codex");
+  });
+
+  // codex 会话可能继承用户 shell 的 CLAUDECODE=1(实测),codex 检测必须优先
+  it("codex 优先:CODEX_CI=1 + CLAUDECODE=1 同时存在 -> codex(防误判 claude-code)", () => {
+    delete process.env.AI_AGENT;
+    process.env.CLAUDECODE = "1";
+    delete process.env.OPENCODE;
+    delete process.env.PI_CODING_AGENT;
+    process.env.CODEX_CI = "1";
+    delete process.env.CODEX_THREAD_ID;
+    expect(detectAgent()).toBe("codex");
+  });
+
+  // codex 会话还可能继承 0 层 AI_AGENT(如从 Claude Code 会话启动 codex),codex 检测必须先于 AI_AGENT
+  it("codex 优先:CODEX_CI=1 + AI_AGENT=claude-code_*_agent 同时存在 -> codex(防 0 层误判)", () => {
+    process.env.AI_AGENT = "claude-code_2-1-212_agent";
+    process.env.CLAUDECODE = "1";
+    delete process.env.OPENCODE;
+    delete process.env.PI_CODING_AGENT;
+    process.env.CODEX_CI = "1";
+    delete process.env.CODEX_THREAD_ID;
+    expect(detectAgent()).toBe("codex");
+  });
+
   // 兜底
   it("无任何标识 env -> null(走兜底,按工具参数名兼容取)", () => {
     delete process.env.AI_AGENT;
     delete process.env.CLAUDECODE;
     delete process.env.OPENCODE;
     delete process.env.PI_CODING_AGENT;
+    delete process.env.CODEX_CI;
+    delete process.env.CODEX_THREAD_ID;
     expect(detectAgent()).toBe(null);
   });
 });

@@ -162,7 +162,7 @@ export async function archiveCommand(args: string[]): Promise<void> {
   // 后续 _verify phase-exit archive 会 FAIL("phase 不匹配: 期望 archiving,实际 applied; started_at 缺失")。
   // 幂等:agent 按流程执行 Step 1 时,started_at 已存在,phase=archiving,此处不覆盖不写。
   // 不 clear gate / 不 commit:clear gate 由 hook-guard 处理(问答工具调用时 clear);commit 由后续归档变更提交一起处理。
-  // 多 agent 影响:Claude Code/OpenCode/Pi 都可能跳过 Step 1,兜底对 3 个 agent 都正收益。
+  // 多 agent 影响:Claude Code/OpenCode/Pi/Codex 都可能跳过 Step 1,兜底对 4 个 agent 都正收益。
   try {
     const state = await readState(archiveDir);
     let needsWrite = false;

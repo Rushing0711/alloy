@@ -43,6 +43,7 @@ export function detectAlloySkill(agent: AgentInfo, projectPath: string): Install
  * 按 agent 的实际 skills 路径检测(证据见 docs/reference/agent-instruction-files.md):
  * - claude-code: .claude/skills/ -> ~/.claude/skills/ -> ~/.claude/plugins/cache/ * - opencode: .opencode/skills/ + .claude/skills/ + .agents/skills/ -> ~/.config/opencode/skills/ + ~/.claude/skills/ + ~/.agents/skills/ -> ~/.cache/opencode/node_modules/superpowers/skills/
  * - pi: .pi/skills/ + .agents/skills/ -> ~/.pi/agent/skills/ + ~/.agents/skills/ -> ~/.pi/agent/git/ + ~/.pi/agent/npm/
+ * - codex: .agents/skills/ -> ~/.agents/skills/(与 OpenCode/Pi 共享目录,无专属路径)
  *
  * @param scope 可选,严格按 scope 检测:
  *              - "global":只查用户级 + plugin(跳过项目级)
@@ -96,6 +97,17 @@ export function detectSkill(name: string, agent: AgentInfo, projectPath: string,
         { path: join(home, ".pi", "agent", "git", "github.com", "obra", "superpowers", "skills", name), version: null },
         { path: join(home, ".pi", "agent", "npm", "node_modules", "superpowers", "skills", name), version: null },
       ];
+      break;
+    case "codex":
+      // Codex 读 $CWD/.agents/skills/(REPO)+ ~/.agents/skills/(USER),无专属目录、无插件缓存
+      // 证据:learn.chatgpt.com/docs/build-skills(REPO/USER/ADMIN 三级)
+      projectPaths = [
+        join(projectPath, ".agents", "skills", name),
+      ];
+      globalPaths = [
+        join(home, ".agents", "skills", name),
+      ];
+      pluginPaths = [];
       break;
     default: {
       // 未知 agent,fallback 到原逻辑(commandsDir 推导)

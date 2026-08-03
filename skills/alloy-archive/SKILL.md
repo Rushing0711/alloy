@@ -177,7 +177,7 @@ git log --oneline -10 "$WORKTREE_BRANCH" 2>/dev/null
 
 **② USER_GATE 确认清理：**
 
-> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级。
+> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具调用自动 clear(Codex 例外:request_user_input 不触发 hook,问答后必须立即调 `alloy _guard user-gate pass`)或手动 pass 降级。
 
 ⛔ [HARD_STOP] 必须执行以下命令设置 pending_gate(不是说明,是必跑命令):
 
@@ -316,7 +316,7 @@ SPEC_DIFF=$(git diff --stat openspec/specs/)
 SPEC_DIFF_FULL=$(git diff openspec/specs/ | head -200)  # 截 200 行防爆量
 ```
 
-> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级。
+> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具调用自动 clear(Codex 例外:request_user_input 不触发 hook,问答后必须立即调 `alloy _guard user-gate pass`)或手动 pass 降级。
 
 ⛔ [HARD_STOP] 必须执行以下命令设置 pending_gate(不是说明,是必跑命令):
 
@@ -386,10 +386,10 @@ alloy _phase downgrade "$ARCHIVE_DIR" applied
 -> 代码合入由 /alloy-finish 处理
 ```
 
-> ⛔ [HARD_STOP] 输出完成框后**必须立刻**设 USER_GATE + 问用户下一步--完成框是阶段宣告,不是流程结束。跳过下方 gate 直接进 finish = 违规(3 个 agent 实测踩坑:输出完成框后误判"archive 已结束",跳过 gate)。
+> ⛔ [HARD_STOP] 输出完成框后**必须立刻**设 USER_GATE + 问用户下一步--完成框是阶段宣告,不是流程结束。跳过下方 gate 直接进 finish = 违规(多 agent 实测踩坑:输出完成框后误判"archive 已结束",跳过 gate)。
 > 违反字面 = 违反精神：哪怕"用户肯定要进 finish"、"gate 是形式主义",也算违反--gate 是流程节点,不是可选步骤。
 
-> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级。
+> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具调用自动 clear(Codex 例外:request_user_input 不触发 hook,问答后必须立即调 `alloy _guard user-gate pass`)或手动 pass 降级。
 
 > ℹ️ `archive:phase-complete` gate 已由 `_phase complete archive` 自动设。以下 `user-gate require` 命令幂等可省略--agent 也可手动调(覆盖相同值,无冲突)。
 
@@ -410,7 +410,8 @@ archive 不做代码合并--代码合入由 `/alloy-finish` 处理。
 
 > 用户选 1 后,agent **必须直接加载 `alloy-finish` skill(多 agent 适配,见 `alloy-shared/references/skill-loading.md`):
 - Claude Code / OpenCode: 调 `skill({ name: "alloy-finish", args: "<change-name>" })`
-- Pi: `read .pi/skills/alloy-finish/SKILL.md`(read 后按 SKILL.md 指引执行,change name 通过上下文传入)**
+- Pi: `read .pi/skills/alloy-finish/SKILL.md`(read 后按 SKILL.md 指引执行,change name 通过上下文传入)
+- Codex: `$alloy-finish` 或 `read .agents/skills/alloy-finish/SKILL.md`(read 后按 SKILL.md 指引执行,change name 通过上下文传入)**
 
 > ⛔ [HARD_STOP] 禁止输出"请运行 /alloy-finish"让用户手动输入命令--用户已在 USER_GATE 授权,阶段转换已触发,再让用户输入命令 = 违反 Iron Law。
 > 用户选 2 后,agent **必须先调 `alloy _guard user-gate reset "$ARCHIVE_DIR" archive:phase-complete`**(把 gate 从 gate_history 移除 + 重新设为 pending_gate),再停止,输出"已暂停。需要时运行 /alloy-finish <name> 继续。"

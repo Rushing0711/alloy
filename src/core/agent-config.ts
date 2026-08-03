@@ -1,6 +1,7 @@
 // src/core/agent-config.ts
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { homedir } from "node:os";
 import type { AgentInfo, DeployOptions } from "./types.js";
 
 /**
@@ -235,17 +236,23 @@ import { getAlloyCliPath } from "../utils/fs.js";
 /**
  * 支持 PreToolUse hook 的 agent 配置--alloy init 可项目级注入。
  * Claude Code 用同款协议(外部脚本 + exit 2 阻断)。
+ * Codex 协议与 Claude Code 同款(stdin JSON + exit 2 + permissionDecision deny),
+ * 载体为项目级 .codex/hooks.json(实测 0.146.0 触发正常;需用户 trust 项目或 --dangerously-bypass-hook-trust)。
+ * 证据:learn.chatgpt.com/docs/hooks
  */
 const ALLOY_HOOK_CONFIGS: Record<string, string> = {
   "claude-code": ".claude/settings.json",
+  "codex": ".codex/hooks.json",
 };
 
 // matcher 含 AskUserQuestion:问答工具调用时触发 hook-guard,自动 clearAllPendingGates。
+// matcher 含 request_user_input:Codex 的问答工具(实测 0.146.0:matcher 不含它时调用不触发 hook,
+// 导致 gate 不 clear,gate_history 缺记录;Claude Code/OpenCode 无此工具,不匹配无害)。
 // matcher 含 Bash:拦截 cat heredoc 写文件 + git reset --hard 等自救命令(P0 拦截)。
 // 旧 matcher 只有 Write|Edit,问答工具不触发 -> pending_gate 残留。alloy init/update 升级到新 matcher。
 const LEGACY_HOOK_MATCHER = "Write|Edit";
 const PREVIOUS_HOOK_MATCHER = "Write|Edit|AskUserQuestion";
-const ALLOY_HOOK_MATCHER = "Write|Edit|AskUserQuestion|Bash";
+const ALLOY_HOOK_MATCHER = "Write|Edit|AskUserQuestion|Bash|request_user_input";
 
 /**
  * hook command 用绝对路径,不依赖 PATH/alias。
@@ -258,9 +265,9 @@ function getHookCommand(): string {
   return `node "${alloyCliPath}" _hook-guard`;
 }
 
-/** 返回支持 hook 闸门的 agent id 列表(claude-code 用 settings.json,pi 用扩展,opencode 用 plugin) */
+/** 返回支持 hook 闸门的 agent id 列表(claude-code/codex 用 settings 类 JSON,pi 用扩展,opencode 用 plugin) */
 export function getHookSupportedAgents(): string[] {
-  return ["claude-code", "pi", "opencode"];
+  return ["claude-code", "pi", "opencode", "codex"];
 }
 
 /** 返回 agent 的 hook 配置路径描述(用于 init 执行清单显示) */
@@ -269,6 +276,7 @@ export function getHookConfigPath(agentId: string): string {
     case "claude-code": return ".claude/settings.json (hooks.PreToolUse)";
     case "pi": return ".pi/extensions/alloy-guard.ts (tool_call + agent_settled 扩展)";
     case "opencode": return ".opencode/plugins/alloy-guard.ts (tool.execute.before + session.idle 插件)";
+    case "codex": return ".codex/hooks.json (hooks.PreToolUse + hooks.Stop)";
     default: return "";
   }
 }
@@ -375,6 +383,7 @@ const ALLOY_STOP_HOOK_CONFIGS: Record<string, string> = {
   "claude-code": ".claude/settings.json",
   "pi": ".pi/extensions/alloy-guard.ts",
   "opencode": ".opencode/plugins/alloy-guard.ts",
+  "codex": ".codex/hooks.json",
 };
 
 function getStopHookCommand(): string {
@@ -847,6 +856,58 @@ export async function hasQuestionConfig(projectPath: string, agentId: string): P
 export async function writeQuestionConfig(projectPath: string, agentId: string): Promise<boolean> {
   if (agentId === "pi") return writePiQuestionExtension(projectPath);
   return false;
+}
+
+// --- Codex 全局 feature 配置(~/.codex/config.toml) ---
+
+/** Codex 配置路径(CODEX_HOME 可改,默认 ~/.codex/config.toml) */
+function getCodexConfigPath(): string {
+  const codexHome = process.env.CODEX_HOME?.trim() || join(homedir(), ".codex");
+  return join(codexHome, "config.toml");
+}
+
+/**
+ * Codex 的 request_user_input 默认仅 Plan mode 可用(源码 protocol/src/config_types.rs
+ * `allows_request_user_input()` 只匹配 Plan);Default 模式需开启实验 feature
+ * `default_mode_request_user_input`(源码 features/src/lib.rs FeatureSpec,UnderDevelopment,
+ * default_enabled: false)。实测 0.146.0:开启后 Default 模式可用,
+ * 仅 exec 非交互模式仍不支持("not supported in exec mode")。
+ * 证据:openai/codex features/src/lib.rs + tools/src/tool_config.rs
+ */
+export async function hasCodexFeatures(): Promise<boolean> {
+  const configPath = getCodexConfigPath();
+  try {
+    const raw = await readFile(configPath, "utf-8");
+    return raw.includes("default_mode_request_user_input");
+  } catch {
+    return false;
+  }
+}
+
+/** 写入 Codex 全局 feature(幂等:已存在不重复写入;config.toml 不存在则创建) */
+export async function writeCodexFeatures(): Promise<boolean> {
+  const configPath = getCodexConfigPath();
+  const line = "default_mode_request_user_input = true";
+  let raw = "";
+  try {
+    raw = await readFile(configPath, "utf-8");
+  } catch {
+    // 文件不存在:创建
+  }
+  if (raw.includes(line)) return true;
+
+  // 找现有 [features] 段插入;没有则文件末尾追加新段
+  const match = raw.match(/^\[features\]\s*$/m);
+  let updated: string;
+  if (match && match.index !== undefined) {
+    const idx = match.index + match[0].length;
+    updated = raw.slice(0, idx) + "\n" + line + raw.slice(idx);
+  } else {
+    updated = raw.trimEnd() + "\n\n[features]\n" + line + "\n";
+  }
+  await mkdir(join(configPath, ".."), { recursive: true });
+  await writeFile(configPath, updated, "utf-8");
+  return true;
 }
 
 // --- OpenCode hook 插件(.opencode/plugins/alloy-guard.ts) ---

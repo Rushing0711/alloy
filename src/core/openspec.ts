@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync, rmSync, existsSync, readdirSync, cpSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -104,7 +104,7 @@ export async function initOpenSpecProject(
 
   const TOOL_MAP: Record<string, string> = {
     "claude-code": "claude",    "opencode": "opencode",
-    "pi": "pi",
+    "pi": "pi",    "codex": "codex",
   };
   const tools = agents && agents.length > 0
     ? agents.map(a => TOOL_MAP[a.id] ?? "claude").join(",")
@@ -117,12 +117,41 @@ export async function initOpenSpecProject(
       { stdio: "pipe", timeout: 120_000, env: profile.env },
     );
     console.log(`     ✓ openspec init 完成（${label}）`);
+    // openspec CLI 把 codex 的 opsx skills 装到 .codex/skills/(过时路径),
+    // 同步到 codex 实际加载的共享目录 .agents/skills/(见 syncCodexOpenSpecSkills)
+    if (agents?.some(a => a.id === "codex")) {
+      syncCodexOpenSpecSkills(targetPath);
+    }
     return "initialized";
   } catch (error) {
     console.error(`     ✗ openspec init 失败: ${(error as Error).message}`);
     return "failed";
   } finally {
     profile.cleanup();
+  }
+}
+
+/**
+ * openspec CLI 1.6/1.7 的 codex adapter 把 opsx skills 装到 <root>/.codex/skills/
+ * (config.js `skillsDir: '.codex'`,沿用旧版实验路径)。
+ * codex 官方规范加载 .agents/skills/(REPO)与 ~/.agents/skills/(USER),
+ * `.codex/skills/` 不在加载路径(实测 0.146.0:$alloy-start 从 .agents/skills/ 加载)。
+ * 这里把 openspec-* skills 同步复制到共享目录,让 codex 能加载 opsx skills。
+ * 幂等:目标已存在则覆盖(openspec 重装可能更新内容)。
+ * 证据:learn.chatgpt.com/docs/build-skills(加载位置表)+ 实测
+ */
+export function syncCodexOpenSpecSkills(baseDir: string): void {
+  const src = join(baseDir, ".codex", "skills");
+  if (!existsSync(src)) return;
+  const dest = join(baseDir, ".agents", "skills");
+  mkdirSync(dest, { recursive: true });
+  for (const entry of readdirSync(src, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !entry.name.startsWith("openspec-")) continue;
+    const destDir = join(dest, entry.name);
+    if (existsSync(destDir)) {
+      rmSync(destDir, { recursive: true, force: true });
+    }
+    cpSync(join(src, entry.name), destDir, { recursive: true });
   }
 }
 
@@ -149,6 +178,10 @@ export async function updateOpenSpecCommands(
       `openspec update ${JSON.stringify(targetPath)}`,
       { stdio: "pipe", timeout: 120_000, env: profile.env },
     );
+    // 同 initOpenSpecProject:同步 codex 的 opsx skills 到共享目录
+    if (agents.some(a => a.id === "codex")) {
+      syncCodexOpenSpecSkills(targetPath);
+    }
     return "updated";
   } catch {
     return "failed";

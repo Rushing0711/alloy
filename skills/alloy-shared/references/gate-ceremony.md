@@ -21,6 +21,22 @@ alloy _guard user-gate require <change-dir> <gate-name>
 
 问答工具调用即自动 clear。**无需 agent 手动操作**。agent 调问答工具 -> hook-guard 检测到 -> clear pending_gate -> 后续 Write/Edit 不再被拦。
 
+### 2.5 Codex 专属:问答后手动 pass(替代自动 clear)
+
+**Codex 的 `request_user_input` 调用不触发 PreToolUse/PostToolUse hook**(实测 0.146.0:走 bespoke event 路径,hook 完全无法检测),hook-guard 自动 clear 机制对 Codex 不可用。Codex agent 的 gate clear 路径:
+
+```bash
+# 1. 调 request_user_input 问用户(物理选择)
+# 2. 用户回答后,立即调:  
+alloy _guard user-gate pass <change-dir>
+```
+
+- `pass` 幂等:gate 从 pending 移除 + 加入 gate_history(用户已在问答工具里物理选择,与自动 clear 语义一致)
+- 这是 Codex 的唯一 clear 路径,不依赖 hook;其他 agent(Claude Code/OpenCode/Pi)仍走自动 clear
+- 用户选 N(否决)时:先 `pass`(hook 无法检测,必须先清)再调 `_guard user-gate reset` 恢复 pending,或者直接不 pass 保持 pending 并 reset 语义由 SKILL.md 指示(见各 SKILL.md 的 reset 流程)
+
+> 证据:openai/codex 源码 request_user_input 为 bespoke event + 实测 codex-cli 0.146.0(matcher 含 request_user_input 也不触发 hook)。
+
 ### 3. reset pending gate(用户选 N 后必做)
 
 用户选 N(否决)后,agent 必须调:
@@ -49,7 +65,7 @@ SKILL.md 里设 USER_GATE 时,引用本文件代替内联说明(避免 16 处复
 
 ```markdown
 设 USER_GATE pending(流程见 alloy-shared/references/gate-ceremony.md):
-- hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question/alloy-question)调用自动 clear
+- hook-guard 拦截非白名单写入,直到问答工具调用自动 clear(Codex 例外:问答后必须立即调 `alloy _guard user-gate pass <change-dir>`,见 §2.5)
 - 用户选 N 后必须先调 `alloy _guard user-gate reset <change-dir> <gate-name>`,再继续后续步骤
 ```
 

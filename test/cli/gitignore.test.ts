@@ -30,6 +30,8 @@ describe("ensureGitignore", () => {
     expect(content).toContain(".claude/worktrees/");
     expect(content).toContain("skills-lock.json");
     expect(content).toContain("*.local.*");
+    // openspec CLI 过时输出路径(codex skills 已同步 .agents/skills/),应被 ignore
+    expect(content).toContain(".codex/skills/");
 
     expect(content).toContain("### AI 开发工具产物 ###");
     expect(content).toContain(".idea/");

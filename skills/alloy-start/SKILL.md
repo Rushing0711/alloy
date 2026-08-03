@@ -31,7 +31,7 @@ behaviors:
 
 > **`<TIMESTAMP>`：** 每次渲染阶段头部时执行 `date "+%Y-%m-%d %H:%M:%S"` 获取本地时间。`<START_TIME>` 是"全新开始"路径中捕获的时间——agent 捕获后复用于 header 和 phase_timings。`<created_at>` 从 `.alloy.yaml` 读取。
 
-**交互规则:** `🔴 STOP` 等价 `USER_GATE`--首次呈现即必须调平台原生交互工具(禁"先文本展示 1./2. 再等用户打字")。Claude Code: `AskUserQuestion`;OpenCode: `question`;Pi: `alloy-question`。完整规则 + 平台调用示例见 `alloy-shared/references/interaction-style.md`;USER_GATE pending/clear/reset 流程见 `alloy-shared/references/gate-ceremony.md`。跳过 USER_GATE / 批量打包 / 基于内容跳过 = 违反 Iron Law。
+**交互规则:** `🔴 STOP` 等价 `USER_GATE`--首次呈现即必须调平台原生交互工具(禁"先文本展示 1./2. 再等用户打字")。Claude Code: `AskUserQuestion`;OpenCode: `question`;Pi: `alloy-question`;Codex: `request_user_input`(init 已开启 Default 模式支持)。完整规则 + 平台调用示例见 `alloy-shared/references/interaction-style.md`;USER_GATE pending/clear/reset 流程见 `alloy-shared/references/gate-ceremony.md`。跳过 USER_GATE / 批量打包 / 基于内容跳过 = 违反 Iron Law。
 
 **状态符号:** `⛔` = HARD_STOP / PRECONDITION_FAIL,`🔴` = USER_GATE,`⚠️` = WARN(完整含义见 `alloy-shared/references/hard-stop-meaning.md`)。
 
@@ -146,6 +146,7 @@ dirty 时 -> 🔴 USER_GATE:检测到未提交变更,如何处理?
 加载 `openspec-explore` skill(多 agent 适配见 `alloy-shared/references/skill-loading.md`),按其指引探索项目上下文:
 - Claude Code / OpenCode: 调 `skill({ name: "openspec-explore", args: "<topic>" })`
 - Pi: `read .pi/skills/openspec-explore/SKILL.md`(read 后按 SKILL.md 指引执行,args 通过上下文传入)
+- Codex: `$openspec-explore` 或 `read .agents/skills/openspec-explore/SKILL.md`(read 后按 SKILL.md 指引执行,args 通过上下文传入)
 
 > ⛔ [HARD_STOP] 必须加载 `openspec-explore` skill--禁手动 `ls`/`find`/`cat`/`grep` 替代探查,禁跑 `openspec explore`(不存在)。
 > Skill 调用的 args 必须传 topic:
@@ -343,6 +344,7 @@ alloy _guard user-gate require openspec/changes/<name> start:topic-confirm
 加载 `brainstorming` skill(多 agent 适配见 `alloy-shared/references/skill-loading.md`),传入探查结果和主题:
 - Claude Code / OpenCode: 调 `skill({ name: "brainstorming" })`
 - Pi: `read .pi/skills/brainstorming/SKILL.md`
+- Codex: `$brainstorming` 或 `read .agents/skills/brainstorming/SKILL.md`
 
    ```
    探查结果：<Step 1 关键发现摘要>
@@ -394,7 +396,7 @@ alloy _guard user-gate require openspec/changes/<name> start:topic-confirm
 
 5. **生成 `draft.md` 审查窗口--start 阶段唯一确认点（brainstorming 内不单独确认方案,此处合并为 draft 锁定 USER_GATE）：**
 
-    > 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question/alloy-question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级。
+    > 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具调用自动 clear(Codex 例外:request_user_input 不触发 hook,问答后必须立即调 `alloy _guard user-gate pass`)或手动 pass 降级。
 
     ⛔ [HARD_STOP] 必须执行以下命令设置 pending_gate(不是说明,是必跑命令):
 
@@ -464,7 +466,7 @@ alloy _guard user-gate require openspec/changes/<name> start:topic-confirm
 > 违反字面 = 违反精神：哪怕"用户上次也是接 plan 这次猜跳过 USER_GATE"或"draft 已锁定流程很顺"，也算违反 Iron Law（NO AUTO ADVANCE）。
 > **"不自动进 plan"指未经 USER_GATE 确认不能进——用户在下方 USER_GATE 明确选"进入 plan"后,agent 必须直接加载 plan skill 执行,不再要求用户手动输入命令。**
 
-> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question/alloy-question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级。
+> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具调用自动 clear(Codex 例外:request_user_input 不触发 hook,问答后必须立即调 `alloy _guard user-gate pass`)或手动 pass 降级。
 
 > ℹ️ `start:phase-complete` gate 已由 `_phase complete start`(或 `_start finalize` 内部)自动设。以下 `user-gate require` 命令幂等可省略--agent 也可手动调(覆盖相同值,无冲突)。
 
@@ -491,7 +493,8 @@ alloy _guard user-gate require openspec/changes/<name> start:phase-complete
 
 > 用户选 1 后,agent **必须直接加载 `alloy-plan` skill(多 agent 适配,见 `alloy-shared/references/skill-loading.md`):
 - Claude Code / OpenCode: 调 `skill({ name: "alloy-plan", args: "<change-name>" })`
-- Pi: `read .pi/skills/alloy-plan/SKILL.md`(read 后按 SKILL.md 指引执行,change name 通过上下文传入)**
+- Pi: `read .pi/skills/alloy-plan/SKILL.md`(read 后按 SKILL.md 指引执行,change name 通过上下文传入)
+- Codex: `$alloy-plan` 或 `read .agents/skills/alloy-plan/SKILL.md`(read 后按 SKILL.md 指引执行,change name 通过上下文传入)**
 
 > ⛔ [HARD_STOP] 禁止输出"请运行 /alloy-xxx"让用户手动输入命令--用户已在 USER_GATE 授权,阶段转换已触发,再让用户输入命令 = 违反 Iron Law。
 > 违反字面 = 违反精神:哪怕"提示一下更友好"、"用户可能想调整",也算违反--用户要调整会在 USER_GATE 选"调整需求",选"进入"就是授权直接加载。

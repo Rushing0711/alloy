@@ -28,7 +28,7 @@ phase != archived / 分支不存在 / merge 问答工具确认未通过 / spec �
 
 **核心原则：只做代码合入，不碰 spec。** spec 已归档封存，任何 spec 级变更应走新 change（[HARD_STOP]）。
 
-**交互规则:** `🔴 STOP` 等价 `USER_GATE`--首次呈现即必须调平台原生交互工具(禁"先文本展示 1./2. 再等用户打字")。Claude Code: `AskUserQuestion`;OpenCode: `question`;Pi: `alloy-question`。完整规则 + 平台调用示例见 `alloy-shared/references/interaction-style.md`;USER_GATE pending/clear/reset 流程见 `alloy-shared/references/gate-ceremony.md`。跳过 USER_GATE / 批量打包 / 基于内容跳过 = 违反 Iron Law。
+**交互规则:** `🔴 STOP` 等价 `USER_GATE`--首次呈现即必须调平台原生交互工具(禁"先文本展示 1./2. 再等用户打字")。Claude Code: `AskUserQuestion`;OpenCode: `question`;Pi: `alloy-question`;Codex: `request_user_input`(init 已开启 Default 模式支持)。完整规则 + 平台调用示例见 `alloy-shared/references/interaction-style.md`;USER_GATE pending/clear/reset 流程见 `alloy-shared/references/gate-ceremony.md`。跳过 USER_GATE / 批量打包 / 基于内容跳过 = 违反 Iron Law。
 
 **状态符号:** `⛔` = HARD_STOP / PRECONDITION_FAIL,`🔴` = USER_GATE,`⚠️` = WARN(完整含义见 `alloy-shared/references/hard-stop-meaning.md`)。
 
@@ -133,7 +133,7 @@ alloy _checkpoint clean "$CHANGE_DIR" --verify
 
 **REQUIRED SUB-SKILL:** Use superpowers:finishing-a-development-branch
 
-> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question/alloy-question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级。
+> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具调用自动 clear(Codex 例外:request_user_input 不触发 hook,问答后必须立即调 `alloy _guard user-gate pass`)或手动 pass 降级。
 
 ⛔ [HARD_STOP] 必须执行以下命令设置 pending_gate(不是说明,是必跑命令):
 
@@ -158,6 +158,7 @@ alloy _guard user-gate require "$CHANGE_DIR" finish:choose-method
 加载 `finishing-a-development-branch` skill(多 agent 适配见 `alloy-shared/references/skill-loading.md`),传入:
 - Claude Code / OpenCode: 调 `skill({ name: "finishing-a-development-branch" })`
 - Pi: `read .pi/skills/finishing-a-development-branch/SKILL.md`
+- Codex: `$finishing-a-development-branch` 或 `read .agents/skills/finishing-a-development-branch/SKILL.md`
 ```
 Change: <name>
 状态：phase=finishing（spec 已归档，代码待合入）
@@ -179,7 +180,7 @@ alloy _skill log "$CHANGE_DIR" finish superpowers:finishing-a-development-branch
 
 **合并确认（USER_GATE --问答工具,选项确认）:**
 
-> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具(AskUserQuestion/question/alloy-question)调用自动 clear 或手动 `alloy _guard user-gate pass` 降级。
+> 设 USER_GATE pending:hook-guard 拦截非白名单写入,直到问答工具调用自动 clear(Codex 例外:request_user_input 不触发 hook,问答后必须立即调 `alloy _guard user-gate pass`)或手动 pass 降级。
 
 ⛔ [HARD_STOP] 必须执行以下命令设置 pending_gate(不是说明,是必跑命令):
 

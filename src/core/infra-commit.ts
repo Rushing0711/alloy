@@ -38,6 +38,11 @@ export function getInfraCommitTargets(
     targets.push("opencode.json");
   }
 
+  // codex 的 hook 配置在项目根 .codex/hooks.json(不在 .agents/ 下),需单独 add
+  if (targetAgents.some(a => a.id === "codex")) {
+    targets.push(".codex/hooks.json");
+  }
+
   // 指令文件(CLAUDE.md / AGENTS.md),存在则 add
   for (const file of ["CLAUDE.md", "AGENTS.md"]) {
     if (existsSync(join(projectPath, file))) {

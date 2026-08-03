@@ -8,6 +8,7 @@ Alloy 各阶段需要用户输入时，**优先使用平台原生的交互式选
 - Claude Code：必须用 `AskUserQuestion`
 - OpenCode：必须用 `question` 工具
 - Pi：必须用 `alloy-question` 工具(alloy init 自动装 alloy-question extension,注册 alloy-question 工具供 LLM 调用)
+- Codex：必须用 `request_user_input` 工具(alloy init 自动开启 Default 模式支持);仅 exec 非交互模式不可用,降级为结构化文本选项
 - Copilot CLI / Gemini CLI 等无原生交互工具的平台：降级为结构化文本选项
 违反字面 = 违反精神：哪怕"就一个问题用文本快"、"先文本展示再问"、"长流程偶尔一次用文本"、"平台有工具但我习惯输出 1.2."--也算违反 Iron Law。
 ```
@@ -23,10 +24,11 @@ Alloy 各阶段需要用户输入时，**优先使用平台原生的交互式选
 | **Claude Code** | `AskUserQuestion` | radio（单选）、checkbox（多选）、preview（代码对比） |
 | **OpenCode** | `question` | options(label+description)、`multiple: true`(多选)、`custom: true`(自定义文本,默认开) |
 | **Pi** | `alloy-question` 工具(alloy-question extension 注册) | alloy init 自动装 `.pi/extensions/alloy-question.ts` |
+| **Codex** | `request_user_input`(Default 模式可用,需 init 开启 feature) | id/header/question/options;exec 非交互模式降级文本 |
 | **Copilot CLI** | 无等价工具 | 降级为结构化文本选项 |
 | **Gemini CLI** | 查平台工具映射 | 查 GEMINI.md 中的工具映射 |
 
-**降级策略：** 当平台无原生交互工具时，使用清晰的文本选项格式——但必须结构化（每选项一行，带编号和简短说明），不要让用户猜要输入什么。Claude Code(`AskUserQuestion`) / OpenCode(`question`) / Pi(`alloy-question`) 有等价工具,**必须用工具,不可降级文本**;Copilot CLI/Gemini CLI 无等价工具降级文本。
+**降级策略：** 当平台无原生交互工具时，使用清晰的文本选项格式——但必须结构化（每选项一行，带编号和简短说明），不要让用户猜要输入什么。Claude Code(`AskUserQuestion`) / OpenCode(`question`) / Pi(`alloy-question`) / Codex(`request_user_input`,init 已开启 Default 模式支持) 有等价工具,**必须用工具,不可降级文本**;Copilot CLI/Gemini CLI 无等价工具降级文本。
 
 ## 选择类型与工具映射
 
@@ -87,7 +89,21 @@ alloy-question({
 ```
 > LLM 调用 `alloy-question` 工具,extension 内部用 `ctx.ui.custom()` + SelectList 弹出 TUI,用户选择后返回选中 label。
 
-**Copilot CLI / Gemini CLI（无原生工具,降级文本）：**
+**Codex（`request_user_input` 工具,Default 模式可用——alloy init 写入 `~/.codex/config.toml` 的 `[features] default_mode_request_user_input = true`;exec 非交互模式报 "not supported in exec mode",降级文本）:**
+```
+request_user_input: {
+  id: "<唯一id,必填>",
+  header: "<制品名>",
+  question: "确认并锁定 <制品名>？",
+  options: [
+    { label: "1. 确认，锁定并继续", description: "锁定制品 hash,推进到下一阶段" },
+    { label: "2. 需要调整", description: "回退到上一步骤修改" }
+  ]
+}
+```
+> 实测:Codex 0.146.0 工具集包含 `request_user_input`,开启 feature 后 Default 模式可执行(TUI 弹交互表单)。exec 非交互模式报 "not supported in exec mode",立即降级为文本选项,不得反复重试。
+
+**Copilot CLI / Gemini CLI / Codex(exec 非交互模式)（无原生工具,降级文本）：**
 ```
 > -> 1. 确认，锁定 <制品名> 并继续
 > -> 2. 需要调整 - 说明修改点
@@ -111,7 +127,7 @@ alloy-question({
 
 ## 沉默 ≠ 授权（USER_GATE 通用禁令，跨 skill 适用）
 
-**[HARD_STOP]** 所有 🔴 USER_GATE / 🔴 STOP **必须**单独调用平台原生交互工具(Claude Code `AskUserQuestion` / OpenCode `question` / Pi `alloy-question` / 无工具平台降级文本) 等用户物理选择，下列行为全部禁止：
+**[HARD_STOP]** 所有 🔴 USER_GATE / 🔴 STOP **必须**单独调用平台原生交互工具(Claude Code `AskUserQuestion` / OpenCode `question` / Pi `alloy-question` / Codex `request_user_input`(Default 模式可用) / 无工具平台降级文本) 等用户物理选择，下列行为全部禁止：
 
 | 反模式 | 现实 |
 |--------|------|
@@ -131,7 +147,7 @@ alloy-question({
 - **模糊回复不算确认**："好"、"可以"、"y"、"go ahead" 全部不算精确确认，必须等到字面匹配的字符串
 - **跨 skill 适用**：discard 命令按此规则
 
-> **注意:** merge 确认（finish 阶段）**不适用**精确字符串特例--必须用问答工具(AskUserQuestion/question/alloy-question)让用户选"确认合并"选项。原因:实测发现 LLM agent 容易把"用户说'好'"当成精确字符串确认,违反 Iron Law;问答工具的选项选择是物理确认,无歧义。
+> **注意:** merge 确认（finish 阶段）**不适用**精确字符串特例--必须用问答工具(AskUserQuestion/question/alloy-question/request_user_input)让用户选"确认合并"选项。原因:实测发现 LLM agent 容易把"用户说'好'"当成精确字符串确认,违反 Iron Law;问答工具的选项选择是物理确认,无歧义。
 
 ## 不能使用 AskUserQuestion 的场景
 

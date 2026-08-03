@@ -12,9 +12,9 @@ interface StopHookInput {
  * 根据 agent 返回 USER_GATE 应用的交互工具提示。
  */
 function getAgentToolHint(agent: AgentId | null): string {
-  if (!agent) return "平台原生交互工具(AskUserQuestion / question / alloy-question)";
+  if (!agent) return "平台原生交互工具(AskUserQuestion / question / alloy-question / request_user_input)";
   const agentInfo = KNOWN_AGENTS.find(a => a.id === agent);
-  return agentInfo?.askToolDisplay ? agentInfo.askToolDisplay + " 工具" : "平台原生交互工具(AskUserQuestion / question / alloy-question)";
+  return agentInfo?.askToolDisplay ? agentInfo.askToolDisplay + " 工具" : "平台原生交互工具(AskUserQuestion / question / alloy-question / request_user_input)";
 }
 
 /**

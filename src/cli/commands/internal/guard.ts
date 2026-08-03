@@ -20,6 +20,11 @@ export const ARTIFACT_CHECKS: Record<string, string[]> = {
   "archived->finished": ["retrospective.md"],
 };
 
+/** Pi 运行时检测(bash 无 cwd 参数、无原生 subagent,能力最弱) */
+function isPiEnv(): boolean {
+  return process.env.PI_CODING_AGENT === "true";
+}
+
 export async function guardCommand(args: string[]): Promise<void> {
   // 子命令路由
   const subCommand = args[0];
@@ -309,11 +314,12 @@ async function worktreeStatusGuard(args: string[]): Promise<void> {
     return process.exit(1);
   }
 
-  // Pi 不支持 worktree:强制返回 skipped(双重保险,配合 apply SKILL.md 的 Pi 检测)
-  // 原因:Pi bash 工具无 cwd 参数,session cwd 不解绑到 worktree,
-  // 创建 worktree 后 agent 仍在主仓操作,commit 落 feature 分支破坏隔离。
+  // Pi 不支持 worktree:强制返回 skipped(双重保险,配合 apply SKILL.md 检测)
+  // Pi bash 工具无 cwd 参数,session cwd 不解绑到 worktree,创建后 commit 落错分支。
+  // Codex 支持 worktree(实测 0.146.0:exec_command 有 workdir 参数 + apply_patch 支持绝对路径,
+  // 机制与 OpenCode 同构),不强制 skipped。
   // 详见 docs/reference/agent-instruction-files.md 第 11 章 Worktree。
-  if (process.env.PI_CODING_AGENT === "true") {
+  if (isPiEnv()) {
     console.log("skipped");
     return;
   }
@@ -376,10 +382,12 @@ async function userGateGuard(args: string[]): Promise<void> {
       return;
     }
     // Pi 下两个 apply gate 无意义,CLI 层硬约束自动通过 + 输出路径引导
-    // SKILL.md 不再为 Pi 做软约束(避免 Claude Code/OpenCode 多读 Pi 分支 + 多调 _detect agent)
+    // SKILL.md 不再为 Pi 做软约束(避免 Claude Code/OpenCode 多读分支 + 多调 _detect agent)
     // - apply:worktree-choice:Pi 不支持 worktree(bash 无 cwd 参数,session cwd 不解绑),强制 skipped
-    // - apply:sdd-ep-choice:Pi 无原生 subagent(README "skips sub agents"),强制 EP
-    if (process.env.PI_CODING_AGENT === "true" && (gateId === "apply:worktree-choice" || gateId === "apply:sdd-ep-choice")) {
+    // - apply:sdd-ep-choice:Pi 无原生 subagent,强制 EP
+    // Codex 支持 worktree(exec_command workdir + apply_patch 绝对路径)与 subagent,均正常询问
+    const sddAuto = isPiEnv();
+    if ((isPiEnv() && gateId === "apply:worktree-choice") || (sddAuto && gateId === "apply:sdd-ep-choice")) {
       if (gateId === "apply:worktree-choice") {
         console.log(`✓ user-gate 自动通过(Pi 不支持 worktree): ${gateId} (${changeDir})`);
         console.log("  -> 走 skipped 路径:alloy _state write <change-dir> worktree skipped + commit");
@@ -389,7 +397,7 @@ async function userGateGuard(args: string[]): Promise<void> {
         console.log("  -> 走 EP 路径:加载 executing-plans skill,在当前 session 顺序执行");
         console.log("  详见 docs/reference/agent-instruction-files.md 第 12 章 Subagent");
       }
-      // Pi 自动通过也写入 gate_history,供后续 gate 前置检查(如 sdd-ep-choice 检查 worktree-choice)
+      // 自动通过也写入 gate_history,供后续 gate 前置检查(如 sdd-ep-choice 检查 worktree-choice)
       try {
         await addClearedGate(changeDir, gateId);
       } catch {
@@ -420,6 +428,19 @@ async function userGateGuard(args: string[]): Promise<void> {
     // worktree cwd 守卫:worktree 模式下必须在 worktree 内执行
     // 否则 pending_gate 写到主仓 .alloy.yaml,且 .alloy.yaml/制品 commit 进 feature 分支,破坏 worktree 隔离
     await assertInWorktree(changeDir);
+    // 覆盖未决 gate 告警:require 时已有 pending_gate 且不同,说明前一个 gate 未 clear/pass
+    // 就设新 gate(自动 clear 失效时可能发生)。静默覆盖会丢 gate 生命周期记录。
+    // 实测 2026-08-02 Codex 会话:start:topic-confirm 被 lock-draft 覆盖,未进 gate_history。
+    try {
+      const prevState = await readState(changeDir);
+      const prevGate = prevState.pending_gate ?? null;
+      if (prevGate && prevGate !== gateId) {
+        console.warn(`⚠️ 已有未决 gate: ${prevGate},将被 ${gateId} 覆盖(前一个 gate 未 clear/pass)`);
+        console.warn("  若用户已确认前一个 gate,应先调 alloy _guard user-gate pass <change-dir> 再设新 gate");
+      }
+    } catch {
+      // state 读失败不阻断 require
+    }
     // 精准替换 pending_gate 行,不触发 writeState 全量重写(保留 worktree_created_at 等字段格式)
     // 不自动 commit:pending_gate 作为临时状态,由下一个 _artifact commit / _phase complete 一起 commit
     await setPendingGate(changeDir, gateId);

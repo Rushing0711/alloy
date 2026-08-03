@@ -48,12 +48,13 @@ const APPLY_PHASES = new Set(["applying", "applied", "finishing", "finished"]);
  * 非 apply 阶段白名单(允许写的路径模式)
  * - openspec/:change 产物(proposal/design/specs/tasks/plans/verify/retrospective)
  * - .alloy.yaml:state 文件(由 _state 命令写)
- * - .claude/、.agents/、.opencode/、.pi/:agent 配置 + 共享 skills 运行时(npx skills add 装到 .agents/skills/)
+ * - .claude/、.agents/、.opencode/、.pi/、.codex/:agent 配置 + 共享 skills 运行时(npx skills add 装到 .agents/skills/;codex 的 hook 配置在 .codex/hooks.json)
  * - .superpowers/:superpowers 运行时目录(brainstorming Visual Companion 布局文件等,已 gitignore)
  * - docs/:文档
  * - *.md:markdown 文件(任意位置,含 README/CLAUDE.md/AGENTS.md)
  * - .gitignore、.gitattributes:git 配置
  * - opencode.json:OpenCode 项目配置(在项目根,不在 .opencode/ 目录下;alloy init 注入 permissions)
+ * - skills-lock.json:npx skills add 创建的锁文件(init 装 superpowers 时生成,基础设施产物)
  */
 const NON_APPLY_WHITELIST: RegExp[] = [
   /^openspec\//,
@@ -61,12 +62,14 @@ const NON_APPLY_WHITELIST: RegExp[] = [
   /^\.claude\//,  /^\.agents\//,
   /^\.opencode\//,
   /^\.pi\//,
+  /^\.codex\//,
   /^\.superpowers\//,
   /^docs\//,
   /\.md$/,
   /^\.gitignore$/,
   /^\.gitattributes$/,
   /^opencode\.json$/,
+  /^skills-lock\.json$/,
 ];
 
 export function guardCheck(input: GuardInput): GuardResult {

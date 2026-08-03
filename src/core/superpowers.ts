@@ -22,7 +22,7 @@ export interface SuperpowersInstallResult {
  *
  * 策略:
  * 1. 调一次 `npx skills add obra/superpowers -y`--npx 装到 .agents/skills/ 共享目录,
- *    并为 claude-code/pi 创建符号链接,OpenCode 直接读 .agents/skills/。
+ *    并为 claude-code/pi 创建符号链接,OpenCode/Codex 直接读 .agents/skills/。
  *    所有 agent 都能用 npx 最新版。
  * 2. npx 失败时(网络问题),fallback 复制 vendor 到 .agents/skills/ + claude-code/pi 各自目录。
  *
@@ -58,12 +58,12 @@ export async function installSuperpowers(
 /**
  * fallback 安装:npx 失败时,复制 vendor 到 .agents/skills/ + claude-code/pi 各自目录。
  *
- * - .agents/skills/(共享,OpenCode 读)
+ * - .agents/skills/(共享,OpenCode/Codex 读)
  * - .claude/skills/(claude-code 读,不读 .agents/skills/)
  * - .pi/skills/(pi 读,不读 .agents/skills/)
  *
  * 注意:claude-code/pi 不读 .agents/skills/,需要复制到各自目录。
- * OpenCode 读 .agents/skills/,不需要额外复制。
+ * OpenCode/Codex 读 .agents/skills/,不需要额外复制。
  */
 function fallbackInstallAll(
   scope: "global" | "project",
