@@ -2,6 +2,28 @@
 
 本文件记录 @flyin-ai/alloy 的所有版本变更。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.6.0] - 2026-08-03
+
+### Added
+
+- **Codex 成为第 4 个 agent 全量支持**:调研与实测(codex-cli 0.146.0)确认 skills 规范为共享 `.agents/skills/`(REPO)+ `~/.agents/skills/`(USER),env 注入 `CODEX_CI`/`CODEX_THREAD_ID`,`request_user_input` 工具存在但仅 Plan mode 可用,PreToolUse/Stop hook 协议与 Claude Code 同款(载体 `.codex/hooks.json`),无内置 worktree 工具但实测支持(机制同 OpenCode),有 subagent(SDD 不降级)。全链路实现:detectAgent codex 最优先、hook/stop hook 支持 codex、guard worktree-status 对 codex 强制 skipped、SKILL.md 四平台表述、agent-instruction-files.md 更新为 12 特性 × 4 agent。
+- **Codex request_user_input 在 Default 模式可用**:查 openai/codex 源码定位——`allows_request_user_input` 默认只匹配 Plan mode;init 自动写 `~/.codex/config.toml` 的 `[features] default_mode_request_user_input = true`(幂等,CODEX_HOME 可改),Default 模式(TUI)可用,仅 exec 非交互模式降级。
+- **KNOWN_AGENTS 顺序调整**(Claude Code/Codex/OpenCode/Pi)。
+
+### Fixed
+
+- **修正 Codex worktree 误判**:实测 exec_command 有 `workdir` 参数 + apply_patch 支持绝对路径,Codex 与 OpenCode 同机制支持 worktree(早期依据"无 EnterWorktree 工具"误判为不支持)。
+- **codex 会话里 alloy 解析到旧版全局包 + openspec skills 同步到共享目录**:openspec CLI 的 codex adapter 把 opsx skills 装到过时路径 `.codex/skills/`(其 config.ts `skillsDir: '.codex'`),新增 `syncCodexOpenSpecSkills` 同步到 `.agents/skills/`(Codex 实际加载路径);init/update 均触发。
+- **三 agent session(Claude Code/Codex/OpenCode)实测 5 项流程缺陷**:
+  1. Codex gate 自动 clear 失效(request_user_input 走 bespoke event 路径,PreToolUse/PostToolUse hook 均不触发),SKILL.md 加 Codex 专属"问答后立即 `_guard user-gate pass`"路径
+  2. worktree-cleanup 丢弃 worktree 内 gate 状态(force-remove 前 syncWorktreeGateStateToMain 同步 gate_history/pending_gate)
+  3. pre-commit 跨副本扫描误拦 Codex 死锁(collectPendingGates 跳过主仓 stale 副本)
+  4. require 覆盖未决 gate 静默(setPendingGate 前检测已有 pending_gate 并告警)
+  5. writeState 非原子写撕裂状态文件(全套状态写入改 writeFileAtomic tmp+rename)
+- **_worktree-create 对仅 .alloy.yaml dirty 自动 commit(高频摩擦点下沉)**:校验 dirty 时,若仅 `.alloy.yaml` 修改(alloy 临时状态),自动 commit 后继续,与 _worktree-cleanup 的"仅 .alloy.yaml 自动 commit"逻辑对称;其他 dirty 文件仍 HARD_STOP(保护用户代码)。
+- **_finish-cleanup 语义校验(tree 一致性) + hook 拦截输出隐藏逃生阀**:校验 5 从 commit message 字符串检测改为 tree 语义校验(`git diff --quiet <feature> <main>`);hook-guard/pre-commit-check 拦截输出移除 `ALLOY_FORCE_WRITE` 字样(对 agent 可见的逃生阀 = 对 agent 可用的逃生阀),逃生阀说明移至 git-self-rescue-ban.md(仅人类用户使用)。
+- **.gitignore 忽略 `.codex/skills/`**:openspec CLI 过时输出路径(内容已由 syncCodexOpenSpecSkills 同步到 `.agents/skills/`),ignore 避免 untracked 噪音 + `git add .` 误提交 legacy 镜像;openspec 官方 issue #1157 计划迁移 codex skills 到 `.agents`,发布后此目录不再产生。
+
 ## [0.5.3] - 2026-07-27
 
 ### Fixed
