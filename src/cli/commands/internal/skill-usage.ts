@@ -16,7 +16,7 @@ export async function skillUsageCommand(args: string[]): Promise<void> {
   const skill = args[3];
 
   if (!action || !changeDir || !stage || !skill) {
-    console.error("用法: alloy _skill <log|skip> <change-dir> <stage> <skill> [--via <source>] [--reason <reason>]");
+    console.error("用法: alloy _skill <log|skip> <change-dir> <stage> <skill> [--via <source>] [--reason <reason>] [--at <ts>]");
     process.exit(1);
     return;
   }

@@ -145,7 +145,7 @@ export async function stateCommand(args: string[]): Promise<void> {
   const value = args[3];
 
   if (!action || !changeDir) {
-    console.error("用法: alloy _state <init|read|write|merge|check> <change-dir> [field] [value]");
+    console.error("用法: alloy _state <init|read|write|merge|timestamp|check> <change-dir> [field] [value]");
     process.exit(1);
   }
 

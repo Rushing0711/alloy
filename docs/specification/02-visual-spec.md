@@ -553,15 +553,17 @@ question: {
 }
 ```
 
-**Pi（`ctx.ui` select，通过 alloy ask-question 扩展）：**
+**Pi（`ctx.ui.custom` + 自绘 OptionList 组件，通过 alloy-question 扩展注册的 `alloy-question` 工具）：**
 ```
-ctx.ui.select({
-  title: "确认以上诊断结论？",
-  options: [
-    { label: "1. 确认，进入修复", value: "1" },
-    { label: "2. 重新诊断", value: "2" }
-  ]
-})
+ctx.ui.custom((ui) => {
+  ui.component("OptionList", {
+    title: "确认以上诊断结论？",
+    options: [
+      { label: "1. 确认，进入修复", value: "1" },
+      { label: "2. 重新诊断", value: "2" }
+    ]
+  });
+});
 ```
 
 **无原生交互工具的平台（Copilot CLI / Gemini CLI,降级为文本选项）：**

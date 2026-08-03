@@ -23,6 +23,7 @@
 - **_worktree-create 对仅 .alloy.yaml dirty 自动 commit(高频摩擦点下沉)**:校验 dirty 时,若仅 `.alloy.yaml` 修改(alloy 临时状态),自动 commit 后继续,与 _worktree-cleanup 的"仅 .alloy.yaml 自动 commit"逻辑对称;其他 dirty 文件仍 HARD_STOP(保护用户代码)。
 - **_finish-cleanup 语义校验(tree 一致性) + hook 拦截输出隐藏逃生阀**:校验 5 从 commit message 字符串检测改为 tree 语义校验(`git diff --quiet <feature> <main>`);hook-guard/pre-commit-check 拦截输出移除 `ALLOY_FORCE_WRITE` 字样(对 agent 可见的逃生阀 = 对 agent 可用的逃生阀),逃生阀说明移至 git-self-rescue-ban.md(仅人类用户使用)。
 - **.gitignore 忽略 `.codex/skills/`**:openspec CLI 过时输出路径(内容已由 syncCodexOpenSpecSkills 同步到 `.agents/skills/`),ignore 避免 untracked 噪音 + `git add .` 误提交 legacy 镜像;openspec 官方 issue #1157 计划迁移 codex skills 到 `.agents`,发布后此目录不再产生。
+- **文档向代码看齐(34 处不一致修复)**:双 agent 全量对比 cli-reference.md / 08-cli-spec.md / 00-overview.md / 02-visual-spec.md 与实现,修复 Codex 第 4 agent 引入的新行为漏同步(`_worktree-create` 自动 commit、`_hook-guard` .codex 白名单、`_guard` Codex 自动通过旧文案等)、历史漂移(`_checkpoint` dirty 例外、`_stop-guard` 判定、status 输出示例等)、文档自相矛盾(易错点 9/24)与复制粘贴残留(`_infra-commit` "不直接调用")。代码侧同步 `_state`/`_skill` usage 文本。
 
 ## [0.5.3] - 2026-07-27
 

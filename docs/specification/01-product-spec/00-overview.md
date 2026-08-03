@@ -273,7 +273,7 @@ openspec status --change <change-name>
 
 ### 平台兼容
 
-v1 支持 7 个 AI 编码平台：Claude Code、CodeBuddy、Qoder（冒号版命令）、Cursor、OpenCode、Trae、Pi（横线版命令）。`alloy init` 交互式选择安装目标，冒号版和横线版自动生成到各平台目录。平台定义见 `src/core/agents.ts`。
+v1 支持 4 个 AI 编码平台：Claude Code、Codex、OpenCode、Pi（skills 共享 `.agents/skills/` 目录，4 个平台差异见 `docs/reference/agent-instruction-files.md`）。`alloy init` 交互式选择安装目标，各平台目录自动生成。平台定义见 `src/core/agents.ts`。
 
 ### 扩展点
 
@@ -342,9 +342,10 @@ CLI（终端）
 # Alloy 包内置
 compatible:
   node: ">=18.0.0"
+  git: ">=2.20.0"
   openspec: ">=1.3.0 <2.0.0"
   superpowers: ">=5.0.0 <7.0.0"
-  alloy: ">=0.1.0"
+  alloy: ">=0.3.0"
   schema: 1
 
 install:
@@ -422,7 +423,7 @@ $ alloy init
 关键步骤：
 
 1. **选择 scope** — 交互式选择 project（当前目录）或 global（home 目录），也可 `--scope` 参数指定
-2. **选择目标 Agent** — 交互式多选安装目标（Claude Code / Cursor / OpenCode 等 8 个平台），也可 `--agents` 非交互式指定
+2. **选择目标 Agent** — 交互式多选安装目标（Claude Code / Codex / OpenCode / Pi 共 4 个），也可 `--agents` 非交互式指定
 3. **环境检测** — `detectEnv()` 检测 Node.js 版本、git。git 缺失则 HARD STOP
 4. **HOME 拦截** — 当前目录为 `$HOME` 时拒绝初始化（避免污染主目录）。无论 scope 均生效
 5. **采集项目状态（不改变项目目录）** — 检测 git 仓库是否存在、HEAD 是否 unborn（无 commit）、现有 config 是否已有 main_branch、检测主分支（remote HEAD / init.defaultBranch / 本地分支匹配）
@@ -430,11 +431,11 @@ $ alloy init
 7. **USER_GATE 2：确认执行清单** — 展示将部署的文件 + git 操作（是否 git init、是否初始 commit），用户拒绝则 exit 0，项目目录零变化
 8. **确保 git 仓库** — `ensureGitRepo()` 检测当前目录是否已在 git 仓库，未在则 `git init`。失败硬退出
 9. **安装 OpenSpec CLI** — `npm install -g @fission-ai/openspec@1`
-10. **初始化 OpenSpec 项目结构** — `openspec init <path> --tools claude --profile custom`。传入临时 custom profile 确保全部 11 个 workflow 启用
-11. **安装 Superpowers** — `npx skills add obra/superpowers -y --agent claude-code`（project scope 不加 `-g`）
+10. **初始化 OpenSpec 项目结构** — `openspec init <path> --tools <全部目标 agent> --profile custom`（agent 映射:claude-code→claude、codex→codex、opencode→opencode、pi→pi;未指定时默认 claude）。传入临时 custom profile 确保全部 workflow 启用;openspec CLI 会把 codex 的 opsx skills 装到过时路径 `.codex/skills/`,alloy 同步到 `.agents/skills/`(Codex 实际加载路径)
+11. **安装 Superpowers** — `npx skills add obra/superpowers -y`（project scope 不加 `-g`,一次调用装所有目标 agent;global scope 加 `-g`）
 12. **部署 Alloy skill + schema** — 从包复制 `skills/alloy-*/` 到各平台目录，写入 `openspec/schemas/alloy/`
-13. **更新 .gitignore** — 追加 6 条规则（`docs/superpowers/` `.claude/worktrees/` `.worktrees/` `worktrees/` `.superpowers/` `*.local.*`）
-14. **注入 agent 专有配置** - 写入各 agent 的专有配置:Claude Code `.claude/settings.json`(`worktree.baseRef: head`)、OpenCode `opencode.json`+`.opencode/plugins/alloy-guard.ts`、Pi `.pi/settings.json`+`.pi/extensions/alloy-guard.ts` 等。不再注入指令文件(CLAUDE.md / AGENTS.md / .cursor/rules/alloy.mdc)--alloy 规则通过 skill md 自我承载
+13. **更新 .gitignore** — 追加 8 条规则（`docs/superpowers/` `.claude/worktrees/` `.worktrees/` `worktrees/` `.superpowers/` `skills-lock.json` `*.local.*` `.codex/skills/`;最后一条为 openspec CLI 过时输出路径,内容已同步 `.agents/skills/`）
+14. **注入 agent 专有配置** - 写入各 agent 的专有配置:Claude Code `.claude/settings.json`(`worktree.baseRef: head`)、Codex `.codex/hooks.json`(PreToolUse + Stop)+ `~/.codex/config.toml`(`[features] default_mode_request_user_input`)、OpenCode `opencode.json`+`.opencode/plugins/alloy-guard.ts`、Pi `.pi/extensions/alloy-guard.ts`+`.pi/extensions/alloy-question.ts`。不再注入指令文件(CLAUDE.md / AGENTS.md)--alloy 规则通过 skill md 自我承载
 15. **写入 main_branch 配置** — `openspec/config.yaml` 写入 `alloy.main_branch: <确认值>`
 16. **若 HEAD unborn：创建初始 commit 锁定 main 分支** — `git add .claude/ .gitignore openspec/config.yaml openspec/schemas/` + `git commit -m "chore: alloy init 项目初始化"`。在 main 分支创建第一个 commit，让 main 引用文件诞生，后续 `/alloy-start` 切到 feature 分支后 main 保留。若 HEAD 已有 commit 则不自动提交，文件留工作目录，提示用户自行 commit
 17. **兼容性检查** — 根据 `compat.yaml` 校验版本
